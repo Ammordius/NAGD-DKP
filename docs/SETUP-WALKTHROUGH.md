@@ -1,0 +1,182 @@
+# DKP site setup walkthrough (no CLI)
+
+Follow these steps in order. Everything is done in the browser and in this repo.
+
+---
+
+## Part 1: Create a Supabase project
+
+1. Go to **https://supabase.com** and sign in (or create an account with GitHub/email).
+
+2. Click **“New project”**.
+
+3. Fill in:
+   - **Name**: e.g. `dkp` or `guild-dkp`
+   - **Database password**: choose a strong password and **save it somewhere safe** (you need it to connect to the DB later).
+   - **Region**: pick one close to you.
+   Click **“Create new project”** and wait until the project is ready (1–2 minutes).
+
+4. You should land on the project **Dashboard**. Keep this tab open; you’ll use it for the next parts.
+
+---
+
+## Part 2: Run the schema SQL
+
+1. In the left sidebar, click **“SQL Editor”**.
+
+2. Click **“New query”** (or the + button).
+
+3. Open the file **`docs/supabase-schema.sql`** from this repo in your editor (e.g. Cursor/VS Code).  
+   Select **all** the contents (Ctrl+A) and copy (Ctrl+C).
+
+4. Paste into the Supabase SQL Editor (the big text area).
+
+5. Click **“Run”** (or press Ctrl+Enter).
+
+6. You should see a green “Success” message.  
+   If you see any red errors, copy the error message and we can fix the schema.  
+   Otherwise, the tables (`profiles`, `characters`, `raids`, etc.) and RLS policies are now created.
+
+---
+
+## Part 3: Get your API keys (for the web app)
+
+1. In the left sidebar, click **“Project Settings”** (gear icon at the bottom).
+
+2. Click **“API”** in the left submenu.
+
+3. On that page you’ll see:
+   - **Project URL** – e.g. `https://xxxxxxxxxxxx.supabase.co`
+   - **Project API keys**:
+     - **anon public** – safe to use in the browser; we use this in the frontend.
+
+4. Copy both and save them somewhere:
+   - **Project URL** → you’ll use as `VITE_SUPABASE_URL`
+   - **anon public** key → you’ll use as `VITE_SUPABASE_ANON_KEY`
+
+---
+
+## Part 4: Import your data (CSVs)
+
+You have two options.
+
+### Option A: Import via Table Editor (one table at a time)
+
+1. In the sidebar, click **“Table Editor”**.
+
+2. For each table below, do this:
+   - Click the table name (e.g. **characters**).
+   - Click **“Insert”** → **“Import data from CSV”** (or the upload/import option if the wording is different).
+   - Choose the CSV from this repo under **`data/`** (see list below).
+   - Map columns: CSV column names should match the table columns. Supabase will suggest mappings; confirm and import.
+
+**Import in this order** (to satisfy foreign keys):
+
+| Table              | CSV file in `data/`        |
+|--------------------|----------------------------|
+| characters         | `characters.csv`           |
+| accounts           | `accounts.csv`             |
+| character_account  | `character_account.csv`    |
+| raids              | `raids.csv`                |
+| raid_events        | `raid_events.csv`          |
+| raid_loot          | `raid_loot.csv`            |
+| raid_attendance    | `raid_attendance.csv`      |
+
+If the importer complains about types (e.g. empty numbers), you can:
+- Leave problematic columns unmapped and fix data later, or
+- Temporarily change the column type in SQL, import, then change it back.
+
+**Data notes:**
+- **Loot item names:** The `raid_loot` table has an `item_name` column and the app shows it on raid detail pages. **Item names are filled by the pipeline**: run `extract_structured_data.py` (after `pull_raids.py`) so `data/raid_loot.csv` is built from `raids/*.html`; re-run when you refresh raid HTML. (Previously the CSVs didn’t include item names. If you have another source (e.g. scrape from raid HTML) that includes item names, you can add an `item_name` column to the CSV or update rows in the Table Editor after import.
+- **DKP:** Earned = sum of each raid’s event DKP for every raid that character attended. Spent = sum of loot costs for that character. Balance = earned − spent. The DKP page can show this **by character** or **by account** (all toons on the same account summed).
+
+### Option B: Import via SQL (copy/paste from CSVs)
+
+If the Table Editor importer is awkward, we can add a small script that reads your `data/*.csv` files and outputs `INSERT` statements (or a single SQL file) you can paste into the SQL Editor. Say if you want that and we’ll generate it.
+
+---
+
+## Part 5: Turn yourself into an officer
+
+Right now there are no users, so no one can log in. After you run the web app and sign up once, you’ll create a user; then you give that user the officer role.
+
+1. **Create your user (do this after Part 6):**
+   - Run the web app locally (Part 6).
+   - Open the app in the browser, go to the login page, and **“Sign up”** with your email and a password.
+   - Complete sign-up (and confirm email if Supabase email confirmation is on).
+
+2. **Find your user ID:**
+   - In Supabase: **Authentication** → **Users**.
+   - You’ll see your user; click the row or the user to see details.
+   - Copy the **User UID** (a long UUID like `a1b2c3d4-e5f6-7890-abcd-ef1234567890`).
+
+3. **Set your role to officer:**
+   - Go to **SQL Editor** → **New query**.
+   - Paste this (replace the UUID with your User UID):
+
+   ```sql
+   UPDATE profiles SET role = 'officer' WHERE id = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890';
+   ```
+
+   - Click **Run**.  
+   After that, when you sign in to the app you’ll see the Officer label and any officer-only UI.
+
+---
+
+## Part 6: Run the web app locally
+
+1. Open a terminal in this repo and go to the web app folder:
+   ```bash
+   cd c:\TAKP\dkp\web
+   ```
+
+2. Create the env file:
+   - Copy `web/.env.example` to `web/.env.local`.
+   - Edit `web/.env.local` and set:
+     - `VITE_SUPABASE_URL` = your **Project URL** from Part 3
+     - `VITE_SUPABASE_ANON_KEY` = your **anon public** key from Part 3
+
+3. Install and run:
+   ```bash
+   npm install
+   npm run dev
+   ```
+
+4. Open the URL it prints (e.g. **http://localhost:5173**). You should see the login page.
+
+5. Sign up with your email and a password, then sign in.
+
+6. Go back to **Part 5** and run the `UPDATE profiles SET role = 'officer' ...` SQL with your User UID. Refresh the app; you should see “Officer” in the nav.
+
+---
+
+## Part 7: Deploy to Vercel (optional, free)
+
+1. Push this repo to **GitHub** (if it isn’t already).
+
+2. Go to **https://vercel.com** and sign in (e.g. with GitHub).
+
+3. Click **“Add New…”** → **“Project”**, then import your GitHub repo.
+
+4. In project settings:
+   - **Root Directory**: set to **`web`** (so Vercel builds the React app).
+   - **Environment Variables**: add:
+     - `VITE_SUPABASE_URL` = your Project URL
+     - `VITE_SUPABASE_ANON_KEY` = your anon public key  
+   Then save/deploy.
+
+5. After the build, Vercel gives you a URL like `https://your-project.vercel.app`. Use that to share the DKP site; everyone signs in with the accounts you create in Supabase.
+
+---
+
+## Quick checklist
+
+- [ ] Part 1: Supabase project created, password saved
+- [ ] Part 2: `docs/supabase-schema.sql` run in SQL Editor, success
+- [ ] Part 3: Project URL and anon key copied
+- [ ] Part 4: All 7 CSVs imported (characters, accounts, character_account, raids, raid_events, raid_loot, raid_attendance)
+- [ ] Part 5: Signed up in the app, then ran `UPDATE profiles SET role = 'officer'` with your User UID
+- [ ] Part 6: `web/.env.local` set, `npm run dev` works, you can log in and see Officer
+- [ ] Part 7 (optional): Repo on GitHub, Vercel project with root `web` and env vars, deploy works
+
+If you tell me which part you’re on and what you see (or any error message), I can give you the exact next click or fix.

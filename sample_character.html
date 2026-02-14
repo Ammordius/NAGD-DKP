@@ -1,0 +1,782 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<!--------------------------------------------------------------------------- //
+		Love HTML? Love PHP? Are you passionate about gaming? We would love to talk to you!
+		http://www.guildlaunch.com/about-us/employment/
+		// --------------------------------------------------------------------------->
+		<title>Adaria - Grimdahl - Nephilim, Azure Guard and Destiny in Everquest on Custom Server</title>
+		<style>body{background-color:#000000;}</style>
+		<meta name="viewport" content="initial-scale=1.0">
+		<!-- css -->
+                <link rel="stylesheet" type="text/css" href="//fonts.googleapis.com/css?family=Roboto:200,300,400,500,700,400italic,500italic,700italic&subset=latin,cyrillic-ext,latin-ext" />
+  		<link rel="stylesheet" type="text/css" href="/resources/style/v3/templates/base_1/style.css?v=071320152" />
+  		<script language="JavaScript">
+			var version = parseInt((/WebKit\/([0-9]+)/.exec(navigator.appVersion) || 0)[1],10) || void 0;
+			if (version <= 534 && navigator.vendor.indexOf('Google') == 0) {
+			  document.write('<link rel="stylesheet" type="text/css" href="/resources/style/v3/css/android.css"></link>');
+			}
+		</script>
+  		<link rel="stylesheet" type="text/css" id="customization_css" href="/resources/style/v3/customization/style.css?gid=547766" />
+		<link rel="stylesheet" type="text/css" href="//maxcdn.bootstrapcdn.com/font-awesome/4.5.0/css/font-awesome.min.css" />
+		<link rel="stylesheet" type="text/css" href="/resources/style/v3/js/third_party/jquery-ui/jquery-ui.css" />
+  		<!-- end css -->
+  		
+  		<script>
+						var _rollbarConfig = {
+							accessToken: "41e8421ccd9b42fea0ed2852878f0916",
+							captureUncaught: true,
+							payload: {
+								environment: "production"
+							}
+						};
+						// Rollbar Snippet
+						!function(r){function o(e){if(t[e])return t[e].exports;var n=t[e]={exports:{},id:e,loaded:!1};return r[e].call(n.exports,n,n.exports,o),n.loaded=!0,n.exports}var t={};return o.m=r,o.c=t,o.p="",o(0)}([function(r,o,t){"use strict";var e=t(1).Rollbar,n=t(2);_rollbarConfig.rollbarJsUrl=_rollbarConfig.rollbarJsUrl||"https://d37gvrvc0wt4s1.cloudfront.net/js/v1.8/rollbar.min.js";var a=e.init(window,_rollbarConfig),i=n(a,_rollbarConfig);a.loadFull(window,document,!_rollbarConfig.async,_rollbarConfig,i)},function(r,o){"use strict";function t(r){return function(){try{return r.apply(this,arguments)}catch(o){try{console.error("[Rollbar]: Internal error",o)}catch(t){}}}}function e(r,o,t){window._rollbarWrappedError&&(t[4]||(t[4]=window._rollbarWrappedError),t[5]||(t[5]=window._rollbarWrappedError._rollbarContext),window._rollbarWrappedError=null),r.uncaughtError.apply(r,t),o&&o.apply(window,t)}function n(r){var o=function(){var o=Array.prototype.slice.call(arguments,0);e(r,r._rollbarOldOnError,o)};return o.belongsToShim=!0,o}function a(r){this.shimId=++s,this.notifier=null,this.parentShim=r,this._rollbarOldOnError=null}function i(r){var o=a;return t(function(){if(this.notifier)return this.notifier[r].apply(this.notifier,arguments);var t=this,e="scope"===r;e&&(t=new o(this));var n=Array.prototype.slice.call(arguments,0),a={shim:t,method:r,args:n,ts:new Date};return window._rollbarShimQueue.push(a),e?t:void 0})}function l(r,o){if(o.hasOwnProperty&&o.hasOwnProperty("addEventListener")){var t=o.addEventListener;o.addEventListener=function(o,e,n){t.call(this,o,r.wrap(e),n)};var e=o.removeEventListener;o.removeEventListener=function(r,o,t){e.call(this,r,o&&o._wrapped?o._wrapped:o,t)}}}var s=0;a.init=function(r,o){var e=o.globalAlias||"Rollbar";if("object"==typeof r[e])return r[e];r._rollbarShimQueue=[],r._rollbarWrappedError=null,o=o||{};var i=new a;return t(function(){if(i.configure(o),o.captureUncaught){i._rollbarOldOnError=r.onerror,r.onerror=n(i);var t,a,s="EventTarget,Window,Node,ApplicationCache,AudioTrackList,ChannelMergerNode,CryptoOperation,EventSource,FileReader,HTMLUnknownElement,IDBDatabase,IDBRequest,IDBTransaction,KeyOperation,MediaController,MessagePort,ModalWindow,Notification,SVGElementInstance,Screen,TextTrack,TextTrackCue,TextTrackList,WebSocket,WebSocketWorker,Worker,XMLHttpRequest,XMLHttpRequestEventTarget,XMLHttpRequestUpload".split(",");for(t=0;t<s.length;++t)a=s[t],r[a]&&r[a].prototype&&l(i,r[a].prototype)}return r[e]=i,i})()},a.prototype.loadFull=function(r,o,e,n,a){var i=function(){var o;if(void 0===r._rollbarPayloadQueue){var t,e,n,i;for(o=new Error("rollbar.js did not load");t=r._rollbarShimQueue.shift();)for(n=t.args,i=0;i<n.length;++i)if(e=n[i],"function"==typeof e){e(o);break}}"function"==typeof a&&a(o)},l=!1,s=o.createElement("script"),u=o.getElementsByTagName("script")[0],p=u.parentNode;s.crossOrigin="",s.src=n.rollbarJsUrl,s.async=!e,s.onload=s.onreadystatechange=t(function(){if(!(l||this.readyState&&"loaded"!==this.readyState&&"complete"!==this.readyState)){s.onload=s.onreadystatechange=null;try{p.removeChild(s)}catch(r){}l=!0,i()}}),p.insertBefore(s,u)},a.prototype.wrap=function(r,o){try{var t;if(t="function"==typeof o?o:function(){return o||{}},"function"!=typeof r)return r;if(r._isWrap)return r;if(!r._wrapped){r._wrapped=function(){try{return r.apply(this,arguments)}catch(o){throw o._rollbarContext=t()||{},o._rollbarContext._wrappedSource=r.toString(),window._rollbarWrappedError=o,o}},r._wrapped._isWrap=!0;for(var e in r)r.hasOwnProperty(e)&&(r._wrapped[e]=r[e])}return r._wrapped}catch(n){return r}};for(var u="log,debug,info,warn,warning,error,critical,global,configure,scope,uncaughtError".split(","),p=0;p<u.length;++p)a.prototype[u[p]]=i(u[p]);r.exports={Rollbar:a,_rollbarWindowOnError:e}},function(r,o){"use strict";r.exports=function(r,o){return function(t){if(!t&&!window._rollbarInitialized){var e=window.RollbarNotifier,n=o||{},a=n.globalAlias||"Rollbar",i=window.Rollbar.init(n,r);i._processShimQueue(window._rollbarShimQueue||[]),window[a]=i,window._rollbarInitialized=!0,e.processPayloads()}}}}]);
+						// End Rollbar Snippet
+					</script><script>
+			var cookie_host_name = '.gamerlaunch.com';var style_version = 5;var user_status=1;rightWidgets = 0;
+			// these are current EMs for major breakpoints
+			var base_font_px    = 16;var lap_em          = 40.063;var lap_px          = lap_em * base_font_px;
+			var desk_em         = 64.063;var desk_px         = desk_em * base_font_px;var wall_em         = 90.063;
+			var wall_px         = wall_em * base_font_px;var SIZE_HAND       = 'hand';
+			var SIZE_LAP        = 'lap';var SIZE_DESK       = 'desk';var SIZE_WALL       = 'wall';var gl_window_size = SIZE_WALL;
+
+			if (window.innerWidth > wall_px){gl_window_size = SIZE_WALL;
+			}else if (window.innerWidth > desk_px){gl_window_size = SIZE_DESK;
+			}else if (window.innerWidth > lap_px){gl_window_size = SIZE_LAP;
+			}else{gl_window_size = SIZE_HAND;}
+			function resizeIframe(iframe) {
+  				iframe.height = iframe.contentWindow.document.body.scrollHeight + "px";
+			}
+		</script>
+		<!-- jsblocks -->
+  		<script>
+			(function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+			(i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+				m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+			})(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+			ga('create', 'UA-57390518-1', 'auto', {'allowLinker': true});
+			ga('require', 'linker');
+			ga('linker:autoLink', ['guildlaunch.com', 'swtorhost.com', 'corplaunch.com', 'wowlaunch.com', 'aqlaunch.com', 'gamerlaunch.com']);
+			ga('require', 'linkid', 'linkid.js');
+			ga('require', 'displayfeatures');
+			ga('set', 'contentGroup1', 'guild');ga('set', 'contentGroup2', 'profile');ga('set', 'contentGroup3', 'Everquest');ga('set', 'contentGroup5', 'Subscription');
+			ga('set', 'dimension1', 'Plan2');ga('set', 'dimension4', 'SiteMember');ga('set', 'dimension6', '5');
+			ga('set', 'metric1', '5061');ga('set', 'metric3', '2012');ga('set', 'metric4', '4');ga('set', 'metric5', '6');ga('set', 'metric2', '3224');ga('set', 'metric6', '2017');ga('set', 'metric7', '4');ga('set', 'metric8', '17');
+			ga('send', 'pageview');
+		</script>
+		<!-- Begin comScore Tag -->
+		<script>
+		  var _comscore = _comscore || [];
+		  _comscore.push({ c1: "2", c2: "20676402" });
+		  (function() {
+		    var s = document.createElement("script"), el = document.getElementsByTagName("script")[0]; s.async = true;
+		    s.src = (document.location.protocol == "https:" ? "https://sb" : "http://b") + ".scorecardresearch.com/beacon.js";
+		    el.parentNode.insertBefore(s, el);
+		  })();
+		</script>
+		<noscript>
+		  <img src="http://b.scorecardresearch.com/p?c1=2&c2=20676402&cv=2.0&cj=1" />
+		</noscript>
+		<!-- End comScore Tag -->
+		<!-- Facebook Pixel Code -->
+        	<script>
+	          !function(f,b,e,v,n,t,s)
+	          {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+	            n.callMethod.apply(n,arguments):n.queue.push(arguments)};
+        	    if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
+	            n.queue=[];t=b.createElement(e);t.async=!0;
+        	    t.src=v;s=b.getElementsByTagName(e)[0];
+	       	    s.parentNode.insertBefore(t,s)}(window, document,'script',
+	            'https://connect.facebook.net/en_US/fbevents.js');
+		        fbq('init', '841642082853375');
+        		fbq('track', 'PageView');
+	        </script>
+        	<noscript><img height="1" width="1" style="display:none" src="https://www.facebook.com/tr?id=841642082853375&ev=PageView&noscript=1" /></noscript>
+	        <!-- End Facebook Pixel Code -->
+		<!-- <script src="//pubwise-io.videoplayerhub.com/gallery.js" async></script> -->
+				</head>
+	<body id="page" class="theme-color-seabreeze theme-profile base_3">
+		<div id="global_wrap" class="">
+		<div id="global_nav_over_wrap">
+			
+			<div id="global_nav_wrap">
+				<nav id="topnav" class="global-nav"><ul class="admin_top_nav"></ul><ul id="admin_nav" class="nav-list"><li id="notification_activity_nav_link_li"><a href="#" class="adminBar notifier" title="Activity Feed"><span class="fa fa-globe nav-icon"></span> Activity<span class="streamCt" id="notification_count_new">2</span></a><ul class="navgroup" id="notification-activity-nav" style="display:none;"><li class="divider"></li><li class="profile" style="overflow-y:scroll;overflow-x:hidden;max-height:400px;"><div id="notification_stream"><div class="chat_item">
+        								<div class="chat_container_them">
+											<a href="/users/index.php?gl_user=3486094&amp;gid=547766"><img src="https://www.gravatar.com/avatar/b1b210fcfb628733507c15d872ca0765?d=identicon&s=130" width="130"  ></a>
+										</div>
+										<div class="chat_bubble_them">
+											<div class="chat_message">Jyslia created a new raid <a href="http://Azureguardtakp.gamerlaunch.com//rapid_raid/raid_details.php?raid_pool=562569&raidId=1598643&gid=547766">Shei (non DKP)</a></div>
+											<span class="chat_name"><a href="/users/index.php?gl_user=3486094&amp;gid=547766">Jyslia</a></span>
+											<span class="chat_timesent moment-in-time" id="time_sent_94509134" data-moment-in-time="Fri, 13 Feb 2026 08:00:04 -0500" data-moment-type="relative"></span>
+										</div>																											
+										<div class="chat_clearer"></div>
+									</div><div class="chat_item">
+        								<div class="chat_container_them">
+											<a href="/users/index.php?gl_user=3486094&amp;gid=547766"><img src="https://www.gravatar.com/avatar/b1b210fcfb628733507c15d872ca0765?d=identicon&s=130" width="130"  ></a>
+										</div>
+										<div class="chat_bubble_them">
+											<div class="chat_message">Jyslia created a new raid <a href="http://Azureguardtakp.gamerlaunch.com//rapid_raid/raid_details.php?raid_pool=562569&raidId=1598642&gid=547766">Shei (non DKP)</a></div>
+											<span class="chat_name"><a href="/users/index.php?gl_user=3486094&amp;gid=547766">Jyslia</a></span>
+											<span class="chat_timesent moment-in-time" id="time_sent_94509132" data-moment-in-time="Fri, 13 Feb 2026 07:54:57 -0500" data-moment-type="relative"></span>
+										</div>																											
+										<div class="chat_clearer"></div>
+									</div><div class="chat_item">
+        								<div class="chat_container_them">
+											<a href="/users/index.php?gl_user=3486094&amp;gid=547766"><img src="https://www.gravatar.com/avatar/b1b210fcfb628733507c15d872ca0765?d=identicon&s=130" width="130"  ></a>
+										</div>
+										<div class="chat_bubble_them">
+											<div class="chat_message">Jyslia created a new raid <a href="http://Azureguardtakp.gamerlaunch.com//rapid_raid/raid_details.php?raid_pool=562569&raidId=1598641&gid=547766">Water Minis + Cursed/Emp</a></div>
+											<span class="chat_name"><a href="/users/index.php?gl_user=3486094&amp;gid=547766">Jyslia</a></span>
+											<span class="chat_timesent moment-in-time" id="time_sent_94508543" data-moment-in-time="Thu, 12 Feb 2026 07:37:08 -0500" data-moment-type="relative"></span>
+										</div>																											
+										<div class="chat_clearer"></div>
+									</div><div class="chat_item">
+        								<div class="chat_container_them">
+											<a href="/users/index.php?gl_user=3486094&amp;gid=547766"><img src="https://www.gravatar.com/avatar/b1b210fcfb628733507c15d872ca0765?d=identicon&s=130" width="130"  ></a>
+										</div>
+										<div class="chat_bubble_them">
+											<div class="chat_message">Jyslia created a new raid <a href="http://Azureguardtakp.gamerlaunch.com//rapid_raid/raid_details.php?raid_pool=562569&raidId=1598629&gid=547766">VT</a></div>
+											<span class="chat_name"><a href="/users/index.php?gl_user=3486094&amp;gid=547766">Jyslia</a></span>
+											<span class="chat_timesent moment-in-time" id="time_sent_94506826" data-moment-in-time="Mon, 09 Feb 2026 20:59:17 -0500" data-moment-type="relative"></span>
+										</div>																											
+										<div class="chat_clearer"></div>
+									</div><div class="chat_item">
+        								<div class="chat_container_them">
+											<a href="/users/index.php?gl_user=3486094&amp;gid=547766"><img src="https://www.gravatar.com/avatar/b1b210fcfb628733507c15d872ca0765?d=identicon&s=130" width="130"  ></a>
+										</div>
+										<div class="chat_bubble_them">
+											<div class="chat_message">Jyslia created a new raid <a href="http://Azureguardtakp.gamerlaunch.com//rapid_raid/raid_details.php?raid_pool=562569&raidId=1598621&gid=547766">Time Day 2</a></div>
+											<span class="chat_name"><a href="/users/index.php?gl_user=3486094&amp;gid=547766">Jyslia</a></span>
+											<span class="chat_timesent moment-in-time" id="time_sent_94504445" data-moment-in-time="Thu, 05 Feb 2026 18:40:17 -0500" data-moment-type="relative"></span>
+										</div>																											
+										<div class="chat_clearer"></div>
+									</div><div class="chat_item">
+        								<div class="chat_container_them">
+											<a href="/users/index.php?gl_user=3486094&amp;gid=547766"><img src="https://www.gravatar.com/avatar/b1b210fcfb628733507c15d872ca0765?d=identicon&s=130" width="130"  ></a>
+										</div>
+										<div class="chat_bubble_them">
+											<div class="chat_message">Jyslia created a new raid <a href="http://Azureguardtakp.gamerlaunch.com//rapid_raid/raid_details.php?raid_pool=562569&raidId=1598617&gid=547766">Time Day 1</a></div>
+											<span class="chat_name"><a href="/users/index.php?gl_user=3486094&amp;gid=547766">Jyslia</a></span>
+											<span class="chat_timesent moment-in-time" id="time_sent_94503219" data-moment-in-time="Tue, 03 Feb 2026 18:31:18 -0500" data-moment-type="relative"></span>
+										</div>																											
+										<div class="chat_clearer"></div>
+									</div><div class="chat_item">
+        								<div class="chat_container_them">
+											<a href="/users/index.php?gl_user=3486094&amp;gid=547766"><img src="https://www.gravatar.com/avatar/b1b210fcfb628733507c15d872ca0765?d=identicon&s=130" width="130"  ></a>
+										</div>
+										<div class="chat_bubble_them">
+											<div class="chat_message">Jyslia created a new raid <a href="http://Azureguardtakp.gamerlaunch.com//rapid_raid/raid_details.php?raid_pool=562569&raidId=1598605&gid=547766">Xegony</a></div>
+											<span class="chat_name"><a href="/users/index.php?gl_user=3486094&amp;gid=547766">Jyslia</a></span>
+											<span class="chat_timesent moment-in-time" id="time_sent_94502297" data-moment-in-time="Mon, 02 Feb 2026 09:32:51 -0500" data-moment-type="relative"></span>
+										</div>																											
+										<div class="chat_clearer"></div>
+									</div><div class="chat_item">
+        								<div class="chat_container_them">
+											<a href="/users/index.php?gl_user=3486094&amp;gid=547766"><img src="https://www.gravatar.com/avatar/b1b210fcfb628733507c15d872ca0765?d=identicon&s=130" width="130"  ></a>
+										</div>
+										<div class="chat_bubble_them">
+											<div class="chat_message">Jyslia created a new raid <a href="http://Azureguardtakp.gamerlaunch.com//rapid_raid/raid_details.php?raid_pool=562569&raidId=1598594&gid=547766">Vex Thal</a></div>
+											<span class="chat_name"><a href="/users/index.php?gl_user=3486094&amp;gid=547766">Jyslia</a></span>
+											<span class="chat_timesent moment-in-time" id="time_sent_94500553" data-moment-in-time="Thu, 29 Jan 2026 19:20:17 -0500" data-moment-type="relative"></span>
+										</div>																											
+										<div class="chat_clearer"></div>
+									</div><div class="chat_item">
+        								<div class="chat_container_them">
+											<a href="/users/index.php?gl_user=3486094&amp;gid=547766"><img src="https://www.gravatar.com/avatar/b1b210fcfb628733507c15d872ca0765?d=identicon&s=130" width="130"  ></a>
+										</div>
+										<div class="chat_bubble_them">
+											<div class="chat_message">Jyslia created a new raid <a href="http://Azureguardtakp.gamerlaunch.com//rapid_raid/raid_details.php?raid_pool=562569&raidId=1598589&gid=547766">PoEA + MAoE</a></div>
+											<span class="chat_name"><a href="/users/index.php?gl_user=3486094&amp;gid=547766">Jyslia</a></span>
+											<span class="chat_timesent moment-in-time" id="time_sent_94499241" data-moment-in-time="Tue, 27 Jan 2026 18:27:03 -0500" data-moment-type="relative"></span>
+										</div>																											
+										<div class="chat_clearer"></div>
+									</div><div class="chat_item">
+        								<div class="chat_container_them">
+											<a href="/users/index.php?gl_user=3486094&amp;gid=547766"><img src="https://www.gravatar.com/avatar/b1b210fcfb628733507c15d872ca0765?d=identicon&s=130" width="130"  ></a>
+										</div>
+										<div class="chat_bubble_them">
+											<div class="chat_message">Jyslia created a new raid <a href="http://Azureguardtakp.gamerlaunch.com//rapid_raid/raid_details.php?raid_pool=562569&raidId=1598583&gid=547766">Hohon/LMM + Tantisala, 2x earth rings</a></div>
+											<span class="chat_name"><a href="/users/index.php?gl_user=3486094&amp;gid=547766">Jyslia</a></span>
+											<span class="chat_timesent moment-in-time" id="time_sent_94498385" data-moment-in-time="Mon, 26 Jan 2026 10:29:01 -0500" data-moment-type="relative"></span>
+										</div>																											
+										<div class="chat_clearer"></div>
+									</div><div class="chat_item">
+        								<div class="chat_container_them">
+											<a href="/users/index.php?gl_user=3486094&amp;gid=547766"><img src="https://www.gravatar.com/avatar/b1b210fcfb628733507c15d872ca0765?d=identicon&s=130" width="130"  ></a>
+										</div>
+										<div class="chat_bubble_them">
+											<div class="chat_message">Jyslia created a new raid <a href="http://Azureguardtakp.gamerlaunch.com//rapid_raid/raid_details.php?raid_pool=562569&raidId=1598579&gid=547766">Time Day 2</a></div>
+											<span class="chat_name"><a href="/users/index.php?gl_user=3486094&amp;gid=547766">Jyslia</a></span>
+											<span class="chat_timesent moment-in-time" id="time_sent_94496138" data-moment-in-time="Thu, 22 Jan 2026 20:16:18 -0500" data-moment-type="relative"></span>
+										</div>																											
+										<div class="chat_clearer"></div>
+									</div><div class="chat_item">
+        								<div class="chat_container_them">
+											<a href="/users/index.php?gl_user=3486094&amp;gid=547766"><img src="https://www.gravatar.com/avatar/b1b210fcfb628733507c15d872ca0765?d=identicon&s=130" width="130"  ></a>
+										</div>
+										<div class="chat_bubble_them">
+											<div class="chat_message">Jyslia created a new raid <a href="http://Azureguardtakp.gamerlaunch.com//rapid_raid/raid_details.php?raid_pool=562569&raidId=1598572&gid=547766">Time Day 1</a></div>
+											<span class="chat_name"><a href="/users/index.php?gl_user=3486094&amp;gid=547766">Jyslia</a></span>
+											<span class="chat_timesent moment-in-time" id="time_sent_94494294" data-moment-in-time="Tue, 20 Jan 2026 18:40:27 -0500" data-moment-type="relative"></span>
+										</div>																											
+										<div class="chat_clearer"></div>
+									</div></div></li><li class="divider"></li>
+								<li class="profile" style="text-align:center;"><a href="/user/2759679?gid=547766">View Full Activity Feed</a></li></ul></li><li id="profile_nav_link_li">
+								<a class="adminBar notifier" href="#" id="profile_nav_img" title="Profile, PM and Account Info"><i class="fa fa-user nav-icon"></i> ammordius<span class="streamCt" id="pm_count_new" style="display:none;">0</span></a>
+	                            <ul class="navgroup" id="user_profile_nav" style="display:none;">
+	                                <li class="profile">
+                                		<a href="/user/2759679?gid=547766">
+										<img src="https://www.gravatar.com/avatar/c4f52c1d8eaf266052c5eb7c7d7a7431?d=identicon&s=30" width="30"  style="width:39px;height:39px;border-radius:50%;">
+												<div style="display:inline-block;">
+													<strong style="max-width:95%;overflow:hidden;display:inline-block;" class="profile-name">ammordius</strong><br>
+													<span class="mute">View your profile</span>
+												</div>
+												<div class="clear"></div>
+										</a>
+									</li>                                    					
+									<li>
+										<a href="/communication/communication.php?gid=547766" title="View PMs"><div class="dropdown-icon"><span class="fa fa-envelope"></span></div> View PMs  - 8 Unread</span></a>
+									</li>
+									<li class="divider"></li>
+									<li><span class="non_mobile"></span><a href="/users/characters/character_detail.php?char=22007284&amp;gid=547766&amp;gl_user=2759679&amp;action=logout&amp;destination=%2Fusers%2Fcharacters%2Fcharacter_detail.php%3Fchar%3D22007284%26gid%3D547766" title="Logout of site"><div class="dropdown-icon"><span class="fa fa-power-off"></span></div> Logout</a></li>
+								</ul>
+	                        </li></ul>
+						<div style="clear:both;"></div>
+					</nav>
+				<div style="clear:both;"></div>
+			</div>
+			<div style="clear:both;"></div>
+		</div>
+		<div id="header_set_over_wrap">
+			<div id="header_set_wrap">
+				<div id="header_set" class="row">
+					<div id="header_wrap" class="column-12-wall column-12-desk column-12-lap column-12-hand">
+						<header id="header" style="position:relative;"></header>
+					</div>
+					<div id="nav_wrap" class="column-12-wall column-12-desk column-12-lap column-auto-hand">
+						<div id="nav_shim">
+							<div id="site_nav">
+								<nav id="nav" class="top-bar" data-topbar data-options="is_hover: false">
+						<ul class="title-area">
+							<li class="name"></li>
+							<li class="toggle-topbar menu-icon"><a href="#" rel="nofollow"><span>Site Menu</span></a></li>
+						</ul>
+						<section class="top-bar-section">
+					    	<ul class="left">
+					      		<li class=""><a class="guildNavLink " href="/index.php?gid=547766" target="_self">Home</a></li><li class=""><a class="guildNavLink " href="/forums/index.php?gid=547766" target="_self">Forums</a></li><li class="has-dropdown"><a class="guildNavLink " href="/roster/?roster_mode=members&gid=547766" target="_self">Guild Roster</a><ul class="dropdown"><li class="" data-options="mobile_show_parent_link: false"><a href="/roster/?roster_mode=members&amp;gid=547766">Members</a> </li><li class="" data-options="mobile_show_parent_link: false"><a href="/roster/ingame.php?roster_mode=characters&guild_game_id=441145&amp;gid=547766">Characters</a> </li></ul></li><li class="has-dropdown"><a class="guildNavLink " href="/rapid_raid/raids.php?gid=547766" target="_self">Rapid Raid</a><ul class="dropdown"><li class="has-dropdown" data-options="mobile_show_parent_link: false"><a href="/rapid_raid/raids.php?gid=547766">DestinyDKP</a> <ul class="dropdown"><li class="" data-options="mobile_show_parent_link: false"><a href="/rapid_raid/my/?raid_pool=620005&amp;gid=547766">DestinyDKP Dashboard</a> </li><li class="has-dropdown" data-options="mobile_show_parent_link: false"><a href="/rapid_raid/members.php?raid_pool=620005&amp;gid=547766">Standings</a> <ul class="dropdown"><li class="" data-options="mobile_show_parent_link: false"><a href="/rapid_raid/leaderboard.php?raid_pool=620005&amp;gid=547766">Leaderboard</a> </li><li class="" data-options="mobile_show_parent_link: false"><a href="/rapid_raid/adjustments.php?raid_pool=620005&amp;gid=547766">Adjustments</a> </li><li class="" data-options="mobile_show_parent_link: false"><a href="/rapid_raid/imports/import_dkp.php?raid_pool=620005&amp;gid=547766">Imported DestinyDKP</a> </li><li class="" data-options="mobile_show_parent_link: false"><a href="/rapid_raid/members.php?raid_pool=620005&amp;gid=547766">Current DestinyDKP</a> </li></ul></li><li class="has-dropdown" data-options="mobile_show_parent_link: false"><a href="/rapid_raid/raids.php?raid_pool=620005&amp;gid=547766">Raids</a> <ul class="dropdown"><li class="" data-options="mobile_show_parent_link: false"><a href="/rapid_raid/raids.php?raid_pool=620005&amp;gid=547766">Upcoming</a> </li><li class="" data-options="mobile_show_parent_link: false"><a href="/rapid_raid/raids.php?mode=past&raid_pool=620005&amp;gid=547766">Past</a> </li><li class="" data-options="mobile_show_parent_link: false"><a href="/rapid_raid/add_raid.php?raid_pool=620005&amp;gid=547766">Create New</a> </li></ul></li><li class="has-dropdown" data-options="mobile_show_parent_link: false"><a href="/rapid_raid/event_list.php?raid_pool=620005&amp;gid=547766">Events</a> <ul class="dropdown"><li class="" data-options="mobile_show_parent_link: false"><a href="/rapid_raid/event_list.php?raid_pool=620005&amp;gid=547766">Recent</a> </li></ul></li><li class="has-dropdown" data-options="mobile_show_parent_link: false"><a href="/rapid_raid/items.php?raid_pool=620005&amp;gid=547766">Items</a> <ul class="dropdown"><li class="" data-options="mobile_show_parent_link: false"><a href="/rapid_raid/items.php?raid_pool=620005&amp;gid=547766">Recent</a> </li><li class="" data-options="mobile_show_parent_link: false"><a href="/rapid_raid/item_prices.php?raid_pool=620005&amp;gid=547766">Prices</a> </li></ul></li><li class="has-dropdown" data-options="mobile_show_parent_link: false"><a href="/rapid_raid/item_report.php?raid_pool=620005&amp;gid=547766">Reports</a> <ul class="dropdown"><li class="" data-options="mobile_show_parent_link: false"><a href="/rapid_raid/reports/attendance_detail.php?raid_pool=620005&amp;gid=547766">Global Attendance</a> </li><li class="" data-options="mobile_show_parent_link: false"><a href="/rapid_raid/reports/events.php?raid_pool=620005&amp;gid=547766">Event Attendance</a> </li><li class="" data-options="mobile_show_parent_link: false"><a href="/rapid_raid/gear_report.php?raid_pool=620005&amp;gid=547766">Item Ownership</a> </li><li class="" data-options="mobile_show_parent_link: false"><a href="/rapid_raid/event_report.php?raid_pool=620005&amp;gid=547766">Item Event Report</a> </li></ul></li></ul></li><li class="has-dropdown" data-options="mobile_show_parent_link: false"><a href="/rapid_raid/raids.php?gid=547766">NAGD Pool commenced 1 Jan 2018</a> <ul class="dropdown"><li class="" data-options="mobile_show_parent_link: false"><a href="/rapid_raid/my/?raid_pool=562569&amp;gid=547766">NAGD Pool commenced 1 Jan 2018 Dashboard</a> </li><li class="has-dropdown" data-options="mobile_show_parent_link: false"><a href="/rapid_raid/members.php?raid_pool=562569&amp;gid=547766">Standings</a> <ul class="dropdown"><li class="" data-options="mobile_show_parent_link: false"><a href="/rapid_raid/leaderboard.php?raid_pool=562569&amp;gid=547766">Leaderboard</a> </li><li class="" data-options="mobile_show_parent_link: false"><a href="/rapid_raid/adjustments.php?raid_pool=562569&amp;gid=547766">Adjustments</a> </li><li class="" data-options="mobile_show_parent_link: false"><a href="/rapid_raid/imports/import_dkp.php?raid_pool=562569&amp;gid=547766">Imported DKP</a> </li><li class="" data-options="mobile_show_parent_link: false"><a href="/rapid_raid/members.php?raid_pool=562569&amp;gid=547766">Current DKP</a> </li></ul></li><li class="has-dropdown" data-options="mobile_show_parent_link: false"><a href="/rapid_raid/raids.php?raid_pool=562569&amp;gid=547766">Raids</a> <ul class="dropdown"><li class="" data-options="mobile_show_parent_link: false"><a href="/rapid_raid/my/signups.php?raid_pool=562569&amp;gid=547766">Your Signups</a> </li><li class="" data-options="mobile_show_parent_link: false"><a href="/rapid_raid/raids.php?raid_pool=562569&amp;gid=547766">Upcoming</a> </li><li class="" data-options="mobile_show_parent_link: false"><a href="/rapid_raid/raids.php?mode=past&raid_pool=562569&amp;gid=547766">Past</a> </li><li class="" data-options="mobile_show_parent_link: false"><a href="/rapid_raid/add_raid.php?raid_pool=562569&amp;gid=547766">Create New</a> </li></ul></li><li class="has-dropdown" data-options="mobile_show_parent_link: false"><a href="/rapid_raid/event_list.php?raid_pool=562569&amp;gid=547766">Events</a> <ul class="dropdown"><li class="" data-options="mobile_show_parent_link: false"><a href="/rapid_raid/event_list.php?raid_pool=562569&amp;gid=547766">Recent</a> </li></ul></li><li class="has-dropdown" data-options="mobile_show_parent_link: false"><a href="/rapid_raid/items.php?raid_pool=562569&amp;gid=547766">Items</a> <ul class="dropdown"><li class="" data-options="mobile_show_parent_link: false"><a href="/rapid_raid/items.php?raid_pool=562569&amp;gid=547766">Recent</a> </li><li class="" data-options="mobile_show_parent_link: false"><a href="/rapid_raid/item_prices.php?raid_pool=562569&amp;gid=547766">Prices</a> </li></ul></li><li class="has-dropdown" data-options="mobile_show_parent_link: false"><a href="/rapid_raid/item_report.php?raid_pool=562569&amp;gid=547766">Reports</a> <ul class="dropdown"><li class="" data-options="mobile_show_parent_link: false"><a href="/rapid_raid/reports/attendance_detail.php?raid_pool=562569&amp;gid=547766">Global Attendance</a> </li><li class="" data-options="mobile_show_parent_link: false"><a href="/rapid_raid/reports/events.php?raid_pool=562569&amp;gid=547766">Event Attendance</a> </li><li class="" data-options="mobile_show_parent_link: false"><a href="/rapid_raid/gear_report.php?raid_pool=562569&amp;gid=547766">Item Ownership</a> </li><li class="" data-options="mobile_show_parent_link: false"><a href="/rapid_raid/event_report.php?raid_pool=562569&amp;gid=547766">Item Event Report</a> </li><li class="" data-options="mobile_show_parent_link: false"><a href="/rapid_raid/analytics/signups.php?raid_pool=562569&amp;gid=547766">Signup Report</a> </li></ul></li></ul></li><li class="" data-options="mobile_show_parent_link: false"><a href="/rapid_raid/help/index.php?ts=9:1&amp;gid=547766">Help</a> </li></ul></li><li class=""><a class="guildNavLink " href="/calendar/calendar.php?gid=547766" target="_self">Calendar</a></li><li class="has-dropdown"><a class="guildNavLink " href="/gallery/gallery.php?gid=547766" target="_self">Gallery</a><ul class="dropdown"><li class="" data-options="mobile_show_parent_link: false"><a href="/gallery/gallery.php?gid=547766">Gallery</a> </li><li class="" data-options="mobile_show_parent_link: false"><a href="/gallery/library.php?gid=547766">File Library</a> </li></ul></li>
+					    	</ul>
+					    	<div style="clear:both;"></div>
+					  </section>
+					</nav>
+							</div>
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+		<div id="content_over_wrap">
+			<div id="content_wrap">				
+				<div id="content" class="row">
+					<main id="center" class="column-auto-wall column-auto-desk column-auto-lap column-12-hand">
+						<div id="main-content"><script>
+							function primaryPageAction()
+							{
+								if ($("primary_action_container") != undefined){
+									gl_flip("primary_action_container");	
+								}
+							}
+							function postPageAction(data) {							
+					    		var jForm = new Element("form", {"action":"/user/1365198//?gid=547766&postback=true","method":"post","style":"display:none;"});
+					    		jForm.setAttribute("id","quitform");
+					    		for (name in data) {					    		
+					        		var jInput = new Element("input", {"name":name,"value":data[name]});
+					        		jForm.insert(jInput);
+					    		}
+					    		var jInput = new Element("input", {"type":"button","name":"btnsubmit","value":"submit"});
+					    		jForm.insert(jInput);
+					    		
+					    		jForm.appendChild(CSRFP._getInputElt());
+					    		
+					    		$$("body")[0].insert(jForm);
+					    		jForm.submit();
+					    		return false;
+							}
+						</script>
+						<style>
+							
+							/* reset for profile pages */
+							#lbw, #rbw, body, #center {background-image:none;background-color:#f5f8fa;}
+							#lbw, #rbw, body, #site_wrap_neo {margin-bottom:0px;padding-bottom:0px;}
+
+							/* profile positioning */
+							.headerContainer{display:none;}
+							#header_wrap{display:none;}
+							#leftColumn, #rightColumn, #right,#left {display:none;}
+							#top-center-widget-column{display:none;}
+							#bottom-center-widget-column{display:none;}
+							td#mainBody {padding-top:0px;}
+							#center{padding:0px;}
+							#content_wrap{width:100%;max-width:100%;}
+							#footer_container{border:none;}
+							#content {padding-top:0px;}
+						</style>
+						<div id="primary_action_popup"></div>
+						<div id="profileheader" class="mobile-hide">
+							<div id="header-image" style="background-image:url('http://static.guildlaunch.net/templates/assets/headers/partners/twitrcovers/10/Green-l.jpg');">
+								<div id="profile-image-container">
+									<div id="profile-image" style="background-image:url('https://www.gravatar.com/avatar/6aa2bdf96a5ed8b48517e08d6527e3f5?d=identicon&s=130');"></div>									
+								</div>
+							</div>							
+						</div>
+						<div id="profileMobileHeader" class="non-mobile-hide">
+							<div class="row">	
+								<div class="column-3-wall column-3-desk column-3-lap column-3-hand">
+									<img src="https://www.gravatar.com/avatar/6aa2bdf96a5ed8b48517e08d6527e3f5?d=identicon&s=130"/>
+								</div>
+								<div class="column-auto-wall column-auto-desk column-auto-lap column-auto-hand">
+									<div style="padding-left:10px;">
+										<h2 style="line-height:2rem;">Grimdahl</h2><div class="interactions" style="padding-top:5px;"><a href="/communication/communication.php?mode=compose&messageTo=Grimdahl&amp;gid=547766" class="button standard small"><i class="fa fa-envelope fa-fw"></i> Send PM</a></div>	</div>
+		             			</div>
+							</div>
+						</div>
+						<div id="profileMobileNav" class="non-mobile-hide">
+							<div class="row">		
+								<div class="mobile-nav-button column-auto-wall column-auto-desk column-auto-lap column-2-hand">
+									<a class="_nav" href="/user/1365198/?gid=547766">
+										<span class="fa fa-user fa-fw fa-2x"></span><span class="nav-name">Profile</a></span>
+									</a>
+								</div>
+								<div class="mobile-nav-button column-auto-wall column-auto-desk column-auto-lap column-2-hand">
+									<a class="_nav" href="/user/1365198/communities/?gid=547766">
+										<i class="fa fa-users fa-fw fa-2x"></i><span class="nav-name">Sites</span>
+									</a>
+								</div>
+								<div class="mobile-nav-button column-auto-wall column-auto-desk column-auto-lap column-2-hand">
+									<a class="_nav" href="/user/1365198/games/?gid=547766">
+										<i class="fa fa-gamepad fa-fw fa-2x"></i><span class="nav-name">Games</span>
+									</a>
+								</div>
+								<div class="mobile-nav-button column-auto-wall column-auto-desk column-auto-lap column-2-hand">
+									<a class="_nav" href="/user/1365198/esports/?gid=547766">
+										<i class="fa fa-cubes fa-fw fa-2x"></i><span class="nav-name">eSports</span>
+									</a>
+								</div>
+								<div class="mobile-nav-button column-auto-wall column-auto-desk column-auto-lap column-2-hand">
+									<a class="_nav" href="/users/blog/1365198/?gl_user=1365198&amp;gid=547766">
+										<i class="fa fa-pencil-square-o fa-fw fa-2x"></i><span class="nav-name">Blog</span>
+									</a>
+								</div>
+								<div class="mobile-nav-button column-auto-wall column-auto-desk column-auto-lap column-2-hand">
+									<a class="_nav" href="/user/1365198/achievements/?gid=547766">
+										<i class="fa fa-trophy fa-fw fa-2x"></i><span class="nav-name">Awards</span>
+									</a>
+								</div>
+							</div>																				
+						</div><div id="taskbar">
+							<div id="taskcontainer">
+								<div id="taskactions"><ul></div>
+							</div>	
+						</div>						
+						<div id="profileContainer">							
+							<div id="profilecontent" class="row">								
+								<nav class="column-2-wall column-2-desk column-2-lap column-2-hand mobile-hide">									
+									<div id="nameplate" style="position:relative;">																				
+										<div class="name ">Grimdahl</div></div>
+									<div id="infopanel">
+										<ul id="section_nav">
+											<li><a class="" href="/user/1365198/?gid=547766">Profile</a></li>
+											<li><a class="" href="/user/1365198/communities/?gid=547766">Sites</a></li>
+											<li><a class="active-nav-item" href="/user/1365198/games/?gid=547766" class="inactive">Games</a></li>
+                                            <!--<li><a class="active-nav-item" href="/user/1365198/characters/?gid=547766" class="inactive">In-Game</a></li>-->
+                                            <li><a class="" href ="/user/1365198/esports/teams?gid=547766">eSports</a></li>
+											<li><a class="" href="/users/blog/1365198?gl_user=1365198&amp;gid=547766">Blog</a></li>
+											<li><a class="" href="/user/1365198/achievements/?gid=547766">Awards</a></li>	</ul>
+									</div><div class="interactions"><a href="/communication/communication.php?mode=compose&messageTo=Grimdahl&amp;gid=547766" class="button standard small"><i class="fa fa-envelope fa-fw"></i> Send PM</a></div><div id="socialpanel">
+										<ul id="social_nav"></ul>				
+									</div>
+								</nav>
+								<div id="content-column" class="column-auto-wall column-auto-desk column-auto-lap column-auto-hand">
+									<div id="content-area" style="position:relative;"> <div class='widgetFrame'>
+        <div class="contentBody" id="contentBody">
+         <div class="panelBody" align="left" style="margin-left:10px;margin-bottom:5px;font-size:14px;"><div class="panelSubNav" align="left" style="line-height:2;">
+    <table width='98%' style="display:table;" cellpadding=3 cellspacing=2>
+                <tr>
+                <td align='left' valign='middle'>
+                            > Adaria |                     <a href="/users/characters/character_info.php?gl_user=1365198&char=22007284&amp;gid=547766">General Info</a> |
+                                    <a href="/users/characters/character_crafting.php?gl_user=1365198&char=22007284&amp;gid=547766">Crafting</a> |
+                                    <a href="/users/characters/blog/22007284/?gl_user=1365198&char=22007284&amp;gid=547766">Blog</a> |
+                                    <a href="/users/characters/character_dkp.php?gl_user=1365198&char=22007284&amp;gid=547766">Rapid Raid</a>
+                </td><td align='right' valign='top'><script language=JavaScript>
+                        <!--
+                        function Navigate() {
+                        var number = document.getElementById('character_selector').selectedIndex;
+                        location.href = document.getElementById('character_selector').options[number].value; }
+                        // -->
+                        </script>Quick Select: <select style="font-size:9px" name="character_selector" id="character_selector" onChange="Navigate(this.form);"><option value='/users/characters/character_detail.php?char=22007284&gid=547766' selected>Adaria</option><option value='/users/characters/character_detail.php?char=21871788&gid=547766' >Balthasar</option><option value='/users/characters/character_detail.php?char=22021273&gid=547766' >Durango</option><option value='/users/characters/character_detail.php?char=21682905&gid=547766' >Grimdahl</option><option value='/users/characters/character_detail.php?char=22021274&gid=547766' >Kilea</option><option value='/users/characters/character_detail.php?char=21843989&gid=547766' >Manekiki</option><option value='/users/characters/character_detail.php?char=21843990&gid=547766' >Maunianai</option><option value='/users/characters/character_detail.php?char=22007283&gid=547766' >Neith</option><option value='/users/characters/character_detail.php?char=22016790&gid=547766' >Sinbad</option><option value='/users/characters/character_detail.php?char=22019418&gid=547766' >Strange</option><option value='/users/characters/character_detail.php?char=21871789&gid=547766' >Venadan</option></select></td></tr>        </td></tr></table>
+                    </div>
+    </div>
+         
+<div class="contentItem">
+            <form action="character_detail.php" method="post">
+            <input type="hidden" name="gid" value="547766" />
+            <input type="hidden" name="mode" value="" />
+            <input type="hidden" name="char" value="22007284" />
+            <input type="hidden" name="gl_user" value="1365198" />
+            <input type="hidden" name="action" value="" />
+                           <table cellpadding="0" width=100% border=0 align='center'>
+                                            <tr>
+                    <td valign='top' width='160' style='padding-right:20px'><h2>Adaria</h2><div class="img-shadow" style="width:150px;"><img width=150 src="/resources/images/avatar_blank2.jpg" align="absmiddle" /></div></td>                        
+                    <td align="left" valign="top">
+                           <h2>Adaria</h2>                                Member of: <a href='http://Azureguardtakp.gamerlaunch.com/'>NAGD TAKP</a><br>Everquest<input type="hidden" name="game_id" value="17">, Custom Server<input type="hidden" name="server_id" value="4565"><br><br>
+                                Level: 55                                Dark Elf&nbsp;Magician&nbsp;&nbsp;<input type="hidden" name="hier_1" value="Dark Elf"><input type="hidden" name="hier_2" value="Magician"><input type="hidden" name="hier_3" value=""><input type="hidden" name="hier_4" value="">
+                                 
+                </tr>            
+            </table>
+            </form>
+            <span class="micro">Direct Link: <a href=http://www.gamerlaunch.com/community/users/characters/character_detail.php?char=22007284>http://www.gamerlaunch.com/community/users/characters/character_detail.php?char=22007284</a></span>
+            </div>
+            </div>
+            </div></div>
+</div></div></div></div>
+		</div></div> 
+        <script>var torc_tooltips = { "prettylinks": true, "iconlinks": true, "notextlargeicon": false, "override": false };</script>
+        <script>var xivdb_tooltips ={'replaceName' : true, 'colorName' : true, 'showIcon' : true,}</script>
+        <script type="text/javascript">
+        var wowhead_tooltips = { "colorlinks": true};
+
+        function downloadJSAtOnload() {
+
+        var element = document.createElement("script");
+        element.src = "https://torcommunity.com/db/tooltip_loader.js";
+        document.body.appendChild(element);
+
+        var element = document.createElement("script");
+        element.src = "https://zam.zamimg.com/j/tooltips.js";
+        document.body.appendChild(element);
+
+        var element = document.createElement("script");
+        element.src = "https://wow.zamimg.com/widgets/power.js";
+        document.body.appendChild(element);
+
+        var element = document.createElement("script");
+        element.src = "https://www.magelocdn.com/pack/rift/en/magelo-bar.js#3";
+        document.body.appendChild(element);
+
+        //var element = document.createElement("script");
+        //element.src = "http://u.eq2wire.com/js/eq2u_tools2.js";
+        //document.body.appendChild(element);
+        }
+        if (window.addEventListener)
+        window.addEventListener("load", downloadJSAtOnload, false);
+        else if (window.attachEvent)
+        window.attachEvent("onload", downloadJSAtOnload);
+        else window.onload = downloadJSAtOnload;
+        </script>
+        <!--<script defer type="text/javascript" src="http://xivdb.com/tooltips.js?v=1.6"></script>-->
+        <script defer src="https://torcommunity.com/db/tooltip_loader.js"></script>
+        <!--<script defer src="http://teracodex.com/tools/codextooltips.js"></script>
+	    <script defer src="http://zam.zamimg.com/j/tooltips.js"></script>
+        <script async src="http://tor.zamimg.com/tooltips.js"></script>
+        <script defer src="http://static.wowhead.com/widgets/power.js"></script>
+        <script defer src="http://xivdb.com/tooltips.js"></script>
+        <script defer type="text/javascript" src="http://xivdb.com/tooltips.js?v=1.6"></script>
+		<script defer src="http://www.magelocdn.com/pack/rift/en/magelo-bar.js#3" type="text/javascript"></script>
+        <script defer src="http://u.eq2wire.com/js/eq2u_tools2.js"></script>
+        <script defer src="https://torcommunity.com/db/tooltip_loader.js"></script>-->
+        </div>
+                        <div id="top-center-widget-column"><div class="widg_add_display" style="display:none;text-align:center;margin:10px;min-width:160px;font-size:16px;font-weight:bold;"><a href="JavaScript:showWidgetSelectionForm(4,547766,'profile',0,0);" class="widgetAdd button secondary" id="widgetAdd4"><i class="fa fa-plus fa-lg"></i> Add Widget Above</a></div><div id="widg_col_4" class="widgdisplay_marker"><!-- get widget data --><!-- end get widget data --><!-- start column 4 --><!-- end column 4 --></div><div id="widg_content_placeholder" style="display:none;"></div></div>
+						<div id="bottom-center-widget-column"><div class="widg_add_display" style="display:none;text-align:center;margin:10px;min-width:160px;font-size:16px;font-weight:bold;"><a href="JavaScript:showWidgetSelectionForm(2,547766,'profile',0,0);" class="widgetAdd button secondary" id="widgetAdd2"><i class="fa fa-plus fa-lg"></i> Add Widget Below</a></div><div id="widg_col_2" class="widgdisplay_marker"><!-- get widget data --><!-- end get widget data --><!-- start column 2 --><!-- end column 2 --></div></div>
+					</main><aside id="left"  class="column-gs-wall column-gs-desk column-gs-lap column-12-hand">
+							<div id="left-widget-column"><div class="widg_add_display" style="display:none;text-align:center;margin:10px;min-width:160px;font-size:16px;font-weight:bold;"><a href="JavaScript:showWidgetSelectionForm(1,547766,'profile',0,0);" class="widgetAdd button secondary" id="widgetAdd1"><i class="fa fa-plus fa-lg"></i> Add Widget Left</a></div><div id="widg_col_1" class="widgdisplay_marker"><!-- get widget data --><!-- end get widget data --><!-- start column 1 --><style>#left{display:none;}#leftColumn{min-width:0px;}#leftColumnShim{min-width:0px;display:none;}</style><!-- end column 1 --></div></div>
+						</aside><aside id="right"  class="column-gs-wall column-gs-desk column-gs-lap column-12-hand">
+						<div id="right-widget-column"><div class="widg_add_display" style="display:none;text-align:center;margin:10px;min-width:160px;font-size:16px;font-weight:bold;"><a href="JavaScript:showWidgetSelectionForm(3,547766,'profile',0,0);" class="widgetAdd button secondary" id="widgetAdd3"><i class="fa fa-plus fa-lg"></i> Add Widget Right</a></div><div id="widg_col_3" class="widgdisplay_marker"><!-- get widget data --><!-- end get widget data --><!-- start column 3 --><script>rightWidgets++;</script><style>#right{display:none;}#rightColumn{min-width:0px;padding-left:0px;}#rightColumnShim{min-width:0px;display:none;}</style><!-- end column 3 --></div></div>
+					</aside></div>
+			</div>
+		</div>
+		<footer id="footer">
+			<div id="footer_container">
+				<div class="widg_box">
+					<div class="contentBody body2">
+						<div class="row">
+							
+							<div class="column-6-wall column-6-desk column-6-lap column-12-hand">
+								<div>
+									<a href="/feeds/?gid=547766">RSS Feeds</a> - <a href="http://www.gamerlaunch.com/community">Support</a>
+								</div>
+							</div>
+							<div class="column-6-wall column-6-desk column-6-lap column-12-hand right-aligned-all">
+								<div>
+									<a href="http://www.guildlaunch.com" title="Powered by Gamer Launch - Game Community Hosting"><img src="/resources/images/poweredby.png"></a>
+								</div>
+							</div>
+						</div>
+						<div class="row">
+							<div class="column-6-wall column-6-desk column-6-lap column-12-hand micro">2:19 PM GMT -5 You: 7:19 PM GMT 0</div>
+						</div>
+					</div>
+				</div>
+			</div>
+		</footer>		
+		<div class="extras-container">
+			<div id="lean_overlay" style="display:none;"></div>
+			<div id="gl_global_notifier_div" class="notifier_div" style="display:none;"></div>
+			<div id="file-manager" class="popupForm" style="z-index:999999;display:none;">
+				<div id="file-manager-popup-container" class="popupContainer">
+					<header class="popupHeader">
+						<span class="header_title">Images<span id="header_filter_options"> (<span id="image_count"></span>)</span></span>
+						<span id="header_filter_dropdown"></span>
+						<span class="modal_close"><a href="#" onclick="return closeFileManager();" class="close_link" rel="nofollow"><i class="fa fa-times fa-lg"></i></a></span>
+					</header>
+					<div class="contents">
+
+					</div>
+					<div class="footer">
+						<div class="upload">
+							<form id="file-form" action="" method="POST" enctype="multipart/form-data">
+									<input type="hidden" name="action" value="upload" />
+									<input type="hidden" name="image_section" id="image_section" value="" />
+									<input id="uploadFilePicker" placeholder="Pick File" disabled="disabled" />
+									<div class="fileUpload button publish_button">
+									<input id="file-select" type="file" class="upload" name="file"/>
+									<span>Find File</span>
+								</div>
+								<a href="#" class="button save_button" onclick="return uploadFile();" rel="nofollow">Upload</a>
+							</form>
+						</div>
+					</div>
+				</div>
+			</div>
+			<div id="popup_form_div" class="popupForm" style="z-index:999999;display:none;">
+						
+					</div>
+			<div id="loginPopupForm" class="popupForm" style="z-index:999999;display:none;">
+						<div id="loginPopupContainer" class="popupContainer">
+							<header class="popupHeader">
+						        <span class="header_title">Login</span>
+						        <span class="modal_close"><a href="#" onclick="return hideLoginPopupForm();" class="close_link" rel="nofollow"><i class="fa fa-times fa-lg"></i></a></span>
+						    </header>
+						    <section class="popupBody row">
+						    	<div class="user_login column-7-wall column-7-desk column-7-lap column-7-hand">
+									<form action="/recruiting/login.php?gid=547766" method="POST" id="login_form">
+										<input name="login_source" type="hidden" value="guild"/>
+                        				<input name="destination" type="hidden" value="/users/characters/character_detail.php?char=22007284&amp;gid=547766&amp;gid=547766" />
+                        				<input name="action" type="hidden" value="login" />
+									    <label>Email</label> <input type="email" id="popup_login_email" name="loginEmail" required>
+									    <label>Password</label> <input type="password" minlength="8" name="loginPassword" required>
+								 
+									    <div class="checkbox_group">
+									        <input id="remember" type="checkbox" name="autoLogin"> <label for="remember">Remember me on this computer</label>
+									    </div>
+								 
+									 	<div>
+									 		<input type="submit" value="Login" name="submit" class="flat-button blue">&nbsp;<a href="#" onclick="return hideLoginPopupForm();" rel="nofollow">Cancel</a>
+									    </div>
+									</form>
+				                </div>
+				                <div class="social_login column-5-wall column-5-desk column-5-lap column-5-hand">
+				                	<a class="social_box fb fb_connect" fb_dest="/index.php" fb_fail="/recruiting/login.php" fb_action="login" href="#" rel="nofollow">
+				                		<span class="icon"><i class="fa fa-facebook"></i></span>
+				                		<span class="icon_title">Login with Facebook</span>
+				                	</a>
+				                	<a href="/recruiting/app_application.php?destination=%2Fusers%2Fcharacters%2Fcharacter_detail.php%3Fchar%3D22007284%26gid%3D547766&amp;gid=547766">Create An Account</a>
+			                		<a href="http://azureguardtakp.gamerlaunch.com/recruiting/reset_password.php?gid=547766">Forgot Password</a>
+				                </div>
+			                </section>
+		                </div>
+					</div>
+			<div style="display:none;"><span class="detect-no-flexbox">No FB</span> <span class="detect-flexbox">Yes FB</span> <span class="hand">Hand (smaller)</span> <span class="lap">Lap 40.063em</span> <span class="desk">Desk 64.063em</span> <span class="wall">Wall 90.063em</span> <script>document.write('Pixel Ratio:' + window.devicePixelRatio);</script></div></div></div>
+		<!-- javascript -->
+		<script type="text/javascript" src="/javascript/merged_site_script_08092014.js?v=300&load=effects,dragdrop"></script>
+		<script type="text/javascript" src="/resources/style/v3/js/third_party/modernizr.js"></script>
+		<script type="text/javascript" src="//js.pusher.com/2.2/pusher.min.js"></script>
+		<script type="text/javascript" src="/javascript/scriptaculous-js-1.9.0/src/scriptaculous.js?v=1&load=effects,dragdrop"></script>
+		<script type="text/javascript" src="/javascript/carousel.js?v=1"></script>
+		<script type="text/javascript" src="/resources/js/tinymce/0406xx/tinymce.min.js"></script>
+		<script type="text/javascript" src="//cdnjs.cloudflare.com/ajax/libs/jstimezonedetect/1.0.4/jstz.min.js"></script>
+		<!-- end javascript includes -->
+		<!-- bottom javascript -->
+		<script language="JavaScript">
+			document.observe("dom:loaded", function() {
+				if ($('admin_nav') != undefined){
+					var admin_nav = new DropDownMenu($('admin_nav'));
+				}
+			});
+			Event.observe(window, "resize", function() {
+			  adjustMenusForResize();
+			});
+		</script><!-- end primary bottom javascript -->
+		<script src="/resources/style/v3/third_party/foundation/js/vendor/jquery.js"></script>
+		<script src="/resources/style/v3/js/third_party/jquery-ui/jquery-ui.js"></script>
+		<script>
+			jQuery.noConflict();
+		</script><script type = "text/javascript" src = "https://cdnjs.cloudflare.com/ajax/libs/spectrum/1.8.0/spectrum.min.js" ></script><link rel = "stylesheet" href = "https://cdnjs.cloudflare.com/ajax/libs/spectrum/1.8.0/spectrum.min.css" />
+		<script src="/resources/style/v3/third_party/foundation/js/foundation.min.js"></script>
+		<script>
+			jQuery( document ).ready(function( $ ) {
+				$(document).foundation();
+				adjustMenusForResize();
+				$('.moment-in-time').each(function() {
+					if ($(this).attr('data-moment-type') == "relative") {
+						$(this).html(moment($(this).attr('data-moment-in-time')).fromNow());
+					}else{
+						var date_object = moment($(this).attr('data-moment-in-time'));
+
+						if (moment().diff(date_object, 'days') > 90){
+							$(this).html(date_object.format("MMM. Do YYYY h:mm A"));
+						}else{
+							$(this).html(date_object.format("MMM. Do h:mm A"));
+						}
+					}
+				});
+
+				var tz = jstz.determine(); // Determines the time zone of the browser client
+				var client_tz = tz.name();
+				var default_tz = 'America/New_York';
+				var found = false;
+				if (client_tz == 'Etc/UTC'){
+					client_tz = 'UTC';
+				}else if (client_tz == 'Etc/GMT+12'){
+					//client_tz = 'UTC';
+				}
+				//alert(client_tz);
+				jQuery('.tz_picker.client_tz option').each(function(){
+					if (this.value == client_tz){
+						found = true;
+					}
+				});
+
+				if (found){
+					jQuery('.tz_picker.client_tz').val(client_tz);
+				}else{
+					jQuery('.tz_picker.client_tz').val(default_tz);
+				}
+				initSpectrum();
+			});
+			initSpectrum();
+                            // Enable pusher logging - don't include this in production
+                            Pusher.log = function(message) {
+                              if (window.console && window.console.log) {
+                                window.console.log(message);
+                              }
+                            };
+			var pusherPrimary = new Pusher('09cb9d548fb340551843', { authEndpoint: '/recruiting/pusher_auth.php?gid=547766' });
+			var site_presenceChannel = pusherPrimary.subscribe('presence-site-547766');
+
+			if (jQuery('.online_list').length ) {
+				site_presenceChannel.bind('pusher:subscription_succeeded', function() {
+					site_presence_info(site_presenceChannel);
+				});
+
+				site_presenceChannel.bind('pusher:member_added', function(member) {
+					site_add_presence_info(site_presenceChannel, member);
+				});
+
+				site_presenceChannel.bind('pusher:member_removed', function(member) {
+					site_remove_presence_info(site_presenceChannel, member);
+				});
+
+				userStatusTimers = [];
+
+				function site_presence_info(presenceChannel){
+					presence_count = presenceChannel.members.count;
+
+					jQuery('.online_list').html('');
+
+					presenceChannel.members.each(function(member) {
+							if (member.info.handle != "Anonymous"){
+								//alert(member.id);
+								var presence_info = '<a href="/user/' + member.id + '?gid=547766"><span class="avatar standard av_tiny" style="background-image:url(\'' + member.info.avatar + '\');" title="' + member.info.handle + '">&nbsp;</span></a>';
+								jQuery('.online_list').append('<li class="member-info-' + member.id + '">' + presence_info + '</li>');
+							}
+					});
+				}
+
+				function site_add_presence_info(presenceChannel, member){
+					// if this is not the anonymous observer
+					if (member.info.handle != "Anonymous"){
+						//alert(member.id);
+						// clear the timer
+						clearTimeout(userStatusTimers[member.id]);
+						// and we do not alrady have it, add the user
+						if (jQuery('.online_list .member-info-' + member.id).length == 0){
+							var presence_info = '<span class="avatar standard av_tiny" style="background-image:url(\'' + member.info.avatar + '\');" title="' + member.info.handle + '">&nbsp;</span>';
+							jQuery('.online_list').append('<li class="member-info-' + member.id + '">' + presence_info + '</li>');
+							jQuery('.online_list .member-info-' + member.id).hide().slideDown('slow')
+						}
+					}
+				}
+
+				function site_remove_presence_info(presenceChannel, member){
+					if (member.info.handle != "Anonymous"){
+						userStatusTimers[member.id]=setTimeout(function(){
+							jQuery('.online_list .member-info-' + member.id).slideUp();
+							jQuery('.online_list .member-info-' + member.id).remove();
+							}, 5000);
+					}
+				}
+			}
+		</script>
+		<script type="text/javascript" src="/javascript/customization.js?v=9002"></script><script type="text/javascript">
+    (function() {
+        function async_load(script_url){
+            var protocol = ('https:' == document.location.protocol ? 'https://' : 'http://');
+            var s = document.createElement('script'); s.src = protocol + script_url;
+            var x = document.getElementsByTagName('script')[0]; x.parentNode.insertBefore(s, x);
+        }
+        bm_website_code = '89A6670113C743E4';
+        //jQuery(document).ready(function(){async_load('asset.pagefair.com/measure.min.js')});
+        //jQuery(document).ready(function(){async_load('asset.pagefair.net/ads.min.js')});
+    })();
+</script>
+<script language="JavaScript">
+                    (function(body, div) {
+                      if (!Modernizr.flexbox) {
+                        div = document.createElement("div");
+                        div.className = "alert-warning flexbox-warning";
+                        div.innerHTML = "Your browser does not support Flexbox. Parts of this site may not appear as expected. A mobile site is <a href=\"/mobile/?gid=547766\">available.";
+                        body.insertBefore(div, body.firstChild);
+                        _gaq.push(['_trackEvent', 'Flexbox', 'Not Available', 'Top',true]);
+                      }
+                    }(document.body));
+                    </script><script type="text/javascript">
+					var DISPLAY_ALL_TUTORIALS = 0;
+					var CURRENT_TUT_BITMASK = 1;
+					var TUT_BITMASK = {
+						SITEINTRO: 1, // 2^0
+						WIDGETS: 2, // 2^1
+						STYLE: 4, // 2^2
+						STYLE2: 8, // 2^3
+						//OTHER2: 16 // 2^4
+					};
+
+					if (!(CURRENT_TUT_BITMASK & TUT_BITMASK["SITEINTRO"]) || DISPLAY_ALL_TUTORIALS == 1)
+					{
+						startSiteIntro();
+					}
+				</script>		
+		<!-- Quantcast Tag -->
+		<script type="text/javascript">
+			<!-- Quantcast Tag -->            
+            var _qevents = _qevents || [];
+            
+            (function() {
+            var elem = document.createElement('script');
+            elem.src = (document.location.protocol == "https:" ? "https://secure" : "http://edge") + ".quantserve.com/quant.js";
+            elem.async = true;
+            elem.type = "text/javascript";
+            var scpt = document.getElementsByTagName('script')[0];
+            scpt.parentNode.insertBefore(elem, scpt);
+            })();
+		        
+            _qevents.push({
+            qacct:"p-qEwZYqw48ca-M"
+            },{
+			qacct:"p-08C2tN1gz3kHY"
+			});
+        </script>   
+        <noscript> <div style="display:none;"> <img src="//pixel.quantserve.com/pixel?a.1=p-qEwZYqw48ca-M&a.2=p-08C2tN1gz3kHY" border="0" height="1" width="1" alt="Quantcast"/> </div> </noscript>
+        <!-- End Quantcast tag -->
+        <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'9cd6ad81be3ba468',t:'MTc3MTAxMDM3MA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</html>
