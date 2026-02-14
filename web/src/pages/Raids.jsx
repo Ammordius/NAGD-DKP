@@ -11,7 +11,8 @@ export default function Raids() {
     supabase
       .from('raids')
       .select('raid_id, raid_name, date_iso, date, attendees')
-      .order('date_iso', { ascending: false })
+      .order('date_iso', { ascending: false, nullsFirst: false })
+      .order('raid_id', { ascending: false })
       .limit(200)
       .then(({ data, error: err }) => {
         if (err) setError(err.message)
