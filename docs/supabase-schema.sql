@@ -96,6 +96,24 @@ CREATE TABLE IF NOT EXISTS dkp_adjustments (
   spent_delta INTEGER NOT NULL DEFAULT 0
 );
 
+-- Cached DKP totals per character (refreshed on attendance/loot changes or by officers). Makes the leaderboard fast.
+CREATE TABLE IF NOT EXISTS dkp_summary (
+  character_key TEXT PRIMARY KEY,
+  character_name TEXT,
+  earned NUMERIC NOT NULL DEFAULT 0,
+  spent INTEGER NOT NULL DEFAULT 0,
+  last_activity_date DATE,
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- Characters explicitly marked as active (always shown on leaderboard). Officers manage this list.
+CREATE TABLE IF NOT EXISTS active_raiders (
+  character_key TEXT PRIMARY KEY
+);
+
+-- Add new columns if upgrading from an older schema (no-op if already present)
+ALTER TABLE dkp_summary ADD COLUMN IF NOT EXISTS last_activity_date DATE;
+
 -- Indexes for common queries
 CREATE INDEX IF NOT EXISTS idx_raid_events_raid ON raid_events(raid_id);
 CREATE INDEX IF NOT EXISTS idx_raid_loot_raid ON raid_loot(raid_id);
@@ -107,6 +125,126 @@ CREATE INDEX IF NOT EXISTS idx_raid_event_attendance_char ON raid_event_attendan
 CREATE INDEX IF NOT EXISTS idx_raid_classifications_raid ON raid_classifications(raid_id);
 CREATE INDEX IF NOT EXISTS idx_raid_classifications_mob ON raid_classifications(mob);
 CREATE INDEX IF NOT EXISTS idx_dkp_adjustments_name ON dkp_adjustments(character_name);
+
+-- Internal refresh: recomputes dkp_summary and last_activity_date. No auth check (used by triggers and by RPC).
+CREATE OR REPLACE FUNCTION public.refresh_dkp_summary_internal()
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  use_per_event BOOLEAN;
+BEGIN
+  SELECT EXISTS (SELECT 1 FROM raid_event_attendance LIMIT 1) INTO use_per_event;
+
+  TRUNCATE dkp_summary;
+
+  IF use_per_event THEN
+    INSERT INTO dkp_summary (character_key, character_name, earned, spent, last_activity_date, updated_at)
+    SELECT character_key, character_name, earned, 0, last_activity_date, now()
+    FROM (
+      SELECT
+        (CASE WHEN COALESCE(trim(rea.char_id::text), '') = '' THEN COALESCE(trim(rea.character_name), 'unknown') ELSE trim(rea.char_id::text) END) AS character_key,
+        MAX(COALESCE(trim(rea.character_name), rea.char_id::text, 'unknown')) AS character_name,
+        SUM(COALESCE((re.dkp_value::numeric), 0)) AS earned,
+        MAX((r.date_iso::date)) AS last_activity_date
+      FROM raid_event_attendance rea
+      LEFT JOIN raid_events re ON re.raid_id = rea.raid_id AND re.event_id = rea.event_id
+      LEFT JOIN raids r ON r.raid_id = rea.raid_id
+      GROUP BY (CASE WHEN COALESCE(trim(rea.char_id::text), '') = '' THEN COALESCE(trim(rea.character_name), 'unknown') ELSE trim(rea.char_id::text) END)
+    ) e;
+  ELSE
+    INSERT INTO dkp_summary (character_key, character_name, earned, spent, last_activity_date, updated_at)
+    SELECT character_key, character_name, earned, 0, last_activity_date, now()
+    FROM (
+      SELECT
+        (CASE WHEN COALESCE(trim(ra.char_id::text), '') = '' THEN COALESCE(trim(ra.character_name), 'unknown') ELSE trim(ra.char_id::text) END) AS character_key,
+        MAX(COALESCE(trim(ra.character_name), ra.char_id::text, 'unknown')) AS character_name,
+        SUM(COALESCE(raid_totals.dkp, 0)) AS earned,
+        MAX((r.date_iso::date)) AS last_activity_date
+      FROM raid_attendance ra
+      LEFT JOIN (SELECT raid_id, SUM((dkp_value::numeric)) AS dkp FROM raid_events GROUP BY raid_id) raid_totals ON ra.raid_id = raid_totals.raid_id
+      LEFT JOIN raids r ON r.raid_id = ra.raid_id
+      GROUP BY (CASE WHEN COALESCE(trim(ra.char_id::text), '') = '' THEN COALESCE(trim(ra.character_name), 'unknown') ELSE trim(ra.char_id::text) END)
+    ) e;
+  END IF;
+
+  -- Merge spent and last_activity from raid_loot (and ensure we have last_activity from loot raids)
+  WITH spent_agg AS (
+    SELECT
+      (CASE WHEN COALESCE(trim(rl.char_id::text), '') = '' THEN COALESCE(trim(rl.character_name), 'unknown') ELSE trim(rl.char_id::text) END) AS character_key,
+      MAX(COALESCE(trim(rl.character_name), rl.char_id::text, 'unknown')) AS character_name,
+      SUM(COALESCE((rl.cost::integer), 0)) AS spent
+    FROM raid_loot rl
+    GROUP BY (CASE WHEN COALESCE(trim(rl.char_id::text), '') = '' THEN COALESCE(trim(rl.character_name), 'unknown') ELSE trim(rl.char_id::text) END)
+  ),
+  activity_dates AS (
+    SELECT character_key, MAX(raid_date) AS last_activity_date FROM (
+      SELECT (CASE WHEN COALESCE(trim(rea.char_id::text), '') = '' THEN COALESCE(trim(rea.character_name), 'unknown') ELSE trim(rea.char_id::text) END) AS character_key, (r.date_iso::date) AS raid_date FROM raid_event_attendance rea JOIN raids r ON r.raid_id = rea.raid_id WHERE r.date_iso IS NOT NULL
+      UNION ALL
+      SELECT (CASE WHEN COALESCE(trim(ra.char_id::text), '') = '' THEN COALESCE(trim(ra.character_name), 'unknown') ELSE trim(ra.char_id::text) END), (r.date_iso::date) FROM raid_attendance ra JOIN raids r ON r.raid_id = ra.raid_id WHERE r.date_iso IS NOT NULL
+      UNION ALL
+      SELECT (CASE WHEN COALESCE(trim(rl.char_id::text), '') = '' THEN COALESCE(trim(rl.character_name), 'unknown') ELSE trim(rl.char_id::text) END), (r.date_iso::date) FROM raid_loot rl JOIN raids r ON r.raid_id = rl.raid_id WHERE r.date_iso IS NOT NULL
+    ) t
+    WHERE raid_date IS NOT NULL
+    GROUP BY character_key
+  ),
+  combined AS (
+    SELECT
+      COALESCE(s.character_key, d.character_key) AS character_key,
+      COALESCE(s.character_name, d.character_name) AS character_name,
+      COALESCE(d.earned, 0) AS earned,
+      COALESCE(s.spent, 0) AS spent
+    FROM dkp_summary d
+    FULL OUTER JOIN spent_agg s ON d.character_key = s.character_key
+  )
+  TRUNCATE dkp_summary;
+  INSERT INTO dkp_summary (character_key, character_name, earned, spent, last_activity_date, updated_at)
+  SELECT c.character_key, c.character_name, c.earned, c.spent, ad.last_activity_date, now()
+  FROM combined c
+  LEFT JOIN activity_dates ad ON ad.character_key = c.character_key;
+END;
+$$;
+
+-- RPC: officers only. Calls internal refresh.
+CREATE OR REPLACE FUNCTION public.refresh_dkp_summary()
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  IF NOT (SELECT EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'officer')) THEN
+    RAISE EXCEPTION 'Only officers can refresh DKP summary';
+  END IF;
+  PERFORM refresh_dkp_summary_internal();
+END;
+$$;
+
+-- Trigger: refresh cache whenever attendance or loot changes (one refresh per statement, e.g. one per bulk insert).
+CREATE OR REPLACE FUNCTION public.trigger_refresh_dkp_summary()
+RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  PERFORM refresh_dkp_summary_internal();
+  RETURN NULL;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS refresh_dkp_after_event_attendance ON raid_event_attendance;
+CREATE TRIGGER refresh_dkp_after_event_attendance
+  AFTER INSERT OR UPDATE OR DELETE ON raid_event_attendance
+  FOR EACH STATEMENT EXECUTE FUNCTION public.trigger_refresh_dkp_summary();
+
+DROP TRIGGER IF EXISTS refresh_dkp_after_attendance ON raid_attendance;
+CREATE TRIGGER refresh_dkp_after_attendance
+  AFTER INSERT OR UPDATE OR DELETE ON raid_attendance
+  FOR EACH STATEMENT EXECUTE FUNCTION public.trigger_refresh_dkp_summary();
+
+DROP TRIGGER IF EXISTS refresh_dkp_after_loot ON raid_loot;
+CREATE TRIGGER refresh_dkp_after_loot
+  AFTER INSERT OR UPDATE OR DELETE ON raid_loot
+  FOR EACH STATEMENT EXECUTE FUNCTION public.trigger_refresh_dkp_summary();
 
 -- 3) Auto-create profile on signup
 CREATE OR REPLACE FUNCTION public.handle_new_user()
@@ -135,6 +273,8 @@ ALTER TABLE raid_attendance ENABLE ROW LEVEL SECURITY;
 ALTER TABLE raid_event_attendance ENABLE ROW LEVEL SECURITY;
 ALTER TABLE raid_classifications ENABLE ROW LEVEL SECURITY;
 ALTER TABLE dkp_adjustments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE dkp_summary ENABLE ROW LEVEL SECURITY;
+ALTER TABLE active_raiders ENABLE ROW LEVEL SECURITY;
 
 -- Profiles: users read own row; officers read all (drop first so script is re-runnable)
 DROP POLICY IF EXISTS "Users can read own profile" ON profiles;
@@ -179,6 +319,18 @@ DROP POLICY IF EXISTS "Authenticated read raid_classifications" ON raid_classifi
 CREATE POLICY "Authenticated read raid_classifications" ON raid_classifications FOR SELECT TO authenticated USING (true);
 DROP POLICY IF EXISTS "Authenticated read dkp_adjustments" ON dkp_adjustments;
 CREATE POLICY "Authenticated read dkp_adjustments" ON dkp_adjustments FOR SELECT TO authenticated USING (true);
+DROP POLICY IF EXISTS "Authenticated read dkp_summary" ON dkp_summary;
+CREATE POLICY "Authenticated read dkp_summary" ON dkp_summary FOR SELECT TO authenticated USING (true);
+
+-- active_raiders: everyone can read; only officers can insert/delete
+DROP POLICY IF EXISTS "Authenticated read active_raiders" ON active_raiders;
+CREATE POLICY "Authenticated read active_raiders" ON active_raiders FOR SELECT TO authenticated USING (true);
+DROP POLICY IF EXISTS "Officers manage active_raiders" ON active_raiders;
+CREATE POLICY "Officers manage active_raiders" ON active_raiders FOR ALL TO authenticated USING (
+  EXISTS (SELECT 1 FROM profiles p WHERE p.id = auth.uid() AND p.role = 'officer')
+) WITH CHECK (
+  EXISTS (SELECT 1 FROM profiles p WHERE p.id = auth.uid() AND p.role = 'officer')
+);
 
 -- 5) First officer: run after creating your user in Supabase Auth (replace YOUR_USER_UUID)
 -- INSERT INTO profiles (id, email, role) VALUES ('YOUR_USER_UUID', 'your@email.com', 'officer')

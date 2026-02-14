@@ -15,6 +15,7 @@ TRUNCATE TABLE raids RESTART IDENTITY CASCADE;
 TRUNCATE TABLE character_account CASCADE;
 TRUNCATE TABLE characters CASCADE;
 TRUNCATE TABLE accounts CASCADE;
+TRUNCATE TABLE dkp_summary;
 
 -- 2) dkp_adjustments: create if not exists (schema may already have it), clear and repopulate
 CREATE TABLE IF NOT EXISTS dkp_adjustments (
@@ -56,4 +57,8 @@ ON CONFLICT (character_name) DO UPDATE SET
 --   8. raid_event_attendance <- data/raid_event_attendance.csv
 --   9. raid_classifications  <- data/raid_classifications_import.csv (or data/raid_classifications.csv)
 --   10. dkp_adjustments  <- already filled by INSERT above; or use data/dkp_adjustments.csv
+--
+-- Then refresh the DKP cache (fast leaderboard): run in SQL Editor:
+--   SELECT refresh_dkp_summary();
+-- Or use the "Refresh DKP totals" button on the DKP page (officers only).
 -- =============================================================================

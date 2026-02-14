@@ -99,6 +99,8 @@ If the importer complains about types (e.g. empty numbers), you can:
 - **Earned much lower than official** → Either only a subset of raids/events is in Supabase, or **per-event attendance** is missing. For earned to match the official DKP export (see `docs/DKP-GROUND-TRUTH.md`): (1) Run `pull_raid_attendees.py` and `parse_raid_attendees.py` to create `data/raid_event_attendance.csv`, (2) Import that CSV into the `raid_event_attendance` table. Without it, the app uses raid-level attendance and may over- or under-credit depending on data.
 - In Supabase Table Editor, check row counts: `raid_loot` and `raid_events` should have thousands of rows if you have full history; `raid_event_attendance` should have many rows for per-event earned.
 
+**After importing (or re-importing) raid/attendance/loot data:** Refresh the DKP cache so the leaderboard loads quickly. Either (1) Log in as an officer and click **“Refresh DKP totals”** on the DKP page, or (2) In SQL Editor run: `SELECT refresh_dkp_summary();` The DKP page uses this cache when available; if the cache is empty it recomputes from raw tables (slower).
+
 ### Option B: Import via SQL (copy/paste from CSVs)
 
 If the Table Editor importer is awkward, we can add a small script that reads your `data/*.csv` files and outputs `INSERT` statements (or a single SQL file) you can paste into the SQL Editor. Say if you want that and we’ll generate it.
