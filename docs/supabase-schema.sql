@@ -89,6 +89,13 @@ CREATE TABLE IF NOT EXISTS raid_classifications (
   PRIMARY KEY (raid_id, mob)
 );
 
+-- One-off DKP adjustments so displayed totals match ground truth (character_name -> earned_delta, spent_delta)
+CREATE TABLE IF NOT EXISTS dkp_adjustments (
+  character_name TEXT PRIMARY KEY,
+  earned_delta NUMERIC NOT NULL DEFAULT 0,
+  spent_delta INTEGER NOT NULL DEFAULT 0
+);
+
 -- Indexes for common queries
 CREATE INDEX IF NOT EXISTS idx_raid_events_raid ON raid_events(raid_id);
 CREATE INDEX IF NOT EXISTS idx_raid_loot_raid ON raid_loot(raid_id);
@@ -99,6 +106,7 @@ CREATE INDEX IF NOT EXISTS idx_raid_event_attendance_raid ON raid_event_attendan
 CREATE INDEX IF NOT EXISTS idx_raid_event_attendance_char ON raid_event_attendance(char_id);
 CREATE INDEX IF NOT EXISTS idx_raid_classifications_raid ON raid_classifications(raid_id);
 CREATE INDEX IF NOT EXISTS idx_raid_classifications_mob ON raid_classifications(mob);
+CREATE INDEX IF NOT EXISTS idx_dkp_adjustments_name ON dkp_adjustments(character_name);
 
 -- 3) Auto-create profile on signup
 CREATE OR REPLACE FUNCTION public.handle_new_user()
@@ -126,36 +134,51 @@ ALTER TABLE raid_loot ENABLE ROW LEVEL SECURITY;
 ALTER TABLE raid_attendance ENABLE ROW LEVEL SECURITY;
 ALTER TABLE raid_event_attendance ENABLE ROW LEVEL SECURITY;
 ALTER TABLE raid_classifications ENABLE ROW LEVEL SECURITY;
+ALTER TABLE dkp_adjustments ENABLE ROW LEVEL SECURITY;
 
--- Profiles: users read own row; officers read all
+-- Profiles: users read own row; officers read all (drop first so script is re-runnable)
+DROP POLICY IF EXISTS "Users can read own profile" ON profiles;
 CREATE POLICY "Users can read own profile" ON profiles
   FOR SELECT USING (auth.uid() = id);
 
+DROP POLICY IF EXISTS "Officers can read all profiles" ON profiles;
 CREATE POLICY "Officers can read all profiles" ON profiles
   FOR SELECT USING (
     EXISTS (SELECT 1 FROM profiles p WHERE p.id = auth.uid() AND p.role = 'officer')
   );
 
+DROP POLICY IF EXISTS "Users can update own profile (limited)" ON profiles;
 CREATE POLICY "Users can update own profile (limited)" ON profiles
   FOR UPDATE USING (auth.uid() = id)
   WITH CHECK (auth.uid() = id);
 
--- Officers can update any profile (e.g. promote to officer)
+DROP POLICY IF EXISTS "Officers can update profiles" ON profiles;
 CREATE POLICY "Officers can update profiles" ON profiles
   FOR UPDATE USING (
     EXISTS (SELECT 1 FROM profiles p WHERE p.id = auth.uid() AND p.role = 'officer')
   );
 
--- Data tables: any authenticated user can read (officer-only write if we add edit later)
+-- Data tables: any authenticated user can read (drop first so script is re-runnable)
+DROP POLICY IF EXISTS "Authenticated read characters" ON characters;
 CREATE POLICY "Authenticated read characters" ON characters FOR SELECT TO authenticated USING (true);
+DROP POLICY IF EXISTS "Authenticated read accounts" ON accounts;
 CREATE POLICY "Authenticated read accounts" ON accounts FOR SELECT TO authenticated USING (true);
+DROP POLICY IF EXISTS "Authenticated read character_account" ON character_account;
 CREATE POLICY "Authenticated read character_account" ON character_account FOR SELECT TO authenticated USING (true);
+DROP POLICY IF EXISTS "Authenticated read raids" ON raids;
 CREATE POLICY "Authenticated read raids" ON raids FOR SELECT TO authenticated USING (true);
+DROP POLICY IF EXISTS "Authenticated read raid_events" ON raid_events;
 CREATE POLICY "Authenticated read raid_events" ON raid_events FOR SELECT TO authenticated USING (true);
+DROP POLICY IF EXISTS "Authenticated read raid_loot" ON raid_loot;
 CREATE POLICY "Authenticated read raid_loot" ON raid_loot FOR SELECT TO authenticated USING (true);
+DROP POLICY IF EXISTS "Authenticated read raid_attendance" ON raid_attendance;
 CREATE POLICY "Authenticated read raid_attendance" ON raid_attendance FOR SELECT TO authenticated USING (true);
+DROP POLICY IF EXISTS "Authenticated read raid_event_attendance" ON raid_event_attendance;
 CREATE POLICY "Authenticated read raid_event_attendance" ON raid_event_attendance FOR SELECT TO authenticated USING (true);
+DROP POLICY IF EXISTS "Authenticated read raid_classifications" ON raid_classifications;
 CREATE POLICY "Authenticated read raid_classifications" ON raid_classifications FOR SELECT TO authenticated USING (true);
+DROP POLICY IF EXISTS "Authenticated read dkp_adjustments" ON dkp_adjustments;
+CREATE POLICY "Authenticated read dkp_adjustments" ON dkp_adjustments FOR SELECT TO authenticated USING (true);
 
 -- 5) First officer: run after creating your user in Supabase Auth (replace YOUR_USER_UUID)
 -- INSERT INTO profiles (id, email, role) VALUES ('YOUR_USER_UUID', 'your@email.com', 'officer')

@@ -94,6 +94,11 @@ If the importer complains about types (e.g. empty numbers), you can:
 - **Loot item names:** The `raid_loot` table has an `item_name` column and the app shows it on raid detail pages. **Item names are filled by the pipeline**: run `extract_structured_data.py` (after `pull_raids.py`) so `data/raid_loot.csv` is built from `raids/*.html`; re-run when you refresh raid HTML. (Previously the CSVs didn’t include item names. If you have another source (e.g. scrape from raid HTML) that includes item names, you can add an `item_name` column to the CSV or update rows in the Table Editor after import.
 - **DKP:** If `raid_event_attendance` is imported, earned uses per-event attendance (matches official site); otherwise earned = sum of each raid’s event DKP for every raid that character attended. Spent = sum of loot costs for that character. Balance = earned − spent. The DKP page can show this **by character** or **by account** (all toons on the same account summed).
 
+**DKP not matching ground truth (e.g. Spent = 0 or Earned too low)?**
+- **Spent = 0 for everyone** → `raid_loot` is missing or empty in Supabase. Import `data/raid_loot.csv` into the `raid_loot` table (Table Editor → raid_loot → Import from CSV). The app needs `char_id` or `character_name` and `cost` on each row to compute spent.
+- **Earned much lower than official** → Either only a subset of raids/events is in Supabase, or **per-event attendance** is missing. For earned to match the official DKP export (see `docs/DKP-GROUND-TRUTH.md`): (1) Run `pull_raid_attendees.py` and `parse_raid_attendees.py` to create `data/raid_event_attendance.csv`, (2) Import that CSV into the `raid_event_attendance` table. Without it, the app uses raid-level attendance and may over- or under-credit depending on data.
+- In Supabase Table Editor, check row counts: `raid_loot` and `raid_events` should have thousands of rows if you have full history; `raid_event_attendance` should have many rows for per-event earned.
+
 ### Option B: Import via SQL (copy/paste from CSVs)
 
 If the Table Editor importer is awkward, we can add a small script that reads your `data/*.csv` files and outputs `INSERT` statements (or a single SQL file) you can paste into the SQL Editor. Say if you want that and we’ll generate it.

@@ -19,9 +19,11 @@ export default function DKP({ isOfficer }) {
       supabase.from('raid_loot').select('char_id, character_name, cost').limit(limit),
       supabase.from('character_account').select('char_id, account_id').limit(limit),
       supabase.from('accounts').select('account_id, toon_names').limit(limit),
-    ]).then(([att, ev, evAtt, loot, ca, acc]) => {
+      supabase.from('dkp_adjustments').select('character_name, earned_delta, spent_delta').limit(1000),
+    ]).then(([att, ev, evAtt, loot, ca, acc, adj]) => {
       const err = att.error || ev.error || loot.error || ca.error || acc.error
       if (err) { setError(err.message); setLoading(false); return }
+      const adjustments = (adj && !adj.error && adj.data) ? adj.data : []
       // If raid_event_attendance table is missing or empty, we fall back to raid_attendance
       const eventAttendance = evAtt.error ? [] : (evAtt.data || [])
       // (raid_id, event_id) -> dkp_value for that event
@@ -64,7 +66,19 @@ export default function DKP({ isOfficer }) {
         earned: typeof v === 'object' ? v.earned : v,
         spent: spent[key] || 0,
       }))
-      list.forEach((r) => { r.balance = r.earned - r.spent })
+      const adjustmentsMap = {}
+      adjustments.forEach((row) => {
+        const n = (row.character_name || '').trim()
+        if (n) adjustmentsMap[n] = { earned_delta: Number(row.earned_delta) || 0, spent_delta: Number(row.spent_delta) | 0 }
+      })
+      list.forEach((r) => {
+        const adjRow = adjustmentsMap[(r.name || '').trim()] || adjustmentsMap[(r.name || '').trim().replace(/^\(\*\)\s*/, '')]
+        if (adjRow) {
+          r.earned += adjRow.earned_delta
+          r.spent += adjRow.spent_delta || 0
+        }
+        r.balance = r.earned - r.spent
+      })
       list.sort((a, b) => b.balance - a.balance)
       setLeaderboard(list)
 
@@ -109,6 +123,11 @@ export default function DKP({ isOfficer }) {
       {showList.length === 0 && (
         <p style={{ color: '#f59e0b', marginBottom: '1rem' }}>
           No DKP data. Make sure you’re logged in and the app is using the same Supabase project where you imported the CSVs (check Vercel env: VITE_SUPABASE_URL).
+        </p>
+      )}
+      {showList.length > 0 && showList.every((r) => Number(r.spent) === 0) && (
+        <p style={{ color: '#f59e0b', marginBottom: '1rem' }}>
+          Spent is 0 for all characters. Import <code>data/raid_loot.csv</code> into the <strong>raid_loot</strong> table in Supabase so loot costs are included. See docs/SETUP-WALKTHROUGH.md.
         </p>
       )}
       <div className="card">
