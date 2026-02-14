@@ -11,15 +11,17 @@ export default function DKP({ isOfficer }) {
   useEffect(() => {
     // DKP earned: sum event dkp for each character's raid attendance
     // DKP spent: sum loot cost per character
-    // Then optionally roll up by account (character_account + accounts)
+    // Request all rows (Supabase default is 1000; we have 50k+ attendance)
+    const limit = 100000
     Promise.all([
-      supabase.from('raid_attendance').select('raid_id, char_id, character_name'),
-      supabase.from('raid_events').select('raid_id, dkp_value'),
-      supabase.from('raid_loot').select('char_id, character_name, cost'),
-      supabase.from('character_account').select('char_id, account_id'),
-      supabase.from('accounts').select('account_id, toon_names'),
+      supabase.from('raid_attendance').select('raid_id, char_id, character_name').limit(limit),
+      supabase.from('raid_events').select('raid_id, dkp_value').limit(limit),
+      supabase.from('raid_loot').select('char_id, character_name, cost').limit(limit),
+      supabase.from('character_account').select('char_id, account_id').limit(limit),
+      supabase.from('accounts').select('account_id, toon_names').limit(limit),
     ]).then(([att, ev, loot, ca, acc]) => {
-      if (att.error) { setError(att.error.message); setLoading(false); return }
+      const err = att.error || ev.error || loot.error || ca.error || acc.error
+      if (err) { setError(err.message); setLoading(false); return }
       const evByRaid = {}
       ;(ev.data || []).forEach((e) => {
         evByRaid[e.raid_id] = (evByRaid[e.raid_id] || 0) + parseFloat(e.dkp_value || 0)
@@ -85,6 +87,11 @@ export default function DKP({ isOfficer }) {
         <button type="button" onClick={() => setView('character')} style={{ fontWeight: view === 'character' ? 'bold' : 'normal' }}>By character</button>
         <button type="button" onClick={() => setView('account')} style={{ fontWeight: view === 'account' ? 'bold' : 'normal' }}>By account</button>
       </div>
+      {showList.length === 0 && (
+        <p style={{ color: '#f59e0b', marginBottom: '1rem' }}>
+          No DKP data. Make sure you’re logged in and the app is using the same Supabase project where you imported the CSVs (check Vercel env: VITE_SUPABASE_URL).
+        </p>
+      )}
       <div className="card">
         <table>
           <thead>
