@@ -6,6 +6,9 @@ import Dashboard from './pages/Dashboard'
 import Raids from './pages/Raids'
 import RaidDetail from './pages/RaidDetail'
 import DKP from './pages/DKP'
+import LootSearch from './pages/LootSearch'
+import MobLoot from './pages/MobLoot'
+import Accounts from './pages/Accounts'
 
 export default function App() {
   const [session, setSession] = useState(null)
@@ -58,6 +61,9 @@ export default function App() {
         <a href="/">Home</a>
         <a href="/raids">Raids</a>
         <a href="/dkp">DKP</a>
+        <a href="/loot">Loot search</a>
+        <a href="/mobs">Mob loot</a>
+        <a href="/accounts">Accounts</a>
         {isOfficer && <a href="/dkp" style={{ color: '#fbbf24' }}>Officer</a>}
         <span className="role">{profile?.role === 'officer' ? 'Officer' : 'Player'}</span>
         <button
@@ -72,6 +78,9 @@ export default function App() {
         <Route path="/raids" element={<Raids />} />
         <Route path="/raids/:raidId" element={<RaidDetail />} />
         <Route path="/dkp" element={<DKP isOfficer={isOfficer} />} />
+        <Route path="/loot" element={<LootSearch />} />
+        <Route path="/mobs" element={<MobLoot />} />
+        <Route path="/accounts" element={<Accounts />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </>

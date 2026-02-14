@@ -8,6 +8,7 @@ export default function RaidDetail() {
   const [events, setEvents] = useState([])
   const [loot, setLoot] = useState([])
   const [attendance, setAttendance] = useState([])
+  const [classifications, setClassifications] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -26,19 +27,34 @@ export default function RaidDetail() {
       if (!a.error) setAttendance(a.data || [])
       setLoading(false)
     })
+    supabase.from('raid_classifications').select('mob, zone').eq('raid_id', raidId).then(({ data }) => {
+      if (data) setClassifications(data)
+    })
   }, [raidId])
 
   if (loading) return <div className="container">Loading…</div>
   if (error || !raid) return <div className="container"><span className="error">{error || 'Raid not found'}</span> <Link to="/raids">← Raids</Link></div>
+
+  const totalDkp = events.reduce((sum, e) => sum + parseFloat(e.dkp_value || 0), 0)
+  const mobLabels = [...new Set(classifications.map((c) => c.mob.replace(/^#/, '')))]
 
   return (
     <div className="container">
       <p><Link to="/raids">← Raids</Link></p>
       <h1>{raid.raid_name || raidId}</h1>
       <p style={{ color: '#a1a1aa' }}>{raid.date_iso || raid.date} · {raid.attendees} attendees</p>
+      {mobLabels.length > 0 && (
+        <p className="raid-badges" style={{ marginTop: '0.5rem' }}>
+          <span style={{ marginRight: '0.5rem', color: '#71717a' }}>Kill types:</span>
+          {mobLabels.map((m) => (
+            <span key={m} className="badge" title={m}>{m}</span>
+          ))}
+        </p>
+      )}
 
-      <h2>Events</h2>
+      <h2>DKP by event</h2>
       <div className="card">
+        <p style={{ margin: '0 0 0.75rem 0', color: '#a1a1aa' }}>Total raid DKP (sum of event DKP): <strong>{Number(totalDkp).toFixed(1)}</strong></p>
         <table>
           <thead>
             <tr><th>#</th><th>Event</th><th>DKP</th><th>Attendees</th></tr>

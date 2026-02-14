@@ -9,30 +9,49 @@ export default function DKP({ isOfficer }) {
   const [error, setError] = useState('')
 
   useEffect(() => {
-    // DKP earned: sum event dkp for each character's raid attendance
+    // DKP earned: per-event attendance when raid_event_attendance exists, else raid-level attendance
     // DKP spent: sum loot cost per character
-    // Request all rows (Supabase default is 1000; we have 50k+ attendance)
     const limit = 100000
     Promise.all([
       supabase.from('raid_attendance').select('raid_id, char_id, character_name').limit(limit),
-      supabase.from('raid_events').select('raid_id, dkp_value').limit(limit),
+      supabase.from('raid_events').select('raid_id, event_id, dkp_value').limit(limit),
+      supabase.from('raid_event_attendance').select('raid_id, event_id, char_id, character_name').limit(limit),
       supabase.from('raid_loot').select('char_id, character_name, cost').limit(limit),
       supabase.from('character_account').select('char_id, account_id').limit(limit),
       supabase.from('accounts').select('account_id, toon_names').limit(limit),
-    ]).then(([att, ev, loot, ca, acc]) => {
+    ]).then(([att, ev, evAtt, loot, ca, acc]) => {
       const err = att.error || ev.error || loot.error || ca.error || acc.error
       if (err) { setError(err.message); setLoading(false); return }
-      const evByRaid = {}
+      // If raid_event_attendance table is missing or empty, we fall back to raid_attendance
+      const eventAttendance = evAtt.error ? [] : (evAtt.data || [])
+      // (raid_id, event_id) -> dkp_value for that event
+      const eventDkp = {}
       ;(ev.data || []).forEach((e) => {
-        evByRaid[e.raid_id] = (evByRaid[e.raid_id] || 0) + parseFloat(e.dkp_value || 0)
+        const k = `${e.raid_id}|${e.event_id}`
+        eventDkp[k] = (eventDkp[k] || 0) + parseFloat(e.dkp_value || 0)
       })
       const earned = {}
-      ;(att.data || []).forEach((a) => {
-        const key = a.char_id || a.character_name || 'unknown'
-        if (!earned[key]) earned[key] = { name: a.character_name || key, earned: 0 }
-        earned[key].earned += evByRaid[a.raid_id] || 0
-        if (a.character_name) earned[key].name = a.character_name
-      })
+      const usePerEvent = eventAttendance.length > 0
+      if (usePerEvent) {
+        eventAttendance.forEach((a) => {
+          const key = a.char_id || a.character_name || 'unknown'
+          if (!earned[key]) earned[key] = { name: a.character_name || key, earned: 0 }
+          const dkp = eventDkp[`${a.raid_id}|${a.event_id}`] || 0
+          earned[key].earned += dkp
+          if (a.character_name) earned[key].name = a.character_name
+        })
+      } else {
+        const evByRaid = {}
+        ;(ev.data || []).forEach((e) => {
+          evByRaid[e.raid_id] = (evByRaid[e.raid_id] || 0) + parseFloat(e.dkp_value || 0)
+        })
+        ;(att.data || []).forEach((a) => {
+          const key = a.char_id || a.character_name || 'unknown'
+          if (!earned[key]) earned[key] = { name: a.character_name || key, earned: 0 }
+          earned[key].earned += evByRaid[a.raid_id] || 0
+          if (a.character_name) earned[key].name = a.character_name
+        })
+      }
       const spent = {}
       ;(loot.data || []).forEach((row) => {
         const key = row.char_id || row.character_name

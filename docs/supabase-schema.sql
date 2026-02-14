@@ -72,12 +72,33 @@ CREATE TABLE IF NOT EXISTS raid_attendance (
   character_name TEXT
 );
 
+-- Per-event attendance (from parse_raid_attendees.py). When present, DKP earned uses this instead of raid_attendance.
+CREATE TABLE IF NOT EXISTS raid_event_attendance (
+  id BIGSERIAL PRIMARY KEY,
+  raid_id TEXT NOT NULL,
+  event_id TEXT NOT NULL,
+  char_id TEXT,
+  character_name TEXT
+);
+
+-- Raid classification by mobs/zones (from loot + raid_item_sources). Run build_raid_classifications.py to generate data/raid_classifications.csv
+CREATE TABLE IF NOT EXISTS raid_classifications (
+  raid_id TEXT REFERENCES raids(raid_id),
+  mob TEXT NOT NULL,
+  zone TEXT,
+  PRIMARY KEY (raid_id, mob)
+);
+
 -- Indexes for common queries
 CREATE INDEX IF NOT EXISTS idx_raid_events_raid ON raid_events(raid_id);
 CREATE INDEX IF NOT EXISTS idx_raid_loot_raid ON raid_loot(raid_id);
 CREATE INDEX IF NOT EXISTS idx_raid_loot_char ON raid_loot(char_id);
 CREATE INDEX IF NOT EXISTS idx_raid_attendance_raid ON raid_attendance(raid_id);
 CREATE INDEX IF NOT EXISTS idx_raid_attendance_char ON raid_attendance(char_id);
+CREATE INDEX IF NOT EXISTS idx_raid_event_attendance_raid ON raid_event_attendance(raid_id);
+CREATE INDEX IF NOT EXISTS idx_raid_event_attendance_char ON raid_event_attendance(char_id);
+CREATE INDEX IF NOT EXISTS idx_raid_classifications_raid ON raid_classifications(raid_id);
+CREATE INDEX IF NOT EXISTS idx_raid_classifications_mob ON raid_classifications(mob);
 
 -- 3) Auto-create profile on signup
 CREATE OR REPLACE FUNCTION public.handle_new_user()
@@ -103,6 +124,8 @@ ALTER TABLE raids ENABLE ROW LEVEL SECURITY;
 ALTER TABLE raid_events ENABLE ROW LEVEL SECURITY;
 ALTER TABLE raid_loot ENABLE ROW LEVEL SECURITY;
 ALTER TABLE raid_attendance ENABLE ROW LEVEL SECURITY;
+ALTER TABLE raid_event_attendance ENABLE ROW LEVEL SECURITY;
+ALTER TABLE raid_classifications ENABLE ROW LEVEL SECURITY;
 
 -- Profiles: users read own row; officers read all
 CREATE POLICY "Users can read own profile" ON profiles
@@ -131,6 +154,8 @@ CREATE POLICY "Authenticated read raids" ON raids FOR SELECT TO authenticated US
 CREATE POLICY "Authenticated read raid_events" ON raid_events FOR SELECT TO authenticated USING (true);
 CREATE POLICY "Authenticated read raid_loot" ON raid_loot FOR SELECT TO authenticated USING (true);
 CREATE POLICY "Authenticated read raid_attendance" ON raid_attendance FOR SELECT TO authenticated USING (true);
+CREATE POLICY "Authenticated read raid_event_attendance" ON raid_event_attendance FOR SELECT TO authenticated USING (true);
+CREATE POLICY "Authenticated read raid_classifications" ON raid_classifications FOR SELECT TO authenticated USING (true);
 
 -- 5) First officer: run after creating your user in Supabase Auth (replace YOUR_USER_UUID)
 -- INSERT INTO profiles (id, email, role) VALUES ('YOUR_USER_UUID', 'your@email.com', 'officer')

@@ -81,6 +81,10 @@ You have two options.
 | raid_events        | `raid_events.csv`          |
 | raid_loot          | `raid_loot.csv`            |
 | raid_attendance    | `raid_attendance.csv`      |
+| raid_event_attendance | `raid_event_attendance.csv` (optional; for per-event DKP earned) |
+| raid_classifications | `raid_classifications.csv` |
+
+**Raid classifications:** Run `python build_raid_classifications.py` (after `extract_structured_data.py`) to generate `data/raid_classifications.csv` from `data/raid_loot.csv`, `data/items_seen_to_mobs.json`, and `data/raid_loot_classification.json` (overrides/aliases, e.g. Plane of Time P1/P3). The script also writes `web/public/item_sources.json` so the Loot search page can show “Drops from”. Import `raid_classifications.csv` into the `raid_classifications` table. For the **Mob loot** page, copy `data/dkp_mob_loot.json` to `web/public/dkp_mob_loot.json`, or run `python build_raid_classifications.py --copy-dkp-mob-loot`.
 
 If the importer complains about types (e.g. empty numbers), you can:
 - Leave problematic columns unmapped and fix data later, or
@@ -88,11 +92,55 @@ If the importer complains about types (e.g. empty numbers), you can:
 
 **Data notes:**
 - **Loot item names:** The `raid_loot` table has an `item_name` column and the app shows it on raid detail pages. **Item names are filled by the pipeline**: run `extract_structured_data.py` (after `pull_raids.py`) so `data/raid_loot.csv` is built from `raids/*.html`; re-run when you refresh raid HTML. (Previously the CSVs didn’t include item names. If you have another source (e.g. scrape from raid HTML) that includes item names, you can add an `item_name` column to the CSV or update rows in the Table Editor after import.
-- **DKP:** Earned = sum of each raid’s event DKP for every raid that character attended. Spent = sum of loot costs for that character. Balance = earned − spent. The DKP page can show this **by character** or **by account** (all toons on the same account summed).
+- **DKP:** If `raid_event_attendance` is imported, earned uses per-event attendance (matches official site); otherwise earned = sum of each raid’s event DKP for every raid that character attended. Spent = sum of loot costs for that character. Balance = earned − spent. The DKP page can show this **by character** or **by account** (all toons on the same account summed).
 
 ### Option B: Import via SQL (copy/paste from CSVs)
 
 If the Table Editor importer is awkward, we can add a small script that reads your `data/*.csv` files and outputs `INSERT` statements (or a single SQL file) you can paste into the SQL Editor. Say if you want that and we’ll generate it.
+
+### Manually adding one raid (if pull_raids.py can't fetch it)
+
+If you're missing a single raid (e.g. due to 403), save it from the browser: open the raid details page, get the **raid ID** from the URL (the number after `raidId=`), then **Save As** → "Webpage, Complete" to `raids/raid_<raidId>.html`. Run `python refresh_raid_index.py` to update `raids_index.csv` from the HTML; then re-run `extract_structured_data.py` if you use the pipeline.
+
+---
+
+## Updating the website (after you change data or code)
+
+When you refresh raid data or re-run the pipeline, update the site in two places: **Supabase (data)** and **frontend (code)** if you host it.
+
+### 1. Refresh your local data
+
+Run your usual pipeline so the `data/` CSVs are up to date, for example:
+
+- `python extract_structured_data.py` — rebuilds `raid_events`, `raid_loot`, `raid_attendance`, `raids`, etc. from `raids/*.html`
+- `python parse_raid_attendees.py` — builds `data/raid_event_attendance.csv` from `raids/raid_*_attendees.html`
+- `python build_raid_classifications.py` — if you use raid classifications / loot search
+
+(You don’t need to re-run `pull_raids.py` or `pull_raid_attendees.py` unless you’re fetching new raids.)
+
+### 2. Re-import CSVs into Supabase
+
+In the Supabase **Table Editor**, for each table that gets new data, either:
+
+- **Replace data:** Delete all rows (e.g. right‑click table → Delete all rows, or run `DELETE FROM raid_events;` in SQL Editor), then **Insert** → **Import data from CSV** and choose the updated file from `data/`, or  
+- Use **Import data from CSV** and let Supabase append; if you do that, avoid duplicate rows (e.g. re-import only after clearing the table).
+
+**Tables you’ll usually re-import after a pipeline run:**
+
+| Table | CSV |
+|-------|-----|
+| raids | `raids.csv` |
+| raid_events | `raid_events.csv` |
+| raid_loot | `raid_loot.csv` |
+| raid_attendance | `raid_attendance.csv` |
+| raid_event_attendance | `raid_event_attendance.csv` (if you use per-event DKP) |
+| raid_classifications | `raid_classifications.csv` (if you ran `build_raid_classifications.py`) |
+
+If the **raid_event_attendance** table doesn’t exist yet, run the schema again (Part 2) or run just the `CREATE TABLE raid_event_attendance ...` and related index/RLS statements from `docs/supabase-schema.sql`, then import `data/raid_event_attendance.csv`.
+
+### 3. Redeploy the frontend (if hosted)
+
+If the app is deployed (e.g. Vercel, Netlify), push your code changes and let the site redeploy, or trigger a deploy from the host’s dashboard. That way the live site uses the latest logic (e.g. DKP page using per-event attendance when the table is filled).
 
 ---
 

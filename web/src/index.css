@@ -19,3 +19,8 @@ input { padding: 0.5rem 0.75rem; border: 1px solid #3f3f46; border-radius: 6px; 
 label { display: block; margin-bottom: 0.25rem; font-size: 0.875rem; color: #a1a1aa; }
 .form-group { margin-bottom: 1rem; }
 .error { color: #f87171; font-size: 0.875rem; margin-top: 0.25rem; }
+.raid-badges { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.badge { font-size: 0.7rem; padding: 0.2rem 0.5rem; background: #3f3f46; border-radius: 4px; color: #a1a1aa; max-width: 8em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.search-bar { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; margin-bottom: 1rem; }
+.search-bar input[type="search"], .search-bar input[type="text"] { max-width: 280px; }
+.filter-select { min-width: 180px; }
