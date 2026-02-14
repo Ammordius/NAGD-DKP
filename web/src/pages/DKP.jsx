@@ -1,6 +1,22 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 
+// Supabase/PostgREST returns at most 1000 rows per query. Paginate to fetch all rows.
+const PAGE_SIZE = 1000
+async function fetchAllRows(table, select = '*') {
+  const all = []
+  let from = 0
+  while (true) {
+    const to = from + PAGE_SIZE - 1
+    const { data, error } = await supabase.from(table).select(select).range(from, to)
+    if (error) return { data: null, error }
+    all.push(...(data || []))
+    if (!data || data.length < PAGE_SIZE) break
+    from += PAGE_SIZE
+  }
+  return { data: all, error: null }
+}
+
 export default function DKP({ isOfficer }) {
   const [leaderboard, setLeaderboard] = useState([])
   const [accountLeaderboard, setAccountLeaderboard] = useState([])
@@ -10,18 +26,17 @@ export default function DKP({ isOfficer }) {
 
   useEffect(() => {
     // DKP earned: per-event attendance when raid_event_attendance exists, else raid-level attendance
-    // DKP spent: sum loot cost per character
-    const limit = 100000
+    // DKP spent: sum loot cost per character. Use fetchAllRows so we get all data (Supabase caps at 1000/query).
     Promise.all([
-      supabase.from('raid_attendance').select('raid_id, char_id, character_name').limit(limit),
-      supabase.from('raid_events').select('raid_id, event_id, dkp_value').limit(limit),
-      supabase.from('raid_event_attendance').select('raid_id, event_id, char_id, character_name').limit(limit),
-      supabase.from('raid_loot').select('char_id, character_name, cost').limit(limit),
-      supabase.from('character_account').select('char_id, account_id').limit(limit),
-      supabase.from('accounts').select('account_id, toon_names').limit(limit),
+      fetchAllRows('raid_attendance', 'raid_id, char_id, character_name'),
+      fetchAllRows('raid_events', 'raid_id, event_id, dkp_value'),
+      fetchAllRows('raid_event_attendance', 'raid_id, event_id, char_id, character_name'),
+      fetchAllRows('raid_loot', 'char_id, character_name, cost'),
+      fetchAllRows('character_account', 'char_id, account_id'),
+      fetchAllRows('accounts', 'account_id, toon_names'),
       supabase.from('dkp_adjustments').select('character_name, earned_delta, spent_delta').limit(1000),
     ]).then(([att, ev, evAtt, loot, ca, acc, adj]) => {
-      const err = att.error || ev.error || loot.error || ca.error || acc.error
+      const err = att.error || ev.error || evAtt.error || loot.error || ca.error || acc.error
       if (err) { setError(err.message); setLoading(false); return }
       const adjustments = (adj && !adj.error && adj.data) ? adj.data : []
       // If raid_event_attendance table is missing or empty, we fall back to raid_attendance
