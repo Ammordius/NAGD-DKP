@@ -1647,7 +1647,7 @@
   },
   "Rallos_Zek_the_Warlord|": {
     "mob": "Rallos_Zek_the_Warlord",
-    "zone": "Plane of Time",
+    "zone": "Plane of Tactics",
     "loot": [
       {
         "item_id": 7770,
@@ -2902,7 +2902,7 @@
   },
   "Tallon_Zek|Drunder, the Fortress of Zek": {
     "mob": "Tallon_Zek",
-    "zone": "Plane of Time",
+    "zone": "Plane of Tactics",
     "loot": [
       {
         "item_id": 26739,
@@ -6062,7 +6062,7 @@
   },
   "Terris_Thule|The Lair of Terris Thule": {
     "mob": "Terris_Thule",
-    "zone": "Plane of Time",
+    "zone": "Plane of Nightmare",
     "loot": [
       {
         "item_id": 10127,
@@ -6109,7 +6109,7 @@
   },
   "Saryrn|Torment, the Plane of Pain": {
     "mob": "Saryrn",
-    "zone": "Plane of Time",
+    "zone": "Plane of Torment",
     "loot": [
       {
         "item_id": 15806,
