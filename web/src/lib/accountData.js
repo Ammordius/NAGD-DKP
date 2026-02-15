@@ -36,7 +36,7 @@ export async function loadAccountActivity(accountId) {
       const chars = (await supabase.from('characters').select('char_id, name').in('char_id', charIds)).data || []
       const characterKeys = [...new Set([...charIds, ...chars.map((c) => c.name).filter(Boolean)])]
       if (characterKeys.length === 0) return { data: [] }
-      return fetchAll('raid_attendance_dkp', 'raid_id, character_key, dkp_earned', (q) => q.in('character_key', characterKeys))
+      return fetchAll('raid_attendance_dkp', 'raid_id, character_key, dkp_earned', (q) => q.in('character_key', characterKeys), { order: { column: 'raid_id', ascending: true } })
     })(),
   ])
   const chars = (chRes.data || []).map((c) => ({ ...c, displayName: c.name || c.char_id }))
@@ -52,7 +52,7 @@ export async function loadAccountActivity(accountId) {
   const raidList = [...raidIds]
   const [rRes, totalsRes] = await Promise.all([
     supabase.from('raids').select('raid_id, raid_name, date_iso').in('raid_id', raidList),
-    fetchAll('raid_dkp_totals', 'raid_id, total_dkp', (q) => q.in('raid_id', raidList)),
+    fetchAll('raid_dkp_totals', 'raid_id, total_dkp', (q) => q.in('raid_id', raidList), { order: { column: 'raid_id', ascending: true } }),
   ])
   if (totalsRes.error) return { error: totalsRes.error?.message || 'Failed to load raid totals', characters: [], activityByRaid: [] }
 

@@ -82,7 +82,7 @@ export default function AccountDetail({ isOfficer, profile }) {
             const ch = cr.data || []
             const characterKeys = [...new Set([...charIds, ...ch.map((c) => c.name).filter(Boolean)])]
             if (characterKeys.length === 0) return { data: [] }
-            return fetchAll('raid_attendance_dkp', 'raid_id, character_key, dkp_earned', (q) => q.in('character_key', characterKeys))
+            return fetchAll('raid_attendance_dkp', 'raid_id, character_key, dkp_earned', (q) => q.in('character_key', characterKeys), { order: { column: 'raid_id', ascending: true } })
           }),
         ]).then(([chRes, attRes, lootRes, attDkpRes]) => {
           const chars = (chRes.data || []).map((c) => ({ ...c, displayName: c.name || c.char_id }))
@@ -102,7 +102,7 @@ export default function AccountDetail({ isOfficer, profile }) {
           const raidList = [...raidIds]
           Promise.all([
             supabase.from('raids').select('raid_id, raid_name, date_iso').in('raid_id', raidList),
-            fetchAll('raid_dkp_totals', 'raid_id, total_dkp', (q) => q.in('raid_id', raidList)),
+            fetchAll('raid_dkp_totals', 'raid_id, total_dkp', (q) => q.in('raid_id', raidList), { order: { column: 'raid_id', ascending: true } }),
           ]).then(([rRes, totalsRes]) => {
             if (totalsRes?.error) {
               setError(totalsRes.error?.message || 'Failed to load raid totals')
@@ -134,9 +134,21 @@ export default function AccountDetail({ isOfficer, profile }) {
             })).sort((a, b) => (b.date || '').localeCompare(a.date || ''))
             setActivityByRaid(activity)
             setLoading(false)
+          }).catch((err) => {
+            setError(err?.message || 'Failed to load raid data')
+            setLoading(false)
           })
+        }).catch((err) => {
+          setError(err?.message || 'Failed to load activity')
+          setLoading(false)
         })
+      }).catch((err) => {
+        setError(err?.message || 'Failed to load characters')
+        setLoading(false)
       })
+    }).catch((err) => {
+      setError(err?.message || 'Failed to load account')
+      setLoading(false)
     })
   }, [accountId, refreshKey])
 
