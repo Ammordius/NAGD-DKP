@@ -79,6 +79,8 @@ BEGIN
     RAISE EXCEPTION 'Only officers can delete raids';
   END IF;
   DELETE FROM raid_loot WHERE raid_id = p_raid_id;
+  DELETE FROM raid_attendance_dkp WHERE raid_id = p_raid_id;
+  DELETE FROM raid_dkp_totals WHERE raid_id = p_raid_id;
   DELETE FROM raid_event_attendance WHERE raid_id = p_raid_id;
   DELETE FROM raid_attendance WHERE raid_id = p_raid_id;
   DELETE FROM raid_events WHERE raid_id = p_raid_id;

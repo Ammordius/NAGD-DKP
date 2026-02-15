@@ -82,6 +82,31 @@ CREATE TABLE IF NOT EXISTS raid_event_attendance (
   character_name TEXT
 );
 
+-- Pre-computed DKP per raid (sum of event dkp_value). Updated by trigger when raid_events change.
+-- After first deploy or import, run: SELECT refresh_all_raid_attendance_totals();
+CREATE TABLE IF NOT EXISTS raid_dkp_totals (
+  raid_id TEXT PRIMARY KEY REFERENCES raids(raid_id),
+  total_dkp NUMERIC NOT NULL DEFAULT 0
+);
+
+-- Pre-computed DKP earned per character per raid. Updated by trigger when raid_events or raid_event_attendance change.
+-- Activity page reads this instead of per-tic data. character_key matches dkp_summary (char_id or character_name).
+CREATE TABLE IF NOT EXISTS raid_attendance_dkp (
+  raid_id TEXT NOT NULL REFERENCES raids(raid_id),
+  character_key TEXT NOT NULL,
+  character_name TEXT,
+  dkp_earned NUMERIC NOT NULL DEFAULT 0,
+  PRIMARY KEY (raid_id, character_key)
+);
+
+-- View for fetching raid_events in reverse chronological order (most recent raids first when paginating).
+-- Use table name raid_events_ordered with .order('raid_date_iso', { ascending: false }) so first pages are latest.
+CREATE OR REPLACE VIEW raid_events_ordered AS
+  SELECT re.id, re.raid_id, re.event_id, re.event_order, re.event_name, re.dkp_value, re.attendee_count, re.event_time,
+         r.date_iso AS raid_date_iso
+  FROM raid_events re
+  LEFT JOIN raids r ON r.raid_id = re.raid_id;
+
 -- Raid classification by mobs/zones (from loot + raid_item_sources). Run build_raid_classifications.py to generate data/raid_classifications.csv
 CREATE TABLE IF NOT EXISTS raid_classifications (
   raid_id TEXT REFERENCES raids(raid_id),
@@ -145,6 +170,8 @@ CREATE INDEX IF NOT EXISTS idx_raid_attendance_raid ON raid_attendance(raid_id);
 CREATE INDEX IF NOT EXISTS idx_raid_attendance_char ON raid_attendance(char_id);
 CREATE INDEX IF NOT EXISTS idx_raid_event_attendance_raid ON raid_event_attendance(raid_id);
 CREATE INDEX IF NOT EXISTS idx_raid_event_attendance_char ON raid_event_attendance(char_id);
+CREATE INDEX IF NOT EXISTS idx_raid_attendance_dkp_character ON raid_attendance_dkp(character_key);
+CREATE INDEX IF NOT EXISTS idx_raid_attendance_dkp_raid ON raid_attendance_dkp(raid_id);
 CREATE INDEX IF NOT EXISTS idx_raid_classifications_raid ON raid_classifications(raid_id);
 CREATE INDEX IF NOT EXISTS idx_raid_classifications_mob ON raid_classifications(mob);
 CREATE INDEX IF NOT EXISTS idx_dkp_adjustments_name ON dkp_adjustments(character_name);
@@ -284,6 +311,112 @@ BEGIN
   RETURN NULL;
 END;
 $$;
+
+-- Refresh raid_dkp_totals and raid_attendance_dkp for one raid (used by triggers and by backfill).
+CREATE OR REPLACE FUNCTION public.refresh_raid_attendance_totals(p_raid_id TEXT)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  raid_total NUMERIC;
+  use_per_event BOOLEAN;
+BEGIN
+  -- 1) Raid total DKP from raid_events
+  SELECT COALESCE(SUM((dkp_value::numeric)), 0) INTO raid_total FROM raid_events WHERE raid_id = p_raid_id;
+  INSERT INTO raid_dkp_totals (raid_id, total_dkp) VALUES (p_raid_id, COALESCE(raid_total, 0))
+  ON CONFLICT (raid_id) DO UPDATE SET total_dkp = EXCLUDED.total_dkp;
+
+  -- 2) Per-character earned for this raid
+  DELETE FROM raid_attendance_dkp WHERE raid_id = p_raid_id;
+
+  SELECT EXISTS (SELECT 1 FROM raid_event_attendance WHERE raid_id = p_raid_id LIMIT 1) INTO use_per_event;
+
+  IF use_per_event THEN
+    INSERT INTO raid_attendance_dkp (raid_id, character_key, character_name, dkp_earned)
+    SELECT rea.raid_id,
+           (CASE WHEN COALESCE(trim(rea.char_id::text), '') = '' THEN COALESCE(trim(rea.character_name), 'unknown') ELSE trim(rea.char_id::text) END),
+           MAX(COALESCE(trim(rea.character_name), rea.char_id::text, 'unknown')),
+           SUM(COALESCE((re.dkp_value::numeric), 0))
+    FROM raid_event_attendance rea
+    LEFT JOIN raid_events re ON re.raid_id = rea.raid_id AND re.event_id = rea.event_id
+    WHERE rea.raid_id = p_raid_id
+    GROUP BY rea.raid_id, (CASE WHEN COALESCE(trim(rea.char_id::text), '') = '' THEN COALESCE(trim(rea.character_name), 'unknown') ELSE trim(rea.char_id::text) END);
+  ELSE
+    INSERT INTO raid_attendance_dkp (raid_id, character_key, character_name, dkp_earned)
+    SELECT ra.raid_id,
+           (CASE WHEN COALESCE(trim(ra.char_id::text), '') = '' THEN COALESCE(trim(ra.character_name), 'unknown') ELSE trim(ra.char_id::text) END),
+           MAX(COALESCE(trim(ra.character_name), ra.char_id::text, 'unknown')),
+           COALESCE(raid_total, 0)
+    FROM raid_attendance ra
+    WHERE ra.raid_id = p_raid_id
+    GROUP BY ra.raid_id, (CASE WHEN COALESCE(trim(ra.char_id::text), '') = '' THEN COALESCE(trim(ra.character_name), 'unknown') ELSE trim(ra.char_id::text) END);
+  END IF;
+END;
+$$;
+
+-- Backfill all raids (run once after creating tables or importing data).
+CREATE OR REPLACE FUNCTION public.refresh_all_raid_attendance_totals()
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE r TEXT;
+BEGIN
+  FOR r IN SELECT DISTINCT raid_id FROM (
+    SELECT raid_id FROM raid_events
+    UNION SELECT raid_id FROM raid_event_attendance
+    UNION SELECT raid_id FROM raid_attendance
+  ) t
+  LOOP
+    PERFORM refresh_raid_attendance_totals(r);
+  END LOOP;
+END;
+$$;
+
+-- Trigger: when raid_events change, refresh totals for affected raid(s).
+CREATE OR REPLACE FUNCTION public.trigger_refresh_raid_totals_after_events()
+RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  IF TG_OP = 'DELETE' THEN
+    PERFORM refresh_raid_attendance_totals(OLD.raid_id);
+    RETURN OLD;
+  ELSE
+    PERFORM refresh_raid_attendance_totals(NEW.raid_id);
+    RETURN NEW;
+  END IF;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS refresh_raid_totals_after_events_ins ON raid_events;
+DROP TRIGGER IF EXISTS refresh_raid_totals_after_events_upd ON raid_events;
+DROP TRIGGER IF EXISTS refresh_raid_totals_after_events_del ON raid_events;
+CREATE TRIGGER refresh_raid_totals_after_events_ins AFTER INSERT ON raid_events FOR EACH ROW EXECUTE FUNCTION public.trigger_refresh_raid_totals_after_events();
+CREATE TRIGGER refresh_raid_totals_after_events_upd AFTER UPDATE ON raid_events FOR EACH ROW EXECUTE FUNCTION public.trigger_refresh_raid_totals_after_events();
+CREATE TRIGGER refresh_raid_totals_after_events_del AFTER DELETE ON raid_events FOR EACH ROW EXECUTE FUNCTION public.trigger_refresh_raid_totals_after_events();
+
+-- Trigger: when raid_event_attendance change, refresh per-character totals for affected raid(s).
+CREATE OR REPLACE FUNCTION public.trigger_refresh_raid_totals_after_event_attendance()
+RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  IF TG_OP = 'DELETE' THEN
+    PERFORM refresh_raid_attendance_totals(OLD.raid_id);
+    RETURN OLD;
+  ELSE
+    PERFORM refresh_raid_attendance_totals(NEW.raid_id);
+    RETURN NEW;
+  END IF;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS refresh_raid_totals_after_event_attendance_ins ON raid_event_attendance;
+DROP TRIGGER IF EXISTS refresh_raid_totals_after_event_attendance_upd ON raid_event_attendance;
+DROP TRIGGER IF EXISTS refresh_raid_totals_after_event_attendance_del ON raid_event_attendance;
+CREATE TRIGGER refresh_raid_totals_after_event_attendance_ins AFTER INSERT ON raid_event_attendance FOR EACH ROW EXECUTE FUNCTION public.trigger_refresh_raid_totals_after_event_attendance();
+CREATE TRIGGER refresh_raid_totals_after_event_attendance_upd AFTER UPDATE ON raid_event_attendance FOR EACH ROW EXECUTE FUNCTION public.trigger_refresh_raid_totals_after_event_attendance();
+CREATE TRIGGER refresh_raid_totals_after_event_attendance_del AFTER DELETE ON raid_event_attendance FOR EACH ROW EXECUTE FUNCTION public.trigger_refresh_raid_totals_after_event_attendance();
 
 -- Incremental delta: cache is refreshed whenever a new row is added (INSERT) to attendance or loot.
 -- Apply only NEW rows to dkp_summary (no full table scan). For DELETE/UPDATE we run full refresh.
@@ -431,6 +564,8 @@ ALTER TABLE dkp_adjustments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE dkp_summary ENABLE ROW LEVEL SECURITY;
 ALTER TABLE dkp_period_totals ENABLE ROW LEVEL SECURITY;
 ALTER TABLE active_raiders ENABLE ROW LEVEL SECURITY;
+ALTER TABLE raid_dkp_totals ENABLE ROW LEVEL SECURITY;
+ALTER TABLE raid_attendance_dkp ENABLE ROW LEVEL SECURITY;
 
 -- Profiles: one SELECT (own row or officer), one UPDATE (own row or officer)
 DROP POLICY IF EXISTS "Users can read own profile" ON profiles;
@@ -482,6 +617,10 @@ DROP POLICY IF EXISTS "Authenticated read dkp_period_totals" ON dkp_period_total
 CREATE POLICY "Authenticated read dkp_period_totals" ON dkp_period_totals FOR SELECT TO authenticated USING (true);
 DROP POLICY IF EXISTS "Authenticated read active_raiders" ON active_raiders;
 CREATE POLICY "Authenticated read active_raiders" ON active_raiders FOR SELECT TO authenticated USING (true);
+DROP POLICY IF EXISTS "Authenticated read raid_dkp_totals" ON raid_dkp_totals;
+CREATE POLICY "Authenticated read raid_dkp_totals" ON raid_dkp_totals FOR SELECT TO authenticated USING (true);
+DROP POLICY IF EXISTS "Authenticated read raid_attendance_dkp" ON raid_attendance_dkp;
+CREATE POLICY "Authenticated read raid_attendance_dkp" ON raid_attendance_dkp FOR SELECT TO authenticated USING (true);
 DROP POLICY IF EXISTS "Officers manage active_raiders" ON active_raiders;
 CREATE POLICY "Officers manage active_raiders" ON active_raiders FOR ALL TO authenticated
   USING (public.is_officer())

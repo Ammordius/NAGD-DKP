@@ -6,6 +6,8 @@
 
 -- 1) TRUNCATE all data tables (do not touch profiles or auth.users)
 -- Order: child tables first, then parent. RESTART IDENTITY resets serials.
+TRUNCATE TABLE raid_attendance_dkp;
+TRUNCATE TABLE raid_dkp_totals;
 TRUNCATE TABLE raid_event_attendance RESTART IDENTITY CASCADE;
 TRUNCATE TABLE raid_loot RESTART IDENTITY CASCADE;
 TRUNCATE TABLE raid_attendance RESTART IDENTITY CASCADE;
@@ -30,17 +32,15 @@ CREATE POLICY "Authenticated read dkp_adjustments" ON dkp_adjustments FOR SELECT
 
 DELETE FROM dkp_adjustments;
 
--- 3) Insert the 10 one-off adjustments (from compare_dkp_ground_truth.py vs ground truth) (from compare_dkp_ground_truth.py diff to ground truth)
+-- 3) Insert the one-off adjustments (from compare_dkp_ground_truth.py vs ground truth). Omit any character whose base totals now match GT (e.g. Elrontaur was removed: base spent already 310).
 INSERT INTO dkp_adjustments (character_name, earned_delta, spent_delta) VALUES
   ('Bhodi', 2, 2),
   ('Gheff', 10, 10),
   ('Pursuit', 2, 2),
   ('Pugnacious', 1, 0),
   ('Barndog', 2, 0),
-  ('Elrontaur', 0, 21),
   ('Handolur', 2, 0),
-  ('Hamorf', 1, 0),
-  ('Ammordius', 1, 0)
+  ('Hamorf', 1, 0)
 ON CONFLICT (character_name) DO UPDATE SET
   earned_delta = EXCLUDED.earned_delta,
   spent_delta = EXCLUDED.spent_delta;
@@ -49,6 +49,7 @@ ON CONFLICT (character_name) DO UPDATE SET
 -- After this script: Import CSVs in Table Editor in this order:
 --   1. characters       <- data/characters.csv
 --   2. accounts         <- data/accounts.csv
+--   (Optional) Run docs/supabase-account-display-names.sql to set display_name from ground_truth.txt (first char per account)
 --   3. character_account<- data/character_account.csv
 --   4. raids            <- data/raids.csv
 --   5. raid_events      <- data/raid_events.csv
@@ -60,5 +61,6 @@ ON CONFLICT (character_name) DO UPDATE SET
 --
 -- Then refresh the DKP cache (fast leaderboard): run in SQL Editor:
 --   SELECT refresh_dkp_summary();
+--   SELECT refresh_all_raid_attendance_totals();  -- populates raid_dkp_totals and raid_attendance_dkp for activity page
 -- Or use the "Refresh DKP totals" button on the DKP page (officers only).
 -- =============================================================================
