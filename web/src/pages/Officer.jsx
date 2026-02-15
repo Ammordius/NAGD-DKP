@@ -49,19 +49,45 @@ function parseChannelList(paste) {
   return { eventTime, names: [...nameSet] }
 }
 
-/** Parse loot log lines e.g. "Earring of Eradication grats Barndog, 4 DKP!!!" or "... 0 DKP" */
+/** Parse loot log lines. Supports:
+ * - "Item grats Name, 4 DKP" or "Item congrats Name 7 dkp"
+ * - "Item no bids - Name w/ 764/777 grats" (0 DKP)
+ * - "Item grats Name, 545/666" or "Item congrats Name top roll" (0 DKP)
+ */
 function parseLootLog(paste) {
   const lines = (paste || '').split(/\r?\n/).map((l) => l.trim()).filter(Boolean)
   const results = []
+  const gratsOrCongrats = /(?:grats|congrats)/i
   for (const line of lines) {
     const quoted = line.match(/'([^']+)'/)?.[1] || line
-    const gratsMatch = quoted.match(/\bgrats\s+([^,]+?).*?\s+(\d+)\s*DKP/i)
-    if (gratsMatch) {
-      const characterName = gratsMatch[1].trim()
-      const cost = parseInt(gratsMatch[2], 10)
-      const itemName = quoted.replace(/\s*grats\s+[^,]+.*$/i, '').trim()
-      if (itemName && characterName !== undefined) results.push({ itemName, characterName, cost: isNaN(cost) ? 0 : cost })
+    let itemName = ''
+    let characterName = ''
+    let cost = 0
+
+    // Explicit DKP: "... grats/congrats Name ... N DKP"
+    const explicitDkp = quoted.match(/\b(?:grats|congrats)\s+([^,]+?).*?\s+(\d+)\s*dkp/i)
+    if (explicitDkp) {
+      characterName = explicitDkp[1].trim()
+      cost = parseInt(explicitDkp[2], 10)
+      itemName = quoted.replace(/\s*(?:grats|congrats)\s+[^,]+.*$/i, '').trim()
+    } else {
+      // "Item no bids - Name w/ 764/777 grats" (0 DKP)
+      const noBids = quoted.match(/^(.+?)\s+no bids\s*-\s*(\S+)\s+w\/\s*\d+\/\d+\s*grats\s*$/i)
+      if (noBids) {
+        itemName = noBids[1].trim()
+        characterName = noBids[2].trim()
+      } else {
+        // "Item grats/congrats Name, 545/666" or "Item grats Name 750/777" or "Item congrats Name top roll" (0 DKP)
+        const zeroDkp = quoted.match(/\b(?:grats|congrats)\s+(\S+(?:\s+\S+)?)\s*(?:,\s*\d+\/\d+|\s+\d+\/\d+|\s+top\s+roll)/i)
+        if (zeroDkp) {
+          characterName = zeroDkp[1].trim()
+          itemName = quoted.replace(/\s*(?:grats|congrats)\s+[\s\S]+$/i, '').trim()
+          // e.g. "Blood Veil of the Shissar no bids" -> "Blood Veil of the Shissar"
+          itemName = itemName.replace(/\s*,?\s*no bids\s*$/i, '').trim()
+        }
+      }
     }
+    if (itemName && characterName) results.push({ itemName, characterName, cost: isNaN(cost) ? 0 : cost })
   }
   return results
 }
