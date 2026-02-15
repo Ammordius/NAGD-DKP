@@ -80,7 +80,7 @@ export default function MobLoot() {
   const entries = useMemo(() => {
     if (!data || typeof data !== 'object') return []
     const list = Object.entries(data)
-      .filter(([_, v]) => v && typeof v === 'object' && Array.isArray(v.loot))
+      .filter(([_, v]) => v && typeof v === 'object' && Array.isArray(v.loot) && (v.loot || []).length > 0)
       .map(([key, v]) => ({
         key,
         mob: v.mob || key.replace(/\|$/, ''),
