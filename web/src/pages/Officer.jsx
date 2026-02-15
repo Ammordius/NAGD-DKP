@@ -464,17 +464,21 @@ export default function Officer({ isOfficer }) {
       setError('Enter an item name.')
       return
     }
+    const char = nameToChar[characterName.toLowerCase()]
+    if (!char) {
+      setError('Character not on DKP list. Pick a character from the list so the loot can be linked.')
+      return
+    }
     setMutating(true)
     setLootResult(null)
     setError('')
     const event_id = events.length > 0 ? events[0].event_id : 'loot'
-    const char = nameToChar[characterName.toLowerCase()]
     const { error: err } = await supabase.from('raid_loot').insert({
       raid_id: selectedRaidId,
       event_id,
       item_name: itemName,
-      char_id: char?.char_id ?? '',
-      character_name: characterName || (char?.name ?? ''),
+      char_id: char.char_id,
+      character_name: char.name,
       cost: String(isNaN(cost) ? 0 : cost),
     })
     if (err) {
@@ -482,10 +486,11 @@ export default function Officer({ isOfficer }) {
       setMutating(false)
       return
     }
-    setLootResult({ itemName, characterName: characterName || char?.name, cost: isNaN(cost) ? 0 : cost })
+    setLootResult({ itemName, characterName: char.name, cost: isNaN(cost) ? 0 : cost })
     setLootItemQuery('')
     setLootCharName('')
     setLootCost('0')
+    setItemNames((prev) => (prev.includes(itemName) ? prev : [...prev, itemName].sort()))
     loadSelectedRaid()
     setMutating(false)
   }
@@ -504,29 +509,45 @@ export default function Officer({ isOfficer }) {
     setLootResult(null)
     setError('')
     const event_id = events.length > 0 ? events[0].event_id : 'loot'
-    const unmatched = []
+    const itemNamesList = itemNames || []
+    const knownItemSet = new Set(itemNamesList.map((n) => (n || '').trim().toLowerCase()))
+    const itemNameByLower = {}
+    itemNamesList.forEach((n) => { if (n) itemNameByLower[n.trim().toLowerCase()] = n })
+    const playerNotFound = []
+    const itemNotFound = []
     let inserted = 0
     for (const row of parsed) {
       const char = nameToChar[row.characterName.toLowerCase()]
       if (!char) {
-        unmatched.push(`${row.characterName} (${row.itemName})`)
+        playerNotFound.push({ itemName: row.itemName, characterName: row.characterName })
         continue
       }
+      const itemKey = row.itemName.trim().toLowerCase()
+      if (!knownItemSet.has(itemKey)) {
+        itemNotFound.push({ itemName: row.itemName, characterName: char.name })
+        continue
+      }
+      const canonicalItemName = itemNameByLower[itemKey] || row.itemName
       const { error: err } = await supabase.from('raid_loot').insert({
         raid_id: selectedRaidId,
         event_id,
-        item_name: row.itemName,
+        item_name: canonicalItemName,
         char_id: char.char_id,
         character_name: char.name,
         cost: String(row.cost),
       })
       if (!err) inserted++
     }
-    if (unmatched.length > 0) {
-      setError(`Character(s) not on DKP list (loot not added): ${unmatched.join('; ')}. Add the character first or fix the name in the log.`)
+    const parts = []
+    if (playerNotFound.length > 0) {
+      parts.push(`Player not on DKP list (${playerNotFound.length}): ${playerNotFound.map((r) => `${r.characterName} (${r.itemName})`).join('; ')}. Add the character to the DKP list first or fix the name in the log.`)
     }
+    if (itemNotFound.length > 0) {
+      parts.push(`Item not found (${itemNotFound.length}): ${itemNotFound.map((r) => `"${r.itemName}" → ${r.characterName}`).join('; ')}. Add the item manually above (type the exact item name, pick the character, set cost), then retry from log if needed.`)
+    }
+    if (parts.length > 0) setError(parts.join(' '))
     setLootResult({ fromLog: true, inserted, total: parsed.length })
-    setLootLogPaste('')
+    if (playerNotFound.length === 0 && itemNotFound.length === 0) setLootLogPaste('')
     loadSelectedRaid()
     setMutating(false)
   }
@@ -817,7 +838,7 @@ export default function Officer({ isOfficer }) {
           {/* Add loot */}
           <section className="card" style={{ marginBottom: '1.5rem' }}>
             <h2 style={{ marginTop: 0 }}>Add loot</h2>
-            <p style={{ color: '#71717a', fontSize: '0.9rem' }}>Manual: pick item (type to filter), character, cost. Or paste log lines below.</p>
+            <p style={{ color: '#71717a', fontSize: '0.9rem' }}>Manual: pick item (type to filter or enter a new item name), character (must be on DKP list), cost. Or paste log lines below.</p>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', alignItems: 'flex-start', marginBottom: '0.5rem' }}>
               <div style={{ position: 'relative', flex: '1 1 320px', minWidth: '280px', maxWidth: '500px' }}>
                 <input
@@ -826,7 +847,7 @@ export default function Officer({ isOfficer }) {
                   onChange={(e) => setLootItemQuery(e.target.value)}
                   onFocus={() => setShowLootDropdown(true)}
                   onBlur={() => setTimeout(() => setShowLootDropdown(false), 150)}
-                  placeholder="Item name (type to filter)"
+                  placeholder="Item name (filter list or type new)"
                   list="loot-item-list"
                   style={{ width: '100%', padding: '0.5rem 0.6rem', fontSize: '1rem', boxSizing: 'border-box' }}
                 />
