@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
+import { useEffect, useState, useCallback, useMemo, useRef, Fragment } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 
@@ -114,6 +114,15 @@ export default function Officer({ isOfficer }) {
   const [deleteConfirm, setDeleteConfirm] = useState('')
   const [deleteError, setDeleteError] = useState('')
 
+  // Inline edit (raid view)
+  const [attendance, setAttendance] = useState([])
+  const [editingEventId, setEditingEventId] = useState(null)
+  const [editingEventDkp, setEditingEventDkp] = useState('')
+  const [editingLootId, setEditingLootId] = useState(null)
+  const [editingLootCost, setEditingLootCost] = useState('')
+  const [expandedEvents, setExpandedEvents] = useState({})
+  const [showLootDropdown, setShowLootDropdown] = useState(false)
+
   const nameToChar = useMemo(() => {
     const m = {}
     characters.forEach((c) => {
@@ -136,15 +145,21 @@ export default function Officer({ isOfficer }) {
     setLoading(true)
     setError('')
     await loadRaids()
-    const [charsRes, itemsRes] = await Promise.all([
-      supabase.from('characters').select('char_id, name').limit(5000),
-      supabase.from('raid_loot').select('item_name').limit(10000),
-    ])
+    const charsRes = await supabase.from('characters').select('char_id, name').limit(5000)
     if (charsRes.data) setCharacters(charsRes.data)
-    if (itemsRes.data) {
-      const names = [...new Set((itemsRes.data || []).map((r) => r.item_name).filter(Boolean))].sort()
-      setItemNames(names)
+    // Fetch all distinct item_name from raid_loot (paginate; Supabase returns max 1000 per request)
+    const allItemRows = []
+    let from = 0
+    const pageSize = 1000
+    while (true) {
+      const { data } = await supabase.from('raid_loot').select('item_name').range(from, from + pageSize - 1)
+      if (!data?.length) break
+      allItemRows.push(...data)
+      if (data.length < pageSize) break
+      from += pageSize
     }
+    const names = [...new Set(allItemRows.map((r) => r.item_name).filter(Boolean))].sort()
+    setItemNames(names)
     setLoading(false)
   }, [loadRaids])
 
@@ -162,23 +177,33 @@ export default function Officer({ isOfficer }) {
       setEvents([])
       setLoot([])
       setEventAttendance([])
+      setAttendance([])
       return
     }
-    const [r, e, l, ea] = await Promise.all([
+    const [r, e, l, a, ea] = await Promise.all([
       supabase.from('raids').select('*').eq('raid_id', selectedRaidId).single(),
       supabase.from('raid_events').select('*').eq('raid_id', selectedRaidId).order('event_order'),
       supabase.from('raid_loot').select('*').eq('raid_id', selectedRaidId),
+      supabase.from('raid_attendance').select('*').eq('raid_id', selectedRaidId).order('character_name'),
       supabase.from('raid_event_attendance').select('event_id, char_id, character_name').eq('raid_id', selectedRaidId),
     ])
     setRaid(r.data || null)
     setEvents(e.data || [])
     setLoot(l.data || [])
+    setAttendance(a.data || [])
     setEventAttendance(ea.data || [])
   }, [selectedRaidId])
 
   useEffect(() => {
     loadSelectedRaid()
   }, [loadSelectedRaid])
+
+  // After adding a tic, scroll to raid view so the new tic is visible
+  useEffect(() => {
+    if (ticResult?.event_id && raidEditSectionRef.current) {
+      raidEditSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+  }, [ticResult?.event_id])
 
   const handleAddRaid = async () => {
     setMutating(true)
@@ -284,7 +309,27 @@ export default function Officer({ isOfficer }) {
         if (raidAttErr) setError(raidAttErr.message)
       }
     }
-    setTicResult({ matched: matched.length, unmatched, event_id })
+
+    // Delta vs other tics in this raid: who was in a previous tic but missing from this one?
+    const currentTicCharIds = new Set(matched.map((m) => String(m.char_id)))
+    const seenPrev = new Set()
+    const missingFromThisTic = []
+    eventAttendance.forEach((row) => {
+      const cid = String(row.char_id ?? '').trim()
+      if (!cid || seenPrev.has(cid)) return
+      if (currentTicCharIds.has(cid)) return
+      seenPrev.add(cid)
+      missingFromThisTic.push(row.character_name || row.char_id || cid)
+    })
+    missingFromThisTic.sort((a, b) => String(a).localeCompare(b))
+
+    setTicResult({
+      matched: matched.length,
+      unmatched,
+      event_id,
+      missingFromThisTic: missingFromThisTic.length > 0 ? missingFromThisTic : null,
+      newThisTic: events.length === 0 ? matched.map((m) => m.character_name) : matched.filter((m) => !eventAttendance.some((r) => String(r.char_id) === String(m.char_id))).map((m) => m.character_name),
+    })
     setTicPaste('')
     loadSelectedRaid()
     setMutating(false)
@@ -385,14 +430,71 @@ export default function Officer({ isOfficer }) {
     setMutating(false)
   }
 
+  const handleSaveEventDkp = async (eventId) => {
+    const val = String(editingEventDkp).trim()
+    if (val === '' || !selectedRaidId) return
+    setMutating(true)
+    const { error: err } = await supabase.from('raid_events').update({ dkp_value: val }).eq('raid_id', selectedRaidId).eq('event_id', eventId)
+    setMutating(false)
+    if (err) setError(err.message)
+    else {
+      setEditingEventId(null)
+      loadSelectedRaid()
+    }
+  }
+
+  const handleSaveLootCost = async (row) => {
+    const val = String(editingLootCost).trim()
+    setMutating(true)
+    const { error: err } = await supabase.from('raid_loot').update({ cost: val }).eq('id', row.id)
+    setMutating(false)
+    if (err) setError(err.message)
+    else {
+      setEditingLootId(null)
+      loadSelectedRaid()
+    }
+  }
+
+  const handleDeleteLoot = async (row) => {
+    if (!window.confirm(`Remove loot "${row.item_name}" from ${row.character_name}?`)) return
+    setMutating(true)
+    const { error: err } = await supabase.from('raid_loot').delete().eq('id', row.id)
+    setMutating(false)
+    if (err) setError(err.message)
+    else loadSelectedRaid()
+  }
+
+  const handleDeleteEvent = async (eventId) => {
+    if (!window.confirm('Remove this DKP tic and its attendance? This cannot be undone.')) return
+    setMutating(true)
+    await supabase.from('raid_event_attendance').delete().eq('raid_id', selectedRaidId).eq('event_id', eventId)
+    const { error: err } = await supabase.from('raid_events').delete().eq('raid_id', selectedRaidId).eq('event_id', eventId)
+    setMutating(false)
+    if (err) setError(err.message)
+    else loadSelectedRaid()
+  }
+
+  const attendeesByEvent = useMemo(() => {
+    const byEvent = {}
+    eventAttendance.forEach((row) => {
+      const eid = String(row.event_id ?? '').trim()
+      if (!eid) return
+      if (!byEvent[eid]) byEvent[eid] = []
+      byEvent[eid].push({ name: row.character_name || row.char_id || '—', char_id: row.char_id })
+    })
+    Object.keys(byEvent).forEach((id) => byEvent[id].sort((a, b) => (a.name || '').localeCompare(b.name || '')))
+    return byEvent
+  }, [eventAttendance])
+
   const filteredItemNames = useMemo(() => {
     const q = lootItemQuery.toLowerCase().trim()
-    if (!q) return itemNames.slice(0, 50)
-    return itemNames.filter((n) => n.toLowerCase().includes(q)).slice(0, 50)
+    if (!q) return itemNames
+    return itemNames.filter((n) => n.toLowerCase().includes(q))
   }, [itemNames, lootItemQuery])
 
   const addRaidSectionRef = useRef(null)
   const raidPasteRef = useRef(null)
+  const raidEditSectionRef = useRef(null)
   const focusAddRaid = () => {
     addRaidSectionRef.current?.scrollIntoView({ behavior: 'smooth' })
     setTimeout(() => raidPasteRef.current?.focus(), 300)
@@ -492,10 +594,16 @@ export default function Officer({ isOfficer }) {
               </button>
             </div>
             {ticResult && (
-              <div style={{ marginTop: '0.5rem' }}>
-                <p style={{ color: '#22c55e' }}>Credited {ticResult.matched} attendee(s).</p>
+              <div style={{ marginTop: '0.5rem', padding: '0.75rem', backgroundColor: 'rgba(0,0,0,0.2)', borderRadius: '4px' }}>
+                <p style={{ color: '#22c55e', marginTop: 0 }}>Tic added. Credited <strong>{ticResult.matched}</strong> attendee(s). See raid view below.</p>
                 {ticResult.unmatched?.length > 0 && (
-                  <p style={{ color: '#f59e0b' }}>Unmatched (not on DKP list): {ticResult.unmatched.join(', ')}</p>
+                  <p style={{ color: '#f59e0b', marginBottom: '0.25rem' }}><strong>Unmatched</strong> (not on DKP list, no credit): {ticResult.unmatched.join(', ')}</p>
+                )}
+                {ticResult.missingFromThisTic?.length > 0 && (
+                  <p style={{ color: '#f97316', marginBottom: '0.25rem' }}><strong>Missing from this tic</strong> (were in earlier tics this raid): {ticResult.missingFromThisTic.join(', ')}</p>
+                )}
+                {ticResult.newThisTic?.length > 0 && (
+                  <p style={{ color: '#71717a', fontSize: '0.9rem', marginBottom: 0 }}><strong>New this tic</strong> (first time this raid): {ticResult.newThisTic.join(', ')}</p>
                 )}
               </div>
             )}
@@ -504,28 +612,59 @@ export default function Officer({ isOfficer }) {
           {/* Add loot */}
           <section className="card" style={{ marginBottom: '1.5rem' }}>
             <h2 style={{ marginTop: 0 }}>Add loot</h2>
-            <p style={{ color: '#71717a', fontSize: '0.9rem' }}>Manual: pick item (autocomplete), character, cost. Or paste log lines below.</p>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', alignItems: 'center', marginBottom: '0.5rem' }}>
-              <input
-                type="text"
-                value={lootItemQuery}
-                onChange={(e) => setLootItemQuery(e.target.value)}
-                onBlur={() => {}}
-                placeholder="Item name"
-                list="loot-item-list"
-                style={{ padding: '0.35rem', minWidth: '200px' }}
-              />
-              <datalist id="loot-item-list">
-                {filteredItemNames.map((n) => (
-                  <option key={n} value={n} />
-                ))}
-              </datalist>
+            <p style={{ color: '#71717a', fontSize: '0.9rem' }}>Manual: pick item (type to filter), character, cost. Or paste log lines below.</p>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', alignItems: 'flex-start', marginBottom: '0.5rem' }}>
+              <div style={{ position: 'relative', flex: '1 1 320px', minWidth: '280px', maxWidth: '500px' }}>
+                <input
+                  type="text"
+                  value={lootItemQuery}
+                  onChange={(e) => setLootItemQuery(e.target.value)}
+                  onFocus={() => setShowLootDropdown(true)}
+                  onBlur={() => setTimeout(() => setShowLootDropdown(false), 150)}
+                  placeholder="Item name (type to filter)"
+                  list="loot-item-list"
+                  style={{ width: '100%', padding: '0.5rem 0.6rem', fontSize: '1rem', boxSizing: 'border-box' }}
+                />
+                <datalist id="loot-item-list">
+                  {filteredItemNames.map((n) => (
+                    <option key={n} value={n} />
+                  ))}
+                </datalist>
+                {showLootDropdown && filteredItemNames.length > 0 && (
+                  <ul
+                    className="card"
+                    style={{
+                      position: 'absolute',
+                      top: '100%',
+                      left: 0,
+                      right: 0,
+                      margin: 0,
+                      marginTop: '2px',
+                      padding: '0.25rem 0',
+                      maxHeight: '280px',
+                      overflowY: 'auto',
+                      listStyle: 'none',
+                      zIndex: 10,
+                    }}
+                  >
+                    {filteredItemNames.map((n) => (
+                      <li
+                        key={n}
+                        style={{ padding: '0.4rem 0.6rem', cursor: 'pointer' }}
+                        onMouseDown={(e) => { e.preventDefault(); setLootItemQuery(n); setShowLootDropdown(false) }}
+                      >
+                        {n}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
               <input
                 type="text"
                 value={lootCharName}
                 onChange={(e) => setLootCharName(e.target.value)}
                 placeholder="Character name"
-                style={{ padding: '0.35rem', minWidth: '120px' }}
+                style={{ padding: '0.5rem 0.6rem', minWidth: '140px', fontSize: '1rem' }}
               />
               <input
                 type="number"
@@ -533,9 +672,9 @@ export default function Officer({ isOfficer }) {
                 value={lootCost}
                 onChange={(e) => setLootCost(e.target.value)}
                 placeholder="Cost"
-                style={{ width: '4rem', padding: '0.35rem' }}
+                style={{ width: '5rem', padding: '0.5rem 0.6rem', fontSize: '1rem' }}
               />
-              <button type="button" onClick={handleAddLootManual} disabled={mutating || !lootItemQuery.trim()}>
+              <button type="button" className="btn" onClick={handleAddLootManual} disabled={mutating || !lootItemQuery.trim()}>
                 Add
               </button>
             </div>
@@ -557,12 +696,125 @@ export default function Officer({ isOfficer }) {
             )}
           </section>
 
-          {/* Current events & loot (read-only summary) */}
-          <section className="card" style={{ marginBottom: '1.5rem' }}>
-            <h2 style={{ marginTop: 0 }}>Raid summary</h2>
-            <p><strong>{raid.raid_name}</strong> · {raid.date_iso || raid.date}</p>
-            <p>Events: {events.length} · Loot rows: {loot.length}</p>
-            <p><Link to={`/raids/${selectedRaidId}`}>Open full raid page to edit or view attendees</Link></p>
+          {/* Raid edit view (like RaidDetail with inline edit) */}
+          <section ref={raidEditSectionRef} className="card" style={{ marginBottom: '1.5rem' }}>
+            <h2 style={{ marginTop: 0 }}>Raid: {raid.raid_name}</h2>
+            <p style={{ color: '#a1a1aa', marginBottom: '1rem' }}>
+              {raid.date_iso || raid.date}
+              {raid.attendees != null && raid.attendees !== '' && ` · ${Math.round(Number(raid.attendees))} attendees`}
+              {' · '}
+              <Link to={`/raids/${selectedRaidId}`}>Open full raid page</Link>
+            </p>
+
+            <h3 style={{ marginTop: '1rem' }}>DKP by event</h3>
+            <p style={{ color: '#71717a', fontSize: '0.9rem', marginTop: '-0.25rem 0 0.5rem 0' }}>
+              Total: <strong>{events.reduce((sum, e) => sum + parseFloat(e.dkp_value || 0), 0).toFixed(1)}</strong> DKP
+            </p>
+            <table>
+              <thead>
+                <tr><th style={{ width: '2rem' }}></th><th>#</th><th>Event</th><th>DKP</th><th>Attendees</th><th style={{ width: '5rem' }}></th></tr>
+              </thead>
+              <tbody>
+                {events.map((e) => {
+                  const eid = String(e.event_id ?? '').trim()
+                  const attendees = attendeesByEvent[eid] || []
+                  const hasList = attendees.length > 0
+                  const isExpanded = expandedEvents[e.event_id]
+                  const isEditingDkp = editingEventId === e.event_id
+                  return (
+                    <Fragment key={e.event_id}>
+                      <tr>
+                        <td>
+                          {hasList && (
+                            <button type="button" className="btn btn-ghost" style={{ padding: '0.25rem', fontSize: '1rem' }} onClick={() => setExpandedEvents((prev) => ({ ...prev, [e.event_id]: !prev[e.event_id] }))} aria-expanded={isExpanded} title={isExpanded ? 'Hide attendees' : 'Show attendees'}>
+                              {isExpanded ? '−' : '+'}
+                            </button>
+                          )}
+                        </td>
+                        <td>{e.event_order}</td>
+                        <td>{e.event_name}</td>
+                        <td>
+                          {isEditingDkp ? (
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
+                              <input type="text" value={editingEventDkp} onChange={(ev) => setEditingEventDkp(ev.target.value)} style={{ width: '4rem', padding: '0.2rem' }} />
+                              <button type="button" className="btn btn-ghost" onClick={() => handleSaveEventDkp(e.event_id)} disabled={mutating}>Save</button>
+                              <button type="button" className="btn btn-ghost" onClick={() => setEditingEventId(null)}>Cancel</button>
+                            </span>
+                          ) : (
+                            <>
+                              {e.dkp_value}
+                              <button type="button" className="btn btn-ghost" style={{ marginLeft: '0.25rem', fontSize: '0.85rem' }} onClick={() => { setEditingEventId(e.event_id); setEditingEventDkp(e.dkp_value || '') }} title="Edit DKP">✎</button>
+                            </>
+                          )}
+                        </td>
+                        <td>{hasList ? `${attendees.length}${isExpanded ? '' : ' — click +'}` : (e.attendee_count ?? '—')}</td>
+                        <td>
+                          <button type="button" className="btn btn-ghost" style={{ fontSize: '0.85rem', color: '#f87171' }} onClick={() => handleDeleteEvent(e.event_id)} disabled={mutating} title="Remove tic">Remove</button>
+                        </td>
+                      </tr>
+                      {hasList && isExpanded && (
+                        <tr>
+                          <td colSpan={6} style={{ padding: '0.5rem 1rem', verticalAlign: 'top', backgroundColor: 'rgba(0,0,0,0.2)', borderBottom: '1px solid #27272a' }}>
+                            <div className="attendee-list">
+                              {attendees.map((a, i) => (
+                                <Link key={a.char_id || a.name || i} to={`/characters/${encodeURIComponent(a.name || '')}`}>{a.name}</Link>
+                              ))}
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  )
+                })}
+              </tbody>
+            </table>
+
+            <h3 style={{ marginTop: '1.25rem' }}>Loot</h3>
+            <table>
+              <thead>
+                <tr><th>Item</th><th>Character</th><th>Cost</th><th style={{ width: '6rem' }}></th></tr>
+              </thead>
+              <tbody>
+                {loot.length === 0 && <tr><td colSpan={4}>No loot recorded</td></tr>}
+                {loot.map((row, i) => {
+                  const isEditingCost = editingLootId === row.id
+                  return (
+                    <tr key={row.id || i}>
+                      <td><Link to={`/items/${encodeURIComponent(row.item_name || '')}`}>{row.item_name || '—'}</Link></td>
+                      <td><Link to={`/characters/${encodeURIComponent(row.character_name || row.char_id || '')}`}>{row.character_name || row.char_id || '—'}</Link></td>
+                      <td>
+                        {isEditingCost ? (
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
+                            <input type="text" value={editingLootCost} onChange={(ev) => setEditingLootCost(ev.target.value)} style={{ width: '4rem', padding: '0.2rem' }} />
+                            <button type="button" className="btn btn-ghost" onClick={() => handleSaveLootCost(row)} disabled={mutating}>Save</button>
+                            <button type="button" className="btn btn-ghost" onClick={() => setEditingLootId(null)}>Cancel</button>
+                          </span>
+                        ) : (
+                          <>
+                            {row.cost}
+                            <button type="button" className="btn btn-ghost" style={{ marginLeft: '0.25rem', fontSize: '0.85rem' }} onClick={() => { setEditingLootId(row.id); setEditingLootCost(row.cost ?? '') }} title="Edit cost">✎</button>
+                          </>
+                        )}
+                      </td>
+                      <td>
+                        {!isEditingCost && (
+                          <button type="button" className="btn btn-ghost" style={{ fontSize: '0.85rem', color: '#f87171' }} onClick={() => handleDeleteLoot(row)}>Remove</button>
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+
+            <h3 style={{ marginTop: '1.25rem' }}>Attendees</h3>
+            <div className="attendee-list">
+              {attendance.length > 0 ? attendance.map((a) => (
+                <Link key={a.char_id || a.character_name} to={`/characters/${encodeURIComponent(a.character_name || a.char_id || '')}`}>{a.character_name || a.char_id}</Link>
+              )) : (
+                <span style={{ color: '#71717a' }}>None (add a DKP tic to record attendance)</span>
+              )}
+            </div>
           </section>
 
           {/* Delete raid */}
