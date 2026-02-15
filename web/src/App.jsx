@@ -12,6 +12,7 @@ import Accounts from './pages/Accounts'
 import AccountDetail from './pages/AccountDetail'
 import ItemPage from './pages/ItemPage'
 import CharacterPage from './pages/CharacterPage'
+import Officer from './pages/Officer'
 
 export default function App() {
   const [session, setSession] = useState(null)
@@ -67,7 +68,7 @@ export default function App() {
         <a href="/loot">Loot search</a>
         <a href="/mobs">Mob loot</a>
         <a href="/accounts">Accounts</a>
-        {isOfficer && <a href="/dkp" style={{ color: '#fbbf24' }}>Officer</a>}
+        {isOfficer && <a href="/officer" style={{ color: '#fbbf24' }}>Officer</a>}
         <span className="role">{profile?.role === 'officer' ? 'Officer' : 'Player'}</span>
         <button
           className="btn btn-ghost"
@@ -79,8 +80,9 @@ export default function App() {
       <Routes>
         <Route path="/" element={<Dashboard isOfficer={isOfficer} />} />
         <Route path="/raids" element={<Raids />} />
-        <Route path="/raids/:raidId" element={<RaidDetail />} />
+        <Route path="/raids/:raidId" element={<RaidDetail isOfficer={isOfficer} />} />
         <Route path="/dkp" element={<DKP isOfficer={isOfficer} />} />
+        <Route path="/officer" element={<Officer isOfficer={isOfficer} />} />
         <Route path="/loot" element={<LootSearch />} />
         <Route path="/mobs" element={<MobLoot />} />
         <Route path="/accounts" element={<Accounts />} />
