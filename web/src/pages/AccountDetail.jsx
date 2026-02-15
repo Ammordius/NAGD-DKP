@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 
@@ -179,6 +179,16 @@ export default function AccountDetail({ isOfficer, profile }) {
 
   const displayName = account?.display_name?.trim() || account?.toon_names?.split(',')[0]?.trim() || accountId
 
+  const dkpTotal = useMemo(() => {
+    let earned = 0
+    let spent = 0
+    activityByRaid.forEach((act) => {
+      earned += Number(act.dkpEarned ?? 0) || 0
+      ;(act.items || []).forEach((row) => { spent += Number(row.cost) || 0 })
+    })
+    return earned - spent
+  }, [activityByRaid])
+
   async function handleClaimAccount() {
     setClaimLoading(true)
     const { data: { user } } = await supabase.auth.getUser()
@@ -231,6 +241,11 @@ export default function AccountDetail({ isOfficer, profile }) {
       <p style={{ color: '#a1a1aa', marginBottom: '1rem' }}>
         Account <code>{accountId}</code>
         {account.toon_count != null && <span style={{ marginLeft: '0.5rem' }}>({account.toon_count} toons)</span>}
+        {activityByRaid.length > 0 && (
+          <span style={{ marginLeft: '0.5rem' }}>
+            {MIDDLE_DOT} <strong>DKP total: {Number(dkpTotal).toFixed(0)}</strong>
+          </span>
+        )}
         {isMyAccount && <span style={{ marginLeft: '0.5rem', color: '#a78bfa' }}> {MIDDLE_DOT} This is your account</span>}
         {profile && !isMyAccount && !myAccountId && (
           <button type="button" className="btn btn-ghost" style={{ marginLeft: '0.5rem', fontSize: '0.875rem' }} onClick={handleClaimAccount} disabled={claimLoading}>

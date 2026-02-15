@@ -141,6 +141,7 @@ export default function Officer({ isOfficer }) {
   const [editingLootCost, setEditingLootCost] = useState('')
   const [expandedEvents, setExpandedEvents] = useState({})
   const [showLootDropdown, setShowLootDropdown] = useState(false)
+  const [showLootCharDropdown, setShowLootCharDropdown] = useState(false)
 
   // Add single attendee to a tic
   const [addToTicEventId, setAddToTicEventId] = useState('')
@@ -211,7 +212,15 @@ export default function Officer({ isOfficer }) {
       if (data.length < pageSize) break
       from += pageSize
     }
-    const names = [...new Set(allItemRows.map((r) => r.item_name).filter(Boolean))].sort()
+    // Merge duplicate items by case-insensitive name (keep first occurrence as canonical)
+    const byLower = new Map()
+    allItemRows.forEach((r) => {
+      const n = (r.item_name || '').trim()
+      if (!n) return
+      const key = n.toLowerCase()
+      if (!byLower.has(key)) byLower.set(key, n)
+    })
+    const names = [...byLower.values()].sort((a, b) => a.localeCompare(b))
     setItemNames(names)
     try {
       const res = await fetch('/dkp_mob_loot.json')
@@ -486,13 +495,14 @@ export default function Officer({ isOfficer }) {
       setError('Select a raid first.')
       return
     }
-    const itemName = lootItemQuery.trim()
+    const itemNameRaw = lootItemQuery.trim()
     const characterName = lootCharName.trim()
     const cost = parseInt(lootCost, 10)
-    if (!itemName) {
+    if (!itemNameRaw) {
       setError('Enter an item name.')
       return
     }
+    const itemName = itemNameToCanonical[itemNameRaw.toLowerCase()] || itemNameRaw
     const char = nameToChar[characterName.toLowerCase()]
     if (!char) {
       setError('Character not on DKP list. Pick a character from the list so the loot can be linked.')
@@ -519,7 +529,11 @@ export default function Officer({ isOfficer }) {
     setLootItemQuery('')
     setLootCharName('')
     setLootCost('0')
-    setItemNames((prev) => (prev.includes(itemName) ? prev : [...prev, itemName].sort()))
+    setItemNames((prev) => {
+      const key = itemName.trim().toLowerCase()
+      if (prev.some((n) => (n || '').trim().toLowerCase() === key)) return prev
+      return [...prev, itemName].sort((a, b) => a.localeCompare(b))
+    })
     loadSelectedRaid()
     setMutating(false)
   }
@@ -675,12 +689,24 @@ export default function Officer({ isOfficer }) {
     return itemNames.filter((n) => n.toLowerCase().includes(q))
   }, [itemNames, lootItemQuery])
 
+  const itemNameToCanonical = useMemo(() => {
+    const m = {}
+    itemNames.forEach((n) => { if (n) m[n.trim().toLowerCase()] = n })
+    return m
+  }, [itemNames])
+
   const characterNamesList = useMemo(() => characters.map((c) => (c.name || '').trim()).filter(Boolean).sort((a, b) => a.localeCompare(b)), [characters])
   const filteredCharacterNames = useMemo(() => {
     const q = addToTicCharQuery.toLowerCase().trim()
     if (!q) return characterNamesList.slice(0, 200)
     return characterNamesList.filter((n) => n.toLowerCase().includes(q)).slice(0, 200)
   }, [characterNamesList, addToTicCharQuery])
+
+  const filteredLootCharacterNames = useMemo(() => {
+    const q = lootCharName.toLowerCase().trim()
+    if (!q) return characterNamesList.slice(0, 200)
+    return characterNamesList.filter((n) => n.toLowerCase().includes(q)).slice(0, 200)
+  }, [characterNamesList, lootCharName])
 
   const addRaidSectionRef = useRef(null)
   const raidPasteRef = useRef(null)
@@ -921,13 +947,45 @@ export default function Officer({ isOfficer }) {
                   </ul>
                 )}
               </div>
-              <input
-                type="text"
-                value={lootCharName}
-                onChange={(e) => setLootCharName(e.target.value)}
-                placeholder="Character name"
-                style={{ padding: '0.5rem 0.6rem', minWidth: '140px', fontSize: '1rem' }}
-              />
+              <div style={{ position: 'relative', minWidth: '200px' }}>
+                <input
+                  type="text"
+                  value={lootCharName}
+                  onChange={(e) => { setLootCharName(e.target.value); setError('') }}
+                  onFocus={() => setShowLootCharDropdown(true)}
+                  onBlur={() => setTimeout(() => setShowLootCharDropdown(false), 150)}
+                  placeholder="Character name (type to filter)"
+                  style={{ padding: '0.5rem 0.6rem', fontSize: '1rem', width: '100%', minWidth: '180px', boxSizing: 'border-box' }}
+                />
+                {showLootCharDropdown && filteredLootCharacterNames.length > 0 && (
+                  <ul
+                    className="card"
+                    style={{
+                      position: 'absolute',
+                      top: '100%',
+                      left: 0,
+                      right: 0,
+                      margin: 0,
+                      marginTop: '2px',
+                      padding: '0.25rem 0',
+                      maxHeight: '240px',
+                      overflowY: 'auto',
+                      listStyle: 'none',
+                      zIndex: 10,
+                    }}
+                  >
+                    {filteredLootCharacterNames.map((n) => (
+                      <li
+                        key={n}
+                        style={{ padding: '0.4rem 0.6rem', cursor: 'pointer' }}
+                        onMouseDown={(e) => { e.preventDefault(); setLootCharName(n); setShowLootCharDropdown(false) }}
+                      >
+                        {n}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
               <input
                 type="number"
                 min={0}

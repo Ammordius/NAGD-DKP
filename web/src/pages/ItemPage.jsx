@@ -141,8 +141,10 @@ export default function ItemPage() {
     }
     setLoading(true)
     setError('')
+    // Case-insensitive item match so "Earring" and "earring" show the same page
+    const escaped = (itemName || '').replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_')
     Promise.all([
-      supabase.from('raid_loot').select('id, raid_id, event_id, item_name, char_id, character_name, cost').eq('item_name', itemName).limit(500),
+      supabase.from('raid_loot').select('id, raid_id, event_id, item_name, char_id, character_name, cost').ilike('item_name', escaped).limit(500),
       fetch('/dkp_mob_loot.json').then((r) => (r.ok ? r.json() : null)).catch(() => null),
     ]).then(([lootRes, mobJson]) => {
       if (lootRes.error) {
