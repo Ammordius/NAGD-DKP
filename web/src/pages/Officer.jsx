@@ -337,6 +337,7 @@ export default function Officer({ isOfficer }) {
     }
     const matched = []
     const unmatched = []
+    const duplicates = []
     const seenCharId = new Set()
     for (const n of names) {
       const key = n.toLowerCase().trim()
@@ -344,7 +345,9 @@ export default function Officer({ isOfficer }) {
       if (char && !seenCharId.has(char.char_id)) {
         seenCharId.add(char.char_id)
         matched.push({ char_id: char.char_id, character_name: char.name })
-      } else if (!char) {
+      } else if (char && seenCharId.has(char.char_id)) {
+        duplicates.push(n)
+      } else {
         unmatched.push(n)
       }
     }
@@ -392,7 +395,8 @@ export default function Officer({ isOfficer }) {
 
     setTicResult({
       matched: matched.length,
-      unmatched,
+      unmatched: unmatched.length > 0 ? unmatched : null,
+      duplicates: duplicates.length > 0 ? duplicates : null,
       event_id,
       missingFromThisTic: missingFromThisTic.length > 0 ? missingFromThisTic : null,
       newThisTic: events.length === 0 ? matched.map((m) => m.character_name) : matched.filter((m) => !eventAttendance.some((r) => String(r.char_id) === String(m.char_id))).map((m) => m.character_name),
@@ -675,6 +679,9 @@ export default function Officer({ isOfficer }) {
                 <p style={{ color: '#22c55e', marginTop: 0 }}>Tic added. Credited <strong>{ticResult.matched}</strong> attendee(s). See raid view below.</p>
                 {ticResult.unmatched?.length > 0 && (
                   <p style={{ color: '#f59e0b', marginBottom: '0.25rem' }}><strong>Unmatched</strong> (not on DKP list, no credit): {ticResult.unmatched.join(', ')}</p>
+                )}
+                {ticResult.duplicates?.length > 0 && (
+                  <p style={{ color: '#a78bfa', marginBottom: '0.25rem' }}><strong>Duplicates</strong> (in paste again, not double-counted): {ticResult.duplicates.join(', ')}</p>
                 )}
                 {ticResult.missingFromThisTic?.length > 0 && (
                   <p style={{ color: '#f97316', marginBottom: '0.25rem' }}><strong>Missing from this tic</strong> (were in earlier tics this raid): {ticResult.missingFromThisTic.join(', ')}</p>
