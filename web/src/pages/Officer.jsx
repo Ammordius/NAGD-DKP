@@ -123,6 +123,12 @@ export default function Officer({ isOfficer }) {
   const [expandedEvents, setExpandedEvents] = useState({})
   const [showLootDropdown, setShowLootDropdown] = useState(false)
 
+  // Add single attendee to a tic
+  const [addToTicEventId, setAddToTicEventId] = useState('')
+  const [addToTicCharQuery, setAddToTicCharQuery] = useState('')
+  const [showCharDropdown, setShowCharDropdown] = useState(false)
+  const [addToTicResult, setAddToTicResult] = useState(null)
+
   const nameToChar = useMemo(() => {
     const m = {}
     characters.forEach((c) => {
@@ -204,6 +210,55 @@ export default function Officer({ isOfficer }) {
       raidEditSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' })
     }
   }, [ticResult?.event_id])
+
+  // Keep addToTicEventId in sync with events (default to first tic)
+  useEffect(() => {
+    if (events.length > 0 && (!addToTicEventId || !events.some((e) => e.event_id === addToTicEventId))) {
+      setAddToTicEventId(events[0].event_id)
+    }
+  }, [events, addToTicEventId])
+
+  const handleAddAttendeeToTic = async () => {
+    if (!selectedRaidId || !addToTicEventId) return
+    const name = addToTicCharQuery.trim()
+    const char = nameToChar[name.toLowerCase()]
+    if (!char) {
+      setError('Select a character from the list (name must match DKP list).')
+      return
+    }
+    const alreadyInTic = eventAttendance.some((r) => String(r.event_id) === String(addToTicEventId) && String(r.char_id) === String(char.char_id))
+    if (alreadyInTic) {
+      setError(`${char.name} is already in this tic.`)
+      return
+    }
+    setMutating(true)
+    setAddToTicResult(null)
+    setError('')
+    const { error: attErr } = await supabase.from('raid_event_attendance').insert({
+      raid_id: selectedRaidId,
+      event_id: addToTicEventId,
+      char_id: char.char_id,
+      character_name: char.name,
+    })
+    if (attErr) {
+      setError(attErr.message)
+      setMutating(false)
+      return
+    }
+    const { data: existingRaidAtt } = await supabase.from('raid_attendance').select('char_id').eq('raid_id', selectedRaidId)
+    const existingCharIds = new Set((existingRaidAtt || []).map((r) => String(r.char_id)))
+    if (!existingCharIds.has(String(char.char_id))) {
+      await supabase.from('raid_attendance').insert({
+        raid_id: selectedRaidId,
+        char_id: char.char_id,
+        character_name: char.name,
+      })
+    }
+    setAddToTicResult(char.name)
+    setAddToTicCharQuery('')
+    loadSelectedRaid()
+    setMutating(false)
+  }
 
   const handleAddRaid = async () => {
     setMutating(true)
@@ -492,6 +547,13 @@ export default function Officer({ isOfficer }) {
     return itemNames.filter((n) => n.toLowerCase().includes(q))
   }, [itemNames, lootItemQuery])
 
+  const characterNamesList = useMemo(() => characters.map((c) => (c.name || '').trim()).filter(Boolean).sort((a, b) => a.localeCompare(b)), [characters])
+  const filteredCharacterNames = useMemo(() => {
+    const q = addToTicCharQuery.toLowerCase().trim()
+    if (!q) return characterNamesList.slice(0, 200)
+    return characterNamesList.filter((n) => n.toLowerCase().includes(q)).slice(0, 200)
+  }, [characterNamesList, addToTicCharQuery])
+
   const addRaidSectionRef = useRef(null)
   const raidPasteRef = useRef(null)
   const raidEditSectionRef = useRef(null)
@@ -608,6 +670,72 @@ export default function Officer({ isOfficer }) {
               </div>
             )}
           </section>
+
+          {/* Add single attendee to a tic */}
+          {events.length > 0 && (
+            <section className="card" style={{ marginBottom: '1.5rem' }}>
+              <h2 style={{ marginTop: 0 }}>Add attendee to tic</h2>
+              <p style={{ color: '#71717a', fontSize: '0.9rem' }}>Pick a tic and a character to add them to that tic (e.g. someone missed the paste).</p>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', alignItems: 'flex-start' }}>
+                <select
+                  value={addToTicEventId}
+                  onChange={(e) => { setAddToTicEventId(e.target.value); setAddToTicResult(null) }}
+                  style={{ padding: '0.5rem 0.6rem', fontSize: '1rem', minWidth: '200px' }}
+                >
+                  {events.map((e) => (
+                    <option key={e.event_id} value={e.event_id}>
+                      #{e.event_order} {e.event_name} ({e.dkp_value} DKP)
+                    </option>
+                  ))}
+                </select>
+                <div style={{ position: 'relative', minWidth: '200px' }}>
+                  <input
+                    type="text"
+                    value={addToTicCharQuery}
+                    onChange={(e) => { setAddToTicCharQuery(e.target.value); setAddToTicResult(null) }}
+                    onFocus={() => setShowCharDropdown(true)}
+                    onBlur={() => setTimeout(() => setShowCharDropdown(false), 150)}
+                    placeholder="Character name (type to filter)"
+                    style={{ padding: '0.5rem 0.6rem', fontSize: '1rem', width: '100%', minWidth: '180px', boxSizing: 'border-box' }}
+                  />
+                  {showCharDropdown && filteredCharacterNames.length > 0 && (
+                    <ul
+                      className="card"
+                      style={{
+                        position: 'absolute',
+                        top: '100%',
+                        left: 0,
+                        right: 0,
+                        margin: 0,
+                        marginTop: '2px',
+                        padding: '0.25rem 0',
+                        maxHeight: '240px',
+                        overflowY: 'auto',
+                        listStyle: 'none',
+                        zIndex: 10,
+                      }}
+                    >
+                      {filteredCharacterNames.map((n) => (
+                        <li
+                          key={n}
+                          style={{ padding: '0.4rem 0.6rem', cursor: 'pointer' }}
+                          onMouseDown={(e) => { e.preventDefault(); setAddToTicCharQuery(n); setShowCharDropdown(false) }}
+                        >
+                          {n}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+                <button type="button" className="btn" onClick={handleAddAttendeeToTic} disabled={mutating || !addToTicCharQuery.trim()}>
+                  Add to tic
+                </button>
+              </div>
+              {addToTicResult && (
+                <p style={{ color: '#22c55e', marginTop: '0.5rem', marginBottom: 0 }}>Added {addToTicResult} to tic.</p>
+              )}
+            </section>
+          )}
 
           {/* Add loot */}
           <section className="card" style={{ marginBottom: '1.5rem' }}>
