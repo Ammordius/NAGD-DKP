@@ -24,3 +24,6 @@ label { display: block; margin-bottom: 0.25rem; font-size: 0.875rem; color: #a1a
 .search-bar { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; margin-bottom: 1rem; }
 .search-bar input[type="search"], .search-bar input[type="text"] { max-width: 280px; }
 .filter-select { min-width: 180px; }
+.attendee-list { max-height: 200px; overflow-y: auto; font-size: 0.9rem; display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: flex-start; }
+.attendee-list a { display: inline-block; padding: 0.2rem 0.5rem; background: #27272a; border-radius: 4px; color: #a78bfa; }
+.attendee-list a:hover { background: #3f3f46; text-decoration: none; }

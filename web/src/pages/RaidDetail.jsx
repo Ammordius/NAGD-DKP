@@ -9,7 +9,6 @@ export default function RaidDetail() {
   const [loot, setLoot] = useState([])
   const [attendance, setAttendance] = useState([])
   const [eventAttendance, setEventAttendance] = useState([])
-  const [classifications, setClassifications] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [expandedEvents, setExpandedEvents] = useState({})
@@ -31,40 +30,54 @@ export default function RaidDetail() {
       if (!ea.error) setEventAttendance(ea.data || [])
       setLoading(false)
     })
-    supabase.from('raid_classifications').select('mob, zone').eq('raid_id', raidId).then(({ data }) => {
-      if (data) setClassifications(data)
-    })
   }, [raidId])
 
   const attendeesByEvent = useMemo(() => {
     const byEvent = {}
     eventAttendance.forEach((row) => {
-      if (!byEvent[row.event_id]) byEvent[row.event_id] = []
-      byEvent[row.event_id].push({ name: row.character_name || row.char_id || '—', char_id: row.char_id })
+      const eid = String(row.event_id ?? '').trim()
+      if (!eid) return
+      if (!byEvent[eid]) byEvent[eid] = []
+      byEvent[eid].push({ name: row.character_name || row.char_id || '—', char_id: row.char_id })
     })
     Object.keys(byEvent).forEach((id) => byEvent[id].sort((a, b) => (a.name || '').localeCompare(b.name || '')))
     return byEvent
   }, [eventAttendance])
 
+  const notPresentForAllEvents = useMemo(() => {
+    if (!events.length || eventAttendance.length === 0) return []
+    const eventKeys = {}
+    events.forEach((ev) => {
+      const eid = String(ev.event_id ?? '').trim()
+      const set = new Set()
+      ;(attendeesByEvent[eid] || []).forEach((a) => {
+        if (a.name) set.add(String(a.name).trim())
+        if (a.char_id != null && a.char_id !== '') set.add(String(a.char_id).trim())
+      })
+      eventKeys[eid] = set
+    })
+    return attendance.filter((a) => {
+      const name = (a.character_name || '').trim()
+      const cid = a.char_id != null && a.char_id !== '' ? String(a.char_id).trim() : ''
+      return events.some((ev) => {
+        const eid = String(ev.event_id ?? '').trim()
+        const keys = eventKeys[eid]
+        if (!keys || keys.size === 0) return false
+        return !keys.has(name) && !keys.has(cid)
+      })
+    })
+  }, [attendance, events, attendeesByEvent, eventAttendance.length])
+
   if (loading) return <div className="container">Loading…</div>
   if (error || !raid) return <div className="container"><span className="error">{error || 'Raid not found'}</span> <Link to="/raids">← Raids</Link></div>
 
   const totalDkp = events.reduce((sum, e) => sum + parseFloat(e.dkp_value || 0), 0)
-  const mobLabels = [...new Set(classifications.map((c) => c.mob.replace(/^#/, '')))]
 
   return (
     <div className="container">
       <p><Link to="/raids">← Raids</Link></p>
       <h1>{raid.raid_name || raidId}</h1>
       <p style={{ color: '#a1a1aa' }}>{raid.date_iso || raid.date} · {raid.attendees} attendees</p>
-      {mobLabels.length > 0 && (
-        <p className="raid-badges" style={{ marginTop: '0.5rem' }}>
-          <span style={{ marginRight: '0.5rem', color: '#71717a' }}>Kill types:</span>
-          {mobLabels.map((m) => (
-            <span key={m} className="badge" title={m}>{m}</span>
-          ))}
-        </p>
-      )}
 
       <h2>DKP by event</h2>
       <div className="card">
@@ -75,7 +88,8 @@ export default function RaidDetail() {
           </thead>
           <tbody>
             {events.map((e) => {
-              const attendees = attendeesByEvent[e.event_id] || []
+              const eid = String(e.event_id ?? '').trim()
+              const attendees = attendeesByEvent[eid] || []
               const hasList = attendees.length > 0
               const isExpanded = expandedEvents[e.event_id]
               return (
@@ -109,7 +123,7 @@ export default function RaidDetail() {
                   {hasList && isExpanded && (
                     <tr key={`${e.event_id}-attendees`}>
                       <td colSpan={5} style={{ padding: '0.5rem 1rem', verticalAlign: 'top', backgroundColor: 'rgba(0,0,0,0.2)', borderBottom: '1px solid #27272a' }}>
-                        <div style={{ maxHeight: '200px', overflowY: 'auto', fontSize: '0.9rem', display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
+                        <div className="attendee-list">
                           {attendees.map((a, i) => (
                             <Link key={a.char_id || a.name || i} to={`/characters/${encodeURIComponent(a.name || '')}`}>
                               {a.name}
@@ -147,14 +161,30 @@ export default function RaidDetail() {
 
       <h2>Attendees</h2>
       <div className="card">
-        <p style={{ margin: 0 }}>
+        <div className="attendee-list">
           {attendance.map((a) => (
-            <Link key={a.char_id || a.character_name} to={`/characters/${encodeURIComponent(a.character_name || a.char_id || '')}`} style={{ marginRight: '0.5rem' }}>
+            <Link key={a.char_id || a.character_name} to={`/characters/${encodeURIComponent(a.character_name || a.char_id || '')}`}>
               {a.character_name || a.char_id}
             </Link>
           ))}
-        </p>
+        </div>
       </div>
+
+      {notPresentForAllEvents.length > 0 && (
+        <>
+          <h2>Not present for all events</h2>
+          <div className="card">
+            <p style={{ color: '#a1a1aa', fontSize: '0.875rem', marginTop: 0 }}>Raiders who attended but missed one or more DKP events.</p>
+            <div className="attendee-list">
+              {notPresentForAllEvents.map((a) => (
+                <Link key={a.char_id || a.character_name} to={`/characters/${encodeURIComponent(a.character_name || a.char_id || '')}`}>
+                  {a.character_name || a.char_id}
+                </Link>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
     </div>
   )
 }
