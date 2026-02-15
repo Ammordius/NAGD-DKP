@@ -102,8 +102,16 @@ CREATE TABLE IF NOT EXISTS dkp_summary (
   character_name TEXT,
   earned NUMERIC NOT NULL DEFAULT 0,
   spent INTEGER NOT NULL DEFAULT 0,
+  earned_30d INTEGER NOT NULL DEFAULT 0,
+  earned_60d INTEGER NOT NULL DEFAULT 0,
   last_activity_date DATE,
   updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- Total DKP available per period (sum of all event DKP in that window). Updated by full refresh.
+CREATE TABLE IF NOT EXISTS dkp_period_totals (
+  period TEXT PRIMARY KEY,
+  total_dkp NUMERIC NOT NULL DEFAULT 0
 );
 
 -- Characters explicitly marked as active (always shown on leaderboard). Officers manage this list.
@@ -113,6 +121,8 @@ CREATE TABLE IF NOT EXISTS active_raiders (
 
 -- Add new columns if upgrading from an older schema (no-op if already present)
 ALTER TABLE dkp_summary ADD COLUMN IF NOT EXISTS last_activity_date DATE;
+ALTER TABLE dkp_summary ADD COLUMN IF NOT EXISTS earned_30d INTEGER;
+ALTER TABLE dkp_summary ADD COLUMN IF NOT EXISTS earned_60d INTEGER;
 
 -- Indexes for common queries
 CREATE INDEX IF NOT EXISTS idx_raid_events_raid ON raid_events(raid_id);
@@ -141,13 +151,15 @@ BEGIN
   TRUNCATE dkp_summary;
 
   IF use_per_event THEN
-    INSERT INTO dkp_summary (character_key, character_name, earned, spent, last_activity_date, updated_at)
-    SELECT character_key, character_name, earned, 0, last_activity_date, now()
+    INSERT INTO dkp_summary (character_key, character_name, earned, spent, earned_30d, earned_60d, last_activity_date, updated_at)
+    SELECT character_key, character_name, earned, 0, earned_30d, earned_60d, last_activity_date, now()
     FROM (
       SELECT
         (CASE WHEN COALESCE(trim(rea.char_id::text), '') = '' THEN COALESCE(trim(rea.character_name), 'unknown') ELSE trim(rea.char_id::text) END) AS character_key,
         MAX(COALESCE(trim(rea.character_name), rea.char_id::text, 'unknown')) AS character_name,
         SUM(COALESCE((re.dkp_value::numeric), 0)) AS earned,
+        (SUM(CASE WHEN r.date_iso IS NOT NULL AND (r.date_iso::date) >= (current_date - 30) THEN COALESCE((re.dkp_value::numeric), 0) ELSE 0 END))::INTEGER AS earned_30d,
+        (SUM(CASE WHEN r.date_iso IS NOT NULL AND (r.date_iso::date) >= (current_date - 60) THEN COALESCE((re.dkp_value::numeric), 0) ELSE 0 END))::INTEGER AS earned_60d,
         MAX((r.date_iso::date)) AS last_activity_date
       FROM raid_event_attendance rea
       LEFT JOIN raid_events re ON re.raid_id = rea.raid_id AND re.event_id = rea.event_id
@@ -155,13 +167,15 @@ BEGIN
       GROUP BY (CASE WHEN COALESCE(trim(rea.char_id::text), '') = '' THEN COALESCE(trim(rea.character_name), 'unknown') ELSE trim(rea.char_id::text) END)
     ) e;
   ELSE
-    INSERT INTO dkp_summary (character_key, character_name, earned, spent, last_activity_date, updated_at)
-    SELECT character_key, character_name, earned, 0, last_activity_date, now()
+    INSERT INTO dkp_summary (character_key, character_name, earned, spent, earned_30d, earned_60d, last_activity_date, updated_at)
+    SELECT character_key, character_name, earned, 0, earned_30d, earned_60d, last_activity_date, now()
     FROM (
       SELECT
         (CASE WHEN COALESCE(trim(ra.char_id::text), '') = '' THEN COALESCE(trim(ra.character_name), 'unknown') ELSE trim(ra.char_id::text) END) AS character_key,
         MAX(COALESCE(trim(ra.character_name), ra.char_id::text, 'unknown')) AS character_name,
         SUM(COALESCE(raid_totals.dkp, 0)) AS earned,
+        (SUM(CASE WHEN r.date_iso IS NOT NULL AND (r.date_iso::date) >= (current_date - 30) THEN COALESCE(raid_totals.dkp, 0) ELSE 0 END))::INTEGER AS earned_30d,
+        (SUM(CASE WHEN r.date_iso IS NOT NULL AND (r.date_iso::date) >= (current_date - 60) THEN COALESCE(raid_totals.dkp, 0) ELSE 0 END))::INTEGER AS earned_60d,
         MAX((r.date_iso::date)) AS last_activity_date
       FROM raid_attendance ra
       LEFT JOIN (SELECT raid_id, SUM((dkp_value::numeric)) AS dkp FROM raid_events GROUP BY raid_id) raid_totals ON ra.raid_id = raid_totals.raid_id
@@ -171,14 +185,14 @@ BEGIN
   END IF;
 
   -- Copy earned rows to temp table (we are about to truncate dkp_summary and need them for the join).
-  CREATE TEMP TABLE IF NOT EXISTS _dkp_earned (character_key TEXT, character_name TEXT, earned NUMERIC, spent INTEGER, last_activity_date DATE, updated_at TIMESTAMPTZ) ON COMMIT DROP;
+  CREATE TEMP TABLE IF NOT EXISTS _dkp_earned (character_key TEXT, character_name TEXT, earned NUMERIC, spent INTEGER, earned_30d INTEGER, earned_60d INTEGER, last_activity_date DATE, updated_at TIMESTAMPTZ) ON COMMIT DROP;
   TRUNCATE _dkp_earned;
-  INSERT INTO _dkp_earned SELECT character_key, character_name, earned, spent, last_activity_date, updated_at FROM dkp_summary;
+  INSERT INTO _dkp_earned SELECT character_key, character_name, earned, spent, COALESCE(earned_30d, 0), COALESCE(earned_60d, 0), last_activity_date, updated_at FROM dkp_summary;
 
   TRUNCATE dkp_summary;
 
   -- Merge spent and last_activity; insert final rows.
-  INSERT INTO dkp_summary (character_key, character_name, earned, spent, last_activity_date, updated_at)
+  INSERT INTO dkp_summary (character_key, character_name, earned, spent, earned_30d, earned_60d, last_activity_date, updated_at)
   WITH spent_agg AS (
     SELECT
       (CASE WHEN COALESCE(trim(rl.char_id::text), '') = '' THEN COALESCE(trim(rl.character_name), 'unknown') ELSE trim(rl.char_id::text) END) AS character_key,
@@ -203,13 +217,23 @@ BEGIN
       COALESCE(s.character_key, d.character_key) AS character_key,
       COALESCE(s.character_name, d.character_name) AS character_name,
       COALESCE(d.earned, 0) AS earned,
-      COALESCE(s.spent, 0) AS spent
+      COALESCE(s.spent, 0) AS spent,
+      COALESCE(d.earned_30d, 0) AS earned_30d,
+      COALESCE(d.earned_60d, 0) AS earned_60d
     FROM _dkp_earned d
     FULL OUTER JOIN spent_agg s ON d.character_key = s.character_key
   )
-  SELECT c.character_key, c.character_name, c.earned, c.spent, ad.last_activity_date, now()
+  SELECT c.character_key, c.character_name, c.earned, c.spent, c.earned_30d, c.earned_60d, ad.last_activity_date, now()
   FROM combined c
   LEFT JOIN activity_dates ad ON ad.character_key = c.character_key;
+
+  -- Update period totals (total DKP available in last 30d and 60d from all raids).
+  INSERT INTO dkp_period_totals (period, total_dkp)
+  SELECT '30d', COALESCE(SUM((re.dkp_value::numeric)), 0) FROM raid_events re JOIN raids r ON r.raid_id = re.raid_id WHERE r.date_iso IS NOT NULL AND (r.date_iso::date) >= (current_date - 30)
+  ON CONFLICT (period) DO UPDATE SET total_dkp = EXCLUDED.total_dkp;
+  INSERT INTO dkp_period_totals (period, total_dkp)
+  SELECT '60d', COALESCE(SUM((re.dkp_value::numeric)), 0) FROM raid_events re JOIN raids r ON r.raid_id = re.raid_id WHERE r.date_iso IS NOT NULL AND (r.date_iso::date) >= (current_date - 60)
+  ON CONFLICT (period) DO UPDATE SET total_dkp = EXCLUDED.total_dkp;
 END;
 $$;
 
@@ -237,8 +261,9 @@ BEGIN
 END;
 $$;
 
--- Incremental delta: apply only NEW rows to dkp_summary (no full table scan). Historical data stays as baseline.
--- Use REFERENCING NEW TABLE so we only process inserted rows. For DELETE/UPDATE we run full refresh.
+-- Incremental delta: cache is refreshed whenever a new row is added (INSERT) to attendance or loot.
+-- Apply only NEW rows to dkp_summary (no full table scan). For DELETE/UPDATE we run full refresh.
+-- Run a full refresh daily (e.g. pg_cron) so 30d/60d windows roll; delta triggers do not recompute period totals.
 
 CREATE OR REPLACE FUNCTION public.trigger_delta_event_attendance()
 RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
@@ -377,6 +402,7 @@ ALTER TABLE raid_event_attendance ENABLE ROW LEVEL SECURITY;
 ALTER TABLE raid_classifications ENABLE ROW LEVEL SECURITY;
 ALTER TABLE dkp_adjustments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE dkp_summary ENABLE ROW LEVEL SECURITY;
+ALTER TABLE dkp_period_totals ENABLE ROW LEVEL SECURITY;
 ALTER TABLE active_raiders ENABLE ROW LEVEL SECURITY;
 
 -- Profiles: users read own row; officers read all (drop first so script is re-runnable)
@@ -424,6 +450,8 @@ DROP POLICY IF EXISTS "Authenticated read dkp_adjustments" ON dkp_adjustments;
 CREATE POLICY "Authenticated read dkp_adjustments" ON dkp_adjustments FOR SELECT TO authenticated USING (true);
 DROP POLICY IF EXISTS "Authenticated read dkp_summary" ON dkp_summary;
 CREATE POLICY "Authenticated read dkp_summary" ON dkp_summary FOR SELECT TO authenticated USING (true);
+DROP POLICY IF EXISTS "Authenticated read dkp_period_totals" ON dkp_period_totals;
+CREATE POLICY "Authenticated read dkp_period_totals" ON dkp_period_totals FOR SELECT TO authenticated USING (true);
 DROP POLICY IF EXISTS "Authenticated read active_raiders" ON active_raiders;
 CREATE POLICY "Authenticated read active_raiders" ON active_raiders FOR SELECT TO authenticated USING (true);
 DROP POLICY IF EXISTS "Officers manage active_raiders" ON active_raiders;

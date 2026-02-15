@@ -25,8 +25,8 @@ function applyAdjustmentsAndBalance(list, adjustmentsMap) {
   list.forEach((r) => {
     const adjRow = adjustmentsMap[(r.name || '').trim()] || adjustmentsMap[(r.name || '').trim().replace(/^\(\*\)\s*/, '')]
     if (adjRow) {
-      r.earned += adjRow.earned_delta
-      r.spent += adjRow.spent_delta || 0
+      r.earned += Math.round(Number(adjRow.earned_delta) || 0)
+      r.spent += Math.round(Number(adjRow.spent_delta) || 0)
     }
     r.balance = r.earned - r.spent
   })
@@ -44,9 +44,11 @@ function buildAccountLeaderboard(list, caData, accData) {
   const byAccount = {}
   list.forEach((r) => {
     const aid = charToAccount[String(r.char_id)] ?? '_no_account_'
-    if (!byAccount[aid]) byAccount[aid] = { account_id: aid, earned: 0, spent: 0, name: accountNames[aid] || (aid === '_no_account_' ? '(no account)' : aid) }
+    if (!byAccount[aid]) byAccount[aid] = { account_id: aid, earned: 0, spent: 0, earned_30d: 0, earned_60d: 0, name: accountNames[aid] || (aid === '_no_account_' ? '(no account)' : aid) }
     byAccount[aid].earned += r.earned
     byAccount[aid].spent += r.spent
+    byAccount[aid].earned_30d += (r.earned_30d != null ? r.earned_30d : 0)
+    byAccount[aid].earned_60d += (r.earned_60d != null ? r.earned_60d : 0)
   })
   const accountList = Object.values(byAccount).map((r) => ({ ...r, balance: r.earned - r.spent }))
   accountList.sort((a, b) => b.balance - a.balance)
@@ -54,13 +56,12 @@ function buildAccountLeaderboard(list, caData, accData) {
 }
 
 function isActiveRow(r, activeKeysSet, cutoffDate) {
-  if (!activeKeysSet && cutoffDate == null) return true
   if (activeKeysSet?.has(String(r.char_id))) return true
-  if (r.last_activity_date && cutoffDate) {
-    const d = typeof r.last_activity_date === 'string' ? new Date(r.last_activity_date) : r.last_activity_date
-    if (!isNaN(d.getTime()) && d >= cutoffDate) return true
-  }
-  return false
+  if (!cutoffDate) return false
+  if (r.last_activity_date == null || r.last_activity_date === '') return false
+  const d = typeof r.last_activity_date === 'string' ? new Date(r.last_activity_date) : r.last_activity_date
+  if (isNaN(d.getTime())) return false
+  return d >= cutoffDate
 }
 
 export default function DKP({ isOfficer }) {
@@ -79,21 +80,23 @@ export default function DKP({ isOfficer }) {
   const [caData, setCaData] = useState(null)
   const [accData, setAccData] = useState(null)
   const [accountViewLoading, setAccountViewLoading] = useState(false)
+  const [periodTotals, setPeriodTotals] = useState({ '30d': 0, '60d': 0 })
 
   // Fast path: only summary + adjustments + active (no character_account/accounts). Account rollup is lazy-loaded.
   const loadFromCache = useCallback(async (opts = {}) => {
     const { includeAccountData = false } = opts
     const tables = [
-      supabase.from('dkp_summary').select('character_key, character_name, earned, spent, last_activity_date, updated_at'),
+      supabase.from('dkp_summary').select('character_key, character_name, earned, spent, earned_30d, earned_60d, last_activity_date, updated_at'),
       supabase.from('dkp_adjustments').select('character_name, earned_delta, spent_delta').limit(1000),
       fetchAllRows('active_raiders', 'character_key'),
+      supabase.from('dkp_period_totals').select('period, total_dkp'),
     ]
     if (includeAccountData) {
       tables.push(fetchAllRows('character_account', 'char_id, account_id'))
       tables.push(fetchAllRows('accounts', 'account_id, toon_names'))
     }
     const results = await Promise.all(tables)
-    const [summary, adj, active, ca, acc] = includeAccountData ? results : [...results, null, null]
+    const [summary, adj, active, periodTotalsRes, ca, acc] = results.length >= 6 ? results : [...results, null, null]
     if (summary.error) return { ok: false, error: summary.error }
     const rows = summary.data || []
     if (rows.length === 0) return { ok: false }
@@ -109,11 +112,16 @@ export default function DKP({ isOfficer }) {
       const n = (row.character_name || '').trim()
       if (n) adjustmentsMap[n] = { earned_delta: Number(row.earned_delta) || 0, spent_delta: Number(row.spent_delta) || 0 }
     })
+    const pt = { '30d': 0, '60d': 0 }
+    ;(periodTotalsRes?.data || []).forEach((row) => { pt[row.period] = Math.round(Number(row.total_dkp) || 0) })
+    setPeriodTotals(pt)
     let list = rows.map((r) => ({
       char_id: r.character_key,
       name: r.character_name || r.character_key,
-      earned: Number(r.earned) || 0,
-      spent: Number(r.spent) || 0,
+      earned: Math.round(Number(r.earned) || 0),
+      spent: Math.round(Number(r.spent) || 0),
+      earned_30d: Math.round(Number(r.earned_30d) || 0),
+      earned_60d: Math.round(Number(r.earned_60d) || 0),
       last_activity_date: r.last_activity_date || null,
     }))
     list = list.filter((r) => isActiveRow(r, activeSet, cutoff))
@@ -366,17 +374,29 @@ export default function DKP({ isOfficer }) {
               <th>Earned</th>
               <th>Spent</th>
               <th>Balance</th>
+              <th title="DKP earned / total DKP in period">30d</th>
+              <th title="DKP earned / total DKP in period">60d</th>
             </tr>
           </thead>
           <tbody>
-            {showList.slice(0, 200).map((r, i) => (
-              <tr key={view === 'account' ? r.account_id + i : r.char_id}>
-                <td>{r.name}</td>
-                <td>{Number(r.earned).toFixed(1)}</td>
-                <td>{r.spent}</td>
-                <td><strong>{Number(r.balance).toFixed(1)}</strong></td>
-              </tr>
-            ))}
+            {showList.slice(0, 200).map((r, i) => {
+              const total30 = periodTotals['30d'] || 0
+              const total60 = periodTotals['60d'] || 0
+              const e30 = r.earned_30d != null ? Math.round(r.earned_30d) : 0
+              const e60 = r.earned_60d != null ? Math.round(r.earned_60d) : 0
+              const cell30 = total30 > 0 ? `${e30} / ${total30}` : '—'
+              const cell60 = total60 > 0 ? `${e60} / ${total60}` : '—'
+              return (
+                <tr key={view === 'account' ? r.account_id + i : r.char_id}>
+                  <td>{r.name}</td>
+                  <td>{Number(r.earned)}</td>
+                  <td>{Number(r.spent)}</td>
+                  <td><strong>{Number(r.balance)}</strong></td>
+                  <td>{cell30}</td>
+                  <td>{cell60}</td>
+                </tr>
+              )
+            })}
           </tbody>
         </table>
       </div>
