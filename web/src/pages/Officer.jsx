@@ -511,7 +511,8 @@ export default function Officer({ isOfficer }) {
   }
 
   const handleDeleteLoot = async (row) => {
-    if (!window.confirm(`Remove loot "${row.item_name}" from ${row.character_name}?`)) return
+    const msg = `Are you sure you want to remove this loot?\n\n"${row.item_name || 'Item'}" from ${row.character_name || 'character'}\n\nThis cannot be undone.`
+    if (!window.confirm(msg)) return
     setMutating(true)
     const { error: err } = await supabase.from('raid_loot').delete().eq('id', row.id)
     setMutating(false)
@@ -520,7 +521,7 @@ export default function Officer({ isOfficer }) {
   }
 
   const handleDeleteEvent = async (eventId) => {
-    if (!window.confirm('Remove this DKP tic and its attendance? This cannot be undone.')) return
+    if (!window.confirm('Are you sure you want to remove this DKP tic and all its attendance?\n\nThis cannot be undone.')) return
     setMutating(true)
     await supabase.from('raid_event_attendance').delete().eq('raid_id', selectedRaidId).eq('event_id', eventId)
     const { error: err } = await supabase.from('raid_events').delete().eq('raid_id', selectedRaidId).eq('event_id', eventId)

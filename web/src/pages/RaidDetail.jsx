@@ -137,7 +137,8 @@ export default function RaidDetail({ isOfficer }) {
   }
 
   const handleDeleteLoot = async (row) => {
-    if (!window.confirm(`Remove loot "${row.item_name}" from ${row.character_name}?`)) return
+    const msg = `Are you sure you want to remove this loot?\n\n"${row.item_name || 'Item'}" from ${row.character_name || 'character'}\n\nThis cannot be undone.`
+    if (!window.confirm(msg)) return
     setMutating(true)
     const { error: err } = await supabase.from('raid_loot').delete().eq('id', row.id)
     setMutating(false)
