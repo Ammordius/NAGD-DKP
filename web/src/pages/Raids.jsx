@@ -67,44 +67,27 @@ export default function Raids() {
   return (
     <div className="container">
       <h1>Raids</h1>
-      <p style={{ color: '#71717a' }}>Recent raids with DKP by event and classification by kills (from loot).</p>
+      <p style={{ color: '#71717a' }}>Recent raids with total DKP earned (sum of event DKP).</p>
       <div className="card">
         <table>
           <thead>
             <tr>
               <th>Date</th>
               <th>Raid</th>
-              <th>Event DKP</th>
-              <th>Kill types</th>
+              <th>Total DKP</th>
               <th>Attendees</th>
-              <th></th>
             </tr>
           </thead>
           <tbody>
             {raids.map((r) => {
               const ev = eventsByRaid[r.raid_id]
               const totalDkp = ev ? ev.totalDkp : null
-              const classes = classificationsByRaid[r.raid_id] || []
-              const mobLabels = [...new Set(classes.map((c) => c.mob.replace(/^#/, '')))]
               return (
                 <tr key={r.raid_id}>
                   <td>{r.date_iso || r.date || '—'}</td>
-                  <td>{r.raid_name || r.raid_id}</td>
-                  <td>{totalDkp != null ? Number(totalDkp).toFixed(1) : '—'}</td>
-                  <td>
-                    {mobLabels.length > 0 ? (
-                      <span className="raid-badges">
-                        {mobLabels.slice(0, 5).map((m) => (
-                          <span key={m} className="badge" title={m}>{m}</span>
-                        ))}
-                        {mobLabels.length > 5 && <span className="badge">+{mobLabels.length - 5}</span>}
-                      </span>
-                    ) : (
-                      '—'
-                    )}
-                  </td>
+                  <td><Link to={`/raids/${r.raid_id}`}>{r.raid_name || r.raid_id}</Link></td>
+                  <td>{totalDkp != null ? Math.round(Number(totalDkp)) : '—'}</td>
                   <td>{r.attendees ?? '—'}</td>
-                  <td><Link to={`/raids/${r.raid_id}`}>View</Link></td>
                 </tr>
               )
             })}

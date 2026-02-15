@@ -5,17 +5,49 @@ import { supabase } from '../lib/supabase'
 const LOOT_CACHE_KEY = 'loot_search_cache_v1'
 const CACHE_TTL_MS = 10 * 60 * 1000 // 10 minutes
 
-// Item name -> drops from (mob/zone). Loaded from web/public/item_sources.json (built from items_seen_to_mobs + raid_loot_classification).
-function itemSourceLabel(itemSources, itemName) {
+// Normalize mob name for comparison (strip # and trim, lowercase)
+function normMob(m) {
+  return (m || '').replace(/^#/, '').trim().toLowerCase()
+}
+
+// Item name -> drops from (mob/zone). Infer which mob dropped it using raid context when multiple sources exist.
+function itemSourceLabel(itemSources, itemName, raidId, raidName, raidToMobs) {
   if (!itemSources || !itemName) return null
   const key = String(itemName).trim().toLowerCase()
   const arr = itemSources[key]
   if (!arr || !arr.length) return null
-  const first = arr[0]
-  const mob = first.mob || ''
-  const zone = first.zone || ''
-  if (!mob) return null
-  return zone ? `${mob.replace(/^#/, '')} (${zone})` : mob.replace(/^#/, '')
+  const format = (s) => {
+    const mob = (s.mob || '').replace(/^#/, '').trim()
+    const zone = (s.zone || '').trim()
+    if (!mob) return null
+    return zone ? `${mob} (${zone})` : mob
+  }
+  if (arr.length === 1) return format(arr[0])
+  const raidMobs = raidId && raidToMobs && raidToMobs[raidId] ? new Set([...raidToMobs[raidId]].map(normMob)) : null
+  const raidNameLower = (raidName || '').toLowerCase()
+  const keywords = [
+    { k: ['water', 'plane of water', 'pow', 'minis'], prefer: ['water', 'plane of water'] },
+    { k: ['cursed', 'emp', 'empire', 'rhag', 'ssra'], prefer: ['cursed', 'empire', 'ssraeshza', 'ssra', 'temple of ssraeshza'] },
+    { k: ['fire', 'plane of fire', 'po fire'], prefer: ['fire', 'plane of fire'] },
+    { k: ['earth', 'plane of earth', 'po earth'], prefer: ['earth', 'plane of earth'] },
+    { k: ['air', 'plane of air', 'po air'], prefer: ['air', 'plane of air'] },
+    { k: ['time', 'pot', 'plane of time'], prefer: ['time', 'plane of time'] },
+    { k: ['vex thal', 'vexthal'], prefer: ['vex thal', 'vexthal'] },
+  ]
+  if (raidMobs && raidMobs.size > 0) {
+    const exact = arr.find((s) => raidMobs.has(normMob(s.mob)))
+    if (exact) return format(exact)
+  }
+  for (const { k, prefer } of keywords) {
+    if (!k.some((kw) => raidNameLower.includes(kw))) continue
+    const match = arr.find((s) => {
+      const z = (s.zone || '').toLowerCase()
+      const m = normMob(s.mob)
+      return prefer.some((p) => z.includes(p) || m.includes(p))
+    })
+    if (match) return format(match)
+  }
+  return format(arr[0])
 }
 
 function loadCache() {
@@ -47,6 +79,7 @@ export default function LootSearch() {
   const [loot, setLoot] = useState([])
   const [raids, setRaids] = useState({})
   const [classifications, setClassifications] = useState({})
+  const [raidToMobs, setRaidToMobs] = useState({})
   const [itemSources, setItemSources] = useState(null)
   const [itemQuery, setItemQuery] = useState('')
   const [mobFilter, setMobFilter] = useState('')
@@ -122,11 +155,15 @@ export default function LootSearch() {
     run()
     supabase.from('raid_classifications').select('raid_id, mob').limit(50000).then(({ data }) => {
       const raidByMob = {}
+      const raidToMobsMap = {}
       ;(data || []).forEach((row) => {
         if (!raidByMob[row.mob]) raidByMob[row.mob] = []
         if (!raidByMob[row.mob].includes(row.raid_id)) raidByMob[row.mob].push(row.raid_id)
+        if (!raidToMobsMap[row.raid_id]) raidToMobsMap[row.raid_id] = []
+        if (!raidToMobsMap[row.raid_id].includes(row.mob)) raidToMobsMap[row.raid_id].push(row.mob)
       })
       setClassifications(raidByMob)
+      setRaidToMobs(raidToMobsMap)
     })
     fetch('/item_sources.json')
       .then((res) => (res.ok ? res.json() : null))
@@ -214,7 +251,7 @@ export default function LootSearch() {
                   <td style={{ color: '#a1a1aa', fontSize: '0.875rem' }}>{(raids[row.raid_id]?.date_iso || '').slice(0, 10) || '—'}</td>
                   <td><Link to={`/items/${encodeURIComponent(row.item_name || '')}`}>{row.item_name || '—'}</Link></td>
                   <td style={{ color: '#a1a1aa', fontSize: '0.875rem' }}>
-                    {itemSourceLabel(itemSources, row.item_name) ?? '—'}
+                    {itemSourceLabel(itemSources, row.item_name, row.raid_id, raids[row.raid_id]?.name, raidToMobs) ?? '—'}
                   </td>
                   <td><Link to={`/raids/${row.raid_id}`}>{raids[row.raid_id]?.name ?? row.raid_id}</Link></td>
                   <td><Link to={`/characters/${encodeURIComponent(row.character_name || row.char_id || '')}`}>{row.character_name || row.char_id || '—'}</Link></td>
