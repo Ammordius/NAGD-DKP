@@ -24,30 +24,39 @@ export default function MobLoot() {
 
   useEffect(() => {
     let cancelled = false
+    const PAGE = 1000
     const run = async () => {
-      const { data: lootRows } = await supabase.from('raid_loot').select('raid_id, item_name, cost').limit(20000)
-      if (cancelled || !lootRows?.length) return
-      const raidIds = [...new Set(lootRows.map((r) => r.raid_id))]
+      const allLoot = []
+      let from = 0
+      while (true) {
+        const to = from + PAGE - 1
+        const { data: chunk } = await supabase.from('raid_loot').select('raid_id, item_name, cost').range(from, to)
+        if (cancelled) return
+        if (!chunk?.length) break
+        allLoot.push(...chunk)
+        if (chunk.length < PAGE) break
+        from += PAGE
+      }
+      if (cancelled || allLoot.length === 0) return
+      const raidIds = [...new Set(allLoot.map((r) => r.raid_id).filter(Boolean))]
       const { data: raidRows } = await supabase.from('raids').select('raid_id, date_iso').in('raid_id', raidIds)
       if (cancelled) return
       const dateByRaid = {}
       ;(raidRows || []).forEach((row) => { dateByRaid[row.raid_id] = (row.date_iso || '').slice(0, 10) })
       const byItem = {}
-      lootRows.forEach((row) => {
+      allLoot.forEach((row) => {
         const name = (row.item_name || '').trim().toLowerCase()
         if (!name) return
         if (!byItem[name]) byItem[name] = []
         byItem[name].push({ cost: row.cost, date: dateByRaid[row.raid_id] || '' })
       })
-      Object.keys(byItem).forEach((name) => {
-        byItem[name].sort((a, b) => (b.date || '').localeCompare(a.date || ''))
-        byItem[name] = byItem[name].slice(0, 3)
-      })
       const last3Map = {}
       Object.entries(byItem).forEach(([key, arr]) => {
-        const costs = arr.map((r) => Number(r.cost))
+        arr.sort((a, b) => (b.date || '').localeCompare(a.date || ''))
+        const recent = arr.slice(0, 3)
+        const costs = recent.map((r) => Number(r.cost))
         const avg = costs.length ? (costs.reduce((s, c) => s + c, 0) / costs.length).toFixed(1) : null
-        last3Map[key] = { values: arr.map((r) => r.cost ?? '—'), avg }
+        last3Map[key] = { values: recent.map((r) => r.cost ?? '—'), avg }
       })
       if (!cancelled) setItemLast3(last3Map)
     }

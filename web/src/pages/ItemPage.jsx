@@ -19,16 +19,16 @@ function buildItemIdMap(mobLoot) {
   return map
 }
 
-// Simple SVG line chart for price history
-function PriceChart({ data, height = 120 }) {
+// Simple SVG line chart: X = date, Y = cost (DKP)
+function PriceChart({ data, height = 180 }) {
   if (!data || data.length === 0) return null
   const costs = data.map((d) => Number(d.cost) || 0)
   const maxCost = Math.max(...costs, 1)
   const minCost = Math.min(...costs, 0)
   const range = maxCost - minCost || 1
-  const w = 400
+  const w = 520
   const h = height
-  const pad = { top: 8, right: 8, bottom: 24, left: 32 }
+  const pad = { top: 12, right: 12, bottom: 28, left: 44 }
   const innerW = w - pad.left - pad.right
   const innerH = h - pad.top - pad.bottom
   const points = data.map((d, i) => {
@@ -36,9 +36,12 @@ function PriceChart({ data, height = 120 }) {
     const y = pad.top + innerH - ((Number(d.cost) || 0) - minCost) / range * innerH
     return `${x},${y}`
   }).join(' ')
+  const firstDate = data[0]?.date || ''
+  const lastDate = data[data.length - 1]?.date || ''
   return (
     <div className="card" style={{ overflow: 'auto' }}>
       <h3 style={{ marginTop: 0 }}>DKP cost over time</h3>
+      <p style={{ color: '#a1a1aa', fontSize: '0.875rem', marginBottom: '0.5rem' }}>X = date, Y = cost (DKP)</p>
       <svg width={w} height={h} style={{ display: 'block' }}>
         <polyline
           fill="none"
@@ -53,8 +56,12 @@ function PriceChart({ data, height = 120 }) {
             <circle key={i} cx={x} cy={y} r={4} fill="#7c3aed" />
           )
         })}
-        <text x={pad.left} y={h - 4} fill="#71717a" fontSize="10">{minCost}</text>
-        <text x={w - pad.right} y={h - 4} fill="#71717a" fontSize="10" textAnchor="end">{maxCost}</text>
+        {/* Y axis (left): cost scale */}
+        <text x={pad.left - 4} y={pad.top} fill="#71717a" fontSize="10" textAnchor="end">{maxCost}</text>
+        <text x={pad.left - 4} y={pad.top + innerH} fill="#71717a" fontSize="10" textAnchor="end">{minCost}</text>
+        {/* X axis (bottom): date range */}
+        <text x={pad.left} y={h - 6} fill="#71717a" fontSize="10">{firstDate}</text>
+        <text x={pad.left + innerW} y={h - 6} fill="#71717a" fontSize="10" textAnchor="end">{lastDate}</text>
       </svg>
     </div>
   )

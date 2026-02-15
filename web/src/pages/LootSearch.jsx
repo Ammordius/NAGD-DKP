@@ -28,8 +28,8 @@ export default function LootSearch() {
   useEffect(() => {
     const limit = 50000
     Promise.all([
-      supabase.from('raid_loot').select('id, raid_id, event_id, item_name, character_name, cost').limit(limit),
-      supabase.from('raids').select('raid_id, raid_name').limit(limit),
+      supabase.from('raid_loot').select('id, raid_id, event_id, item_name, character_name, char_id, cost').limit(limit),
+      supabase.from('raids').select('raid_id, raid_name, date_iso').limit(limit),
     ]).then(([l, r]) => {
       if (l.error) {
         setError(l.error.message)
@@ -38,7 +38,7 @@ export default function LootSearch() {
       }
       setLoot(l.data || [])
       const raidMap = {}
-      ;(r.data || []).forEach((row) => { raidMap[row.raid_id] = row.raid_name || row.raid_id })
+      ;(r.data || []).forEach((row) => { raidMap[row.raid_id] = { name: row.raid_name || row.raid_id, date_iso: row.date_iso || '' } })
       setRaids(raidMap)
       setLoading(false)
     })
@@ -74,8 +74,10 @@ export default function LootSearch() {
         list = list.filter((row) => set.has(row.raid_id))
       }
     }
+    const dateIso = (raidId) => (raids[raidId] && raids[raidId].date_iso) ? String(raids[raidId].date_iso).slice(0, 10) : ''
+    list = [...list].sort((a, b) => (dateIso(b.raid_id) || '').localeCompare(dateIso(a.raid_id) || ''))
     return list
-  }, [loot, itemQuery, mobFilter, classifications])
+  }, [loot, itemQuery, mobFilter, classifications, raids])
 
   if (loading) return <div className="container">Loading loot…</div>
   if (error) return <div className="container"><span className="error">{error}</span></div>
@@ -120,6 +122,7 @@ export default function LootSearch() {
           <table>
             <thead>
               <tr>
+                <th>Date</th>
                 <th>Item</th>
                 <th>Drops from</th>
                 <th>Raid</th>
@@ -130,11 +133,12 @@ export default function LootSearch() {
             <tbody>
               {filteredLoot.slice(0, 500).map((row, i) => (
                 <tr key={row.id || `${row.raid_id}-${row.item_name}-${i}`}>
+                  <td style={{ color: '#a1a1aa', fontSize: '0.875rem' }}>{(raids[row.raid_id]?.date_iso || '').slice(0, 10) || '—'}</td>
                   <td><Link to={`/items/${encodeURIComponent(row.item_name || '')}`}>{row.item_name || '—'}</Link></td>
                   <td style={{ color: '#a1a1aa', fontSize: '0.875rem' }}>
                     {itemSourceLabel(itemSources, row.item_name) ?? '—'}
                   </td>
-                  <td><Link to={`/raids/${row.raid_id}`}>{raids[row.raid_id] || row.raid_id}</Link></td>
+                  <td><Link to={`/raids/${row.raid_id}`}>{raids[row.raid_id]?.name ?? row.raid_id}</Link></td>
                   <td><Link to={`/characters/${encodeURIComponent(row.character_name || row.char_id || '')}`}>{row.character_name || row.char_id || '—'}</Link></td>
                   <td>{row.cost ?? '—'}</td>
                 </tr>
