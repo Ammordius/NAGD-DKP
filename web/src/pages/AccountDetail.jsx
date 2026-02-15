@@ -187,9 +187,7 @@ export default function AccountDetail() {
                   <p style={{ margin: '0 0 0.25rem 0' }}>
                     <Link to={`/raids/${act.raid_id}`}><strong>{act.raid_name}</strong></Link>
                     {act.date && <span style={{ color: '#71717a', marginLeft: '0.5rem' }}>{act.date}</span>}
-                    {act.dkpEarned != null && act.dkpEarned > 0 && (
-                      <span style={{ marginLeft: '0.5rem' }}>· <strong>Earned: {Number(act.dkpEarned).toFixed(0)}</strong> DKP</span>
-                    )}
+                    <span style={{ marginLeft: '0.5rem' }}>· <strong>Earned: {Number(act.dkpEarned ?? 0).toFixed(0)}</strong> DKP</span>
                   </p>
                   {act.items.length > 0 && (
                     <ul style={{ margin: '0.25rem 0 0 1.25rem', paddingLeft: 0, listStyle: 'none' }}>
