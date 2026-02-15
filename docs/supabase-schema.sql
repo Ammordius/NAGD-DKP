@@ -170,7 +170,15 @@ BEGIN
     ) e;
   END IF;
 
-  -- Merge spent and last_activity from raid_loot (and ensure we have last_activity from loot raids)
+  -- Copy earned rows to temp table (we are about to truncate dkp_summary and need them for the join).
+  CREATE TEMP TABLE IF NOT EXISTS _dkp_earned (character_key TEXT, character_name TEXT, earned NUMERIC, spent INTEGER, last_activity_date DATE, updated_at TIMESTAMPTZ) ON COMMIT DROP;
+  TRUNCATE _dkp_earned;
+  INSERT INTO _dkp_earned SELECT character_key, character_name, earned, spent, last_activity_date, updated_at FROM dkp_summary;
+
+  TRUNCATE dkp_summary;
+
+  -- Merge spent and last_activity; insert final rows.
+  INSERT INTO dkp_summary (character_key, character_name, earned, spent, last_activity_date, updated_at)
   WITH spent_agg AS (
     SELECT
       (CASE WHEN COALESCE(trim(rl.char_id::text), '') = '' THEN COALESCE(trim(rl.character_name), 'unknown') ELSE trim(rl.char_id::text) END) AS character_key,
@@ -196,11 +204,9 @@ BEGIN
       COALESCE(s.character_name, d.character_name) AS character_name,
       COALESCE(d.earned, 0) AS earned,
       COALESCE(s.spent, 0) AS spent
-    FROM dkp_summary d
+    FROM _dkp_earned d
     FULL OUTER JOIN spent_agg s ON d.character_key = s.character_key
   )
-  TRUNCATE dkp_summary;
-  INSERT INTO dkp_summary (character_key, character_name, earned, spent, last_activity_date, updated_at)
   SELECT c.character_key, c.character_name, c.earned, c.spent, ad.last_activity_date, now()
   FROM combined c
   LEFT JOIN activity_dates ad ON ad.character_key = c.character_key;
@@ -222,7 +228,7 @@ BEGIN
 END;
 $$;
 
--- Trigger: refresh cache whenever attendance or loot changes (one refresh per statement, e.g. one per bulk insert).
+-- Full refresh trigger (used only on UPDATE/DELETE so corrections are applied).
 CREATE OR REPLACE FUNCTION public.trigger_refresh_dkp_summary()
 RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 BEGIN
@@ -231,19 +237,116 @@ BEGIN
 END;
 $$;
 
+-- Incremental delta: apply only NEW rows to dkp_summary (no full table scan). Historical data stays as baseline.
+-- Use REFERENCING NEW TABLE so we only process inserted rows. For DELETE/UPDATE we run full refresh.
+
+CREATE OR REPLACE FUNCTION public.trigger_delta_event_attendance()
+RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  INSERT INTO dkp_summary (character_key, character_name, earned, spent, last_activity_date, updated_at)
+  WITH delta AS (
+    SELECT
+      (CASE WHEN COALESCE(trim(nr.char_id::text), '') = '' THEN COALESCE(trim(nr.character_name), 'unknown') ELSE trim(nr.char_id::text) END) AS character_key,
+      MAX(COALESCE(trim(nr.character_name), nr.char_id::text, 'unknown')) AS character_name,
+      SUM(COALESCE((re.dkp_value::numeric), 0)) AS earned,
+      MAX((r.date_iso::date)) AS last_activity_date
+    FROM new_rows nr
+    LEFT JOIN raid_events re ON re.raid_id = nr.raid_id AND re.event_id = nr.event_id
+    LEFT JOIN raids r ON r.raid_id = nr.raid_id
+    GROUP BY (CASE WHEN COALESCE(trim(nr.char_id::text), '') = '' THEN COALESCE(trim(nr.character_name), 'unknown') ELSE trim(nr.char_id::text) END)
+  )
+  SELECT character_key, character_name, earned, 0, last_activity_date, now() FROM delta
+  ON CONFLICT (character_key) DO UPDATE SET
+    earned = dkp_summary.earned + EXCLUDED.earned,
+    last_activity_date = GREATEST(COALESCE(dkp_summary.last_activity_date, '1970-01-01'::date), COALESCE(EXCLUDED.last_activity_date, '1970-01-01'::date)),
+    updated_at = now(),
+    character_name = COALESCE(EXCLUDED.character_name, dkp_summary.character_name);
+  RETURN NULL;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.trigger_delta_attendance()
+RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  INSERT INTO dkp_summary (character_key, character_name, earned, spent, last_activity_date, updated_at)
+  WITH delta AS (
+    SELECT
+      (CASE WHEN COALESCE(trim(nr.char_id::text), '') = '' THEN COALESCE(trim(nr.character_name), 'unknown') ELSE trim(nr.char_id::text) END) AS character_key,
+      MAX(COALESCE(trim(nr.character_name), nr.char_id::text, 'unknown')) AS character_name,
+      SUM(COALESCE(rt.dkp, 0)) AS earned,
+      MAX((r.date_iso::date)) AS last_activity_date
+    FROM new_rows nr
+    LEFT JOIN raids r ON r.raid_id = nr.raid_id
+    LEFT JOIN (SELECT raid_id, SUM((dkp_value::numeric)) AS dkp FROM raid_events GROUP BY raid_id) rt ON rt.raid_id = nr.raid_id
+    GROUP BY (CASE WHEN COALESCE(trim(nr.char_id::text), '') = '' THEN COALESCE(trim(nr.character_name), 'unknown') ELSE trim(nr.char_id::text) END)
+  )
+  SELECT character_key, character_name, earned, 0, last_activity_date, now() FROM delta
+  ON CONFLICT (character_key) DO UPDATE SET
+    earned = dkp_summary.earned + EXCLUDED.earned,
+    last_activity_date = GREATEST(COALESCE(dkp_summary.last_activity_date, '1970-01-01'::date), COALESCE(EXCLUDED.last_activity_date, '1970-01-01'::date)),
+    updated_at = now(),
+    character_name = COALESCE(EXCLUDED.character_name, dkp_summary.character_name);
+  RETURN NULL;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.trigger_delta_loot()
+RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  INSERT INTO dkp_summary (character_key, character_name, earned, spent, last_activity_date, updated_at)
+  WITH delta AS (
+    SELECT
+      (CASE WHEN COALESCE(trim(nr.char_id::text), '') = '' THEN COALESCE(trim(nr.character_name), 'unknown') ELSE trim(nr.char_id::text) END) AS character_key,
+      MAX(COALESCE(trim(nr.character_name), nr.char_id::text, 'unknown')) AS character_name,
+      SUM(COALESCE((nr.cost::integer), 0)) AS spent,
+      MAX((r.date_iso::date)) AS last_activity_date
+    FROM new_rows nr
+    LEFT JOIN raids r ON r.raid_id = nr.raid_id
+    GROUP BY (CASE WHEN COALESCE(trim(nr.char_id::text), '') = '' THEN COALESCE(trim(nr.character_name), 'unknown') ELSE trim(nr.char_id::text) END)
+  )
+  SELECT character_key, character_name, 0, spent, last_activity_date, now() FROM delta
+  ON CONFLICT (character_key) DO UPDATE SET
+    spent = dkp_summary.spent + EXCLUDED.spent,
+    last_activity_date = GREATEST(COALESCE(dkp_summary.last_activity_date, '1970-01-01'::date), COALESCE(EXCLUDED.last_activity_date, '1970-01-01'::date)),
+    updated_at = now(),
+    character_name = COALESCE(EXCLUDED.character_name, dkp_summary.character_name);
+  RETURN NULL;
+END;
+$$;
+
+-- Triggers: only on INSERT so we only apply delta (new rows). For DELETE/UPDATE run full refresh.
 DROP TRIGGER IF EXISTS refresh_dkp_after_event_attendance ON raid_event_attendance;
-CREATE TRIGGER refresh_dkp_after_event_attendance
-  AFTER INSERT OR UPDATE OR DELETE ON raid_event_attendance
-  FOR EACH STATEMENT EXECUTE FUNCTION public.trigger_refresh_dkp_summary();
+CREATE TRIGGER delta_dkp_after_event_attendance
+  AFTER INSERT ON raid_event_attendance
+  REFERENCING NEW TABLE AS new_rows
+  FOR EACH STATEMENT EXECUTE FUNCTION public.trigger_delta_event_attendance();
 
 DROP TRIGGER IF EXISTS refresh_dkp_after_attendance ON raid_attendance;
-CREATE TRIGGER refresh_dkp_after_attendance
-  AFTER INSERT OR UPDATE OR DELETE ON raid_attendance
-  FOR EACH STATEMENT EXECUTE FUNCTION public.trigger_refresh_dkp_summary();
+CREATE TRIGGER delta_dkp_after_attendance
+  AFTER INSERT ON raid_attendance
+  REFERENCING NEW TABLE AS new_rows
+  FOR EACH STATEMENT EXECUTE FUNCTION public.trigger_delta_attendance();
 
 DROP TRIGGER IF EXISTS refresh_dkp_after_loot ON raid_loot;
-CREATE TRIGGER refresh_dkp_after_loot
-  AFTER INSERT OR UPDATE OR DELETE ON raid_loot
+CREATE TRIGGER delta_dkp_after_loot
+  AFTER INSERT ON raid_loot
+  REFERENCING NEW TABLE AS new_rows
+  FOR EACH STATEMENT EXECUTE FUNCTION public.trigger_delta_loot();
+
+-- On UPDATE or DELETE we run full refresh so corrections/deletions are applied (rare path).
+DROP TRIGGER IF EXISTS full_refresh_dkp_after_event_attendance_change ON raid_event_attendance;
+CREATE TRIGGER full_refresh_dkp_after_event_attendance_change
+  AFTER UPDATE OR DELETE ON raid_event_attendance
+  FOR EACH STATEMENT EXECUTE FUNCTION public.trigger_refresh_dkp_summary();
+
+DROP TRIGGER IF EXISTS full_refresh_dkp_after_attendance_change ON raid_attendance;
+CREATE TRIGGER full_refresh_dkp_after_attendance_change
+  AFTER UPDATE OR DELETE ON raid_attendance
+  FOR EACH STATEMENT EXECUTE FUNCTION public.trigger_refresh_dkp_summary();
+
+DROP TRIGGER IF EXISTS full_refresh_dkp_after_loot_change ON raid_loot;
+CREATE TRIGGER full_refresh_dkp_after_loot_change
+  AFTER UPDATE OR DELETE ON raid_loot
   FOR EACH STATEMENT EXECUTE FUNCTION public.trigger_refresh_dkp_summary();
 
 -- 3) Auto-create profile on signup
@@ -321,8 +424,6 @@ DROP POLICY IF EXISTS "Authenticated read dkp_adjustments" ON dkp_adjustments;
 CREATE POLICY "Authenticated read dkp_adjustments" ON dkp_adjustments FOR SELECT TO authenticated USING (true);
 DROP POLICY IF EXISTS "Authenticated read dkp_summary" ON dkp_summary;
 CREATE POLICY "Authenticated read dkp_summary" ON dkp_summary FOR SELECT TO authenticated USING (true);
-
--- active_raiders: everyone can read; only officers can insert/delete
 DROP POLICY IF EXISTS "Authenticated read active_raiders" ON active_raiders;
 CREATE POLICY "Authenticated read active_raiders" ON active_raiders FOR SELECT TO authenticated USING (true);
 DROP POLICY IF EXISTS "Officers manage active_raiders" ON active_raiders;

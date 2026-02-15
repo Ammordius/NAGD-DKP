@@ -4,6 +4,8 @@ import { supabase } from '../lib/supabase'
 // Supabase/PostgREST returns at most 1000 rows per query. Paginate to fetch all rows.
 const PAGE_SIZE = 1000
 const ACTIVE_DAYS = 120 // Show raiders marked active or with activity in last N days
+const CACHE_KEY = 'dkp_leaderboard_v1'
+const CACHE_TTL_MS = 5 * 60 * 1000 // 5 minutes: show cached data immediately, refresh in background
 
 async function fetchAllRows(table, select = '*') {
   const all = []
@@ -74,15 +76,24 @@ export default function DKP({ isOfficer }) {
   const [activeManageOpen, setActiveManageOpen] = useState(false)
   const [activeAddKey, setActiveAddKey] = useState('')
   const [activeMutating, setActiveMutating] = useState(false)
+  const [caData, setCaData] = useState(null)
+  const [accData, setAccData] = useState(null)
+  const [accountViewLoading, setAccountViewLoading] = useState(false)
 
-  const loadFromCache = useCallback(async () => {
-    const [summary, adj, ca, acc, active] = await Promise.all([
+  // Fast path: only summary + adjustments + active (no character_account/accounts). Account rollup is lazy-loaded.
+  const loadFromCache = useCallback(async (opts = {}) => {
+    const { includeAccountData = false } = opts
+    const tables = [
       supabase.from('dkp_summary').select('character_key, character_name, earned, spent, last_activity_date, updated_at'),
       supabase.from('dkp_adjustments').select('character_name, earned_delta, spent_delta').limit(1000),
-      fetchAllRows('character_account', 'char_id, account_id'),
-      fetchAllRows('accounts', 'account_id, toon_names'),
       fetchAllRows('active_raiders', 'character_key'),
-    ])
+    ]
+    if (includeAccountData) {
+      tables.push(fetchAllRows('character_account', 'char_id, account_id'))
+      tables.push(fetchAllRows('accounts', 'account_id, toon_names'))
+    }
+    const results = await Promise.all(tables)
+    const [summary, adj, active, ca, acc] = includeAccountData ? results : [...results, null, null]
     if (summary.error) return { ok: false, error: summary.error }
     const rows = summary.data || []
     if (rows.length === 0) return { ok: false }
@@ -107,13 +118,40 @@ export default function DKP({ isOfficer }) {
     }))
     list = list.filter((r) => isActiveRow(r, activeSet, cutoff))
     applyAdjustmentsAndBalance(list, adjustmentsMap)
-    const accountList = buildAccountLeaderboard(list, ca?.data ?? [], acc?.data ?? [])
+    const caList = includeAccountData ? (ca?.data ?? []) : (caData ?? [])
+    const accList = includeAccountData ? (acc?.data ?? []) : (accData ?? [])
+    if (includeAccountData && ca) setCaData(ca?.data ?? [])
+    if (includeAccountData && acc) setAccData(acc?.data ?? [])
+    const accountList = (includeAccountData || (caList.length > 0 || accList.length > 0))
+      ? buildAccountLeaderboard(list, caList, accList)
+      : []
     setLeaderboard(list)
     setAccountLeaderboard(accountList)
-    setSummaryUpdatedAt(rows[0]?.updated_at || null)
+    const updatedAt = rows[0]?.updated_at ?? null
+    setSummaryUpdatedAt(updatedAt)
     setUsingCache(true)
-    return { ok: true }
+    return { ok: true, list, accountList, summaryUpdatedAt: updatedAt }
   }, [])
+
+  // Lazy-load character_account + accounts when user first switches to "By account" view.
+  const ensureAccountDataLoaded = useCallback(async () => {
+    if (caData !== null && accData !== null) return
+    setAccountViewLoading(true)
+    const [ca, acc] = await Promise.all([
+      fetchAllRows('character_account', 'char_id, account_id'),
+      fetchAllRows('accounts', 'account_id, toon_names'),
+    ])
+    if (ca?.data) setCaData(ca.data)
+    if (acc?.data) setAccData(acc.data)
+    setAccountViewLoading(false)
+  }, [caData, accData])
+
+  // When we get ca/acc data, rebuild account leaderboard from current character list.
+  useEffect(() => {
+    if (caData === null || accData === null || leaderboard.length === 0) return
+    const accountList = buildAccountLeaderboard(leaderboard, caData, accData)
+    setAccountLeaderboard(accountList)
+  }, [caData, accData, leaderboard])
 
   const loadLive = useCallback(async () => {
     const [att, ev, evAtt, loot, ca, acc, adj] = await Promise.all([
@@ -176,20 +214,59 @@ export default function DKP({ isOfficer }) {
     setAccountLeaderboard(accountList)
     setSummaryUpdatedAt(null)
     setUsingCache(false)
-    return { ok: true }
+    return { ok: true, list, accountList }
   }, [])
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (opts = {}) => {
+    const { skipCache = false } = opts
     setError('')
+
+    if (!skipCache) {
+      try {
+        const raw = sessionStorage.getItem(CACHE_KEY)
+        if (raw) {
+          const obj = JSON.parse(raw)
+          if (obj.fetchedAt && (Date.now() - obj.fetchedAt) < CACHE_TTL_MS && Array.isArray(obj.leaderboard)) {
+            setLeaderboard(obj.leaderboard)
+            setAccountLeaderboard([]) // Lazy-load account rollup when user switches to "By account"
+            setSummaryUpdatedAt(obj.summaryUpdatedAt ?? null)
+            setUsingCache(!!obj.usingCache)
+            setLoading(false)
+          }
+        }
+      } catch (_) { /* ignore */ }
+    }
+
     const cacheResult = await loadFromCache()
-    if (cacheResult.ok) return
+    if (cacheResult.ok) {
+      try {
+        sessionStorage.setItem(CACHE_KEY, JSON.stringify({
+          leaderboard: cacheResult.list,
+          accountLeaderboard: cacheResult.accountList,
+          summaryUpdatedAt: cacheResult.summaryUpdatedAt ?? null,
+          usingCache: true,
+          fetchedAt: Date.now(),
+        }))
+      } catch (_) { /* ignore */ }
+      return
+    }
     if (cacheResult.error) {
       setError(cacheResult.error.message)
       setLoading(false)
       return
     }
     const liveResult = await loadLive()
-    if (!liveResult.ok) {
+    if (liveResult.ok) {
+      try {
+        sessionStorage.setItem(CACHE_KEY, JSON.stringify({
+          leaderboard: liveResult.list,
+          accountLeaderboard: liveResult.accountList,
+          summaryUpdatedAt: null,
+          usingCache: false,
+          fetchedAt: Date.now(),
+        }))
+      } catch (_) { /* ignore */ }
+    } else {
       setError(liveResult.error?.message || 'Failed to load DKP')
     }
   }, [loadFromCache, loadLive])
@@ -198,6 +275,10 @@ export default function DKP({ isOfficer }) {
     setLoading(true)
     load().finally(() => setLoading(false))
   }, [load])
+
+  useEffect(() => {
+    if (view === 'account' && leaderboard.length > 0) ensureAccountDataLoaded()
+  }, [view, leaderboard.length, ensureAccountDataLoaded])
 
   const handleRefreshTotals = useCallback(async () => {
     setRefreshing(true)
@@ -209,10 +290,10 @@ export default function DKP({ isOfficer }) {
       return
     }
     setLoading(true)
-    await loadFromCache()
+    await loadFromCache({ includeAccountData: caData !== null })
     setLoading(false)
     setRefreshing(false)
-  }, [loadFromCache])
+  }, [loadFromCache, caData])
 
   const handleAddActive = useCallback(async () => {
     const key = activeAddKey.trim()
@@ -239,11 +320,12 @@ export default function DKP({ isOfficer }) {
     }
   }, [loadFromCache])
 
-  if (loading) return <div className="container">Loading DKP…</div>
-  if (error) return <div className="container"><span className="error">{error}</span></div>
-
   const showList = view === 'account' ? accountLeaderboard : leaderboard
   const colLabel = view === 'account' ? 'Account (first toon)' : 'Character'
+
+  if (loading && !showList.length) return <div className="container">Loading DKP…</div>
+  if (error && !showList.length) return <div className="container"><span className="error">{error}</span></div>
+  if (view === 'account' && accountViewLoading && !showList.length) return <div className="container">Loading account view…</div>
 
   return (
     <div className="container">
