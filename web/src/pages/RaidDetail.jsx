@@ -183,6 +183,8 @@ export default function RaidDetail({ isOfficer }) {
     }
     setAddToTicResult(char.name)
     setAddToTicCharQuery('')
+    await supabase.rpc('refresh_dkp_summary')
+    try { sessionStorage.removeItem('dkp_leaderboard_v2') } catch (_) {}
     loadData()
     setMutating(false)
   }

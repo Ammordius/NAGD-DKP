@@ -256,6 +256,8 @@ export default function Officer({ isOfficer }) {
     }
     setAddToTicResult(char.name)
     setAddToTicCharQuery('')
+    await supabase.rpc('refresh_dkp_summary')
+    try { sessionStorage.removeItem('dkp_leaderboard_v2') } catch (_) {}
     loadSelectedRaid()
     setMutating(false)
   }
@@ -386,6 +388,8 @@ export default function Officer({ isOfficer }) {
       newThisTic: events.length === 0 ? matched.map((m) => m.character_name) : matched.filter((m) => !eventAttendance.some((r) => String(r.char_id) === String(m.char_id))).map((m) => m.character_name),
     })
     setTicPaste('')
+    await supabase.rpc('refresh_dkp_summary')
+    try { sessionStorage.removeItem('dkp_leaderboard_v2') } catch (_) {}
     loadSelectedRaid()
     setMutating(false)
   }
