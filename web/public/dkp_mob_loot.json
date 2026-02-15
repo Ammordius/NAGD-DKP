@@ -1,7 +1,7 @@
 {
   "#Bertoxxulous|": {
     "mob": "#Bertoxxulous",
-    "zone": "",
+    "zone": "Plane of Time B",
     "loot": [
       {
         "item_id": 15927,
@@ -92,7 +92,7 @@
   },
   "A_Deadly_Warboar|": {
     "mob": "A_Deadly_Warboar",
-    "zone": "",
+    "zone": "Plane of Time",
     "loot": [
       {
         "item_id": 21997,
@@ -165,7 +165,7 @@
   },
   "A_Ferocious_Warboar|": {
     "mob": "A_Ferocious_Warboar",
-    "zone": "",
+    "zone": "Plane of Time",
     "loot": [
       {
         "item_id": 21997,
@@ -238,7 +238,7 @@
   },
   "A_Monsterous_Mudwalker|": {
     "mob": "A_Monsterous_Mudwalker",
-    "zone": "",
+    "zone": "Plane of Earth",
     "loot": [
       {
         "item_id": 20453,
@@ -272,7 +272,7 @@
   },
   "A_Mystical_Arbitor_of_Earth|": {
     "mob": "A_Mystical_Arbitor_of_Earth",
-    "zone": "",
+    "zone": "Plane of Earth",
     "loot": [
       {
         "item_id": 27290,
@@ -299,7 +299,7 @@
   },
   "A_Needletusk_Warboar|": {
     "mob": "A_Needletusk_Warboar",
-    "zone": "",
+    "zone": "Plane of Time",
     "loot": [
       {
         "item_id": 21997,
@@ -372,7 +372,7 @@
   },
   "A_Perfected_Warder_of_Earth|": {
     "mob": "A_Perfected_Warder_of_Earth",
-    "zone": "",
+    "zone": "Plane of Earth",
     "loot": [
       {
         "item_id": 27106,
@@ -606,7 +606,7 @@
   },
   "Anar_of_Water|": {
     "mob": "Anar_of_Water",
-    "zone": "",
+    "zone": "Plane of Time",
     "loot": [
       {
         "item_id": 9444,
@@ -647,7 +647,7 @@
   },
   "Avatar_of_the_Elements|": {
     "mob": "Avatar_of_the_Elements",
-    "zone": "",
+    "zone": "Plane of Time B",
     "loot": [
       {
         "item_id": 5760,
@@ -702,7 +702,7 @@
   },
   "Azobian_the_Darklord|": {
     "mob": "Azobian_the_Darklord",
-    "zone": "",
+    "zone": "Plane of Fire",
     "loot": [
       {
         "item_id": 10240,
@@ -736,7 +736,7 @@
   },
   "Bertoxxulous|": {
     "mob": "Bertoxxulous",
-    "zone": "",
+    "zone": "Plane of Time B",
     "loot": [
       {
         "item_id": 15927,
@@ -860,7 +860,7 @@
   },
   "Cazic_Thule|": {
     "mob": "Cazic_Thule",
-    "zone": "",
+    "zone": "Plane of Time B",
     "loot": [
       {
         "item_id": 15877,
@@ -951,7 +951,7 @@
   },
   "Champion_of_Torment|": {
     "mob": "Champion_of_Torment",
-    "zone": "",
+    "zone": "Plane of Time B",
     "loot": [
       {
         "item_id": 21997,
@@ -1078,7 +1078,7 @@
   },
   "Dark_Knight_of_Terris|": {
     "mob": "Dark_Knight_of_Terris",
-    "zone": "",
+    "zone": "Plane of Time B",
     "loot": [
       {
         "item_id": 21997,
@@ -1151,7 +1151,7 @@
   },
   "Deathbringer_Blackheart|": {
     "mob": "Deathbringer_Blackheart",
-    "zone": "",
+    "zone": "Plane of Time B",
     "loot": [
       {
         "item_id": 21997,
@@ -1224,7 +1224,7 @@
   },
   "Deathbringer_Rianit|": {
     "mob": "Deathbringer_Rianit",
-    "zone": "",
+    "zone": "Plane of Time B",
     "loot": [
       {
         "item_id": 21997,
@@ -1297,7 +1297,7 @@
   },
   "Deathbringer_Skullsmash|": {
     "mob": "Deathbringer_Skullsmash",
-    "zone": "",
+    "zone": "Plane of Time B",
     "loot": [
       {
         "item_id": 21997,
@@ -1370,7 +1370,7 @@
   },
   "Dersool_Fal`Giersnaol|": {
     "mob": "Dersool_Fal`Giersnaol",
-    "zone": "",
+    "zone": "Plane of Time B",
     "loot": [
       {
         "item_id": 21997,
@@ -1443,7 +1443,7 @@
   },
   "Derugoak_Bloodwalker|": {
     "mob": "Derugoak_Bloodwalker",
-    "zone": "",
+    "zone": "Plane of Earth",
     "loot": [
       {
         "item_id": 16369,
@@ -1501,7 +1501,7 @@
   },
   "Dreamwarp|": {
     "mob": "Dreamwarp",
-    "zone": "",
+    "zone": "Plane of Time B",
     "loot": [
       {
         "item_id": 21997,
@@ -1574,7 +1574,7 @@
   },
   "Earthen_Overseer|": {
     "mob": "Earthen_Overseer",
-    "zone": "",
+    "zone": "Plane of Time",
     "loot": [
       {
         "item_id": 21996,
@@ -1698,7 +1698,7 @@
   },
   "Fennin_Ro_the_Tyrant_of_Fire|": {
     "mob": "Fennin_Ro_the_Tyrant_of_Fire",
-    "zone": "",
+    "zone": "Plane of Fire",
     "loot": [
       {
         "item_id": 16679,
@@ -1778,7 +1778,7 @@
   },
   "Freegan_Haun|": {
     "mob": "Freegan_Haun",
-    "zone": "",
+    "zone": "Halls of Honor",
     "loot": [
       {
         "item_id": 23491,
@@ -1852,7 +1852,7 @@
   },
   "Gutripping_War_Beast|": {
     "mob": "Gutripping_War_Beast",
-    "zone": "",
+    "zone": "Plane of Time",
     "loot": [
       {
         "item_id": 28662,
@@ -1879,7 +1879,7 @@
   },
   "Halgoz_Rellinic|": {
     "mob": "Halgoz_Rellinic",
-    "zone": "",
+    "zone": "Halls of Honor",
     "loot": [
       {
         "item_id": 10248,
@@ -1913,7 +1913,7 @@
   },
   "Hebabbilys_the_Ragelord|": {
     "mob": "Hebabbilys_the_Ragelord",
-    "zone": "",
+    "zone": "Plane of Fire",
     "loot": [
       {
         "item_id": 10240,
@@ -1947,7 +1947,7 @@
   },
   "Herlsoakian|": {
     "mob": "Herlsoakian",
-    "zone": "",
+    "zone": "Plane of Time B",
     "loot": [
       {
         "item_id": 21997,
@@ -2020,7 +2020,7 @@
   },
   "Innoruuk|": {
     "mob": "Innoruuk",
-    "zone": "",
+    "zone": "Plane of Time B",
     "loot": [
       {
         "item_id": 27274,
@@ -2124,7 +2124,7 @@
   },
   "Javonn_the_Overlord|": {
     "mob": "Javonn_the_Overlord",
-    "zone": "",
+    "zone": "Plane of Fire",
     "loot": [
       {
         "item_id": 10240,
@@ -2178,7 +2178,7 @@
   },
   "Kazrok_of_Fire|": {
     "mob": "Kazrok_of_Fire",
-    "zone": "",
+    "zone": "Plane of Time",
     "loot": [
       {
         "item_id": 9444,
@@ -2232,7 +2232,7 @@
   },
   "Kraksmaal_Fir`Dethsin|": {
     "mob": "Kraksmaal_Fir`Dethsin",
-    "zone": "",
+    "zone": "Plane of Time B",
     "loot": [
       {
         "item_id": 21997,
@@ -2331,7 +2331,7 @@
   },
   "Narandi_the_Wretched|": {
     "mob": "Narandi_the_Wretched",
-    "zone": "",
+    "zone": "The Great Divide",
     "loot": [
       {
         "item_id": 1738,
@@ -2344,7 +2344,7 @@
   },
   "Neimon_of_Air|": {
     "mob": "Neimon_of_Air",
-    "zone": "",
+    "zone": "Plane of Time",
     "loot": [
       {
         "item_id": 9444,
@@ -2385,7 +2385,7 @@
   },
   "Nrinda_of_Ice|": {
     "mob": "Nrinda_of_Ice",
-    "zone": "",
+    "zone": "Plane of Water",
     "loot": [
       {
         "item_id": 16369,
@@ -2450,7 +2450,7 @@
   },
   "Peregrin_Rockskull|": {
     "mob": "Peregrin_Rockskull",
-    "zone": "",
+    "zone": "Plane of Earth",
     "loot": [
       {
         "item_id": 11096,
@@ -2497,7 +2497,7 @@
   },
   "Pwelon_of_Vapor|": {
     "mob": "Pwelon_of_Vapor",
-    "zone": "",
+    "zone": "Plane of Water",
     "loot": [
       {
         "item_id": 16369,
@@ -2548,7 +2548,7 @@
   },
   "Quarm|": {
     "mob": "Quarm",
-    "zone": "",
+    "zone": "Plane of Time B",
     "loot": [
       {
         "item_id": 21993,
@@ -2691,7 +2691,7 @@
   },
   "Rallos_Zek|": {
     "mob": "Rallos_Zek",
-    "zone": "",
+    "zone": "Plane of Time B",
     "loot": [
       {
         "item_id": 26990,
@@ -2782,7 +2782,7 @@
   },
   "Rallos_Zek_the_Warlord|": {
     "mob": "Rallos_Zek_the_Warlord",
-    "zone": "",
+    "zone": "Plane of Time B",
     "loot": [
       {
         "item_id": 7770,
@@ -2830,7 +2830,7 @@
   },
   "Ralthos_Enrok|": {
     "mob": "Ralthos_Enrok",
-    "zone": "",
+    "zone": "Plane of Time",
     "loot": [
       {
         "item_id": 22883,
@@ -2864,7 +2864,7 @@
   },
   "Reaxnous_the_Chaoslord|": {
     "mob": "Reaxnous_the_Chaoslord",
-    "zone": "",
+    "zone": "Plane of Fire",
     "loot": [
       {
         "item_id": 10240,
@@ -2925,7 +2925,7 @@
   },
   "Rythor_of_the_Undead|": {
     "mob": "Rythor_of_the_Undead",
-    "zone": "",
+    "zone": "Plane of Time",
     "loot": [
       {
         "item_id": 9444,
@@ -2966,7 +2966,7 @@
   },
   "Saryrn|": {
     "mob": "Saryrn",
-    "zone": "",
+    "zone": "Plane of Time B",
     "loot": [
       {
         "item_id": 28648,
@@ -3125,7 +3125,7 @@
   },
   "Sinrunal_Gorgedreal|": {
     "mob": "Sinrunal_Gorgedreal",
-    "zone": "",
+    "zone": "Plane of Time B",
     "loot": [
       {
         "item_id": 21997,
@@ -3198,7 +3198,7 @@
   },
   "Supernatural_Guardian|": {
     "mob": "Supernatural_Guardian",
-    "zone": "",
+    "zone": "Plane of Time B",
     "loot": [
       {
         "item_id": 5760,
@@ -3253,7 +3253,7 @@
   },
   "Tallon_Zek|": {
     "mob": "Tallon_Zek",
-    "zone": "",
+    "zone": "Plane of Time B",
     "loot": [
       {
         "item_id": 28654,
@@ -3349,7 +3349,7 @@
   },
   "Terlok_of_Earth|": {
     "mob": "Terlok_of_Earth",
-    "zone": "",
+    "zone": "Plane of Time",
     "loot": [
       {
         "item_id": 9444,
@@ -3390,7 +3390,7 @@
   },
   "Terris_Thule|": {
     "mob": "Terris_Thule",
-    "zone": "",
+    "zone": "Plane of Time B",
     "loot": [
       {
         "item_id": 21995,
@@ -3479,7 +3479,7 @@
   },
   "The_Avatar_of_War|": {
     "mob": "The_Avatar_of_War",
-    "zone": "",
+    "zone": "Plane of Time B",
     "loot": [
       {
         "item_id": 25210,
@@ -3527,7 +3527,7 @@
   },
   "The_Living_Earth|": {
     "mob": "The_Living_Earth",
-    "zone": "",
+    "zone": "Plane of Earth",
     "loot": [
       {
         "item_id": 10249,
@@ -3540,7 +3540,7 @@
   },
   "The_Protector_of_Dresolik|": {
     "mob": "The_Protector_of_Dresolik",
-    "zone": "",
+    "zone": "Tower of Solusek Ro",
     "loot": [
       {
         "item_id": 25987,
@@ -3581,7 +3581,7 @@
   },
   "Tribal_Leader_Diseranon|": {
     "mob": "Tribal_Leader_Diseranon",
-    "zone": "",
+    "zone": "Plane of Earth",
     "loot": [
       {
         "item_id": 22896,
@@ -3594,7 +3594,7 @@
   },
   "Undead_Squad_Leader|": {
     "mob": "Undead_Squad_Leader",
-    "zone": "",
+    "zone": "Plane of Time B",
     "loot": [
       {
         "item_id": 21997,
@@ -3687,7 +3687,7 @@
   },
   "Vallon_Zek|": {
     "mob": "Vallon_Zek",
-    "zone": "",
+    "zone": "Plane of Time B",
     "loot": [
       {
         "item_id": 27818,
@@ -3862,7 +3862,7 @@
   },
   "War_Shapen_Emissary|": {
     "mob": "War_Shapen_Emissary",
-    "zone": "",
+    "zone": "Plane of Time",
     "loot": [
       {
         "item_id": 28662,
@@ -3916,7 +3916,7 @@
   },
   "Windshapen_Warlord_of_Air|": {
     "mob": "Windshapen_Warlord_of_Air",
-    "zone": "",
+    "zone": "Plane of Time",
     "loot": [
       {
         "item_id": 21996,
@@ -3950,7 +3950,7 @@
   },
   "Xeroan_Xi`Geruonask|": {
     "mob": "Xeroan_Xi`Geruonask",
-    "zone": "",
+    "zone": "Plane of Time B",
     "loot": [
       {
         "item_id": 21997,
@@ -4023,7 +4023,7 @@
   },
   "Xerskel_Gerodnsal|": {
     "mob": "Xerskel_Gerodnsal",
-    "zone": "",
+    "zone": "Plane of Time B",
     "loot": [
       {
         "item_id": 21997,
@@ -4315,7 +4315,7 @@
   },
   "an_Enchanted_War_Boar|": {
     "mob": "an_Enchanted_War_Boar",
-    "zone": "",
+    "zone": "Plane of Time",
     "loot": [
       {
         "item_id": 16298,
@@ -5156,7 +5156,7 @@
   },
   "Tallon_Zek|Drunder, the Fortress of Zek": {
     "mob": "Tallon_Zek",
-    "zone": "Drunder, the Fortress of Zek",
+    "zone": "Plane of Time B",
     "loot": [
       {
         "item_id": 26739,
@@ -5919,7 +5919,7 @@
   },
   "Cazic_Thule|Plane of Fear": {
     "mob": "Cazic_Thule",
-    "zone": "Plane of Fear",
+    "zone": "Plane of Time B",
     "loot": [
       {
         "item_id": 11646,
@@ -10909,7 +10909,7 @@
   },
   "Terris_Thule|The Lair of Terris Thule": {
     "mob": "Terris_Thule",
-    "zone": "The Lair of Terris Thule",
+    "zone": "Plane of Time B",
     "loot": [
       {
         "item_id": 10127,
@@ -11187,7 +11187,7 @@
   },
   "Saryrn|Torment, the Plane of Pain": {
     "mob": "Saryrn",
-    "zone": "Torment, the Plane of Pain",
+    "zone": "Plane of Time B",
     "loot": [
       {
         "item_id": 15806,
