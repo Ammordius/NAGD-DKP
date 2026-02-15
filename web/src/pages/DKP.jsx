@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase'
 // Supabase/PostgREST returns at most 1000 rows per query. Paginate to fetch all rows.
 const PAGE_SIZE = 1000
 const ACTIVE_DAYS = 120 // Show raiders marked active or with activity in last N days
-const CACHE_KEY = 'dkp_leaderboard_v1'
+const CACHE_KEY = 'dkp_leaderboard_v2'
 const CACHE_TTL_MS = 5 * 60 * 1000 // 5 minutes: show cached data immediately, refresh in background
 
 async function fetchAllRows(table, select = '*') {
@@ -67,7 +67,6 @@ function isActiveRow(r, activeKeysSet, cutoffDate) {
 export default function DKP({ isOfficer }) {
   const [leaderboard, setLeaderboard] = useState([])
   const [accountLeaderboard, setAccountLeaderboard] = useState([])
-  const [view, setView] = useState('character')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [usingCache, setUsingCache] = useState(false)
@@ -79,24 +78,21 @@ export default function DKP({ isOfficer }) {
   const [activeMutating, setActiveMutating] = useState(false)
   const [caData, setCaData] = useState(null)
   const [accData, setAccData] = useState(null)
-  const [accountViewLoading, setAccountViewLoading] = useState(false)
   const [periodTotals, setPeriodTotals] = useState({ '30d': 0, '60d': 0 })
 
-  // Fast path: only summary + adjustments + active (no character_account/accounts). Account rollup is lazy-loaded.
+  // Load summary + adjustments + active + character_account + accounts so we always show one row per account.
   const loadFromCache = useCallback(async (opts = {}) => {
-    const { includeAccountData = false } = opts
+    const { includeAccountData = true } = opts
     const tables = [
       supabase.from('dkp_summary').select('character_key, character_name, earned, spent, earned_30d, earned_60d, last_activity_date, updated_at'),
       supabase.from('dkp_adjustments').select('character_name, earned_delta, spent_delta').limit(1000),
       fetchAllRows('active_raiders', 'character_key'),
       supabase.from('dkp_period_totals').select('period, total_dkp'),
     ]
-    if (includeAccountData) {
-      tables.push(fetchAllRows('character_account', 'char_id, account_id'))
-      tables.push(fetchAllRows('accounts', 'account_id, toon_names'))
-    }
+    tables.push(fetchAllRows('character_account', 'char_id, account_id'))
+    tables.push(fetchAllRows('accounts', 'account_id, toon_names'))
     const results = await Promise.all(tables)
-    const [summary, adj, active, periodTotalsRes, ca, acc] = results.length >= 6 ? results : [...results, null, null]
+    const [summary, adj, active, periodTotalsRes, ca, acc] = results
     if (summary.error) return { ok: false, error: summary.error }
     const rows = summary.data || []
     if (rows.length === 0) return { ok: false }
@@ -126,13 +122,9 @@ export default function DKP({ isOfficer }) {
     }))
     list = list.filter((r) => isActiveRow(r, activeSet, cutoff))
     applyAdjustmentsAndBalance(list, adjustmentsMap)
-    const caList = includeAccountData ? (ca?.data ?? []) : (caData ?? [])
-    const accList = includeAccountData ? (acc?.data ?? []) : (accData ?? [])
-    if (includeAccountData && ca) setCaData(ca?.data ?? [])
-    if (includeAccountData && acc) setAccData(acc?.data ?? [])
-    const accountList = (includeAccountData || (caList.length > 0 || accList.length > 0))
-      ? buildAccountLeaderboard(list, caList, accList)
-      : []
+    if (ca?.data) setCaData(ca.data)
+    if (acc?.data) setAccData(acc.data)
+    const accountList = buildAccountLeaderboard(list, ca?.data ?? [], acc?.data ?? [])
     setLeaderboard(list)
     setAccountLeaderboard(accountList)
     const updatedAt = rows[0]?.updated_at ?? null
@@ -140,19 +132,6 @@ export default function DKP({ isOfficer }) {
     setUsingCache(true)
     return { ok: true, list, accountList, summaryUpdatedAt: updatedAt }
   }, [])
-
-  // Lazy-load character_account + accounts when user first switches to "By account" view.
-  const ensureAccountDataLoaded = useCallback(async () => {
-    if (caData !== null && accData !== null) return
-    setAccountViewLoading(true)
-    const [ca, acc] = await Promise.all([
-      fetchAllRows('character_account', 'char_id, account_id'),
-      fetchAllRows('accounts', 'account_id, toon_names'),
-    ])
-    if (ca?.data) setCaData(ca.data)
-    if (acc?.data) setAccData(acc.data)
-    setAccountViewLoading(false)
-  }, [caData, accData])
 
   // When we get ca/acc data, rebuild account leaderboard from current character list.
   useEffect(() => {
@@ -236,7 +215,7 @@ export default function DKP({ isOfficer }) {
           const obj = JSON.parse(raw)
           if (obj.fetchedAt && (Date.now() - obj.fetchedAt) < CACHE_TTL_MS && Array.isArray(obj.leaderboard)) {
             setLeaderboard(obj.leaderboard)
-            setAccountLeaderboard([]) // Lazy-load account rollup when user switches to "By account"
+            setAccountLeaderboard(Array.isArray(obj.accountLeaderboard) ? obj.accountLeaderboard : [])
             setSummaryUpdatedAt(obj.summaryUpdatedAt ?? null)
             setUsingCache(!!obj.usingCache)
             setLoading(false)
@@ -284,10 +263,6 @@ export default function DKP({ isOfficer }) {
     load().finally(() => setLoading(false))
   }, [load])
 
-  useEffect(() => {
-    if (view === 'account' && leaderboard.length > 0) ensureAccountDataLoaded()
-  }, [view, leaderboard.length, ensureAccountDataLoaded])
-
   const handleRefreshTotals = useCallback(async () => {
     setRefreshing(true)
     setError('')
@@ -298,10 +273,10 @@ export default function DKP({ isOfficer }) {
       return
     }
     setLoading(true)
-    await loadFromCache({ includeAccountData: caData !== null })
+    await loadFromCache()
     setLoading(false)
     setRefreshing(false)
-  }, [loadFromCache, caData])
+  }, [loadFromCache])
 
   const handleAddActive = useCallback(async () => {
     const key = activeAddKey.trim()
@@ -328,28 +303,25 @@ export default function DKP({ isOfficer }) {
     }
   }, [loadFromCache])
 
-  const showList = view === 'account' ? accountLeaderboard : leaderboard
-  const colLabel = view === 'account' ? 'Account (first toon)' : 'Character'
+  const showList = accountLeaderboard
+  const colLabel = 'Account'
 
   if (loading && !showList.length) return <div className="container">Loading DKP…</div>
   if (error && !showList.length) return <div className="container"><span className="error">{error}</span></div>
-  if (view === 'account' && accountViewLoading && !showList.length) return <div className="container">Loading account view…</div>
 
   return (
     <div className="container">
       <h1>DKP Leaderboard</h1>
       <p style={{ color: '#71717a' }}>
-        Earned (raid attendance × event DKP) minus spent (loot). Toggle to view by character or by account (all toons on same account summed).
+        One row per account (one human). Earned (raid attendance × event DKP) minus spent (loot); all characters on the same account are combined.
         {usingCache && summaryUpdatedAt && (
           <span style={{ marginLeft: '0.5rem' }}>· Cached {new Date(summaryUpdatedAt).toLocaleString()}</span>
         )}
         {usingCache && (
-          <span style={{ marginLeft: '0.5rem' }}>· Showing active raiders only (marked active or activity in last {ACTIVE_DAYS} days)</span>
+          <span style={{ marginLeft: '0.5rem' }}>· Showing accounts with active raiders (marked active or activity in last {ACTIVE_DAYS} days)</span>
         )}
       </p>
       <div style={{ marginBottom: '1rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
-        <button type="button" onClick={() => setView('character')} style={{ fontWeight: view === 'character' ? 'bold' : 'normal' }}>By character</button>
-        <button type="button" onClick={() => setView('account')} style={{ fontWeight: view === 'account' ? 'bold' : 'normal' }}>By account</button>
         {isOfficer && (
           <button type="button" onClick={handleRefreshTotals} disabled={refreshing} style={{ marginLeft: 'auto' }}>
             {refreshing ? 'Refreshing…' : 'Refresh DKP totals'}
@@ -387,7 +359,7 @@ export default function DKP({ isOfficer }) {
               const cell30 = total30 > 0 ? `${e30} / ${total30}` : '—'
               const cell60 = total60 > 0 ? `${e60} / ${total60}` : '—'
               return (
-                <tr key={view === 'account' ? r.account_id + i : r.char_id}>
+                <tr key={r.account_id + i}>
                   <td>{r.name}</td>
                   <td>{Number(r.earned)}</td>
                   <td>{Number(r.spent)}</td>
