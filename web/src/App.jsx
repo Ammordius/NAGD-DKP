@@ -81,7 +81,7 @@ export default function App() {
       </nav>
       <Routes>
         <Route path="/" element={<Dashboard isOfficer={isOfficer} />} />
-        <Route path="/raids" element={<Raids />} />
+        <Route path="/raids" element={<Raids isOfficer={isOfficer} />} />
         <Route path="/raids/:raidId" element={<RaidDetail isOfficer={isOfficer} />} />
         <Route path="/dkp" element={<DKP isOfficer={isOfficer} />} />
         <Route path="/officer" element={<Officer isOfficer={isOfficer} />} />

@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
+
+const OFFICER_ADD_RAID_HASH = '#add-raid'
 import { supabase } from '../lib/supabase'
 import { createCache } from '../lib/cache'
 
 const CACHE_KEY = 'raids_list_v2'
 const CACHE_TTL = 10 * 60 * 1000
 
-export default function Raids() {
+export default function Raids({ isOfficer }) {
   const [raids, setRaids] = useState([])
   const [eventsByRaid, setEventsByRaid] = useState({})
   const [classificationsByRaid, setClassificationsByRaid] = useState({})
@@ -91,7 +93,14 @@ export default function Raids() {
 
   return (
     <div className="container">
-      <h1>Raids</h1>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
+        <h1 style={{ margin: 0 }}>Raids</h1>
+        {isOfficer && (
+          <Link to={`/officer${OFFICER_ADD_RAID_HASH}`} className="btn btn-ghost" style={{ padding: '0.25rem 0.5rem', fontSize: '1.25rem', lineHeight: 1 }} title="Add raid">
+            +
+          </Link>
+        )}
+      </div>
       <p style={{ color: '#71717a' }}>Recent raids with total DKP earned (sum of event DKP).</p>
       <div className="card">
         <table>

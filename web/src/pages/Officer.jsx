@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useMemo, useRef, Fragment } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 
 // --- Parsing ---
@@ -82,6 +82,7 @@ function generateEventId(eventTimeStr) {
 
 export default function Officer({ isOfficer }) {
   const navigate = useNavigate()
+  const location = useLocation()
   const [raids, setRaids] = useState([])
   const [selectedRaidId, setSelectedRaidId] = useState('')
   const [raid, setRaid] = useState(null)
@@ -176,6 +177,15 @@ export default function Officer({ isOfficer }) {
     }
     loadOfficerData()
   }, [isOfficer, navigate, loadOfficerData])
+
+  // When linked from Raids "+" with #add-raid, scroll to add-raid section
+  useEffect(() => {
+    if (location.hash !== '#add-raid') return
+    const t = setTimeout(() => {
+      if (addRaidSectionRef.current) focusAddRaid()
+    }, 100)
+    return () => clearTimeout(t)
+  }, [location.hash])
 
   const loadSelectedRaid = useCallback(async () => {
     if (!selectedRaidId) {
