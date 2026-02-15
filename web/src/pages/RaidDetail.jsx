@@ -1,9 +1,11 @@
 import { useEffect, useState, useMemo, useCallback, Fragment } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { useCharToAccountMap } from '../lib/useCharToAccountMap'
 
 export default function RaidDetail({ isOfficer }) {
   const { raidId } = useParams()
+  const { getAccountId } = useCharToAccountMap()
   const [raid, setRaid] = useState(null)
   const [events, setEvents] = useState([])
   const [loot, setLoot] = useState([])
@@ -267,11 +269,15 @@ export default function RaidDetail({ isOfficer }) {
                     <tr key={`${e.event_id}-attendees`}>
                       <td colSpan={isOfficer ? 6 : 5} style={{ padding: '0.5rem 1rem', verticalAlign: 'top', backgroundColor: 'rgba(0,0,0,0.2)', borderBottom: '1px solid #27272a' }}>
                         <div className="attendee-list">
-                          {attendees.map((a, i) => (
-                            <Link key={a.char_id || a.name || i} to={`/characters/${encodeURIComponent(a.name || '')}`}>
-                              {a.name}
-                            </Link>
-                          ))}
+                          {attendees.map((a, i) => {
+                            const accountId = getAccountId(a.name || a.char_id)
+                            const to = accountId ? `/accounts/${accountId}` : `/characters/${encodeURIComponent(a.name || '')}`
+                            return (
+                              <Link key={a.char_id || a.name || i} to={to}>
+                                {a.name}
+                              </Link>
+                            )
+                          })}
                         </div>
                       </td>
                     </tr>
@@ -360,7 +366,13 @@ export default function RaidDetail({ isOfficer }) {
               return (
                 <tr key={row.id || i}>
                   <td><Link to={`/items/${encodeURIComponent(row.item_name || '')}`}>{row.item_name || '—'}</Link></td>
-                  <td><Link to={`/characters/${encodeURIComponent(row.character_name || row.char_id || '')}`}>{row.character_name || row.char_id || '—'}</Link></td>
+                  <td>
+                    {(() => {
+                      const accountId = getAccountId(row.character_name || row.char_id)
+                      const to = accountId ? `/accounts/${accountId}` : `/characters/${encodeURIComponent(row.character_name || row.char_id || '')}`
+                      return <Link to={to}>{row.character_name || row.char_id || '—'}</Link>
+                    })()}
+                  </td>
                   <td>
                     {isEditingCost ? (
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
@@ -394,11 +406,15 @@ export default function RaidDetail({ isOfficer }) {
       <h2>Attendees</h2>
       <div className="card">
         <div className="attendee-list">
-          {attendance.map((a) => (
-            <Link key={a.char_id || a.character_name} to={`/characters/${encodeURIComponent(a.character_name || a.char_id || '')}`}>
-              {a.character_name || a.char_id}
-            </Link>
-          ))}
+          {attendance.map((a) => {
+            const accountId = getAccountId(a.character_name || a.char_id)
+            const to = accountId ? `/accounts/${accountId}` : `/characters/${encodeURIComponent(a.character_name || a.char_id || '')}`
+            return (
+              <Link key={a.char_id || a.character_name} to={to}>
+                {a.character_name || a.char_id}
+              </Link>
+            )
+          })}
         </div>
       </div>
 
@@ -408,11 +424,15 @@ export default function RaidDetail({ isOfficer }) {
           <div className="card">
             <p style={{ color: '#a1a1aa', fontSize: '0.875rem', marginTop: 0 }}>Raiders who attended but missed one or more DKP events.</p>
             <div className="attendee-list">
-              {notPresentForAllEvents.map((a) => (
-                <Link key={a.char_id || a.character_name} to={`/characters/${encodeURIComponent(a.character_name || a.char_id || '')}`}>
-                  {a.character_name || a.char_id}
-                </Link>
-              ))}
+              {notPresentForAllEvents.map((a) => {
+                const accountId = getAccountId(a.character_name || a.char_id)
+                const to = accountId ? `/accounts/${accountId}` : `/characters/${encodeURIComponent(a.character_name || a.char_id || '')}`
+                return (
+                  <Link key={a.char_id || a.character_name} to={to}>
+                    {a.character_name || a.char_id}
+                  </Link>
+                )
+              })}
             </div>
           </div>
         </>

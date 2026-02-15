@@ -115,16 +115,12 @@ export default function Accounts() {
                 <tr key={acc.account_id}>
                   <td style={{ verticalAlign: 'top', whiteSpace: 'nowrap' }}>
                     <Link to={`/accounts/${acc.account_id}`}>
-                      <code>{acc.account_id}</code>
+                      {acc.display_name?.trim() || acc.characters?.[0]?.name || acc.account_id}
                     </Link>
-                    {acc.display_name && (
-                      <span style={{ marginLeft: '0.5rem' }}>{acc.display_name}</span>
-                    )}
-                    {acc.toon_count != null && (
-                      <span style={{ marginLeft: '0.5rem', color: '#71717a', fontSize: '0.875rem' }}>
-                        ({acc.toon_count} toons)
-                      </span>
-                    )}
+                    <span style={{ marginLeft: '0.5rem', color: '#71717a', fontSize: '0.875rem' }}>
+                      <code>{acc.account_id}</code>
+                      {acc.toon_count != null && ` · ${acc.toon_count} toons`}
+                    </span>
                   </td>
                   <td style={{ verticalAlign: 'top', minWidth: 0 }}>
                     {chars.length === 0 ? (

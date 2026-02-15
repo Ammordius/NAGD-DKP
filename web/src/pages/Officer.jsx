@@ -157,6 +157,19 @@ export default function Officer({ isOfficer }) {
     return m
   }, [characters])
 
+  const getAccountId = useMemo(() => {
+    const nameToAcc = {}
+    characters.forEach((c) => {
+      const acc = charIdToAccountId[c.char_id]
+      if (acc && (c.name || '').trim()) nameToAcc[(c.name || '').trim()] = acc
+    })
+    return (key) => {
+      if (key == null || key === '') return null
+      const k = String(key).trim()
+      return charIdToAccountId[k] ?? nameToAcc[k] ?? null
+    }
+  }, [characters, charIdToAccountId])
+
   const allItemNamesForLootLog = useMemo(() => {
     const byLower = new Map()
     ;(itemNames || []).forEach((n) => { if (n) byLower.set(n.trim().toLowerCase(), n.trim()) })
@@ -1010,9 +1023,13 @@ export default function Officer({ isOfficer }) {
                         <tr>
                           <td colSpan={6} style={{ padding: '0.5rem 1rem', verticalAlign: 'top', backgroundColor: 'rgba(0,0,0,0.2)', borderBottom: '1px solid #27272a' }}>
                             <div className="attendee-list">
-                              {attendees.map((a, i) => (
-                                <Link key={a.char_id || a.name || i} to={`/characters/${encodeURIComponent(a.name || '')}`}>{a.name}</Link>
-                              ))}
+                              {attendees.map((a, i) => {
+                                const accountId = getAccountId(a.name || a.char_id)
+                                const to = accountId ? `/accounts/${accountId}` : `/characters/${encodeURIComponent(a.name || '')}`
+                                return (
+                                  <Link key={a.char_id || a.name || i} to={to}>{a.name}</Link>
+                                )
+                              })}
                             </div>
                           </td>
                         </tr>
@@ -1035,7 +1052,13 @@ export default function Officer({ isOfficer }) {
                   return (
                     <tr key={row.id || i}>
                       <td><Link to={`/items/${encodeURIComponent(row.item_name || '')}`}>{row.item_name || '—'}</Link></td>
-                      <td><Link to={`/characters/${encodeURIComponent(row.character_name || row.char_id || '')}`}>{row.character_name || row.char_id || '—'}</Link></td>
+                      <td>
+                        {(() => {
+                          const accountId = getAccountId(row.character_name || row.char_id)
+                          const to = accountId ? `/accounts/${accountId}` : `/characters/${encodeURIComponent(row.character_name || row.char_id || '')}`
+                          return <Link to={to}>{row.character_name || row.char_id || '—'}</Link>
+                        })()}
+                      </td>
                       <td>
                         {isEditingCost ? (
                           <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
@@ -1063,9 +1086,13 @@ export default function Officer({ isOfficer }) {
 
             <h3 style={{ marginTop: '1.25rem' }}>Attendees</h3>
             <div className="attendee-list">
-              {attendance.length > 0 ? attendance.map((a) => (
-                <Link key={a.char_id || a.character_name} to={`/characters/${encodeURIComponent(a.character_name || a.char_id || '')}`}>{a.character_name || a.char_id}</Link>
-              )) : (
+              {attendance.length > 0 ? attendance.map((a) => {
+                const accountId = getAccountId(a.character_name || a.char_id)
+                const to = accountId ? `/accounts/${accountId}` : `/characters/${encodeURIComponent(a.character_name || a.char_id || '')}`
+                return (
+                  <Link key={a.char_id || a.character_name} to={to}>{a.character_name || a.char_id}</Link>
+                )
+              }) : (
                 <span style={{ color: '#71717a' }}>None (add a DKP tic to record attendance)</span>
               )}
             </div>

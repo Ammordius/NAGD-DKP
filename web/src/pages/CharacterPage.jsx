@@ -7,11 +7,8 @@ const MAGELO_BASE = 'https://www.takproject.net/magelo/character.php?char='
 export default function CharacterPage() {
   const { charKey } = useParams()
   const charIdOrName = useMemo(() => (charKey ? decodeURIComponent(charKey) : ''), [charKey])
-  const [attendance, setAttendance] = useState([])
-  const [loot, setLoot] = useState([])
-  const [raids, setRaids] = useState({})
-  const [eventsByRaid, setEventsByRaid] = useState({})
-  const [eventAttendance, setEventAttendance] = useState([])
+  const [accountId, setAccountId] = useState(null)
+  const [displayName, setDisplayName] = useState(charIdOrName)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -22,91 +19,38 @@ export default function CharacterPage() {
     }
     setLoading(true)
     setError('')
-    // Fetch by char_id or character_name
-    const charFilter = (table, col) => {
-      return supabase.from(table).or(`char_id.eq.${charIdOrName},character_name.eq.${charIdOrName}`)
-    }
+    // Resolve charKey (name or char_id) to account_id via character_account + characters
     Promise.all([
-      supabase.from('raid_attendance').select('raid_id, char_id, character_name').or(`char_id.eq.${charIdOrName},character_name.eq.${charIdOrName}`).limit(2000),
-      supabase.from('raid_loot').select('id, raid_id, item_name, character_name, cost').or(`char_id.eq.${charIdOrName},character_name.eq.${charIdOrName}`).limit(2000),
-      supabase.from('raid_event_attendance').select('raid_id, event_id, char_id, character_name').or(`char_id.eq.${charIdOrName},character_name.eq.${charIdOrName}`).limit(10000),
-    ]).then(([attRes, lootRes, evAttRes]) => {
-      if (attRes.error) {
-        setError(attRes.error.message)
-        setLoading(false)
-        return
-      }
-      setAttendance(attRes.data || [])
-      setLoot(lootRes.data || [])
-      setEventAttendance(evAttRes.data || [])
-      const raidIds = new Set([
-        ...(attRes.data || []).map((r) => r.raid_id),
-        ...(lootRes.data || []).map((r) => r.raid_id),
-      ])
-      if (raidIds.size === 0) {
-        setRaids({})
-        setEventsByRaid({})
-        setLoading(false)
-        return
-      }
-      Promise.all([
-        supabase.from('raids').select('raid_id, raid_name, date_iso').in('raid_id', [...raidIds]),
-        supabase.from('raid_events').select('raid_id, event_id, dkp_value').in('raid_id', [...raidIds]),
-      ]).then(([rRes, eRes]) => {
-        const rMap = {}
-        ;(rRes.data || []).forEach((row) => { rMap[row.raid_id] = row })
-        setRaids(rMap)
-        const eventDkp = {}
-        ;(eRes.data || []).forEach((ev) => {
-          eventDkp[`${ev.raid_id}|${ev.event_id}`] = parseFloat(ev.dkp_value || 0)
-        })
-        const evByRaid = {}
-        if (evAttRes.data?.length > 0) {
-          evAttRes.data.forEach((a) => {
-            const k = `${a.raid_id}|${a.event_id}`
-            if (!evByRaid[a.raid_id]) evByRaid[a.raid_id] = 0
-            evByRaid[a.raid_id] += eventDkp[k] || 0
-          })
-        } else {
-          (attRes.data || []).forEach((a) => {
-            (eRes.data || []).filter((e) => e.raid_id === a.raid_id).forEach((ev) => {
-              if (!evByRaid[a.raid_id]) evByRaid[a.raid_id] = 0
-              evByRaid[a.raid_id] += parseFloat(ev.dkp_value || 0)
-            })
-          })
+      supabase.from('character_account').select('char_id, account_id').limit(20000),
+      supabase.from('characters').select('char_id, name').limit(20000),
+    ]).then(([caRes, chRes]) => {
+      const charToAcc = {}
+      ;(caRes.data || []).forEach((r) => {
+        if (r.char_id != null && r.account_id != null) {
+          charToAcc[String(r.char_id).trim()] = r.account_id
         }
-        setEventsByRaid(evByRaid)
-        setLoading(false)
       })
+      const key = String(charIdOrName).trim()
+      let accId = charToAcc[key] ?? null
+      let name = key
+      if (!accId) {
+        const byName = (chRes.data || []).find((c) => (c.name || '').trim().toLowerCase() === key.toLowerCase())
+        if (byName) {
+          accId = charToAcc[String(byName.char_id).trim()] ?? null
+          name = (byName.name || '').trim() || name
+        }
+      } else {
+        const ch = (chRes.data || []).find((c) => String(c.char_id).trim() === key)
+        if (ch?.name) name = (ch.name || '').trim()
+      }
+      setAccountId(accId)
+      setDisplayName(name || charIdOrName)
+      setLoading(false)
+    }).catch((err) => {
+      setError(err?.message || 'Failed to load')
+      setLoading(false)
     })
   }, [charIdOrName])
-
-  const displayName = useMemo(() => {
-    const fromAtt = attendance[0]?.character_name || attendance[0]?.char_id
-    const fromLoot = loot[0]?.character_name
-    return fromAtt || fromLoot || charIdOrName
-  }, [attendance, loot, charIdOrName])
-
-  const raidList = useMemo(() => {
-    const byRaid = new Map()
-    attendance.forEach((a) => {
-      if (!byRaid.has(a.raid_id)) byRaid.set(a.raid_id, { raid_id: a.raid_id })
-    })
-    return [...byRaid.values()].map((r) => ({
-      ...r,
-      date: raids[r.raid_id]?.date_iso?.slice(0, 10),
-      raid_name: raids[r.raid_id]?.raid_name || r.raid_id,
-      dkp: eventsByRaid[r.raid_id] ?? (eventAttendance.length > 0 ? null : 0),
-    })).sort((a, b) => (b.date || '').localeCompare(a.date || ''))
-  }, [attendance, raids, eventsByRaid, eventAttendance.length])
-
-  const lootWithRaid = useMemo(() => {
-    return loot.map((row) => ({
-      ...row,
-      date: raids[row.raid_id]?.date_iso?.slice(0, 10),
-      raid_name: raids[row.raid_id]?.raid_name || row.raid_id,
-    })).sort((a, b) => (b.date || '').localeCompare(a.date || ''))
-  }, [loot, raids])
 
   if (loading) return <div className="container">Loading character…</div>
   if (error) return <div className="container"><span className="error">{error}</span> <Link to="/dkp">← DKP</Link></div>
@@ -119,61 +63,18 @@ export default function CharacterPage() {
       <h1>{displayName}</h1>
       <p style={{ color: '#a1a1aa', marginBottom: '1rem' }}>
         <a href={mageloUrl} target="_blank" rel="noopener noreferrer">View on TAKP Magelo</a>
+        {accountId && (
+          <>
+            {' · '}
+            <Link to={`/accounts/${accountId}`}>View account (raid history &amp; loot)</Link>
+          </>
+        )}
       </p>
-
-      <h2>Raid history</h2>
-      <div className="card">
-        {raidList.length === 0 ? (
-          <p style={{ color: '#71717a' }}>No raid attendance recorded.</p>
-        ) : (
-          <table>
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th>Raid</th>
-                <th>DKP earned</th>
-              </tr>
-            </thead>
-            <tbody>
-              {raidList.map((r) => (
-                <tr key={r.raid_id}>
-                  <td>{r.date || '—'}</td>
-                  <td><Link to={`/raids/${r.raid_id}`}>{r.raid_name}</Link></td>
-                  <td>{r.dkp != null ? Number(r.dkp).toFixed(1) : '—'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
-
-      <h2>Item history</h2>
-      <div className="card">
-        {lootWithRaid.length === 0 ? (
-          <p style={{ color: '#71717a' }}>No loot recorded.</p>
-        ) : (
-          <table>
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th>Item</th>
-                <th>Raid</th>
-                <th>Cost (DKP)</th>
-              </tr>
-            </thead>
-            <tbody>
-              {lootWithRaid.map((row, i) => (
-                <tr key={row.id || i}>
-                  <td>{row.date || '—'}</td>
-                  <td><Link to={`/items/${encodeURIComponent(row.item_name || '')}`}>{row.item_name || '—'}</Link></td>
-                  <td><Link to={`/raids/${row.raid_id}`}>{row.raid_name}</Link></td>
-                  <td>{row.cost ?? '—'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
+      {!accountId && (
+        <p style={{ color: '#71717a', fontSize: '0.875rem' }}>
+          This character is not linked to an account. Raid history and loot are shown on account pages.
+        </p>
+      )}
     </div>
   )
 }

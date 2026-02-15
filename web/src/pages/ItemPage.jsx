@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { useCharToAccountMap } from '../lib/useCharToAccountMap'
 
 const TAKP_ITEM_BASE = 'https://www.takproject.net/allaclone/item.php?id='
 
@@ -125,6 +126,7 @@ function PriceChart({ data, height = 180 }) {
 
 export default function ItemPage() {
   const { itemNameEncoded } = useParams()
+  const { getAccountId } = useCharToAccountMap()
   const itemName = useMemo(() => (itemNameEncoded ? decodeURIComponent(itemNameEncoded) : ''), [itemNameEncoded])
   const [lootRows, setLootRows] = useState([])
   const [raids, setRaids] = useState({})
@@ -227,9 +229,15 @@ export default function ItemPage() {
                 <td>{row.date || '—'}</td>
                 <td><Link to={`/raids/${row.raid_id}`}>{raids[row.raid_id]?.raid_name || row.raid_id}</Link></td>
                 <td>
-                  <Link to={`/characters/${encodeURIComponent(row.character_name || row.char_id || '')}`}>
-                    {row.character_name || row.char_id || '—'}
-                  </Link>
+                  {(() => {
+                    const accountId = getAccountId(row.character_name || row.char_id)
+                    const to = accountId ? `/accounts/${accountId}` : `/characters/${encodeURIComponent(row.character_name || row.char_id || '')}`
+                    return (
+                      <Link to={to}>
+                        {row.character_name || row.char_id || '—'}
+                      </Link>
+                    )
+                  })()}
                 </td>
                 <td>{row.cost ?? '—'}</td>
               </tr>

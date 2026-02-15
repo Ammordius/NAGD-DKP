@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { useCharToAccountMap } from '../lib/useCharToAccountMap'
 
 const LOOT_CACHE_KEY = 'loot_search_cache_v1'
 const CACHE_TTL_MS = 10 * 60 * 1000 // 10 minutes
@@ -76,6 +77,7 @@ function saveCache(loot, raids, maxLootId) {
 }
 
 export default function LootSearch() {
+  const { getAccountId } = useCharToAccountMap()
   const [loot, setLoot] = useState([])
   const [raids, setRaids] = useState({})
   const [classifications, setClassifications] = useState({})
@@ -254,7 +256,13 @@ export default function LootSearch() {
                     {itemSourceLabel(itemSources, row.item_name, row.raid_id, raids[row.raid_id]?.name, raidToMobs) ?? '—'}
                   </td>
                   <td><Link to={`/raids/${row.raid_id}`}>{raids[row.raid_id]?.name ?? row.raid_id}</Link></td>
-                  <td><Link to={`/characters/${encodeURIComponent(row.character_name || row.char_id || '')}`}>{row.character_name || row.char_id || '—'}</Link></td>
+                  <td>
+                    {(() => {
+                      const accountId = getAccountId(row.character_name || row.char_id)
+                      const to = accountId ? `/accounts/${accountId}` : `/characters/${encodeURIComponent(row.character_name || row.char_id || '')}`
+                      return <Link to={to}>{row.character_name || row.char_id || '—'}</Link>
+                    })()}
+                  </td>
                   <td>{row.cost ?? '—'}</td>
                 </tr>
               ))}
