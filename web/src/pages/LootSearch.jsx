@@ -2,6 +2,9 @@ import { useEffect, useState, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 
+const LOOT_CACHE_KEY = 'loot_search_cache_v1'
+const CACHE_TTL_MS = 10 * 60 * 1000 // 10 minutes
+
 // Item name -> drops from (mob/zone). Loaded from web/public/item_sources.json (built from items_seen_to_mobs + raid_loot_classification).
 function itemSourceLabel(itemSources, itemName) {
   if (!itemSources || !itemName) return null
@@ -13,6 +16,31 @@ function itemSourceLabel(itemSources, itemName) {
   const zone = first.zone || ''
   if (!mob) return null
   return zone ? `${mob.replace(/^#/, '')} (${zone})` : mob.replace(/^#/, '')
+}
+
+function loadCache() {
+  try {
+    const raw = sessionStorage.getItem(LOOT_CACHE_KEY)
+    if (!raw) return null
+    const data = JSON.parse(raw)
+    if (!data?.loot || !Array.isArray(data.loot) || !data.raids || typeof data.raids !== 'object') return null
+    if (data.fetchedAt && Date.now() - data.fetchedAt > CACHE_TTL_MS) return null
+    return data
+  } catch {
+    return null
+  }
+}
+
+function saveCache(loot, raids, maxLootId) {
+  try {
+    const maxId = maxLootId ?? (loot.length ? Math.max(...loot.map((r) => r.id).filter(Number.isFinite)) : 0)
+    sessionStorage.setItem(LOOT_CACHE_KEY, JSON.stringify({
+      loot,
+      raids,
+      maxLootId: maxId,
+      fetchedAt: Date.now(),
+    }))
+  } catch (_) { /* ignore */ }
 }
 
 export default function LootSearch() {
@@ -28,7 +56,44 @@ export default function LootSearch() {
   useEffect(() => {
     const PAGE = 1000
     const MAX_LOOT_PAGES = 20
+
+    const cached = loadCache()
+    if (cached) {
+      setLoot(cached.loot)
+      setRaids(cached.raids)
+      setLoading(false)
+      // Background: fetch only new rows (id > maxLootId)
+      const maxId = cached.maxLootId ?? 0
+      supabase
+        .from('raid_loot')
+        .select('id, raid_id, event_id, item_name, character_name, char_id, cost')
+        .gt('id', maxId)
+        .order('id', { ascending: true })
+        .limit(PAGE)
+        .then(({ data: newRows, error: err }) => {
+          if (err || !newRows?.length) return
+          const newRaidIds = [...new Set(newRows.map((r) => r.raid_id).filter(Boolean))]
+          const missingRaidIds = newRaidIds.filter((rid) => !cached.raids[rid])
+          let nextRaids = cached.raids
+          if (missingRaidIds.length > 0) {
+            return supabase.from('raids').select('raid_id, raid_name, date_iso').in('raid_id', missingRaidIds).then(({ data: raidRows }) => {
+              const mergedRaids = { ...cached.raids }
+              ;(raidRows || []).forEach((row) => { mergedRaids[row.raid_id] = { name: row.raid_name || row.raid_id, date_iso: row.date_iso || '' } })
+              const mergedLoot = [...newRows].reverse().concat(cached.loot)
+              const newMaxId = Math.max(...mergedLoot.map((r) => r.id).filter(Number.isFinite))
+              saveCache(mergedLoot, mergedRaids, newMaxId)
+              setLoot(mergedLoot)
+              setRaids(mergedRaids)
+            })
+          }
+          const mergedLoot = [...newRows].reverse().concat(cached.loot)
+          saveCache(mergedLoot, cached.raids, Math.max(...mergedLoot.map((r) => r.id).filter(Number.isFinite)))
+          setLoot(mergedLoot)
+        })
+    }
+
     const run = async () => {
+      if (cached) return // already showing cache; incremental update above
       const raidRes = await supabase.from('raids').select('raid_id, raid_name, date_iso').limit(50000)
       const raidMap = {}
       ;(raidRes.data || []).forEach((row) => { raidMap[row.raid_id] = { name: row.raid_name || row.raid_id, date_iso: row.date_iso || '' } })
@@ -52,6 +117,7 @@ export default function LootSearch() {
       }
       setLoot(allLoot)
       setLoading(false)
+      saveCache(allLoot, raidMap, Math.max(...allLoot.map((r) => r.id).filter(Number.isFinite)))
     }
     run()
     supabase.from('raid_classifications').select('raid_id, mob').limit(50000).then(({ data }) => {

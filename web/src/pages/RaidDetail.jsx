@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo, Fragment } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 
@@ -8,9 +8,11 @@ export default function RaidDetail() {
   const [events, setEvents] = useState([])
   const [loot, setLoot] = useState([])
   const [attendance, setAttendance] = useState([])
+  const [eventAttendance, setEventAttendance] = useState([])
   const [classifications, setClassifications] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [expandedEvents, setExpandedEvents] = useState({})
 
   useEffect(() => {
     if (!raidId) return
@@ -19,18 +21,30 @@ export default function RaidDetail() {
       supabase.from('raid_events').select('*').eq('raid_id', raidId).order('event_order'),
       supabase.from('raid_loot').select('*').eq('raid_id', raidId),
       supabase.from('raid_attendance').select('*').eq('raid_id', raidId).order('character_name'),
-    ]).then(([r, e, l, a]) => {
+      supabase.from('raid_event_attendance').select('event_id, char_id, character_name').eq('raid_id', raidId),
+    ]).then(([r, e, l, a, ea]) => {
       if (r.error) setError(r.error.message)
       else setRaid(r.data)
       if (!e.error) setEvents(e.data || [])
       if (!l.error) setLoot(l.data || [])
       if (!a.error) setAttendance(a.data || [])
+      if (!ea.error) setEventAttendance(ea.data || [])
       setLoading(false)
     })
     supabase.from('raid_classifications').select('mob, zone').eq('raid_id', raidId).then(({ data }) => {
       if (data) setClassifications(data)
     })
   }, [raidId])
+
+  const attendeesByEvent = useMemo(() => {
+    const byEvent = {}
+    eventAttendance.forEach((row) => {
+      if (!byEvent[row.event_id]) byEvent[row.event_id] = []
+      byEvent[row.event_id].push({ name: row.character_name || row.char_id || '—', char_id: row.char_id })
+    })
+    Object.keys(byEvent).forEach((id) => byEvent[id].sort((a, b) => (a.name || '').localeCompare(b.name || '')))
+    return byEvent
+  }, [eventAttendance])
 
   if (loading) return <div className="container">Loading…</div>
   if (error || !raid) return <div className="container"><span className="error">{error || 'Raid not found'}</span> <Link to="/raids">← Raids</Link></div>
@@ -57,17 +71,57 @@ export default function RaidDetail() {
         <p style={{ margin: '0 0 0.75rem 0', color: '#a1a1aa' }}>Total raid DKP (sum of event DKP): <strong>{Number(totalDkp).toFixed(1)}</strong></p>
         <table>
           <thead>
-            <tr><th>#</th><th>Event</th><th>DKP</th><th>Attendees</th></tr>
+            <tr><th style={{ width: '2rem' }}></th><th>#</th><th>Event</th><th>DKP</th><th>Attendees</th></tr>
           </thead>
           <tbody>
-            {events.map((e) => (
-              <tr key={e.event_id}>
-                <td>{e.event_order}</td>
-                <td>{e.event_name}</td>
-                <td>{e.dkp_value}</td>
-                <td>{e.attendee_count}</td>
-              </tr>
-            ))}
+            {events.map((e) => {
+              const attendees = attendeesByEvent[e.event_id] || []
+              const hasList = attendees.length > 0
+              const isExpanded = expandedEvents[e.event_id]
+              return (
+                <Fragment key={e.event_id}>
+                  <tr>
+                    <td>
+                      {hasList && (
+                        <button
+                          type="button"
+                          className="btn btn-ghost"
+                          style={{ padding: '0.25rem', fontSize: '1rem' }}
+                          onClick={() => setExpandedEvents((prev) => ({ ...prev, [e.event_id]: !prev[e.event_id] }))}
+                          aria-expanded={isExpanded}
+                          title={isExpanded ? 'Hide attendees' : 'Show attendees'}
+                        >
+                          {isExpanded ? '−' : '+'}
+                        </button>
+                      )}
+                    </td>
+                    <td>{e.event_order}</td>
+                    <td>{e.event_name}</td>
+                    <td>{e.dkp_value}</td>
+                    <td>
+                      {hasList ? (
+                        <span>{attendees.length}{isExpanded ? '' : ' — click + to list'}</span>
+                      ) : (
+                        e.attendee_count ?? '—'
+                      )}
+                    </td>
+                  </tr>
+                  {hasList && isExpanded && (
+                    <tr key={`${e.event_id}-attendees`}>
+                      <td colSpan={5} style={{ padding: '0.5rem 1rem', verticalAlign: 'top', backgroundColor: 'rgba(0,0,0,0.2)', borderBottom: '1px solid #27272a' }}>
+                        <p style={{ margin: 0, fontSize: '0.9rem' }}>
+                          {attendees.map((a, i) => (
+                            <Link key={a.char_id || a.name || i} to={`/characters/${encodeURIComponent(a.name || '')}`} style={{ marginRight: '0.5rem' }}>
+                              {a.name}
+                            </Link>
+                          ))}
+                        </p>
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
+              )
+            })}
           </tbody>
         </table>
       </div>
