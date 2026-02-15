@@ -19,7 +19,7 @@ function buildItemIdMap(mobLoot) {
   return map
 }
 
-// Simple SVG line chart: X = date, Y = cost (DKP)
+// Simple SVG line chart: X = date, Y = cost (DKP), with gridlines and ticks
 function PriceChart({ data, height = 180 }) {
   if (!data || data.length === 0) return null
   const costs = data.map((d) => Number(d.cost) || 0)
@@ -31,18 +31,61 @@ function PriceChart({ data, height = 180 }) {
   const pad = { top: 12, right: 12, bottom: 28, left: 44 }
   const innerW = w - pad.left - pad.right
   const innerH = h - pad.top - pad.bottom
+  const n = data.length
+  const lastIdx = Math.max(n - 1, 1)
+
+  // Y ticks: ~5 nice values between minCost and maxCost
+  const yTickCount = 5
+  const yTicks = []
+  for (let i = 0; i <= yTickCount; i++) {
+    const t = minCost + (range * i) / yTickCount
+    yTicks.push(Math.round(t))
+  }
+  const yTicksDedup = [...new Set(yTicks)].sort((a, b) => a - b)
+
+  // X ticks: indices for intermediate dates (e.g. 0, 1/4, 1/2, 3/4, end)
+  const xTickIndices = []
+  if (n <= 5) {
+    for (let i = 0; i < n; i++) xTickIndices.push(i)
+  } else {
+    const step = (n - 1) / 4
+    for (let i = 0; i <= 4; i++) xTickIndices.push(Math.round(i * step))
+  }
+  const xTickIndicesDedup = [...new Set(xTickIndices)].sort((a, b) => a - b)
+
   const points = data.map((d, i) => {
-    const x = pad.left + (i / Math.max(data.length - 1, 1)) * innerW
+    const x = pad.left + (i / lastIdx) * innerW
     const y = pad.top + innerH - ((Number(d.cost) || 0) - minCost) / range * innerH
     return `${x},${y}`
   }).join(' ')
-  const firstDate = data[0]?.date || ''
-  const lastDate = data[data.length - 1]?.date || ''
+
   return (
     <div className="card" style={{ overflow: 'auto' }}>
       <h3 style={{ marginTop: 0 }}>DKP cost over time</h3>
       <p style={{ color: '#a1a1aa', fontSize: '0.875rem', marginBottom: '0.5rem' }}>X = date, Y = cost (DKP)</p>
       <svg width={w} height={h} style={{ display: 'block' }}>
+        {/* Y gridlines + ticks */}
+        {yTicksDedup.map((costVal) => {
+          const y = pad.top + innerH - (costVal - minCost) / range * innerH
+          return (
+            <g key={costVal}>
+              <line x1={pad.left} y1={y} x2={pad.left + innerW} y2={y} stroke="#27272a" strokeWidth="1" strokeDasharray="2,2" />
+              <text x={pad.left - 6} y={y + 4} fill="#71717a" fontSize="10" textAnchor="end">{costVal}</text>
+            </g>
+          )
+        })}
+        {/* X gridlines + ticks */}
+        {xTickIndicesDedup.map((i) => {
+          const x = pad.left + (i / lastIdx) * innerW
+          const date = data[i]?.date || ''
+          return (
+            <g key={i}>
+              <line x1={x} y1={pad.top} x2={x} y2={pad.top + innerH} stroke="#27272a" strokeWidth="1" strokeDasharray="2,2" />
+              <text x={x} y={h - 6} fill="#71717a" fontSize="10" textAnchor="middle">{date}</text>
+            </g>
+          )
+        })}
+        {/* Line and points on top */}
         <polyline
           fill="none"
           stroke="#a78bfa"
@@ -50,18 +93,12 @@ function PriceChart({ data, height = 180 }) {
           points={points}
         />
         {data.map((d, i) => {
-          const x = pad.left + (i / Math.max(data.length - 1, 1)) * innerW
+          const x = pad.left + (i / lastIdx) * innerW
           const y = pad.top + innerH - ((Number(d.cost) || 0) - minCost) / range * innerH
           return (
             <circle key={i} cx={x} cy={y} r={4} fill="#7c3aed" />
           )
         })}
-        {/* Y axis (left): cost scale */}
-        <text x={pad.left - 4} y={pad.top} fill="#71717a" fontSize="10" textAnchor="end">{maxCost}</text>
-        <text x={pad.left - 4} y={pad.top + innerH} fill="#71717a" fontSize="10" textAnchor="end">{minCost}</text>
-        {/* X axis (bottom): date range */}
-        <text x={pad.left} y={h - 6} fill="#71717a" fontSize="10">{firstDate}</text>
-        <text x={pad.left + innerW} y={h - 6} fill="#71717a" fontSize="10" textAnchor="end">{lastDate}</text>
       </svg>
     </div>
   )
