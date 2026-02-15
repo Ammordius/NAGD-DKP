@@ -2,6 +2,8 @@ import { useEffect, useState, useMemo } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 
+const MAGELO_BASE = 'https://www.takproject.net/magelo/character.php?char='
+
 const PAGE = 1000
 async function fetchAll(table, select = '*', filter) {
   const all = []
@@ -159,16 +161,24 @@ export default function AccountDetail() {
             <p style={{ color: '#71717a' }}>No characters linked to this account.</p>
           ) : (
             <ul style={{ listStyle: 'none', paddingLeft: 0, margin: 0 }}>
-              {characters.map((c) => (
-                <li key={c.char_id || c.name} style={{ marginBottom: '0.5rem' }}>
-                  <Link to={`/characters/${encodeURIComponent(c.name || c.char_id)}`}>{c.name || c.char_id}</Link>
-                  {(c.class_name || c.level) && (
-                    <span style={{ color: '#71717a', fontSize: '0.9rem', marginLeft: '0.5rem' }}>
-                      {[c.class_name, c.level].filter(Boolean).join(' ')}
-                    </span>
-                  )}
-                </li>
-              ))}
+              {characters.map((c) => {
+                const name = c.name || c.char_id
+                const mageloUrl = `${MAGELO_BASE}${encodeURIComponent(name)}`
+                return (
+                  <li key={c.char_id || c.name} style={{ marginBottom: '0.5rem' }}>
+                    <Link to={`/characters/${encodeURIComponent(name)}`}>{name}</Link>
+                    {(c.class_name || c.level) && (
+                      <span style={{ color: '#71717a', fontSize: '0.9rem', marginLeft: '0.5rem' }}>
+                        {[c.class_name, c.level].filter(Boolean).join(' ')}
+                      </span>
+                    )}
+                    {' · '}
+                    <a href={mageloUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: '0.9rem', color: '#a78bfa' }}>
+                      Magelo
+                    </a>
+                  </li>
+                )
+              })}
             </ul>
           )}
         </div>

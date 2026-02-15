@@ -1,16 +1,17 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { createCache } from '../lib/cache'
 
 const CACHE_KEY = 'accounts_list_v1'
 const CACHE_TTL = 10 * 60 * 1000
+const MAGELO_BASE = 'https://www.takproject.net/magelo/character.php?char='
 
 export default function Accounts() {
   const [accounts, setAccounts] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [expanded, setExpanded] = useState({})
+  const [search, setSearch] = useState('')
 
   useEffect(() => {
     const cache = createCache(CACHE_KEY, CACHE_TTL)
@@ -52,9 +53,15 @@ export default function Accounts() {
     })
   }, [])
 
-  const toggle = (accountId) => {
-    setExpanded((prev) => ({ ...prev, [accountId]: !prev[accountId] }))
-  }
+  const filteredAccounts = useMemo(() => {
+    if (!search.trim()) return accounts
+    const q = search.trim().toLowerCase()
+    return accounts.filter((acc) => {
+      if ((acc.account_id || '').toLowerCase().includes(q)) return true
+      if ((acc.display_name || '').toLowerCase().includes(q)) return true
+      return (acc.characters || []).some((c) => (c.name || c.char_id || '').toLowerCase().includes(q))
+    })
+  }, [accounts, search])
 
   if (loading) return <div className="container">Loading accounts…</div>
   if (error) return <div className="container"><span className="error">{error}</span></div>
@@ -63,35 +70,50 @@ export default function Accounts() {
     <div className="container">
       <h1>Accounts &amp; characters</h1>
       <p style={{ color: '#71717a', marginBottom: '1rem' }}>
-        Relational list: each account with its characters (from character_account). Click to expand.
+        All accounts with full character lists. Type a name to find who it is.
       </p>
+      <div style={{ marginBottom: '1rem' }}>
+        <input
+          type="search"
+          placeholder="Search by account, display name, or character name…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          style={{
+            width: '100%',
+            maxWidth: '28rem',
+            padding: '0.5rem 0.75rem',
+            fontSize: '1rem',
+            border: '1px solid #3f3f46',
+            borderRadius: '6px',
+            background: '#18181b',
+            color: '#fafafa',
+          }}
+          aria-label="Search accounts and characters"
+        />
+        {search.trim() && (
+          <span style={{ marginLeft: '0.5rem', color: '#71717a', fontSize: '0.875rem' }}>
+            {filteredAccounts.length} account{filteredAccounts.length !== 1 ? 's' : ''}
+          </span>
+        )}
+      </div>
       <div className="card">
-        <table>
+        <table style={{ tableLayout: 'fixed', width: '100%' }}>
+          <colgroup>
+            <col style={{ width: '14rem' }} />
+            <col />
+          </colgroup>
           <thead>
             <tr>
-              <th style={{ width: '2rem' }}></th>
               <th>Account</th>
               <th>Characters</th>
             </tr>
           </thead>
           <tbody>
-            {accounts.map((acc) => {
-              const isOpen = expanded[acc.account_id]
+            {filteredAccounts.map((acc) => {
               const chars = acc.characters || []
               return (
                 <tr key={acc.account_id}>
-                  <td>
-                    <button
-                      type="button"
-                      className="btn btn-ghost"
-                      style={{ padding: '0.25rem', fontSize: '1rem' }}
-                      onClick={() => toggle(acc.account_id)}
-                      aria-expanded={isOpen}
-                    >
-                      {isOpen ? '−' : '+'}
-                    </button>
-                  </td>
-                  <td>
+                  <td style={{ verticalAlign: 'top', whiteSpace: 'nowrap' }}>
                     <Link to={`/accounts/${acc.account_id}`}>
                       <code>{acc.account_id}</code>
                     </Link>
@@ -104,31 +126,54 @@ export default function Accounts() {
                       </span>
                     )}
                   </td>
-                  <td>
+                  <td style={{ verticalAlign: 'top', minWidth: 0 }}>
                     {chars.length === 0 ? (
                       <span style={{ color: '#71717a' }}>—</span>
-                    ) : isOpen ? (
-                      <ul style={{ margin: 0, paddingLeft: '1.25rem', listStyle: 'disc' }}>
-                        {chars.map((c) => (
-                          <li key={c.char_id}>
-                            <Link to={`/characters/${encodeURIComponent(c.name || c.char_id)}`}>{c.name || c.char_id}</Link>
-                            {(c.class_name || c.level) && (
-                              <span style={{ color: '#71717a', fontSize: '0.875rem' }}>
-                                {' '}{[c.class_name, c.level].filter(Boolean).join(' · ')}
-                              </span>
-                            )}
-                          </li>
-                        ))}
-                      </ul>
                     ) : (
-                      <span className="raid-badges">
-                        {chars.slice(0, 4).map((c) => (
-                          <span key={c.char_id} className="badge">
-                            <Link to={`/characters/${encodeURIComponent(c.name || c.char_id)}`} style={{ color: 'inherit' }}>{c.name || c.char_id}</Link>
-                          </span>
-                        ))}
-                        {chars.length > 4 && <span className="badge">+{chars.length - 4}</span>}
-                      </span>
+                      <div
+                        style={{
+                          display: 'flex',
+                          flexWrap: 'wrap',
+                          gap: '0.35rem 1rem',
+                          alignItems: 'baseline',
+                          minWidth: 0,
+                          overflowWrap: 'break-word',
+                        }}
+                      >
+                        {chars.map((c, i) => {
+                          const name = c.name || c.char_id
+                          const mageloUrl = `${MAGELO_BASE}${encodeURIComponent(name)}`
+                          return (
+                            <span
+                              key={c.char_id}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '0.25rem',
+                                flexWrap: 'wrap',
+                                flexShrink: 0,
+                              }}
+                            >
+                              {i > 0 && <span style={{ color: '#52525b', marginRight: '0.25rem' }}>·</span>}
+                              <Link to={`/characters/${encodeURIComponent(name)}`}>{name}</Link>
+                              {(c.class_name || c.level) && (
+                                <span style={{ color: '#71717a', fontSize: '0.875rem' }}>
+                                  {[c.class_name, c.level].filter(Boolean).join(' · ')}
+                                </span>
+                              )}
+                              <a
+                                href={mageloUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                style={{ fontSize: '0.8rem', color: '#a78bfa', whiteSpace: 'nowrap' }}
+                                title={`Magelo: ${name}`}
+                              >
+                                Magelo
+                              </a>
+                            </span>
+                          )
+                        })}
+                      </div>
                     )}
                   </td>
                 </tr>
