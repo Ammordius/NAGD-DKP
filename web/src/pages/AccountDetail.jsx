@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 
 const MAGELO_BASE = 'https://www.takproject.net/magelo/character.php?char='
+const MIDDLE_DOT = '\u00B7'
 
 const PAGE = 1000
 async function fetchAll(table, select = '*', filter) {
@@ -115,8 +116,12 @@ export default function AccountDetail({ isOfficer, profile }) {
               ;(rRes.data || []).forEach((row) => { rMap[row.raid_id] = row })
               setRaids(rMap)
               const eventDkp = {}
+              const totalRaidDkp = {}
               ;(eRes.data || []).forEach((ev) => {
-                eventDkp[`${ev.raid_id}|${ev.event_id}`] = parseFloat(ev.dkp_value || 0)
+                const v = parseFloat(ev.dkp_value || 0)
+                eventDkp[`${ev.raid_id}|${ev.event_id}`] = v
+                if (!totalRaidDkp[ev.raid_id]) totalRaidDkp[ev.raid_id] = 0
+                totalRaidDkp[ev.raid_id] += v
               })
               const dkpByRaid = {}
               if (evAttRes.data?.length > 0) {
@@ -146,6 +151,7 @@ export default function AccountDetail({ isOfficer, profile }) {
                 date: (rMap[raidId]?.date_iso || '').slice(0, 10),
                 raid_name: rMap[raidId]?.raid_name || raidId,
                 dkpEarned: dkpByRaid[raidId] ?? 0,
+                dkpRaidTotal: totalRaidDkp[raidId] ?? 0,
                 items: lootByRaid[raidId] || [],
               })).sort((a, b) => (b.date || '').localeCompare(a.date || ''))
               setActivityByRaid(activity)
@@ -211,7 +217,7 @@ export default function AccountDetail({ isOfficer, profile }) {
       <p style={{ color: '#a1a1aa', marginBottom: '1rem' }}>
         Account <code>{accountId}</code>
         {account.toon_count != null && <span style={{ marginLeft: '0.5rem' }}>({account.toon_count} toons)</span>}
-        {isMyAccount && <span style={{ marginLeft: '0.5rem', color: '#a78bfa' }}> \u00B7 This is your account</span>}
+        {isMyAccount && <span style={{ marginLeft: '0.5rem', color: '#a78bfa' }}> {MIDDLE_DOT} This is your account</span>}
         {profile && !isMyAccount && (
           <button type="button" className="btn btn-ghost" style={{ marginLeft: '0.5rem', fontSize: '0.875rem' }} onClick={handleClaimAccount} disabled={claimLoading}>
             {claimLoading ? 'Claiming...' : 'Claim this account'}
@@ -267,7 +273,7 @@ export default function AccountDetail({ isOfficer, profile }) {
                         {[c.class_name, c.level].filter(Boolean).join(' ')}
                       </span>
                     )}
-                    {' \u00B7 '}
+                    {' '}{MIDDLE_DOT}{' '}
                     <a href={mageloUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: '0.9rem', color: '#a78bfa' }}>
                       Magelo
                     </a>
@@ -317,16 +323,19 @@ export default function AccountDetail({ isOfficer, profile }) {
                   <p style={{ margin: '0 0 0.25rem 0' }}>
                     <Link to={`/raids/${act.raid_id}`}><strong>{act.raid_name}</strong></Link>
                     {act.date && <span style={{ color: '#71717a', marginLeft: '0.5rem' }}>{act.date}</span>}
-                    <span style={{ marginLeft: '0.5rem' }}>\u00B7 <strong>Earned: {Number(act.dkpEarned ?? 0).toFixed(0)}</strong> DKP</span>
+                    <span style={{ marginLeft: '0.5rem' }}>{MIDDLE_DOT} <strong>Earned: {Number(act.dkpEarned ?? 0).toFixed(0)}</strong> DKP</span>
+                    {act.dkpRaidTotal != null && act.dkpRaidTotal > 0 && (
+                      <span style={{ marginLeft: '0.5rem', color: '#71717a', fontSize: '0.9rem' }}>(raid total: {Number(act.dkpRaidTotal).toFixed(0)} DKP)</span>
+                    )}
                   </p>
                   {act.items.length > 0 && (
                     <ul style={{ margin: '0.25rem 0 0 1.25rem', paddingLeft: 0, listStyle: 'none' }}>
                       {act.items.map((row, i) => (
                         <li key={i} style={{ marginBottom: '0.25rem', fontSize: '0.9rem' }}>
                           <Link to={`/items/${encodeURIComponent(row.item_name || '')}`}>{row.item_name || '—'}</Link>
-                          {' \u00B7 '}
+                          {' '}{MIDDLE_DOT}{' '}
                           <Link to={`/characters/${encodeURIComponent(row.character_name || row.char_id || '')}`}>{row.character_name || row.char_id || '—'}</Link>
-                          {row.cost != null && row.cost !== '' && <> \u00B7 {row.cost} DKP</>}
+                          {row.cost != null && row.cost !== '' && <> {MIDDLE_DOT} {row.cost} DKP</>}
                         </li>
                       ))}
                     </ul>
