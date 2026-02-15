@@ -49,44 +49,35 @@ function parseChannelList(paste) {
   return { eventTime, names: [...nameSet] }
 }
 
-/** Parse loot log lines. Supports:
- * - "Item grats Name, 4 DKP" or "Item congrats Name 7 dkp"
- * - "Item no bids - Name w/ 764/777 grats" (0 DKP)
- * - "Item grats Name, 545/666" or "Item congrats Name top roll" (0 DKP)
+/**
+ * Parse loot log by matching against known character names and item names.
+ * - Look for character names (tied to account/DKP list) that appear in the line.
+ * - Look for any loot item that appears in the line (DKP raid_loot or JSON loot list); longest match wins.
+ * - Look for number + "dkp" for cost (default 0).
+ * Returns per-line: { rawLine, itemName, characterNames[], cost, hasDkp }.
+ * 3 matches → add; 1 or 2 matches → report what's missing.
  */
-function parseLootLog(paste) {
+function parseLootLogByMatch(paste, characterNamesList, itemNamesList) {
   const lines = (paste || '').split(/\r?\n/).map((l) => l.trim()).filter(Boolean)
   const results = []
+  const chars = (characterNamesList || []).filter(Boolean).sort((a, b) => (b?.length || 0) - (a?.length || 0))
+  const items = (itemNamesList || []).filter(Boolean).sort((a, b) => (b?.length || 0) - (a?.length || 0))
   for (const line of lines) {
-    const quoted = line.match(/'([^']+)'/)?.[1] || line
+    const quoted = (line.match(/'([^']+)'/)?.[1] || line).trim()
+    if (!quoted) continue
+    const lower = quoted.toLowerCase()
+    const characterNames = chars.filter((name) => name && lower.includes(name.toLowerCase()))
     let itemName = ''
-    let characterName = ''
-    let cost = 0
-
-    // Explicit DKP: "... grats/congrats Name ... N DKP" (name is text before the number that precedes "dkp")
-    const explicitDkp = quoted.match(/\b(?:grats|congrats)\s+(.+?)\s+(\d+)\s*dkp/i)
-    if (explicitDkp) {
-      characterName = explicitDkp[1].trim().replace(/,\s*$/, '')
-      cost = parseInt(explicitDkp[2], 10)
-      itemName = quoted.replace(/\s*(?:grats|congrats)\s+[\s\S]+$/i, '').trim()
-    } else {
-      // "Item no bids - Name w/ 764/777 grats" (0 DKP)
-      const noBids = quoted.match(/^(.+?)\s+no bids\s*-\s*(\S+)\s+w\/\s*\d+\/\d+\s*grats\s*$/i)
-      if (noBids) {
-        itemName = noBids[1].trim()
-        characterName = noBids[2].trim()
-      } else {
-        // "Item grats/congrats Name, 545/666" or "Item grats Name 750/777" or "Item congrats Name top roll" (0 DKP)
-        const zeroDkp = quoted.match(/\b(?:grats|congrats)\s+(\S+(?:\s+\S+)?)\s*(?:,\s*\d+\/\d+|\s+\d+\/\d+|\s+top\s+roll)/i)
-        if (zeroDkp) {
-          characterName = zeroDkp[1].trim()
-          itemName = quoted.replace(/\s*(?:grats|congrats)\s+[\s\S]+$/i, '').trim()
-          // e.g. "Blood Veil of the Shissar no bids" -> "Blood Veil of the Shissar"
-          itemName = itemName.replace(/\s*,?\s*no bids\s*$/i, '').trim()
-        }
+    for (const name of items) {
+      if (name && lower.includes(name.toLowerCase())) {
+        itemName = name
+        break
       }
     }
-    if (itemName && characterName) results.push({ itemName, characterName, cost: isNaN(cost) ? 0 : cost })
+    const dkpMatch = quoted.match(/(\d+)\s*dkp/i)
+    const cost = dkpMatch ? parseInt(dkpMatch[1], 10) : 0
+    const hasDkp = !!dkpMatch
+    results.push({ rawLine: quoted, itemName, characterNames: [...characterNames], cost: isNaN(cost) ? 0 : cost, hasDkp })
   }
   return results
 }
@@ -117,6 +108,7 @@ export default function Officer({ isOfficer }) {
   const [characters, setCharacters] = useState([])
   const [charIdToAccountId, setCharIdToAccountId] = useState({})
   const [itemNames, setItemNames] = useState([])
+  const [jsonLootItemNames, setJsonLootItemNames] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [mutating, setMutating] = useState(false)
@@ -165,6 +157,15 @@ export default function Officer({ isOfficer }) {
     return m
   }, [characters])
 
+  const allItemNamesForLootLog = useMemo(() => {
+    const byLower = new Map()
+    ;(itemNames || []).forEach((n) => { if (n) byLower.set(n.trim().toLowerCase(), n.trim()) })
+    ;(jsonLootItemNames || []).forEach((n) => { if (n) byLower.set(n.trim().toLowerCase(), n.trim()) })
+    return [...byLower.values()]
+  }, [itemNames, jsonLootItemNames])
+
+  const characterNamesForLootLog = useMemo(() => characters.map((c) => (c.name || '').trim()).filter(Boolean), [characters])
+
   const loadRaids = useCallback(async () => {
     const { data } = await supabase
       .from('raids')
@@ -199,6 +200,19 @@ export default function Officer({ isOfficer }) {
     }
     const names = [...new Set(allItemRows.map((r) => r.item_name).filter(Boolean))].sort()
     setItemNames(names)
+    try {
+      const res = await fetch('/dkp_mob_loot.json')
+      if (res.ok) {
+        const data = await res.json()
+        const fromJson = new Set()
+        Object.values(data || {}).forEach((entry) => {
+          ;(entry?.loot || []).forEach((l) => { if (l?.name) fromJson.add(l.name) })
+        })
+        setJsonLootItemNames([...fromJson])
+      } else setJsonLootItemNames([])
+    } catch (_) {
+      setJsonLootItemNames([])
+    }
     setLoading(false)
   }, [loadRaids])
 
@@ -353,14 +367,16 @@ export default function Officer({ isOfficer }) {
     const dkpValue = parseFloat(ticDkpValue) || 1
     const event_id = generateEventId(eventTime)
     const maxOrder = Math.max(0, ...events.map((e) => e.event_order || 0))
+    const isFirstTic = events.length === 0
+    const addedAt = new Date().toISOString()
     const { error: evErr } = await supabase.from('raid_events').insert({
       raid_id: selectedRaidId,
       event_id,
       event_order: maxOrder + 1,
-      event_name: 'DKP tic',
+      event_name: isFirstTic ? 'On-time' : 'DKP tic',
       dkp_value: String(dkpValue),
       attendee_count: String(names.length),
-      event_time: eventTime || null,
+      event_time: eventTime || addedAt,
     })
     if (evErr) {
       setError(evErr.message)
@@ -500,53 +516,60 @@ export default function Officer({ isOfficer }) {
       setError('Select a raid first.')
       return
     }
-    const parsed = parseLootLog(lootLogPaste)
-    if (parsed.length === 0) {
-      setError('No loot lines parsed. Use format like: ... \'Earring of Eradication grats Barndog, 4 DKP!!!\'')
+    const lineResults = parseLootLogByMatch(lootLogPaste, characterNamesForLootLog, allItemNamesForLootLog)
+    if (lineResults.length === 0) {
+      setError('No lines to parse. Paste log lines containing character names (on DKP list), item names (from DKP or loot list), and optional "N DKP".')
       return
     }
     setMutating(true)
     setLootResult(null)
     setError('')
     const event_id = events.length > 0 ? events[0].event_id : 'loot'
-    const itemNamesList = itemNames || []
-    const knownItemSet = new Set(itemNamesList.map((n) => (n || '').trim().toLowerCase()))
+    const knownItemSet = new Set(allItemNamesForLootLog.map((n) => (n || '').trim().toLowerCase()))
     const itemNameByLower = {}
-    itemNamesList.forEach((n) => { if (n) itemNameByLower[n.trim().toLowerCase()] = n })
+    allItemNamesForLootLog.forEach((n) => { if (n) itemNameByLower[n.trim().toLowerCase()] = n })
     const playerNotFound = []
     const itemNotFound = []
+    const missingDkpAmount = []
     let inserted = 0
-    for (const row of parsed) {
-      const char = nameToChar[row.characterName.toLowerCase()]
-      if (!char) {
-        playerNotFound.push({ itemName: row.itemName, characterName: row.characterName })
-        continue
+    for (const line of lineResults) {
+      const characterNames = line.characterNames.length > 0 ? line.characterNames : ['']
+      for (const characterName of characterNames) {
+        const char = characterName ? nameToChar[characterName.toLowerCase()] : null
+        const hasChar = !!char
+        const itemKey = (line.itemName || '').trim().toLowerCase()
+        const hasItem = !!line.itemName && knownItemSet.has(itemKey)
+        const canonicalItemName = itemNameByLower[itemKey] || line.itemName
+        if (hasChar && hasItem) {
+          if (!line.hasDkp && line.cost === 0) missingDkpAmount.push({ itemName: canonicalItemName, characterName: char.name })
+          const { error: err } = await supabase.from('raid_loot').insert({
+            raid_id: selectedRaidId,
+            event_id,
+            item_name: canonicalItemName,
+            char_id: char.char_id,
+            character_name: char.name,
+            cost: String(line.cost),
+          })
+          if (!err) inserted++
+          continue
+        }
+        if (!hasChar) playerNotFound.push({ itemName: line.itemName || line.rawLine, characterName: characterName || '(no character matched)' })
+        if (!hasItem) itemNotFound.push({ itemName: line.itemName || line.rawLine, characterName: char?.name || characterName || '?' })
       }
-      const itemKey = row.itemName.trim().toLowerCase()
-      if (!knownItemSet.has(itemKey)) {
-        itemNotFound.push({ itemName: row.itemName, characterName: char.name })
-        continue
-      }
-      const canonicalItemName = itemNameByLower[itemKey] || row.itemName
-      const { error: err } = await supabase.from('raid_loot').insert({
-        raid_id: selectedRaidId,
-        event_id,
-        item_name: canonicalItemName,
-        char_id: char.char_id,
-        character_name: char.name,
-        cost: String(row.cost),
-      })
-      if (!err) inserted++
     }
+    const totalRows = lineResults.reduce((sum, l) => sum + (l.characterNames.length > 0 ? l.characterNames.length : 1), 0)
     const parts = []
     if (playerNotFound.length > 0) {
-      parts.push(`Player not on DKP list (${playerNotFound.length}): ${playerNotFound.map((r) => `${r.characterName} (${r.itemName})`).join('; ')}. Add the character to the DKP list first or fix the name in the log.`)
+      parts.push(`Missing character (${playerNotFound.length}): ${playerNotFound.map((r) => `${r.characterName} (${r.itemName})`).join('; ')}. Character must be on DKP list.`)
     }
     if (itemNotFound.length > 0) {
-      parts.push(`Item not found (${itemNotFound.length}): ${itemNotFound.map((r) => `"${r.itemName}" → ${r.characterName}`).join('; ')}. Add the item manually above (type the exact item name, pick the character, set cost), then retry from log if needed.`)
+      parts.push(`Missing item (${itemNotFound.length}): ${itemNotFound.map((r) => `"${r.itemName}" → ${r.characterName}`).join('; ')}. Item must exist in DKP loot or JSON loot list.`)
+    }
+    if (missingDkpAmount.length > 0) {
+      parts.push(`No DKP amount in line (used 0) (${missingDkpAmount.length}): ${missingDkpAmount.map((r) => `"${r.itemName}" → ${r.characterName}`).join('; ')}.`)
     }
     if (parts.length > 0) setError(parts.join(' '))
-    setLootResult({ fromLog: true, inserted, total: parsed.length })
+    setLootResult({ fromLog: true, inserted, total: totalRows })
     if (playerNotFound.length === 0 && itemNotFound.length === 0) setLootLogPaste('')
     loadSelectedRaid()
     setMutating(false)
@@ -904,7 +927,7 @@ export default function Officer({ isOfficer }) {
                 Add
               </button>
             </div>
-            <p style={{ color: '#71717a', fontSize: '0.85rem', marginTop: '0.25rem' }}>Or paste loot log lines (e.g. &apos;Earring of Eradication grats Barndog, 4 DKP!!!&apos;):</p>
+            <p style={{ color: '#71717a', fontSize: '0.85rem', marginTop: '0.25rem' }}>Or paste loot log lines. Lines are matched by: character name (on DKP list), item name (in DKP loot or dkp_mob_loot.json), and optional &apos;N DKP&apos;. All 3 matched → added; 1 or 2 matched → shows what&apos;s missing.</p>
             <textarea
               value={lootLogPaste}
               onChange={(e) => setLootLogPaste(e.target.value)}
@@ -919,6 +942,11 @@ export default function Officer({ isOfficer }) {
               <p style={{ color: '#22c55e', marginTop: '0.5rem' }}>
                 {lootResult.fromLog ? `Added ${lootResult.inserted}/${lootResult.total} loot entries.` : `Added ${lootResult.itemName} → ${lootResult.characterName} (${lootResult.cost} DKP).`}
               </p>
+            )}
+            {error && (
+              <div className="error" role="alert" style={{ marginTop: '0.5rem', padding: '0.5rem 0.75rem', backgroundColor: 'rgba(248,113,113,0.15)', borderRadius: '4px', border: '1px solid #f87171' }}>
+                <strong>What went wrong:</strong> {error}
+              </div>
             )}
           </section>
 
