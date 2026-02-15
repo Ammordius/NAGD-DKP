@@ -165,6 +165,7 @@ export default function MobLoot() {
       .map(([key, v]) => ({
         key,
         mob: v.mob || key.replace(/\|$/, ''),
+        mobs: Array.isArray(v.mobs) ? v.mobs : null,
         zone: v.zone || '',
         loot: v.loot || [],
       }))
@@ -174,7 +175,8 @@ export default function MobLoot() {
   const entriesWithZone = useMemo(() => {
     return entries.map((e) => {
       const fromJson = (e.zone || '').trim()
-      const fromRaids = mobZoneFromRaids[normalizeMobKey(e.mob)]
+      const mobKeys = e.mobs?.length ? e.mobs : [e.mob]
+      const fromRaids = mobKeys.map((m) => mobZoneFromRaids[normalizeMobKey(m)]).find(Boolean)
       const displayZone = fromJson || fromRaids || 'Other / Unknown'
       return { ...e, displayZone }
     })
@@ -196,9 +198,10 @@ export default function MobLoot() {
     let list = entriesWithDkp
     const q = (query || '').trim().toLowerCase()
     if (q) {
+      const mobNames = (e) => (e.mobs?.length ? e.mobs : [e.mob]).filter(Boolean).join(' ').toLowerCase()
       list = list.filter(
         (e) =>
-          (e.mob || '').toLowerCase().includes(q) ||
+          mobNames(e).includes(q) ||
           (e.displayZone || '').toLowerCase().includes(q)
       )
     }
@@ -317,7 +320,7 @@ export default function MobLoot() {
                             {isOpen ? '−' : '+'}
                           </button>
                         </td>
-                        <td>{e.mob.replace(/^#/, '')}</td>
+                        <td>{(e.mobs?.length ? e.mobs.join(', ') : (e.mob || '')).replace(/^#/, '')}</td>
                         <td style={{ color: '#a1a1aa' }}>{e.displayZone || '—'}</td>
                         <td>{e.loot.length}</td>
                         <td style={{ color: '#a78bfa' }}>{e.totalAvgDkp > 0 ? Number(e.totalAvgDkp).toFixed(1) : '—'}</td>

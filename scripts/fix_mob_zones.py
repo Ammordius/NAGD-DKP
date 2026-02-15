@@ -11,10 +11,10 @@ MOB_ZONES = [
     ("Nrinda_of_Ice", "Plane of Water"),
     ("Pwelon_of_Vapor", "Plane of Water"),
     ("Azobian_the_Darklord", "Plane of Fire"),
-    ("Dersool_Fal`Giersnaol", "Plane of Time B"),
+    ("Dersool_Fal`Giersnaol", "Plane of Time"),
     ("Derugoak_Bloodwalker", "Plane of Earth"),
     ("Halgoz_Rellinic", "Halls of Honor"),
-    ("Herlsoakian", "Plane of Time B"),
+    ("Herlsoakian", "Plane of Time"),
     ("Narandi_the_Wretched", "The Great Divide"),
     ("Freegan_Haun", "Halls of Honor"),
     ("Tribal_Leader_Diseranon", "Plane of Earth"),
@@ -42,28 +42,28 @@ MOB_ZONES = [
     ("Earthen_Overseer", "Plane of Time"),
     ("Terlok_of_Earth", "Plane of Time"),
     ("The_Living_Earth", "Plane of Earth"),
-    ("Bertoxxulous", "Plane of Time B"),
-    ("#Bertoxxulous", "Plane of Time B"),
-    ("Cazic_Thule", "Plane of Time B"),
-    ("Innoruuk", "Plane of Time B"),
-    ("Rallos_Zek", "Plane of Time B"),
-    ("Rallos_Zek_the_Warlord", "Plane of Time B"),
-    ("Tallon_Zek", "Plane of Time B"),
-    ("Vallon_Zek", "Plane of Time B"),
-    ("Saryrn", "Plane of Time B"),
-    ("Terris_Thule", "Plane of Time B"),
-    ("Quarm", "Plane of Time B"),
-    ("The_Avatar_of_War", "Plane of Time B"),
-    ("Avatar_of_the_Elements", "Plane of Time B"),
-    ("Supernatural_Guardian", "Plane of Time B"),
-    ("Champion_of_Torment", "Plane of Time B"),
-    ("Dark_Knight_of_Terris", "Plane of Time B"),
-    ("Dreamwarp", "Plane of Time B"),
-    ("Kraksmaal_Fir`Dethsin", "Plane of Time B"),
-    ("Sinrunal_Gorgedreal", "Plane of Time B"),
-    ("Xeroan_Xi`Geruonask", "Plane of Time B"),
-    ("Xerskel_Gerodnsal", "Plane of Time B"),
-    ("Undead_Squad_Leader", "Plane of Time B"),
+    ("Bertoxxulous", "Plane of Time"),
+    ("#Bertoxxulous", "Plane of Time"),
+    ("Cazic_Thule", "Plane of Time"),
+    ("Innoruuk", "Plane of Time"),
+    ("Rallos_Zek", "Plane of Time"),
+    ("Rallos_Zek_the_Warlord", "Plane of Time"),
+    ("Tallon_Zek", "Plane of Time"),
+    ("Vallon_Zek", "Plane of Time"),
+    ("Saryrn", "Plane of Time"),
+    ("Terris_Thule", "Plane of Time"),
+    ("Quarm", "Plane of Time"),
+    ("The_Avatar_of_War", "Plane of Time"),
+    ("Avatar_of_the_Elements", "Plane of Time"),
+    ("Supernatural_Guardian", "Plane of Time"),
+    ("Champion_of_Torment", "Plane of Time"),
+    ("Dark_Knight_of_Terris", "Plane of Time"),
+    ("Dreamwarp", "Plane of Time"),
+    ("Kraksmaal_Fir`Dethsin", "Plane of Time"),
+    ("Sinrunal_Gorgedreal", "Plane of Time"),
+    ("Xeroan_Xi`Geruonask", "Plane of Time"),
+    ("Xerskel_Gerodnsal", "Plane of Time"),
+    ("Undead_Squad_Leader", "Plane of Time"),
 ]
 
 
@@ -87,8 +87,8 @@ def main():
 
     # Exact mob name -> zone
     mob_to_zone = {mob: zone for mob, zone in MOB_ZONES}
-    # Deathbringer_* -> Plane of Time B
-    deathbringer_zone = "Plane of Time B"
+    # Deathbringer_* -> Plane of Time
+    deathbringer_zone = "Plane of Time"
 
     updated = 0
     for key, entry in list(data.items()):

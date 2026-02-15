@@ -1,7 +1,10 @@
 {
-  "#Bertoxxulous|": {
-    "mob": "#Bertoxxulous",
-    "zone": "Plane of Time B",
+  "Bertoxxulous|Plane of Time": {
+    "mob": "Bertoxxulous",
+    "mobs": [
+      "Bertoxxulous"
+    ],
+    "zone": "Plane of Time",
     "loot": [
       {
         "item_id": 15927,
@@ -90,81 +93,26 @@
       }
     ]
   },
-  "A_Deadly_Warboar|": {
+  "A_Deadly_Warboar (+15)|Plane of Time": {
     "mob": "A_Deadly_Warboar",
-    "zone": "Plane of Time",
-    "loot": [
-      {
-        "item_id": 21997,
-        "name": "Cloak of Wishes",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24776,
-        "name": "Dagger of Distraction",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 16367,
-        "name": "Elemental Chain Pant Pattern",
-        "sources": [
-          "dkp",
-          "elemental_armor"
-        ]
-      },
-      {
-        "item_id": 16373,
-        "name": "Elemental Greaves Mold",
-        "sources": [
-          "dkp",
-          "elemental_armor"
-        ]
-      },
-      {
-        "item_id": 16381,
-        "name": "Elemental Leather Pant Pattern",
-        "sources": [
-          "dkp",
-          "elemental_armor"
-        ]
-      },
-      {
-        "item_id": 16388,
-        "name": "Elemental Silk Pant Pattern",
-        "sources": [
-          "dkp",
-          "elemental_armor"
-        ]
-      },
-      {
-        "item_id": 8782,
-        "name": "Necklace of Celestial Energy",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 21994,
-        "name": "Protective Sleeves",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 26789,
-        "name": "Time Traveler's Abandoned Notebook",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ]
-  },
-  "A_Ferocious_Warboar|": {
-    "mob": "A_Ferocious_Warboar",
+    "mobs": [
+      "A_Deadly_Warboar",
+      "A_Ferocious_Warboar",
+      "A_Needletusk_Warboar",
+      "Champion_of_Torment",
+      "Dark_Knight_of_Terris",
+      "Deathbringer_Blackheart",
+      "Deathbringer_Rianit",
+      "Deathbringer_Skullsmash",
+      "Dersool_Fal`Giersnaol",
+      "Dreamwarp",
+      "Herlsoakian",
+      "Kraksmaal_Fir`Dethsin",
+      "Sinrunal_Gorgedreal",
+      "Undead_Squad_Leader",
+      "Xeroan_Xi`Geruonask",
+      "Xerskel_Gerodnsal"
+    ],
     "zone": "Plane of Time",
     "loot": [
       {
@@ -297,79 +245,6 @@
       }
     ]
   },
-  "A_Needletusk_Warboar|": {
-    "mob": "A_Needletusk_Warboar",
-    "zone": "Plane of Time",
-    "loot": [
-      {
-        "item_id": 21997,
-        "name": "Cloak of Wishes",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24776,
-        "name": "Dagger of Distraction",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 16367,
-        "name": "Elemental Chain Pant Pattern",
-        "sources": [
-          "dkp",
-          "elemental_armor"
-        ]
-      },
-      {
-        "item_id": 16373,
-        "name": "Elemental Greaves Mold",
-        "sources": [
-          "dkp",
-          "elemental_armor"
-        ]
-      },
-      {
-        "item_id": 16381,
-        "name": "Elemental Leather Pant Pattern",
-        "sources": [
-          "dkp",
-          "elemental_armor"
-        ]
-      },
-      {
-        "item_id": 16388,
-        "name": "Elemental Silk Pant Pattern",
-        "sources": [
-          "dkp",
-          "elemental_armor"
-        ]
-      },
-      {
-        "item_id": 8782,
-        "name": "Necklace of Celestial Energy",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 21994,
-        "name": "Protective Sleeves",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 26789,
-        "name": "Time Traveler's Abandoned Notebook",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ]
-  },
   "A_Perfected_Warder_of_Earth|": {
     "mob": "A_Perfected_Warder_of_Earth",
     "zone": "Plane of Earth",
@@ -470,21 +345,12 @@
       }
     ]
   },
-  "A_Pristine_Gem_Golem|": {
+  "A_Pristine_Gem_Golem (+1)|": {
     "mob": "A_Pristine_Gem_Golem",
-    "zone": "",
-    "loot": [
-      {
-        "item_id": 9490,
-        "name": "Primal Mask of the Earthcrafter",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ]
-  },
-  "A_Shimmering_Gem_Sentry|": {
-    "mob": "A_Shimmering_Gem_Sentry",
+    "mobs": [
+      "A_Pristine_Gem_Golem",
+      "A_Shimmering_Gem_Sentry"
+    ],
     "zone": "",
     "loot": [
       {
@@ -558,9 +424,33 @@
       }
     ]
   },
-  "A_shadow_reaver|": {
-    "mob": "A_shadow_reaver",
-    "zone": "",
+  "A_chanting_shade (+21)|Akheva Ruins": {
+    "mob": "A_chanting_shade",
+    "mobs": [
+      "A_chanting_shade",
+      "A_shadow_reaver",
+      "A_wailing_shade",
+      "Diabo_Tatrua",
+      "Renthias`Dator",
+      "Rygan_Anisher",
+      "Tavuel_Tatrua",
+      "Thall_Tatrua",
+      "The_Protector",
+      "Va_Tatrua",
+      "Xaui_Tatrua",
+      "Xi_Vius",
+      "Xi_Xaui",
+      "Xin`Xakra",
+      "Xin`Xakra_",
+      "Xin`Xakre",
+      "Xin`Xakri",
+      "Xin`Xakru",
+      "Xin`Xekra",
+      "Xin`Xikra",
+      "Xin`Xokra",
+      "Xin`Xukra"
+    ],
+    "zone": "Akheva Ruins",
     "loot": [
       {
         "item_id": 32166,
@@ -604,8 +494,15 @@
       }
     ]
   },
-  "Anar_of_Water|": {
+  "Anar_of_Water (+4)|Plane of Time": {
     "mob": "Anar_of_Water",
+    "mobs": [
+      "Anar_of_Water",
+      "Kazrok_of_Fire",
+      "Neimon_of_Air",
+      "Rythor_of_the_Undead",
+      "Terlok_of_Earth"
+    ],
     "zone": "Plane of Time",
     "loot": [
       {
@@ -645,9 +542,13 @@
       }
     ]
   },
-  "Avatar_of_the_Elements|": {
+  "Avatar_of_the_Elements (+1)|Plane of Time": {
     "mob": "Avatar_of_the_Elements",
-    "zone": "Plane of Time B",
+    "mobs": [
+      "Avatar_of_the_Elements",
+      "Supernatural_Guardian"
+    ],
+    "zone": "Plane of Time",
     "loot": [
       {
         "item_id": 5760,
@@ -700,8 +601,14 @@
       }
     ]
   },
-  "Azobian_the_Darklord|": {
+  "Azobian_the_Darklord (+3)|Plane of Fire": {
     "mob": "Azobian_the_Darklord",
+    "mobs": [
+      "Azobian_the_Darklord",
+      "Hebabbilys_the_Ragelord",
+      "Javonn_the_Overlord",
+      "Reaxnous_the_Chaoslord"
+    ],
     "zone": "Plane of Fire",
     "loot": [
       {
@@ -728,97 +635,6 @@
       {
         "item_id": 19094,
         "name": "Sable Shoes of Flame",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ]
-  },
-  "Bertoxxulous|": {
-    "mob": "Bertoxxulous",
-    "zone": "Plane of Time B",
-    "loot": [
-      {
-        "item_id": 15927,
-        "name": "Belt of Temporal Bindings",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 25995,
-        "name": "Boots of Despair",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 15847,
-        "name": "Celestial Cloak",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 8977,
-        "name": "Collar of Catastrophe",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 9574,
-        "name": "Eye of Dreams",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 26092,
-        "name": "Greatblade of Chaos",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 28651,
-        "name": "Leggings of Furious Might",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 26993,
-        "name": "Pulsing Onyx Ring",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 20508,
-        "name": "Symbol of Ancient Summoning",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 16377,
-        "name": "Timeless Leather Tunic Pattern",
-        "sources": [
-          "dkp",
-          "elemental_armor"
-        ]
-      },
-      {
-        "item_id": 24573,
-        "name": "Timespinner, Blade of the Hunter",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 9435,
-        "name": "Veil of the Inferno",
         "sources": [
           "dkp"
         ]
@@ -860,7 +676,7 @@
   },
   "Cazic_Thule|": {
     "mob": "Cazic_Thule",
-    "zone": "Plane of Time B",
+    "zone": "Plane of Time",
     "loot": [
       {
         "item_id": 15877,
@@ -949,81 +765,14 @@
       }
     ]
   },
-  "Champion_of_Torment|": {
-    "mob": "Champion_of_Torment",
-    "zone": "Plane of Time B",
-    "loot": [
-      {
-        "item_id": 21997,
-        "name": "Cloak of Wishes",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24776,
-        "name": "Dagger of Distraction",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 16367,
-        "name": "Elemental Chain Pant Pattern",
-        "sources": [
-          "dkp",
-          "elemental_armor"
-        ]
-      },
-      {
-        "item_id": 16373,
-        "name": "Elemental Greaves Mold",
-        "sources": [
-          "dkp",
-          "elemental_armor"
-        ]
-      },
-      {
-        "item_id": 16381,
-        "name": "Elemental Leather Pant Pattern",
-        "sources": [
-          "dkp",
-          "elemental_armor"
-        ]
-      },
-      {
-        "item_id": 16388,
-        "name": "Elemental Silk Pant Pattern",
-        "sources": [
-          "dkp",
-          "elemental_armor"
-        ]
-      },
-      {
-        "item_id": 8782,
-        "name": "Necklace of Celestial Energy",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 21994,
-        "name": "Protective Sleeves",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 26789,
-        "name": "Time Traveler's Abandoned Notebook",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ]
-  },
-  "Chancellor_Kirtra|": {
+  "Chancellor_Kirtra (+3)|": {
     "mob": "Chancellor_Kirtra",
+    "mobs": [
+      "Chancellor_Kirtra",
+      "Chancellor_Traxom",
+      "Omni_Magus_Crato",
+      "Warlord_Prollaz"
+    ],
     "zone": "",
     "loot": [
       {
@@ -1049,401 +798,15 @@
       }
     ]
   },
-  "Chancellor_Traxom|": {
-    "mob": "Chancellor_Traxom",
-    "zone": "",
-    "loot": [
-      {
-        "item_id": 11030,
-        "name": "Bracer of Flickering Flames",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 11324,
-        "name": "Fire Crested Rune",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 26798,
-        "name": "Flame Idol of Ro",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ]
-  },
-  "Dark_Knight_of_Terris|": {
-    "mob": "Dark_Knight_of_Terris",
-    "zone": "Plane of Time B",
-    "loot": [
-      {
-        "item_id": 21997,
-        "name": "Cloak of Wishes",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24776,
-        "name": "Dagger of Distraction",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 16367,
-        "name": "Elemental Chain Pant Pattern",
-        "sources": [
-          "dkp",
-          "elemental_armor"
-        ]
-      },
-      {
-        "item_id": 16373,
-        "name": "Elemental Greaves Mold",
-        "sources": [
-          "dkp",
-          "elemental_armor"
-        ]
-      },
-      {
-        "item_id": 16381,
-        "name": "Elemental Leather Pant Pattern",
-        "sources": [
-          "dkp",
-          "elemental_armor"
-        ]
-      },
-      {
-        "item_id": 16388,
-        "name": "Elemental Silk Pant Pattern",
-        "sources": [
-          "dkp",
-          "elemental_armor"
-        ]
-      },
-      {
-        "item_id": 8782,
-        "name": "Necklace of Celestial Energy",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 21994,
-        "name": "Protective Sleeves",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 26789,
-        "name": "Time Traveler's Abandoned Notebook",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ]
-  },
-  "Deathbringer_Blackheart|": {
-    "mob": "Deathbringer_Blackheart",
-    "zone": "Plane of Time B",
-    "loot": [
-      {
-        "item_id": 21997,
-        "name": "Cloak of Wishes",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24776,
-        "name": "Dagger of Distraction",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 16367,
-        "name": "Elemental Chain Pant Pattern",
-        "sources": [
-          "dkp",
-          "elemental_armor"
-        ]
-      },
-      {
-        "item_id": 16373,
-        "name": "Elemental Greaves Mold",
-        "sources": [
-          "dkp",
-          "elemental_armor"
-        ]
-      },
-      {
-        "item_id": 16381,
-        "name": "Elemental Leather Pant Pattern",
-        "sources": [
-          "dkp",
-          "elemental_armor"
-        ]
-      },
-      {
-        "item_id": 16388,
-        "name": "Elemental Silk Pant Pattern",
-        "sources": [
-          "dkp",
-          "elemental_armor"
-        ]
-      },
-      {
-        "item_id": 8782,
-        "name": "Necklace of Celestial Energy",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 21994,
-        "name": "Protective Sleeves",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 26789,
-        "name": "Time Traveler's Abandoned Notebook",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ]
-  },
-  "Deathbringer_Rianit|": {
-    "mob": "Deathbringer_Rianit",
-    "zone": "Plane of Time B",
-    "loot": [
-      {
-        "item_id": 21997,
-        "name": "Cloak of Wishes",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24776,
-        "name": "Dagger of Distraction",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 16367,
-        "name": "Elemental Chain Pant Pattern",
-        "sources": [
-          "dkp",
-          "elemental_armor"
-        ]
-      },
-      {
-        "item_id": 16373,
-        "name": "Elemental Greaves Mold",
-        "sources": [
-          "dkp",
-          "elemental_armor"
-        ]
-      },
-      {
-        "item_id": 16381,
-        "name": "Elemental Leather Pant Pattern",
-        "sources": [
-          "dkp",
-          "elemental_armor"
-        ]
-      },
-      {
-        "item_id": 16388,
-        "name": "Elemental Silk Pant Pattern",
-        "sources": [
-          "dkp",
-          "elemental_armor"
-        ]
-      },
-      {
-        "item_id": 8782,
-        "name": "Necklace of Celestial Energy",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 21994,
-        "name": "Protective Sleeves",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 26789,
-        "name": "Time Traveler's Abandoned Notebook",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ]
-  },
-  "Deathbringer_Skullsmash|": {
-    "mob": "Deathbringer_Skullsmash",
-    "zone": "Plane of Time B",
-    "loot": [
-      {
-        "item_id": 21997,
-        "name": "Cloak of Wishes",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24776,
-        "name": "Dagger of Distraction",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 16367,
-        "name": "Elemental Chain Pant Pattern",
-        "sources": [
-          "dkp",
-          "elemental_armor"
-        ]
-      },
-      {
-        "item_id": 16373,
-        "name": "Elemental Greaves Mold",
-        "sources": [
-          "dkp",
-          "elemental_armor"
-        ]
-      },
-      {
-        "item_id": 16381,
-        "name": "Elemental Leather Pant Pattern",
-        "sources": [
-          "dkp",
-          "elemental_armor"
-        ]
-      },
-      {
-        "item_id": 16388,
-        "name": "Elemental Silk Pant Pattern",
-        "sources": [
-          "dkp",
-          "elemental_armor"
-        ]
-      },
-      {
-        "item_id": 8782,
-        "name": "Necklace of Celestial Energy",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 21994,
-        "name": "Protective Sleeves",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 26789,
-        "name": "Time Traveler's Abandoned Notebook",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ]
-  },
-  "Dersool_Fal`Giersnaol|": {
-    "mob": "Dersool_Fal`Giersnaol",
-    "zone": "Plane of Time B",
-    "loot": [
-      {
-        "item_id": 21997,
-        "name": "Cloak of Wishes",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24776,
-        "name": "Dagger of Distraction",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 16367,
-        "name": "Elemental Chain Pant Pattern",
-        "sources": [
-          "dkp",
-          "elemental_armor"
-        ]
-      },
-      {
-        "item_id": 16373,
-        "name": "Elemental Greaves Mold",
-        "sources": [
-          "dkp",
-          "elemental_armor"
-        ]
-      },
-      {
-        "item_id": 16381,
-        "name": "Elemental Leather Pant Pattern",
-        "sources": [
-          "dkp",
-          "elemental_armor"
-        ]
-      },
-      {
-        "item_id": 16388,
-        "name": "Elemental Silk Pant Pattern",
-        "sources": [
-          "dkp",
-          "elemental_armor"
-        ]
-      },
-      {
-        "item_id": 8782,
-        "name": "Necklace of Celestial Energy",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 21994,
-        "name": "Protective Sleeves",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 26789,
-        "name": "Time Traveler's Abandoned Notebook",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ]
-  },
-  "Derugoak_Bloodwalker|": {
+  "Derugoak_Bloodwalker (+3)|Plane of Water": {
     "mob": "Derugoak_Bloodwalker",
-    "zone": "Plane of Earth",
+    "mobs": [
+      "Derugoak_Bloodwalker",
+      "Nrinda_of_Ice",
+      "Pwelon_of_Vapor",
+      "Vamuil_of_Water"
+    ],
+    "zone": "Plane of Water",
     "loot": [
       {
         "item_id": 16369,
@@ -1479,101 +842,12 @@
       }
     ]
   },
-  "Diabo_Tatrua|": {
-    "mob": "Diabo_Tatrua",
-    "zone": "",
-    "loot": [
-      {
-        "item_id": 32166,
-        "name": "Shaded amice",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 32159,
-        "name": "Shaded cloak",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ]
-  },
-  "Dreamwarp|": {
-    "mob": "Dreamwarp",
-    "zone": "Plane of Time B",
-    "loot": [
-      {
-        "item_id": 21997,
-        "name": "Cloak of Wishes",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24776,
-        "name": "Dagger of Distraction",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 16367,
-        "name": "Elemental Chain Pant Pattern",
-        "sources": [
-          "dkp",
-          "elemental_armor"
-        ]
-      },
-      {
-        "item_id": 16373,
-        "name": "Elemental Greaves Mold",
-        "sources": [
-          "dkp",
-          "elemental_armor"
-        ]
-      },
-      {
-        "item_id": 16381,
-        "name": "Elemental Leather Pant Pattern",
-        "sources": [
-          "dkp",
-          "elemental_armor"
-        ]
-      },
-      {
-        "item_id": 16388,
-        "name": "Elemental Silk Pant Pattern",
-        "sources": [
-          "dkp",
-          "elemental_armor"
-        ]
-      },
-      {
-        "item_id": 8782,
-        "name": "Necklace of Celestial Energy",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 21994,
-        "name": "Protective Sleeves",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 26789,
-        "name": "Time Traveler's Abandoned Notebook",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ]
-  },
-  "Earthen_Overseer|": {
+  "Earthen_Overseer (+1)|Plane of Time": {
     "mob": "Earthen_Overseer",
+    "mobs": [
+      "Earthen_Overseer",
+      "Windshapen_Warlord_of_Air"
+    ],
     "zone": "Plane of Time",
     "loot": [
       {
@@ -1837,8 +1111,16 @@
       }
     ]
   },
-  "Grondon_Zekkin|": {
+  "Grondon_Zekkin (+5)|": {
     "mob": "Grondon_Zekkin",
+    "mobs": [
+      "Grondon_Zekkin",
+      "Khalerogg_Dorfenbane",
+      "Kromzog_Zekkin",
+      "Valorankt_Zekkin",
+      "Vinric_Thunderclap",
+      "Zlirron_Windchill"
+    ],
     "zone": "",
     "loot": [
       {
@@ -1850,8 +1132,12 @@
       }
     ]
   },
-  "Gutripping_War_Beast|": {
+  "Gutripping_War_Beast (+1)|Plane of Time": {
     "mob": "Gutripping_War_Beast",
+    "mobs": [
+      "Gutripping_War_Beast",
+      "War_Shapen_Emissary"
+    ],
     "zone": "Plane of Time",
     "loot": [
       {
@@ -1911,116 +1197,9 @@
       }
     ]
   },
-  "Hebabbilys_the_Ragelord|": {
-    "mob": "Hebabbilys_the_Ragelord",
-    "zone": "Plane of Fire",
-    "loot": [
-      {
-        "item_id": 10240,
-        "name": "Band of Elder Understanding",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 27996,
-        "name": "Blaring Horn of Fire",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 27648,
-        "name": "Fire Marked Rune",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 19094,
-        "name": "Sable Shoes of Flame",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ]
-  },
-  "Herlsoakian|": {
-    "mob": "Herlsoakian",
-    "zone": "Plane of Time B",
-    "loot": [
-      {
-        "item_id": 21997,
-        "name": "Cloak of Wishes",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24776,
-        "name": "Dagger of Distraction",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 16367,
-        "name": "Elemental Chain Pant Pattern",
-        "sources": [
-          "dkp",
-          "elemental_armor"
-        ]
-      },
-      {
-        "item_id": 16373,
-        "name": "Elemental Greaves Mold",
-        "sources": [
-          "dkp",
-          "elemental_armor"
-        ]
-      },
-      {
-        "item_id": 16381,
-        "name": "Elemental Leather Pant Pattern",
-        "sources": [
-          "dkp",
-          "elemental_armor"
-        ]
-      },
-      {
-        "item_id": 16388,
-        "name": "Elemental Silk Pant Pattern",
-        "sources": [
-          "dkp",
-          "elemental_armor"
-        ]
-      },
-      {
-        "item_id": 8782,
-        "name": "Necklace of Celestial Energy",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 21994,
-        "name": "Protective Sleeves",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 26789,
-        "name": "Time Traveler's Abandoned Notebook",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ]
-  },
   "Innoruuk|": {
     "mob": "Innoruuk",
-    "zone": "Plane of Time B",
+    "zone": "Plane of Time",
     "loot": [
       {
         "item_id": 27274,
@@ -2109,47 +1288,17 @@
       }
     ]
   },
-  "Ixiblat_Fer|": {
+  "Ixiblat_Fer (+1)|Nagafen's Lair": {
     "mob": "Ixiblat_Fer",
-    "zone": "",
+    "mobs": [
+      "Ixiblat_Fer",
+      "Lord_Nagafen"
+    ],
+    "zone": "Nagafen's Lair",
     "loot": [
       {
         "item_id": 11621,
         "name": "Cloak of Flames",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ]
-  },
-  "Javonn_the_Overlord|": {
-    "mob": "Javonn_the_Overlord",
-    "zone": "Plane of Fire",
-    "loot": [
-      {
-        "item_id": 10240,
-        "name": "Band of Elder Understanding",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 27996,
-        "name": "Blaring Horn of Fire",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 27648,
-        "name": "Fire Marked Rune",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 19094,
-        "name": "Sable Shoes of Flame",
         "sources": [
           "dkp"
         ]
@@ -2176,146 +1325,6 @@
       }
     ]
   },
-  "Kazrok_of_Fire|": {
-    "mob": "Kazrok_of_Fire",
-    "zone": "Plane of Time",
-    "loot": [
-      {
-        "item_id": 9444,
-        "name": "Mask of Conceptual Energy",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 25844,
-        "name": "Pulsing Emerald Hoop",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 26992,
-        "name": "Ring of Force",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 28655,
-        "name": "Smooth Onyx Torque",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 28668,
-        "name": "Wristguard of Keen Vision",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ]
-  },
-  "Khalerogg_Dorfenbane|": {
-    "mob": "Khalerogg_Dorfenbane",
-    "zone": "",
-    "loot": [
-      {
-        "item_id": 24928,
-        "name": "Corroded Breastplate",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ]
-  },
-  "Kraksmaal_Fir`Dethsin|": {
-    "mob": "Kraksmaal_Fir`Dethsin",
-    "zone": "Plane of Time B",
-    "loot": [
-      {
-        "item_id": 21997,
-        "name": "Cloak of Wishes",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24776,
-        "name": "Dagger of Distraction",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 16367,
-        "name": "Elemental Chain Pant Pattern",
-        "sources": [
-          "dkp",
-          "elemental_armor"
-        ]
-      },
-      {
-        "item_id": 16373,
-        "name": "Elemental Greaves Mold",
-        "sources": [
-          "dkp",
-          "elemental_armor"
-        ]
-      },
-      {
-        "item_id": 16381,
-        "name": "Elemental Leather Pant Pattern",
-        "sources": [
-          "dkp",
-          "elemental_armor"
-        ]
-      },
-      {
-        "item_id": 16388,
-        "name": "Elemental Silk Pant Pattern",
-        "sources": [
-          "dkp",
-          "elemental_armor"
-        ]
-      },
-      {
-        "item_id": 8782,
-        "name": "Necklace of Celestial Energy",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 21994,
-        "name": "Protective Sleeves",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 26789,
-        "name": "Time Traveler's Abandoned Notebook",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ]
-  },
-  "Kromzog_Zekkin|": {
-    "mob": "Kromzog_Zekkin",
-    "zone": "",
-    "loot": [
-      {
-        "item_id": 24928,
-        "name": "Corroded Breastplate",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ]
-  },
   "Melernil_Faal`Armanna|": {
     "mob": "Melernil_Faal`Armanna",
     "zone": "",
@@ -2336,112 +1345,6 @@
       {
         "item_id": 1738,
         "name": "Narandi's Lance",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ]
-  },
-  "Neimon_of_Air|": {
-    "mob": "Neimon_of_Air",
-    "zone": "Plane of Time",
-    "loot": [
-      {
-        "item_id": 9444,
-        "name": "Mask of Conceptual Energy",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 25844,
-        "name": "Pulsing Emerald Hoop",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 26992,
-        "name": "Ring of Force",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 28655,
-        "name": "Smooth Onyx Torque",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 28668,
-        "name": "Wristguard of Keen Vision",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ]
-  },
-  "Nrinda_of_Ice|": {
-    "mob": "Nrinda_of_Ice",
-    "zone": "Plane of Water",
-    "loot": [
-      {
-        "item_id": 16369,
-        "name": "Elemental Bracer Mold",
-        "sources": [
-          "dkp",
-          "elemental_armor"
-        ]
-      },
-      {
-        "item_id": 16365,
-        "name": "Elemental Chain Bracelet Pattern",
-        "sources": [
-          "dkp",
-          "elemental_armor"
-        ]
-      },
-      {
-        "item_id": 16379,
-        "name": "Elemental Leather Wrist Pattern",
-        "sources": [
-          "dkp",
-          "elemental_armor"
-        ]
-      },
-      {
-        "item_id": 16386,
-        "name": "Elemental Silk Bracelet Pattern",
-        "sources": [
-          "dkp",
-          "elemental_armor"
-        ]
-      }
-    ]
-  },
-  "Omni_Magus_Crato|": {
-    "mob": "Omni_Magus_Crato",
-    "zone": "",
-    "loot": [
-      {
-        "item_id": 11030,
-        "name": "Bracer of Flickering Flames",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 11324,
-        "name": "Fire Crested Rune",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 26798,
-        "name": "Flame Idol of Ro",
         "sources": [
           "dkp"
         ]
@@ -2495,44 +1398,6 @@
       }
     ]
   },
-  "Pwelon_of_Vapor|": {
-    "mob": "Pwelon_of_Vapor",
-    "zone": "Plane of Water",
-    "loot": [
-      {
-        "item_id": 16369,
-        "name": "Elemental Bracer Mold",
-        "sources": [
-          "dkp",
-          "elemental_armor"
-        ]
-      },
-      {
-        "item_id": 16365,
-        "name": "Elemental Chain Bracelet Pattern",
-        "sources": [
-          "dkp",
-          "elemental_armor"
-        ]
-      },
-      {
-        "item_id": 16379,
-        "name": "Elemental Leather Wrist Pattern",
-        "sources": [
-          "dkp",
-          "elemental_armor"
-        ]
-      },
-      {
-        "item_id": 16386,
-        "name": "Elemental Silk Bracelet Pattern",
-        "sources": [
-          "dkp",
-          "elemental_armor"
-        ]
-      }
-    ]
-  },
   "Pzo_Adan|": {
     "mob": "Pzo_Adan",
     "zone": "",
@@ -2548,7 +1413,7 @@
   },
   "Quarm|": {
     "mob": "Quarm",
-    "zone": "Plane of Time B",
+    "zone": "Plane of Time",
     "loot": [
       {
         "item_id": 21993,
@@ -2691,7 +1556,7 @@
   },
   "Rallos_Zek|": {
     "mob": "Rallos_Zek",
-    "zone": "Plane of Time B",
+    "zone": "Plane of Time",
     "loot": [
       {
         "item_id": 26990,
@@ -2782,7 +1647,7 @@
   },
   "Rallos_Zek_the_Warlord|": {
     "mob": "Rallos_Zek_the_Warlord",
-    "zone": "Plane of Time B",
+    "zone": "Plane of Time",
     "loot": [
       {
         "item_id": 7770,
@@ -2862,40 +1727,6 @@
       }
     ]
   },
-  "Reaxnous_the_Chaoslord|": {
-    "mob": "Reaxnous_the_Chaoslord",
-    "zone": "Plane of Fire",
-    "loot": [
-      {
-        "item_id": 10240,
-        "name": "Band of Elder Understanding",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 27996,
-        "name": "Blaring Horn of Fire",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 27648,
-        "name": "Fire Marked Rune",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 19094,
-        "name": "Sable Shoes of Flame",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ]
-  },
   "Rydda`Dar|": {
     "mob": "Rydda`Dar",
     "zone": "",
@@ -2923,50 +1754,9 @@
       }
     ]
   },
-  "Rythor_of_the_Undead|": {
-    "mob": "Rythor_of_the_Undead",
-    "zone": "Plane of Time",
-    "loot": [
-      {
-        "item_id": 9444,
-        "name": "Mask of Conceptual Energy",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 25844,
-        "name": "Pulsing Emerald Hoop",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 26992,
-        "name": "Ring of Force",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 28655,
-        "name": "Smooth Onyx Torque",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 28668,
-        "name": "Wristguard of Keen Vision",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ]
-  },
   "Saryrn|": {
     "mob": "Saryrn",
-    "zone": "Plane of Time B",
+    "zone": "Plane of Time",
     "loot": [
       {
         "item_id": 28648,
@@ -3123,137 +1913,9 @@
       }
     ]
   },
-  "Sinrunal_Gorgedreal|": {
-    "mob": "Sinrunal_Gorgedreal",
-    "zone": "Plane of Time B",
-    "loot": [
-      {
-        "item_id": 21997,
-        "name": "Cloak of Wishes",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24776,
-        "name": "Dagger of Distraction",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 16367,
-        "name": "Elemental Chain Pant Pattern",
-        "sources": [
-          "dkp",
-          "elemental_armor"
-        ]
-      },
-      {
-        "item_id": 16373,
-        "name": "Elemental Greaves Mold",
-        "sources": [
-          "dkp",
-          "elemental_armor"
-        ]
-      },
-      {
-        "item_id": 16381,
-        "name": "Elemental Leather Pant Pattern",
-        "sources": [
-          "dkp",
-          "elemental_armor"
-        ]
-      },
-      {
-        "item_id": 16388,
-        "name": "Elemental Silk Pant Pattern",
-        "sources": [
-          "dkp",
-          "elemental_armor"
-        ]
-      },
-      {
-        "item_id": 8782,
-        "name": "Necklace of Celestial Energy",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 21994,
-        "name": "Protective Sleeves",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 26789,
-        "name": "Time Traveler's Abandoned Notebook",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ]
-  },
-  "Supernatural_Guardian|": {
-    "mob": "Supernatural_Guardian",
-    "zone": "Plane of Time B",
-    "loot": [
-      {
-        "item_id": 5760,
-        "name": "Earring of Xaoth Kor",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 22998,
-        "name": "Ethereal Destroyer",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 26983,
-        "name": "Faceguard of Frenzy",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 28657,
-        "name": "Fiery Crystal Guard",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 29174,
-        "name": "Mask of Strategic Insight",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 13638,
-        "name": "Pauldrons of Purity",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 32606,
-        "name": "Timeless Coral Greatsword",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ]
-  },
   "Tallon_Zek|": {
     "mob": "Tallon_Zek",
-    "zone": "Plane of Time B",
+    "zone": "Plane of Time",
     "loot": [
       {
         "item_id": 28654,
@@ -3327,70 +1989,9 @@
       }
     ]
   },
-  "Tavuel_Tatrua|": {
-    "mob": "Tavuel_Tatrua",
-    "zone": "",
-    "loot": [
-      {
-        "item_id": 32166,
-        "name": "Shaded amice",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 32159,
-        "name": "Shaded cloak",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ]
-  },
-  "Terlok_of_Earth|": {
-    "mob": "Terlok_of_Earth",
-    "zone": "Plane of Time",
-    "loot": [
-      {
-        "item_id": 9444,
-        "name": "Mask of Conceptual Energy",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 25844,
-        "name": "Pulsing Emerald Hoop",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 26992,
-        "name": "Ring of Force",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 28655,
-        "name": "Smooth Onyx Torque",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 28668,
-        "name": "Wristguard of Keen Vision",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ]
-  },
   "Terris_Thule|": {
     "mob": "Terris_Thule",
-    "zone": "Plane of Time B",
+    "zone": "Plane of Time",
     "loot": [
       {
         "item_id": 21995,
@@ -3457,29 +2058,9 @@
       }
     ]
   },
-  "Thall_Tatrua|": {
-    "mob": "Thall_Tatrua",
-    "zone": "",
-    "loot": [
-      {
-        "item_id": 32166,
-        "name": "Shaded amice",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 32159,
-        "name": "Shaded cloak",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ]
-  },
   "The_Avatar_of_War|": {
     "mob": "The_Avatar_of_War",
-    "zone": "Plane of Time B",
+    "zone": "Plane of Time",
     "loot": [
       {
         "item_id": 25210,
@@ -3592,102 +2173,9 @@
       }
     ]
   },
-  "Undead_Squad_Leader|": {
-    "mob": "Undead_Squad_Leader",
-    "zone": "Plane of Time B",
-    "loot": [
-      {
-        "item_id": 21997,
-        "name": "Cloak of Wishes",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24776,
-        "name": "Dagger of Distraction",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 16367,
-        "name": "Elemental Chain Pant Pattern",
-        "sources": [
-          "dkp",
-          "elemental_armor"
-        ]
-      },
-      {
-        "item_id": 16373,
-        "name": "Elemental Greaves Mold",
-        "sources": [
-          "dkp",
-          "elemental_armor"
-        ]
-      },
-      {
-        "item_id": 16381,
-        "name": "Elemental Leather Pant Pattern",
-        "sources": [
-          "dkp",
-          "elemental_armor"
-        ]
-      },
-      {
-        "item_id": 16388,
-        "name": "Elemental Silk Pant Pattern",
-        "sources": [
-          "dkp",
-          "elemental_armor"
-        ]
-      },
-      {
-        "item_id": 8782,
-        "name": "Necklace of Celestial Energy",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 21994,
-        "name": "Protective Sleeves",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 26789,
-        "name": "Time Traveler's Abandoned Notebook",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ]
-  },
-  "Va_Tatrua|": {
-    "mob": "Va_Tatrua",
-    "zone": "",
-    "loot": [
-      {
-        "item_id": 32166,
-        "name": "Shaded amice",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 32159,
-        "name": "Shaded cloak",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ]
-  },
   "Vallon_Zek|": {
     "mob": "Vallon_Zek",
-    "zone": "Plane of Time B",
+    "zone": "Plane of Time",
     "loot": [
       {
         "item_id": 27818,
@@ -3796,484 +2284,6 @@
       }
     ]
   },
-  "Valorankt_Zekkin|": {
-    "mob": "Valorankt_Zekkin",
-    "zone": "",
-    "loot": [
-      {
-        "item_id": 24928,
-        "name": "Corroded Breastplate",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ]
-  },
-  "Vamuil_of_Water|": {
-    "mob": "Vamuil_of_Water",
-    "zone": "",
-    "loot": [
-      {
-        "item_id": 16369,
-        "name": "Elemental Bracer Mold",
-        "sources": [
-          "dkp",
-          "elemental_armor"
-        ]
-      },
-      {
-        "item_id": 16365,
-        "name": "Elemental Chain Bracelet Pattern",
-        "sources": [
-          "dkp",
-          "elemental_armor"
-        ]
-      },
-      {
-        "item_id": 16379,
-        "name": "Elemental Leather Wrist Pattern",
-        "sources": [
-          "dkp",
-          "elemental_armor"
-        ]
-      },
-      {
-        "item_id": 16386,
-        "name": "Elemental Silk Bracelet Pattern",
-        "sources": [
-          "dkp",
-          "elemental_armor"
-        ]
-      }
-    ]
-  },
-  "Vinric_Thunderclap|": {
-    "mob": "Vinric_Thunderclap",
-    "zone": "",
-    "loot": [
-      {
-        "item_id": 24928,
-        "name": "Corroded Breastplate",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ]
-  },
-  "War_Shapen_Emissary|": {
-    "mob": "War_Shapen_Emissary",
-    "zone": "Plane of Time",
-    "loot": [
-      {
-        "item_id": 28662,
-        "name": "Girdle of Restoration",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 21999,
-        "name": "Hoop of the Enlightened",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 26995,
-        "name": "Tiny Jade Ring",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ]
-  },
-  "Warlord_Prollaz|": {
-    "mob": "Warlord_Prollaz",
-    "zone": "",
-    "loot": [
-      {
-        "item_id": 11030,
-        "name": "Bracer of Flickering Flames",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 11324,
-        "name": "Fire Crested Rune",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 26798,
-        "name": "Flame Idol of Ro",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ]
-  },
-  "Windshapen_Warlord_of_Air|": {
-    "mob": "Windshapen_Warlord_of_Air",
-    "zone": "Plane of Time",
-    "loot": [
-      {
-        "item_id": 21996,
-        "name": "Cloak of Ferocity",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 28660,
-        "name": "Drape of the Unending",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 27990,
-        "name": "Gauntlets of Disruption",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 25998,
-        "name": "Shield of the Vortex",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ]
-  },
-  "Xeroan_Xi`Geruonask|": {
-    "mob": "Xeroan_Xi`Geruonask",
-    "zone": "Plane of Time B",
-    "loot": [
-      {
-        "item_id": 21997,
-        "name": "Cloak of Wishes",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24776,
-        "name": "Dagger of Distraction",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 16367,
-        "name": "Elemental Chain Pant Pattern",
-        "sources": [
-          "dkp",
-          "elemental_armor"
-        ]
-      },
-      {
-        "item_id": 16373,
-        "name": "Elemental Greaves Mold",
-        "sources": [
-          "dkp",
-          "elemental_armor"
-        ]
-      },
-      {
-        "item_id": 16381,
-        "name": "Elemental Leather Pant Pattern",
-        "sources": [
-          "dkp",
-          "elemental_armor"
-        ]
-      },
-      {
-        "item_id": 16388,
-        "name": "Elemental Silk Pant Pattern",
-        "sources": [
-          "dkp",
-          "elemental_armor"
-        ]
-      },
-      {
-        "item_id": 8782,
-        "name": "Necklace of Celestial Energy",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 21994,
-        "name": "Protective Sleeves",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 26789,
-        "name": "Time Traveler's Abandoned Notebook",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ]
-  },
-  "Xerskel_Gerodnsal|": {
-    "mob": "Xerskel_Gerodnsal",
-    "zone": "Plane of Time B",
-    "loot": [
-      {
-        "item_id": 21997,
-        "name": "Cloak of Wishes",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24776,
-        "name": "Dagger of Distraction",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 16367,
-        "name": "Elemental Chain Pant Pattern",
-        "sources": [
-          "dkp",
-          "elemental_armor"
-        ]
-      },
-      {
-        "item_id": 16373,
-        "name": "Elemental Greaves Mold",
-        "sources": [
-          "dkp",
-          "elemental_armor"
-        ]
-      },
-      {
-        "item_id": 16381,
-        "name": "Elemental Leather Pant Pattern",
-        "sources": [
-          "dkp",
-          "elemental_armor"
-        ]
-      },
-      {
-        "item_id": 16388,
-        "name": "Elemental Silk Pant Pattern",
-        "sources": [
-          "dkp",
-          "elemental_armor"
-        ]
-      },
-      {
-        "item_id": 8782,
-        "name": "Necklace of Celestial Energy",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 21994,
-        "name": "Protective Sleeves",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 26789,
-        "name": "Time Traveler's Abandoned Notebook",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ]
-  },
-  "Xin`Xakra|": {
-    "mob": "Xin`Xakra",
-    "zone": "",
-    "loot": [
-      {
-        "item_id": 32166,
-        "name": "Shaded amice",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 32159,
-        "name": "Shaded cloak",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ]
-  },
-  "Xin`Xakra_|": {
-    "mob": "Xin`Xakra_",
-    "zone": "",
-    "loot": [
-      {
-        "item_id": 32166,
-        "name": "Shaded amice",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 32159,
-        "name": "Shaded cloak",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ]
-  },
-  "Xin`Xakre|": {
-    "mob": "Xin`Xakre",
-    "zone": "",
-    "loot": [
-      {
-        "item_id": 32166,
-        "name": "Shaded amice",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 32159,
-        "name": "Shaded cloak",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ]
-  },
-  "Xin`Xakri|": {
-    "mob": "Xin`Xakri",
-    "zone": "",
-    "loot": [
-      {
-        "item_id": 32166,
-        "name": "Shaded amice",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 32159,
-        "name": "Shaded cloak",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ]
-  },
-  "Xin`Xakru|": {
-    "mob": "Xin`Xakru",
-    "zone": "",
-    "loot": [
-      {
-        "item_id": 32166,
-        "name": "Shaded amice",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 32159,
-        "name": "Shaded cloak",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ]
-  },
-  "Xin`Xekra|": {
-    "mob": "Xin`Xekra",
-    "zone": "",
-    "loot": [
-      {
-        "item_id": 32166,
-        "name": "Shaded amice",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 32159,
-        "name": "Shaded cloak",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ]
-  },
-  "Xin`Xikra|": {
-    "mob": "Xin`Xikra",
-    "zone": "",
-    "loot": [
-      {
-        "item_id": 32166,
-        "name": "Shaded amice",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 32159,
-        "name": "Shaded cloak",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ]
-  },
-  "Xin`Xokra|": {
-    "mob": "Xin`Xokra",
-    "zone": "",
-    "loot": [
-      {
-        "item_id": 32166,
-        "name": "Shaded amice",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 32159,
-        "name": "Shaded cloak",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ]
-  },
-  "Xin`Xukra|": {
-    "mob": "Xin`Xukra",
-    "zone": "",
-    "loot": [
-      {
-        "item_id": 32166,
-        "name": "Shaded amice",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 32159,
-        "name": "Shaded cloak",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ]
-  },
   "Zandal_Adan|": {
     "mob": "Zandal_Adan",
     "zone": "",
@@ -4281,19 +2291,6 @@
       {
         "item_id": 13653,
         "name": "Drape of Wings",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ]
-  },
-  "Zlirron_Windchill|": {
-    "mob": "Zlirron_Windchill",
-    "zone": "",
-    "loot": [
-      {
-        "item_id": 24928,
-        "name": "Corroded Breastplate",
         "sources": [
           "dkp"
         ]
@@ -4313,8 +2310,12 @@
       }
     ]
   },
-  "an_Enchanted_War_Boar|": {
-    "mob": "an_Enchanted_War_Boar",
+  "a_torrid_elemental (+1)|Plane of Time": {
+    "mob": "a_torrid_elemental",
+    "mobs": [
+      "a_torrid_elemental",
+      "an_Enchanted_War_Boar"
+    ],
     "zone": "Plane of Time",
     "loot": [
       {
@@ -4381,50 +2382,17 @@
     ],
     "respawn_seconds": 1200
   },
-  "A_chanting_shade|Akheva Ruins": {
-    "mob": "A_chanting_shade",
-    "zone": "Akheva Ruins",
-    "loot": [
-      {
-        "item_id": 32166,
-        "name": "Shaded amice",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 32159,
-        "name": "Shaded cloak",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ],
-    "respawn_seconds": 285
-  },
-  "A_wailing_shade|Akheva Ruins": {
-    "mob": "A_wailing_shade",
-    "zone": "Akheva Ruins",
-    "loot": [
-      {
-        "item_id": 32166,
-        "name": "Shaded amice",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 32159,
-        "name": "Shaded cloak",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ],
-    "respawn_seconds": 285
-  },
-  "Altar_Priest|Akheva Ruins": {
+  "Altar_Priest (+6)|Akheva Ruins": {
     "mob": "Altar_Priest",
+    "mobs": [
+      "Altar_Priest",
+      "An_Akhevan_lifetaker",
+      "Atulinae`Vius",
+      "Lorekeeper",
+      "Sheleric_Vis",
+      "Transient_Emissary",
+      "Transient_Xin"
+    ],
     "zone": "Akheva Ruins",
     "loot": [
       {
@@ -4434,106 +2402,7 @@
           "dkp"
         ]
       }
-    ],
-    "respawn_seconds": 1200
-  },
-  "An_Akhevan_lifetaker|Akheva Ruins": {
-    "mob": "An_Akhevan_lifetaker",
-    "zone": "Akheva Ruins",
-    "loot": [
-      {
-        "item_id": 32176,
-        "name": "Temariel Vex",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ],
-    "respawn_seconds": 216000
-  },
-  "Atulinae`Vius|Akheva Ruins": {
-    "mob": "Atulinae`Vius",
-    "zone": "Akheva Ruins",
-    "loot": [
-      {
-        "item_id": 32176,
-        "name": "Temariel Vex",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ],
-    "respawn_seconds": 285
-  },
-  "Lorekeeper|Akheva Ruins": {
-    "mob": "Lorekeeper",
-    "zone": "Akheva Ruins",
-    "loot": [
-      {
-        "item_id": 32176,
-        "name": "Temariel Vex",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ],
-    "respawn_seconds": 1200
-  },
-  "Renthias`Dator|Akheva Ruins": {
-    "mob": "Renthias`Dator",
-    "zone": "Akheva Ruins",
-    "loot": [
-      {
-        "item_id": 32166,
-        "name": "Shaded amice",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 32159,
-        "name": "Shaded cloak",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ],
-    "respawn_seconds": 1200
-  },
-  "Rygan_Anisher|Akheva Ruins": {
-    "mob": "Rygan_Anisher",
-    "zone": "Akheva Ruins",
-    "loot": [
-      {
-        "item_id": 32166,
-        "name": "Shaded amice",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 32159,
-        "name": "Shaded cloak",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ],
-    "respawn_seconds": 1200
-  },
-  "Sheleric_Vis|Akheva Ruins": {
-    "mob": "Sheleric_Vis",
-    "zone": "Akheva Ruins",
-    "loot": [
-      {
-        "item_id": 32176,
-        "name": "Temariel Vex",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ],
-    "respawn_seconds": 172800
+    ]
   },
   "The_Itraer_Vius|Akheva Ruins": {
     "mob": "The_Itraer_Vius",
@@ -4621,27 +2490,6 @@
     ],
     "respawn_seconds": 259200
   },
-  "The_Protector|Akheva Ruins": {
-    "mob": "The_Protector",
-    "zone": "Akheva Ruins",
-    "loot": [
-      {
-        "item_id": 32166,
-        "name": "Shaded amice",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 32159,
-        "name": "Shaded cloak",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ],
-    "respawn_seconds": 1200
-  },
   "The_Va`Dyn|Akheva Ruins": {
     "mob": "The_Va`Dyn",
     "zone": "Akheva Ruins",
@@ -4720,34 +2568,6 @@
     ],
     "respawn_seconds": 259200
   },
-  "Transient_Emissary|Akheva Ruins": {
-    "mob": "Transient_Emissary",
-    "zone": "Akheva Ruins",
-    "loot": [
-      {
-        "item_id": 32176,
-        "name": "Temariel Vex",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ],
-    "respawn_seconds": 1200
-  },
-  "Transient_Xin|Akheva Ruins": {
-    "mob": "Transient_Xin",
-    "zone": "Akheva Ruins",
-    "loot": [
-      {
-        "item_id": 32176,
-        "name": "Temariel Vex",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ],
-    "respawn_seconds": 1200
-  },
   "Vius_Tatrua|Akheva Ruins": {
     "mob": "Vius_Tatrua",
     "zone": "Akheva Ruins",
@@ -4775,69 +2595,6 @@
       }
     ],
     "respawn_seconds": 172800
-  },
-  "Xaui_Tatrua|Akheva Ruins": {
-    "mob": "Xaui_Tatrua",
-    "zone": "Akheva Ruins",
-    "loot": [
-      {
-        "item_id": 32166,
-        "name": "Shaded amice",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 32159,
-        "name": "Shaded cloak",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ],
-    "respawn_seconds": 172800
-  },
-  "Xi_Vius|Akheva Ruins": {
-    "mob": "Xi_Vius",
-    "zone": "Akheva Ruins",
-    "loot": [
-      {
-        "item_id": 32166,
-        "name": "Shaded amice",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 32159,
-        "name": "Shaded cloak",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ],
-    "respawn_seconds": 216000
-  },
-  "Xi_Xaui|Akheva Ruins": {
-    "mob": "Xi_Xaui",
-    "zone": "Akheva Ruins",
-    "loot": [
-      {
-        "item_id": 32166,
-        "name": "Shaded amice",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 32159,
-        "name": "Shaded cloak",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ],
-    "respawn_seconds": 1200
   },
   "Xin_Thall|Akheva Ruins": {
     "mob": "Xin_Thall",
@@ -4965,8 +2722,12 @@
     ],
     "respawn_seconds": 21600
   },
-  "Eindride_Icestorm|Bastion of Thunder": {
+  "Eindride_Icestorm (+1)|Bastion of Thunder": {
     "mob": "Eindride_Icestorm",
+    "mobs": [
+      "Eindride_Icestorm",
+      "Tagrin_Maldric"
+    ],
     "zone": "Bastion of Thunder",
     "loot": [
       {
@@ -4976,8 +2737,7 @@
           "dkp"
         ]
       }
-    ],
-    "respawn_seconds": 21600
+    ]
   },
   "Gaukr_Sandstorm|Bastion of Thunder": {
     "mob": "Gaukr_Sandstorm",
@@ -5140,23 +2900,9 @@
     ],
     "respawn_seconds": 86400
   },
-  "Tagrin_Maldric|Drunder, the Fortress of Zek": {
-    "mob": "Tagrin_Maldric",
-    "zone": "Drunder, the Fortress of Zek",
-    "loot": [
-      {
-        "item_id": 16346,
-        "name": "Ornate Breastplate Mold",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ],
-    "respawn_seconds": 86400
-  },
   "Tallon_Zek|Drunder, the Fortress of Zek": {
     "mob": "Tallon_Zek",
-    "zone": "Plane of Time B",
+    "zone": "Plane of Time",
     "loot": [
       {
         "item_id": 26739,
@@ -5229,8 +2975,14 @@
     ],
     "respawn_seconds": 259200
   },
-  "Armor_of_Zek|Kael Drakkel": {
-    "mob": "Armor_of_Zek",
+  "a_guardian_of_Zek (+3)|Kael Drakkel": {
+    "mob": "a_guardian_of_Zek",
+    "mobs": [
+      "a_guardian_of_Zek",
+      "Armor_of_Zek",
+      "High_Priest_of_Tallon_Zek",
+      "High_Priest_of_Vallon_Zek"
+    ],
     "zone": "Kael Drakkel",
     "loot": [
       {
@@ -5275,8 +3027,7 @@
           "dkp"
         ]
       }
-    ],
-    "respawn_seconds": 1754
+    ]
   },
   "Derakor_the_Vindicator|Kael Drakkel": {
     "mob": "Derakor_the_Vindicator",
@@ -5315,104 +3066,6 @@
       }
     ],
     "respawn_seconds": 28800
-  },
-  "High_Priest_of_Tallon_Zek|Kael Drakkel": {
-    "mob": "High_Priest_of_Tallon_Zek",
-    "zone": "Kael Drakkel",
-    "loot": [
-      {
-        "item_id": 24928,
-        "name": "Corroded Breastplate",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24936,
-        "name": "Corroded Chain Leggings",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24935,
-        "name": "Corroded Chain Tunic",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24943,
-        "name": "Eroded Leather Leggings",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24942,
-        "name": "Eroded Leather Tunic",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24949,
-        "name": "Torn Enchanted Silk Robe",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ],
-    "respawn_seconds": 10469
-  },
-  "High_Priest_of_Vallon_Zek|Kael Drakkel": {
-    "mob": "High_Priest_of_Vallon_Zek",
-    "zone": "Kael Drakkel",
-    "loot": [
-      {
-        "item_id": 24928,
-        "name": "Corroded Breastplate",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24936,
-        "name": "Corroded Chain Leggings",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24935,
-        "name": "Corroded Chain Tunic",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24943,
-        "name": "Eroded Leather Leggings",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24942,
-        "name": "Eroded Leather Tunic",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24949,
-        "name": "Torn Enchanted Silk Robe",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ],
-    "respawn_seconds": 10469
   },
   "King_Tormax|Kael Drakkel": {
     "mob": "King_Tormax",
@@ -5561,55 +3214,6 @@
     ],
     "respawn_seconds": 432000
   },
-  "a_guardian_of_Zek|Kael Drakkel": {
-    "mob": "a_guardian_of_Zek",
-    "zone": "Kael Drakkel",
-    "loot": [
-      {
-        "item_id": 24928,
-        "name": "Corroded Breastplate",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24936,
-        "name": "Corroded Chain Leggings",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24935,
-        "name": "Corroded Chain Tunic",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24943,
-        "name": "Eroded Leather Leggings",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24942,
-        "name": "Eroded Leather Tunic",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24949,
-        "name": "Torn Enchanted Silk Robe",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ],
-    "respawn_seconds": 1754
-  },
   "Lcea_Katta|Katta Castellum": {
     "mob": "Lcea_Katta",
     "zone": "Katta Castellum",
@@ -5647,190 +3251,14 @@
     ],
     "respawn_seconds": 453600
   },
-  "a_fire_elemental|Lavastorm Mountains": {
-    "mob": "a_fire_elemental",
-    "zone": "Lavastorm Mountains",
-    "loot": [],
-    "respawn_seconds": 350
-  },
-  "A_Battle_Horror|Mons Letalis": {
-    "mob": "A_Battle_Horror",
-    "zone": "Mons Letalis",
-    "loot": [],
-    "respawn_seconds": 420
-  },
-  "A_Dark_Rockhopper|Mons Letalis": {
-    "mob": "A_Dark_Rockhopper",
-    "zone": "Mons Letalis",
-    "loot": [],
-    "respawn_seconds": 720
-  },
-  "A_Defiant_Spire_Spirit|Mons Letalis": {
-    "mob": "A_Defiant_Spire_Spirit",
-    "zone": "Mons Letalis",
-    "loot": [],
-    "respawn_seconds": 720
-  },
-  "A_Dishonorable_Horror|Mons Letalis": {
-    "mob": "A_Dishonorable_Horror",
-    "zone": "Mons Letalis",
-    "loot": [],
-    "respawn_seconds": 420
-  },
-  "A_Dread_Horror|Mons Letalis": {
-    "mob": "A_Dread_Horror",
-    "zone": "Mons Letalis",
-    "loot": [],
-    "respawn_seconds": 420
-  },
-  "A_Dread_Thought_Leech|Mons Letalis": {
-    "mob": "A_Dread_Thought_Leech",
-    "zone": "Mons Letalis",
-    "loot": [],
-    "respawn_seconds": 420
-  },
-  "A_Foretold_Horror|Mons Letalis": {
-    "mob": "A_Foretold_Horror",
-    "zone": "Mons Letalis",
-    "loot": [],
-    "respawn_seconds": 420
-  },
-  "A_Hardy_Rockhopper|Mons Letalis": {
-    "mob": "A_Hardy_Rockhopper",
-    "zone": "Mons Letalis",
-    "loot": [],
-    "respawn_seconds": 720
-  },
-  "A_Honored_Spire_Spirit|Mons Letalis": {
-    "mob": "A_Honored_Spire_Spirit",
-    "zone": "Mons Letalis",
-    "loot": [],
-    "respawn_seconds": 720
-  },
-  "A_Light_Spire_Spirit|Mons Letalis": {
-    "mob": "A_Light_Spire_Spirit",
-    "zone": "Mons Letalis",
-    "loot": [],
-    "respawn_seconds": 720
-  },
-  "A_Light_Stonegrabber|Mons Letalis": {
-    "mob": "A_Light_Stonegrabber",
-    "zone": "Mons Letalis",
-    "loot": [],
-    "respawn_seconds": 720
-  },
-  "A_Raging_Rockhopper|Mons Letalis": {
-    "mob": "A_Raging_Rockhopper",
-    "zone": "Mons Letalis",
-    "loot": [],
-    "respawn_seconds": 720
-  },
-  "A_Scorched_Stonegrabber|Mons Letalis": {
-    "mob": "A_Scorched_Stonegrabber",
-    "zone": "Mons Letalis",
-    "loot": [],
-    "respawn_seconds": 720
-  },
-  "A_Sculpted_Stonegrabber|Mons Letalis": {
-    "mob": "A_Sculpted_Stonegrabber",
-    "zone": "Mons Letalis",
-    "loot": [],
-    "respawn_seconds": 720
-  },
-  "A_Shik_Nar_Centurion|Mons Letalis": {
-    "mob": "A_Shik_Nar_Centurion",
-    "zone": "Mons Letalis",
-    "loot": [],
-    "respawn_seconds": 720
-  },
-  "A_Shik_Nar_Combatant|Mons Letalis": {
-    "mob": "A_Shik_Nar_Combatant",
-    "zone": "Mons Letalis",
-    "loot": [],
-    "respawn_seconds": 720
-  },
-  "A_Shik_Nar_Defender|Mons Letalis": {
-    "mob": "A_Shik_Nar_Defender",
-    "zone": "Mons Letalis",
-    "loot": [],
-    "respawn_seconds": 720
-  },
-  "A_Shik_Nar_Legionnaire|Mons Letalis": {
-    "mob": "A_Shik_Nar_Legionnaire",
-    "zone": "Mons Letalis",
-    "loot": [],
-    "respawn_seconds": 720
-  },
-  "A_Shik_Nar_Screecher|Mons Letalis": {
-    "mob": "A_Shik_Nar_Screecher",
-    "zone": "Mons Letalis",
-    "loot": [],
-    "respawn_seconds": 720
-  },
-  "A_Steadfast_Spire_Spirit|Mons Letalis": {
-    "mob": "A_Steadfast_Spire_Spirit",
-    "zone": "Mons Letalis",
-    "loot": [],
-    "respawn_seconds": 720
-  },
-  "A_Studded_Stonegrabber|Mons Letalis": {
-    "mob": "A_Studded_Stonegrabber",
-    "zone": "Mons Letalis",
-    "loot": [],
-    "respawn_seconds": 720
-  },
-  "A_Vigorous_Rockhopper|Mons Letalis": {
-    "mob": "A_Vigorous_Rockhopper",
-    "zone": "Mons Letalis",
-    "loot": [],
-    "respawn_seconds": 720
-  },
-  "A_Violent_Rockhopper|Mons Letalis": {
-    "mob": "A_Violent_Rockhopper",
-    "zone": "Mons Letalis",
-    "loot": [],
-    "respawn_seconds": 720
-  },
-  "An_Ancient_Stonegrabber|Mons Letalis": {
-    "mob": "An_Ancient_Stonegrabber",
-    "zone": "Mons Letalis",
-    "loot": [],
-    "respawn_seconds": 720
-  },
-  "An_Ebony_Horror|Mons Letalis": {
-    "mob": "An_Ebony_Horror",
-    "zone": "Mons Letalis",
-    "loot": [],
-    "respawn_seconds": 420
-  },
-  "Lord_Nagafen|Nagafen's Lair": {
-    "mob": "Lord_Nagafen",
-    "zone": "Nagafen's Lair",
-    "loot": [
-      {
-        "item_id": 11621,
-        "name": "Cloak of Flames",
-        "sources": [
-          "dkp"
-        ]
-      }
+  "Faydedar (+3)|Permafrost Caverns": {
+    "mob": "Faydedar",
+    "mobs": [
+      "Faydedar",
+      "Gorenaire",
+      "Lady_Vox",
+      "Severilous"
     ],
-    "respawn_seconds": 604800
-  },
-  "lava_guardian|Nagafen's Lair": {
-    "mob": "lava_guardian",
-    "zone": "Nagafen's Lair",
-    "loot": [],
-    "respawn_seconds": 1150
-  },
-  "a_fire_elemental|Najena": {
-    "mob": "a_fire_elemental",
-    "zone": "Najena",
-    "loot": [],
-    "respawn_seconds": 1080
-  },
-  "Lady_Vox|Permafrost Caverns": {
-    "mob": "Lady_Vox",
     "zone": "Permafrost Caverns",
     "loot": [
       {
@@ -5847,8 +3275,7 @@
           "dkp"
         ]
       }
-    ],
-    "respawn_seconds": 604800
+    ]
   },
   "Sigismond_Windwalker|Plane of Air": {
     "mob": "Sigismond_Windwalker",
@@ -5919,7 +3346,7 @@
   },
   "Cazic_Thule|Plane of Fear": {
     "mob": "Cazic_Thule",
-    "zone": "Plane of Time B",
+    "zone": "Plane of Time",
     "loot": [
       {
         "item_id": 11646,
@@ -6015,8 +3442,13 @@
     ],
     "respawn_seconds": 604800
   },
-  "Dread|Plane of Fear": {
+  "Dread (+2)|Plane of Fear": {
     "mob": "Dread",
+    "mobs": [
+      "Dread",
+      "Fright",
+      "Terror"
+    ],
     "zone": "Plane of Fear",
     "loot": [
       {
@@ -6061,106 +3493,7 @@
           "dkp"
         ]
       }
-    ],
-    "respawn_seconds": 259200
-  },
-  "Fright|Plane of Fear": {
-    "mob": "Fright",
-    "zone": "Plane of Fear",
-    "loot": [
-      {
-        "item_id": 11646,
-        "name": "Amulet of Necropotence",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 11666,
-        "name": "Bone-Clasped Girdle",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 11648,
-        "name": "DawnFire, Morning Star of Light",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 11642,
-        "name": "Lyssa`s Darkwood Piccolo",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 11643,
-        "name": "Puppet Strings",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 11649,
-        "name": "Staff of the Earthcrafter",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ],
-    "respawn_seconds": 259200
-  },
-  "Terror|Plane of Fear": {
-    "mob": "Terror",
-    "zone": "Plane of Fear",
-    "loot": [
-      {
-        "item_id": 11646,
-        "name": "Amulet of Necropotence",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 11666,
-        "name": "Bone-Clasped Girdle",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 11648,
-        "name": "DawnFire, Morning Star of Light",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 11642,
-        "name": "Lyssa`s Darkwood Piccolo",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 11643,
-        "name": "Puppet Strings",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 11649,
-        "name": "Staff of the Earthcrafter",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ],
-    "respawn_seconds": 259200
+    ]
   },
   "a_dracoliche|Plane of Fear": {
     "mob": "a_dracoliche",
@@ -6336,8 +3669,12 @@
     ],
     "respawn_seconds": 259200
   },
-  "Criare_Sunmane|Plane of Fire": {
+  "Criare_Sunmane (+1)|Plane of Fire": {
     "mob": "Criare_Sunmane",
+    "mobs": [
+      "Criare_Sunmane",
+      "Jaxoliz_Dawneyes"
+    ],
     "zone": "Plane of Fire",
     "loot": [
       {
@@ -6380,8 +3717,7 @@
           "raid_item_sources"
         ]
       }
-    ],
-    "respawn_seconds": 86400
+    ]
   },
   "General_Druav_Flamesinger|Plane of Fire": {
     "mob": "General_Druav_Flamesinger",
@@ -6460,48 +3796,6 @@
       }
     ],
     "respawn_seconds": 259200
-  },
-  "Jaxoliz_Dawneyes|Plane of Fire": {
-    "mob": "Jaxoliz_Dawneyes",
-    "zone": "Plane of Fire",
-    "loot": [
-      {
-        "item_id": 15864,
-        "name": "Drape of the Agile",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 20618,
-        "name": "Fang of Flame",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 11323,
-        "name": "Shimmering Sleeves of Flame",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 13654,
-        "name": "Shining Crimson Shawl",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24789,
-        "name": "Staff of Eternal Flames",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ],
-    "respawn_seconds": 86400
   },
   "Magmaton|Plane of Fire": {
     "mob": "Magmaton",
@@ -6691,50 +3985,14 @@
     ],
     "respawn_seconds": 108000
   },
-  "Fayl_Everstrong|Plane of Growth": {
-    "mob": "Fayl_Everstrong",
-    "zone": "Plane of Growth",
-    "loot": [
-      {
-        "item_id": 25522,
-        "name": "Robe of Conjuration",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ],
-    "respawn_seconds": 108000
-  },
-  "Rumbleroot|Plane of Growth": {
-    "mob": "Rumbleroot",
-    "zone": "Plane of Growth",
-    "loot": [
-      {
-        "item_id": 25522,
-        "name": "Robe of Conjuration",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ],
-    "respawn_seconds": 108000
-  },
-  "Treah_Greenroot|Plane of Growth": {
-    "mob": "Treah_Greenroot",
-    "zone": "Plane of Growth",
-    "loot": [
-      {
-        "item_id": 25522,
-        "name": "Robe of Conjuration",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ],
-    "respawn_seconds": 108000
-  },
-  "an_entoling_essence_channeler|Plane of Growth": {
+  "an_entoling_essence_channeler (+3)|Plane of Growth": {
     "mob": "an_entoling_essence_channeler",
+    "mobs": [
+      "an_entoling_essence_channeler",
+      "Fayl_Everstrong",
+      "Rumbleroot",
+      "Treah_Greenroot"
+    ],
     "zone": "Plane of Growth",
     "loot": [
       {
@@ -6744,8 +4002,7 @@
           "dkp"
         ]
       }
-    ],
-    "respawn_seconds": 86400
+    ]
   },
   "Manaetic_Behemoth|Plane of Innovation": {
     "mob": "Manaetic_Behemoth",
@@ -6788,18 +4045,6 @@
       }
     ],
     "respawn_seconds": 259200
-  },
-  "a_crystaline_cloud|Plane of Sky": {
-    "mob": "a_crystaline_cloud",
-    "zone": "Plane of Sky",
-    "loot": [],
-    "respawn_seconds": 28800
-  },
-  "a_gust_of_wind|Plane of Sky": {
-    "mob": "a_gust_of_wind",
-    "zone": "Plane of Sky",
-    "loot": [],
-    "respawn_seconds": 28800
   },
   "an_azarack|Plane of Sky": {
     "mob": "an_azarack",
@@ -7125,8 +4370,13 @@
     ],
     "respawn_seconds": 259200
   },
-  "Triloun_Egg_Keeper|Plane of Water": {
+  "Triloun_Egg_Keeper (+2)|Plane of Water": {
     "mob": "Triloun_Egg_Keeper",
+    "mobs": [
+      "Triloun_Egg_Keeper",
+      "Triloun_Seer",
+      "Triloun_Warder"
+    ],
     "zone": "Plane of Water",
     "loot": [
       {
@@ -7136,36 +4386,7 @@
           "dkp"
         ]
       }
-    ],
-    "respawn_seconds": 2340
-  },
-  "Triloun_Seer|Plane of Water": {
-    "mob": "Triloun_Seer",
-    "zone": "Plane of Water",
-    "loot": [
-      {
-        "item_id": 25986,
-        "name": "Plankton Laced Greatsword",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ],
-    "respawn_seconds": 2340
-  },
-  "Triloun_Warder|Plane of Water": {
-    "mob": "Triloun_Warder",
-    "zone": "Plane of Water",
-    "loot": [
-      {
-        "item_id": 25986,
-        "name": "Plankton Laced Greatsword",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ],
-    "respawn_seconds": 2340
+    ]
   },
   "Trakanon|Ruins of Sebilis": {
     "mob": "Trakanon",
@@ -7243,288 +4464,6 @@
       }
     ],
     "respawn_seconds": 237600
-  },
-  "a_bloodtribe_chanter|Scarlet Desert": {
-    "mob": "a_bloodtribe_chanter",
-    "zone": "Scarlet Desert",
-    "loot": [],
-    "respawn_seconds": 1200
-  },
-  "a_bloodtribe_lightwarrior|Scarlet Desert": {
-    "mob": "a_bloodtribe_lightwarrior",
-    "zone": "Scarlet Desert",
-    "loot": [],
-    "respawn_seconds": 1200
-  },
-  "a_bloodtribe_lorekeeper|Scarlet Desert": {
-    "mob": "a_bloodtribe_lorekeeper",
-    "zone": "Scarlet Desert",
-    "loot": [],
-    "respawn_seconds": 1200
-  },
-  "a_bloodtribe_martialist|Scarlet Desert": {
-    "mob": "a_bloodtribe_martialist",
-    "zone": "Scarlet Desert",
-    "loot": [],
-    "respawn_seconds": 1200
-  },
-  "a_bloodtribe_ornamentalist|Scarlet Desert": {
-    "mob": "a_bloodtribe_ornamentalist",
-    "zone": "Scarlet Desert",
-    "loot": [],
-    "respawn_seconds": 1200
-  },
-  "a_chill_vas_ren_guardian|Scarlet Desert": {
-    "mob": "a_chill_vas_ren_guardian",
-    "zone": "Scarlet Desert",
-    "loot": [],
-    "respawn_seconds": 1200
-  },
-  "a_composed_cheetah|Scarlet Desert": {
-    "mob": "a_composed_cheetah",
-    "zone": "Scarlet Desert",
-    "loot": [],
-    "respawn_seconds": 1200
-  },
-  "a_courageous_tro_jeg_invader|Scarlet Desert": {
-    "mob": "a_courageous_tro_jeg_invader",
-    "zone": "Scarlet Desert",
-    "loot": [],
-    "respawn_seconds": 1200
-  },
-  "a_dark_rockhopper|Scarlet Desert": {
-    "mob": "a_dark_rockhopper",
-    "zone": "Scarlet Desert",
-    "loot": [],
-    "respawn_seconds": 1200
-  },
-  "a_darkeyed_sunflower|Scarlet Desert": {
-    "mob": "a_darkeyed_sunflower",
-    "zone": "Scarlet Desert",
-    "loot": [],
-    "respawn_seconds": 1200
-  },
-  "a_ferocious_rockhopper|Scarlet Desert": {
-    "mob": "a_ferocious_rockhopper",
-    "zone": "Scarlet Desert",
-    "loot": [],
-    "respawn_seconds": 1200
-  },
-  "a_fiery_sun_revenant|Scarlet Desert": {
-    "mob": "a_fiery_sun_revenant",
-    "zone": "Scarlet Desert",
-    "loot": [],
-    "respawn_seconds": 1200
-  },
-  "a_fire_blossom|Scarlet Desert": {
-    "mob": "a_fire_blossom",
-    "zone": "Scarlet Desert",
-    "loot": [],
-    "respawn_seconds": 1200
-  },
-  "a_fleshy_sunflower|Scarlet Desert": {
-    "mob": "a_fleshy_sunflower",
-    "zone": "Scarlet Desert",
-    "loot": [],
-    "respawn_seconds": 1200
-  },
-  "a_flowery_cheetah|Scarlet Desert": {
-    "mob": "a_flowery_cheetah",
-    "zone": "Scarlet Desert",
-    "loot": [],
-    "respawn_seconds": 1200
-  },
-  "a_forsaken_lightcrawler|Scarlet Desert": {
-    "mob": "a_forsaken_lightcrawler",
-    "zone": "Scarlet Desert",
-    "loot": [],
-    "respawn_seconds": 1200
-  },
-  "a_frantic_lightcrawler|Scarlet Desert": {
-    "mob": "a_frantic_lightcrawler",
-    "zone": "Scarlet Desert",
-    "loot": [],
-    "respawn_seconds": 1200
-  },
-  "a_fruitful_sunflower|Scarlet Desert": {
-    "mob": "a_fruitful_sunflower",
-    "zone": "Scarlet Desert",
-    "loot": [],
-    "respawn_seconds": 1200
-  },
-  "a_gallant_cheetah|Scarlet Desert": {
-    "mob": "a_gallant_cheetah",
-    "zone": "Scarlet Desert",
-    "loot": [],
-    "respawn_seconds": 1200
-  },
-  "a_glorious_sunflower|Scarlet Desert": {
-    "mob": "a_glorious_sunflower",
-    "zone": "Scarlet Desert",
-    "loot": [],
-    "respawn_seconds": 1200
-  },
-  "a_golden_grol_baku_sentry|Scarlet Desert": {
-    "mob": "a_golden_grol_baku_sentry",
-    "zone": "Scarlet Desert",
-    "loot": [],
-    "respawn_seconds": 1200
-  },
-  "a_grim_lightcrawler|Scarlet Desert": {
-    "mob": "a_grim_lightcrawler",
-    "zone": "Scarlet Desert",
-    "loot": [],
-    "respawn_seconds": 1200
-  },
-  "a_grol_baku_gemkeeper|Scarlet Desert": {
-    "mob": "a_grol_baku_gemkeeper",
-    "zone": "Scarlet Desert",
-    "loot": [],
-    "respawn_seconds": 1200
-  },
-  "a_grol_baku_runemaster|Scarlet Desert": {
-    "mob": "a_grol_baku_runemaster",
-    "zone": "Scarlet Desert",
-    "loot": [],
-    "respawn_seconds": 1200
-  },
-  "a_grol_baku_sand_collector|Scarlet Desert": {
-    "mob": "a_grol_baku_sand_collector",
-    "zone": "Scarlet Desert",
-    "loot": [],
-    "respawn_seconds": 1200
-  },
-  "a_grol_baku_wiseman|Scarlet Desert": {
-    "mob": "a_grol_baku_wiseman",
-    "zone": "Scarlet Desert",
-    "loot": [],
-    "respawn_seconds": 1200
-  },
-  "a_hardy_rockhopper|Scarlet Desert": {
-    "mob": "a_hardy_rockhopper",
-    "zone": "Scarlet Desert",
-    "loot": [],
-    "respawn_seconds": 1200
-  },
-  "a_hearty_sun_revenant|Scarlet Desert": {
-    "mob": "a_hearty_sun_revenant",
-    "zone": "Scarlet Desert",
-    "loot": [],
-    "respawn_seconds": 1200
-  },
-  "a_light_cheetah|Scarlet Desert": {
-    "mob": "a_light_cheetah",
-    "zone": "Scarlet Desert",
-    "loot": [],
-    "respawn_seconds": 1200
-  },
-  "a_pious_sun_revenant|Scarlet Desert": {
-    "mob": "a_pious_sun_revenant",
-    "zone": "Scarlet Desert",
-    "loot": [],
-    "respawn_seconds": 1200
-  },
-  "a_repulsive_lightcrawler|Scarlet Desert": {
-    "mob": "a_repulsive_lightcrawler",
-    "zone": "Scarlet Desert",
-    "loot": [],
-    "respawn_seconds": 1200
-  },
-  "a_rough_cheetah|Scarlet Desert": {
-    "mob": "a_rough_cheetah",
-    "zone": "Scarlet Desert",
-    "loot": [],
-    "respawn_seconds": 1200
-  },
-  "a_savage_rockhopper|Scarlet Desert": {
-    "mob": "a_savage_rockhopper",
-    "zone": "Scarlet Desert",
-    "loot": [],
-    "respawn_seconds": 1200
-  },
-  "a_scorched_tro_jeg_soldier|Scarlet Desert": {
-    "mob": "a_scorched_tro_jeg_soldier",
-    "zone": "Scarlet Desert",
-    "loot": [],
-    "respawn_seconds": 1200
-  },
-  "a_sun_revenant_hero|Scarlet Desert": {
-    "mob": "a_sun_revenant_hero",
-    "zone": "Scarlet Desert",
-    "loot": [],
-    "respawn_seconds": 1200
-  },
-  "a_sunflower_of_darkness|Scarlet Desert": {
-    "mob": "a_sunflower_of_darkness",
-    "zone": "Scarlet Desert",
-    "loot": [],
-    "respawn_seconds": 1200
-  },
-  "a_tro_jeg_dread_bane|Scarlet Desert": {
-    "mob": "a_tro_jeg_dread_bane",
-    "zone": "Scarlet Desert",
-    "loot": [],
-    "respawn_seconds": 1200
-  },
-  "a_tro_jeg_rock_collector|Scarlet Desert": {
-    "mob": "a_tro_jeg_rock_collector",
-    "zone": "Scarlet Desert",
-    "loot": [],
-    "respawn_seconds": 1200
-  },
-  "a_tro_jeg_smith|Scarlet Desert": {
-    "mob": "a_tro_jeg_smith",
-    "zone": "Scarlet Desert",
-    "loot": [],
-    "respawn_seconds": 1200
-  },
-  "a_valorous_vas_ren_guard|Scarlet Desert": {
-    "mob": "a_valorous_vas_ren_guard",
-    "zone": "Scarlet Desert",
-    "loot": [],
-    "respawn_seconds": 1200
-  },
-  "a_vas_ren_holyman|Scarlet Desert": {
-    "mob": "a_vas_ren_holyman",
-    "zone": "Scarlet Desert",
-    "loot": [],
-    "respawn_seconds": 1200
-  },
-  "a_vas_ren_musician|Scarlet Desert": {
-    "mob": "a_vas_ren_musician",
-    "zone": "Scarlet Desert",
-    "loot": [],
-    "respawn_seconds": 1200
-  },
-  "a_vas_ren_tactician|Scarlet Desert": {
-    "mob": "a_vas_ren_tactician",
-    "zone": "Scarlet Desert",
-    "loot": [],
-    "respawn_seconds": 1200
-  },
-  "a_vigorous_rockhopper|Scarlet Desert": {
-    "mob": "a_vigorous_rockhopper",
-    "zone": "Scarlet Desert",
-    "loot": [],
-    "respawn_seconds": 1200
-  },
-  "a_wild_lightcrawler|Scarlet Desert": {
-    "mob": "a_wild_lightcrawler",
-    "zone": "Scarlet Desert",
-    "loot": [],
-    "respawn_seconds": 1200
-  },
-  "an_etched_sun_revenant|Scarlet Desert": {
-    "mob": "an_etched_sun_revenant",
-    "zone": "Scarlet Desert",
-    "loot": [],
-    "respawn_seconds": 1200
-  },
-  "an_opposed_cheetah|Scarlet Desert": {
-    "mob": "an_opposed_cheetah",
-    "zone": "Scarlet Desert",
-    "loot": [],
-    "respawn_seconds": 1200
   },
   "Talendor|Skyfire Mountains": {
     "mob": "Talendor",
@@ -7676,18 +4615,6 @@
       }
     ],
     "respawn_seconds": 604800
-  },
-  "blazing_elemental|Solusek's Eye": {
-    "mob": "blazing_elemental",
-    "zone": "Solusek's Eye",
-    "loot": [],
-    "respawn_seconds": 1200
-  },
-  "lava_elemental|Solusek's Eye": {
-    "mob": "lava_elemental",
-    "zone": "Solusek's Eye",
-    "loot": [],
-    "respawn_seconds": 930
   },
   "High_Priest_of_Ssraeshza|Ssraeshza Temple": {
     "mob": "High_Priest_of_Ssraeshza",
@@ -8010,8 +4937,13 @@
     ],
     "respawn_seconds": 259200
   },
-  "A_Lava_Defender|Temple of Veeshan": {
+  "A_Lava_Defender (+2)|Temple of Veeshan": {
     "mob": "A_Lava_Defender",
+    "mobs": [
+      "A_Lava_Defender",
+      "an_elder_temple_defender",
+      "An_Onyx_Defender"
+    ],
     "zone": "Temple of Veeshan",
     "loot": [
       {
@@ -8063,67 +4995,25 @@
           "dkp"
         ]
       }
-    ],
-    "respawn_seconds": 14400
+    ]
   },
-  "An_Onyx_Defender|Temple of Veeshan": {
-    "mob": "An_Onyx_Defender",
-    "zone": "Temple of Veeshan",
-    "loot": [
-      {
-        "item_id": 24916,
-        "name": "Ancient Leather Sleeves",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24922,
-        "name": "Ancient Silk Pantaloons",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24926,
-        "name": "Ancient Silk Turban",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24900,
-        "name": "Ancient Tarnished Breastplate",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24909,
-        "name": "Ancient Tarnished Chain Sleeves",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24907,
-        "name": "Ancient Tarnished Chain Tunic",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24902,
-        "name": "Ancient Tarnished Vambraces",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ],
-    "respawn_seconds": 14400
-  },
-  "Beldion_Icewind|Temple of Veeshan": {
+  "Beldion_Icewind (+12)|Temple of Veeshan": {
     "mob": "Beldion_Icewind",
+    "mobs": [
+      "Beldion_Icewind",
+      "Bryrym",
+      "Carx`Vean",
+      "Gra`Vloren",
+      "Hsrek",
+      "Kal`Vunar",
+      "Kedrak",
+      "Lurian",
+      "Mazrien",
+      "Nir`Tan",
+      "Vukuz",
+      "Wel`Wnas",
+      "Zyerek_Onyxblood"
+    ],
     "zone": "Temple of Veeshan",
     "loot": [
       {
@@ -8189,148 +5079,7 @@
           "dkp"
         ]
       }
-    ],
-    "respawn_seconds": 172800
-  },
-  "Bryrym|Temple of Veeshan": {
-    "mob": "Bryrym",
-    "zone": "Temple of Veeshan",
-    "loot": [
-      {
-        "item_id": 31214,
-        "name": "Barrier of Sound",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31218,
-        "name": "Melodic Charm",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31222,
-        "name": "Ring of Superiority",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31219,
-        "name": "Runed Fang Necklace",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31215,
-        "name": "Shield of Dragonkind",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31211,
-        "name": "Shield of Fury",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31217,
-        "name": "Shield of Thorns",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31216,
-        "name": "Shield of the Wurms",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31221,
-        "name": "Silent Fang Necklace",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ],
-    "respawn_seconds": 172800
-  },
-  "Carx`Vean|Temple of Veeshan": {
-    "mob": "Carx`Vean",
-    "zone": "Temple of Veeshan",
-    "loot": [
-      {
-        "item_id": 31214,
-        "name": "Barrier of Sound",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31218,
-        "name": "Melodic Charm",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31222,
-        "name": "Ring of Superiority",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31219,
-        "name": "Runed Fang Necklace",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31215,
-        "name": "Shield of Dragonkind",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31211,
-        "name": "Shield of Fury",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31217,
-        "name": "Shield of Thorns",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31216,
-        "name": "Shield of the Wurms",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31221,
-        "name": "Silent Fang Necklace",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ],
-    "respawn_seconds": 172800
+    ]
   },
   "Dagarn_the_Destroyer|Temple of Veeshan": {
     "mob": "Dagarn_the_Destroyer",
@@ -8402,708 +5151,15 @@
     ],
     "respawn_seconds": 604800
   },
-  "Gra`Vloren|Temple of Veeshan": {
-    "mob": "Gra`Vloren",
-    "zone": "Temple of Veeshan",
-    "loot": [
-      {
-        "item_id": 31214,
-        "name": "Barrier of Sound",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31218,
-        "name": "Melodic Charm",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31222,
-        "name": "Ring of Superiority",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31219,
-        "name": "Runed Fang Necklace",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31215,
-        "name": "Shield of Dragonkind",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31211,
-        "name": "Shield of Fury",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31217,
-        "name": "Shield of Thorns",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31216,
-        "name": "Shield of the Wurms",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31221,
-        "name": "Silent Fang Necklace",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ],
-    "respawn_seconds": 172800
-  },
-  "Hsrek|Temple of Veeshan": {
-    "mob": "Hsrek",
-    "zone": "Temple of Veeshan",
-    "loot": [
-      {
-        "item_id": 31214,
-        "name": "Barrier of Sound",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31218,
-        "name": "Melodic Charm",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31222,
-        "name": "Ring of Superiority",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31219,
-        "name": "Runed Fang Necklace",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31215,
-        "name": "Shield of Dragonkind",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31211,
-        "name": "Shield of Fury",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31217,
-        "name": "Shield of Thorns",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31216,
-        "name": "Shield of the Wurms",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31221,
-        "name": "Silent Fang Necklace",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ],
-    "respawn_seconds": 172800
-  },
-  "Kal`Vunar|Temple of Veeshan": {
-    "mob": "Kal`Vunar",
-    "zone": "Temple of Veeshan",
-    "loot": [
-      {
-        "item_id": 31214,
-        "name": "Barrier of Sound",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31218,
-        "name": "Melodic Charm",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31222,
-        "name": "Ring of Superiority",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31219,
-        "name": "Runed Fang Necklace",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31215,
-        "name": "Shield of Dragonkind",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31211,
-        "name": "Shield of Fury",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31217,
-        "name": "Shield of Thorns",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31216,
-        "name": "Shield of the Wurms",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31221,
-        "name": "Silent Fang Necklace",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ],
-    "respawn_seconds": 172800
-  },
-  "Kedrak|Temple of Veeshan": {
-    "mob": "Kedrak",
-    "zone": "Temple of Veeshan",
-    "loot": [
-      {
-        "item_id": 31214,
-        "name": "Barrier of Sound",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31218,
-        "name": "Melodic Charm",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31222,
-        "name": "Ring of Superiority",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31219,
-        "name": "Runed Fang Necklace",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31215,
-        "name": "Shield of Dragonkind",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31211,
-        "name": "Shield of Fury",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31217,
-        "name": "Shield of Thorns",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31216,
-        "name": "Shield of the Wurms",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31221,
-        "name": "Silent Fang Necklace",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ],
-    "respawn_seconds": 172800
-  },
-  "Lurian|Temple of Veeshan": {
-    "mob": "Lurian",
-    "zone": "Temple of Veeshan",
-    "loot": [
-      {
-        "item_id": 31214,
-        "name": "Barrier of Sound",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31218,
-        "name": "Melodic Charm",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31222,
-        "name": "Ring of Superiority",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31219,
-        "name": "Runed Fang Necklace",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31215,
-        "name": "Shield of Dragonkind",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31211,
-        "name": "Shield of Fury",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31217,
-        "name": "Shield of Thorns",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31216,
-        "name": "Shield of the Wurms",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31221,
-        "name": "Silent Fang Necklace",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ],
-    "respawn_seconds": 172800
-  },
-  "Mazrien|Temple of Veeshan": {
-    "mob": "Mazrien",
-    "zone": "Temple of Veeshan",
-    "loot": [
-      {
-        "item_id": 31214,
-        "name": "Barrier of Sound",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31218,
-        "name": "Melodic Charm",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31222,
-        "name": "Ring of Superiority",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31219,
-        "name": "Runed Fang Necklace",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31215,
-        "name": "Shield of Dragonkind",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31211,
-        "name": "Shield of Fury",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31217,
-        "name": "Shield of Thorns",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31216,
-        "name": "Shield of the Wurms",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31221,
-        "name": "Silent Fang Necklace",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ],
-    "respawn_seconds": 172800
-  },
-  "Nir`Tan|Temple of Veeshan": {
-    "mob": "Nir`Tan",
-    "zone": "Temple of Veeshan",
-    "loot": [
-      {
-        "item_id": 31214,
-        "name": "Barrier of Sound",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31218,
-        "name": "Melodic Charm",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31222,
-        "name": "Ring of Superiority",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31219,
-        "name": "Runed Fang Necklace",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31215,
-        "name": "Shield of Dragonkind",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31211,
-        "name": "Shield of Fury",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31217,
-        "name": "Shield of Thorns",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31216,
-        "name": "Shield of the Wurms",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31221,
-        "name": "Silent Fang Necklace",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ],
-    "respawn_seconds": 172800
-  },
-  "Vukuz|Temple of Veeshan": {
-    "mob": "Vukuz",
-    "zone": "Temple of Veeshan",
-    "loot": [
-      {
-        "item_id": 31214,
-        "name": "Barrier of Sound",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31218,
-        "name": "Melodic Charm",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31222,
-        "name": "Ring of Superiority",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31219,
-        "name": "Runed Fang Necklace",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31215,
-        "name": "Shield of Dragonkind",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31211,
-        "name": "Shield of Fury",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31217,
-        "name": "Shield of Thorns",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31216,
-        "name": "Shield of the Wurms",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31221,
-        "name": "Silent Fang Necklace",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ],
-    "respawn_seconds": 172800
-  },
-  "Wel`Wnas|Temple of Veeshan": {
-    "mob": "Wel`Wnas",
-    "zone": "Temple of Veeshan",
-    "loot": [
-      {
-        "item_id": 31214,
-        "name": "Barrier of Sound",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31218,
-        "name": "Melodic Charm",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31222,
-        "name": "Ring of Superiority",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31219,
-        "name": "Runed Fang Necklace",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31215,
-        "name": "Shield of Dragonkind",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31211,
-        "name": "Shield of Fury",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31217,
-        "name": "Shield of Thorns",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31216,
-        "name": "Shield of the Wurms",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31221,
-        "name": "Silent Fang Necklace",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ],
-    "respawn_seconds": 172800
-  },
-  "Zyerek_Onyxblood|Temple of Veeshan": {
-    "mob": "Zyerek_Onyxblood",
-    "zone": "Temple of Veeshan",
-    "loot": [
-      {
-        "item_id": 31214,
-        "name": "Barrier of Sound",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31218,
-        "name": "Melodic Charm",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31222,
-        "name": "Ring of Superiority",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31219,
-        "name": "Runed Fang Necklace",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31215,
-        "name": "Shield of Dragonkind",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31211,
-        "name": "Shield of Fury",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31217,
-        "name": "Shield of Thorns",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31216,
-        "name": "Shield of the Wurms",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31221,
-        "name": "Silent Fang Necklace",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ],
-    "respawn_seconds": 172800
-  },
-  "a_cerulean_guardian|Temple of Veeshan": {
+  "a_cerulean_guardian (+4)|Temple of Veeshan": {
     "mob": "a_cerulean_guardian",
+    "mobs": [
+      "a_cerulean_guardian",
+      "a_glimmering_emerald_drake",
+      "a_greater_sky_drake",
+      "a_shimmer_drake",
+      "an_ancient_shard_wyvern"
+    ],
     "zone": "Temple of Veeshan",
     "loot": [
       {
@@ -9141,11 +5197,15 @@
           "dkp"
         ]
       }
-    ],
-    "respawn_seconds": 4320
+    ]
   },
-  "a_cerulean_sky_gazer|Temple of Veeshan": {
+  "a_cerulean_sky_gazer (+2)|Temple of Veeshan": {
     "mob": "a_cerulean_sky_gazer",
+    "mobs": [
+      "a_cerulean_sky_gazer",
+      "a_shimmering_green_drake",
+      "an_ancient_sky_drake"
+    ],
     "zone": "Temple of Veeshan",
     "loot": [
       {
@@ -9169,11 +5229,14 @@
           "dkp"
         ]
       }
-    ],
-    "respawn_seconds": 4320
+    ]
   },
-  "a_fiery_drake|Temple of Veeshan": {
+  "a_fiery_drake (+1)|Temple of Veeshan": {
     "mob": "a_fiery_drake",
+    "mobs": [
+      "a_fiery_drake",
+      "a_vehement_wyvern"
+    ],
     "zone": "Temple of Veeshan",
     "loot": [
       {
@@ -9204,8 +5267,7 @@
           "dkp"
         ]
       }
-    ],
-    "respawn_seconds": 4320
+    ]
   },
   "a_fiery_guardian|Temple of Veeshan": {
     "mob": "a_fiery_guardian",
@@ -9291,8 +5353,12 @@
     ],
     "respawn_seconds": 4320
   },
-  "a_fiery_temple_guardian|Temple of Veeshan": {
+  "a_fiery_temple_guardian (+1)|Temple of Veeshan": {
     "mob": "a_fiery_temple_guardian",
+    "mobs": [
+      "a_fiery_temple_guardian",
+      "an_onyx_sky_drake"
+    ],
     "zone": "Temple of Veeshan",
     "loot": [
       {
@@ -9323,11 +5389,15 @@
           "dkp"
         ]
       }
-    ],
-    "respawn_seconds": 4320
+    ]
   },
-  "a_fiery_watcher|Temple of Veeshan": {
+  "a_fiery_watcher (+2)|Temple of Veeshan": {
     "mob": "a_fiery_watcher",
+    "mobs": [
+      "a_fiery_watcher",
+      "a_lava_dancer",
+      "an_elder_onyx_drake"
+    ],
     "zone": "Temple of Veeshan",
     "loot": [
       {
@@ -9358,8 +5428,7 @@
           "dkp"
         ]
       }
-    ],
-    "respawn_seconds": 4320
+    ]
   },
   "a_glimmer_drake|Temple of Veeshan": {
     "mob": "a_glimmer_drake",
@@ -9403,48 +5472,6 @@
       {
         "item_id": 24926,
         "name": "Ancient Silk Turban",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ],
-    "respawn_seconds": 4320
-  },
-  "a_glimmering_emerald_drake|Temple of Veeshan": {
-    "mob": "a_glimmering_emerald_drake",
-    "zone": "Temple of Veeshan",
-    "loot": [
-      {
-        "item_id": 24980,
-        "name": "Tattered Silk Boots",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24978,
-        "name": "Tattered Silk Pantaloons",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24977,
-        "name": "Tattered Silk Robe",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24979,
-        "name": "Tattered Silk Sleeves",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24982,
-        "name": "Tattered Silk Turban",
         "sources": [
           "dkp"
         ]
@@ -9529,85 +5556,14 @@
     ],
     "respawn_seconds": 4320
   },
-  "a_greater_sky_drake|Temple of Veeshan": {
-    "mob": "a_greater_sky_drake",
-    "zone": "Temple of Veeshan",
-    "loot": [
-      {
-        "item_id": 24980,
-        "name": "Tattered Silk Boots",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24978,
-        "name": "Tattered Silk Pantaloons",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24977,
-        "name": "Tattered Silk Robe",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24979,
-        "name": "Tattered Silk Sleeves",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24982,
-        "name": "Tattered Silk Turban",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ],
-    "respawn_seconds": 4320
-  },
-  "a_lava_dancer|Temple of Veeshan": {
-    "mob": "a_lava_dancer",
-    "zone": "Temple of Veeshan",
-    "loot": [
-      {
-        "item_id": 24922,
-        "name": "Ancient Silk Pantaloons",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24926,
-        "name": "Ancient Silk Turban",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24900,
-        "name": "Ancient Tarnished Breastplate",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24902,
-        "name": "Ancient Tarnished Vambraces",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ],
-    "respawn_seconds": 4320
-  },
-  "a_malevolent_drake|Temple of Veeshan": {
+  "a_malevolent_drake (+3)|Temple of Veeshan": {
     "mob": "a_malevolent_drake",
+    "mobs": [
+      "a_malevolent_drake",
+      "a_raging_wyvern",
+      "an_ancient_tigerclaw_racnar",
+      "an_elder_crimson_drake"
+    ],
     "zone": "Temple of Veeshan",
     "loot": [
       {
@@ -9652,165 +5608,14 @@
           "dkp"
         ]
       }
-    ],
-    "respawn_seconds": 4320
+    ]
   },
-  "a_raging_wyvern|Temple of Veeshan": {
-    "mob": "a_raging_wyvern",
-    "zone": "Temple of Veeshan",
-    "loot": [
-      {
-        "item_id": 24956,
-        "name": "Unadorned Breastplate",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24960,
-        "name": "Unadorned Plate Bracer",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24962,
-        "name": "Unadorned Plate Gauntlets",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24957,
-        "name": "Unadorned Plate Greaves",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24961,
-        "name": "Unadorned Plate Helmet",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24958,
-        "name": "Unadorned Plate Vambraces",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ],
-    "respawn_seconds": 4320
-  },
-  "a_shimmer_drake|Temple of Veeshan": {
-    "mob": "a_shimmer_drake",
-    "zone": "Temple of Veeshan",
-    "loot": [
-      {
-        "item_id": 24980,
-        "name": "Tattered Silk Boots",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24978,
-        "name": "Tattered Silk Pantaloons",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24977,
-        "name": "Tattered Silk Robe",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24979,
-        "name": "Tattered Silk Sleeves",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24982,
-        "name": "Tattered Silk Turban",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ],
-    "respawn_seconds": 4320
-  },
-  "a_shimmering_green_drake|Temple of Veeshan": {
-    "mob": "a_shimmering_green_drake",
-    "zone": "Temple of Veeshan",
-    "loot": [
-      {
-        "item_id": 24916,
-        "name": "Ancient Leather Sleeves",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24909,
-        "name": "Ancient Tarnished Chain Sleeves",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24907,
-        "name": "Ancient Tarnished Chain Tunic",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ],
-    "respawn_seconds": 4320
-  },
-  "a_vehement_wyvern|Temple of Veeshan": {
-    "mob": "a_vehement_wyvern",
-    "zone": "Temple of Veeshan",
-    "loot": [
-      {
-        "item_id": 24973,
-        "name": "Unadorned Leather Boots",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24971,
-        "name": "Unadorned Leather Leggings",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24972,
-        "name": "Unadorned Leather Sleeves",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24970,
-        "name": "Unadorned Leather Tunic",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ],
-    "respawn_seconds": 4320
-  },
-  "an_ancient_frost_guardian|Temple of Veeshan": {
+  "an_ancient_frost_guardian (+1)|Temple of Veeshan": {
     "mob": "an_ancient_frost_guardian",
+    "mobs": [
+      "an_ancient_frost_guardian",
+      "an_elder_racnar"
+    ],
     "zone": "Temple of Veeshan",
     "loot": [
       {
@@ -9953,8 +5758,7 @@
           "dkp"
         ]
       }
-    ],
-    "respawn_seconds": 4320
+    ]
   },
   "an_ancient_guardian_wurm|Temple of Veeshan": {
     "mob": "an_ancient_guardian_wurm",
@@ -10068,8 +5872,12 @@
     ],
     "respawn_seconds": 4320
   },
-  "an_ancient_ice_wurm_defender|Temple of Veeshan": {
+  "an_ancient_ice_wurm_defender (+1)|Temple of Veeshan": {
     "mob": "an_ancient_ice_wurm_defender",
+    "mobs": [
+      "an_ancient_ice_wurm_defender",
+      "an_emerald_sky_defender"
+    ],
     "zone": "Temple of Veeshan",
     "loot": [
       {
@@ -10107,361 +5915,14 @@
           "dkp"
         ]
       }
-    ],
-    "respawn_seconds": 4320
+    ]
   },
-  "an_ancient_shard_wyvern|Temple of Veeshan": {
-    "mob": "an_ancient_shard_wyvern",
-    "zone": "Temple of Veeshan",
-    "loot": [
-      {
-        "item_id": 24980,
-        "name": "Tattered Silk Boots",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24978,
-        "name": "Tattered Silk Pantaloons",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24977,
-        "name": "Tattered Silk Robe",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24979,
-        "name": "Tattered Silk Sleeves",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24982,
-        "name": "Tattered Silk Turban",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ],
-    "respawn_seconds": 4320
-  },
-  "an_ancient_sky_drake|Temple of Veeshan": {
-    "mob": "an_ancient_sky_drake",
-    "zone": "Temple of Veeshan",
-    "loot": [
-      {
-        "item_id": 24916,
-        "name": "Ancient Leather Sleeves",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24909,
-        "name": "Ancient Tarnished Chain Sleeves",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24907,
-        "name": "Ancient Tarnished Chain Tunic",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ],
-    "respawn_seconds": 4320
-  },
-  "an_ancient_tigerclaw_racnar|Temple of Veeshan": {
-    "mob": "an_ancient_tigerclaw_racnar",
-    "zone": "Temple of Veeshan",
-    "loot": [
-      {
-        "item_id": 24956,
-        "name": "Unadorned Breastplate",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24960,
-        "name": "Unadorned Plate Bracer",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24962,
-        "name": "Unadorned Plate Gauntlets",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24957,
-        "name": "Unadorned Plate Greaves",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24961,
-        "name": "Unadorned Plate Helmet",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24958,
-        "name": "Unadorned Plate Vambraces",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ],
-    "respawn_seconds": 4320
-  },
-  "an_elder_crimson_drake|Temple of Veeshan": {
-    "mob": "an_elder_crimson_drake",
-    "zone": "Temple of Veeshan",
-    "loot": [
-      {
-        "item_id": 24956,
-        "name": "Unadorned Breastplate",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24960,
-        "name": "Unadorned Plate Bracer",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24962,
-        "name": "Unadorned Plate Gauntlets",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24957,
-        "name": "Unadorned Plate Greaves",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24961,
-        "name": "Unadorned Plate Helmet",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24958,
-        "name": "Unadorned Plate Vambraces",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ],
-    "respawn_seconds": 4320
-  },
-  "an_elder_onyx_drake|Temple of Veeshan": {
-    "mob": "an_elder_onyx_drake",
-    "zone": "Temple of Veeshan",
-    "loot": [
-      {
-        "item_id": 24922,
-        "name": "Ancient Silk Pantaloons",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24926,
-        "name": "Ancient Silk Turban",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24900,
-        "name": "Ancient Tarnished Breastplate",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24902,
-        "name": "Ancient Tarnished Vambraces",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ],
-    "respawn_seconds": 4320
-  },
-  "an_elder_racnar|Temple of Veeshan": {
-    "mob": "an_elder_racnar",
-    "zone": "Temple of Veeshan",
-    "loot": [
-      {
-        "item_id": 24980,
-        "name": "Tattered Silk Boots",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24978,
-        "name": "Tattered Silk Pantaloons",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24977,
-        "name": "Tattered Silk Robe",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24979,
-        "name": "Tattered Silk Sleeves",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24982,
-        "name": "Tattered Silk Turban",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24956,
-        "name": "Unadorned Breastplate",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24966,
-        "name": "Unadorned Chain Boots",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24969,
-        "name": "Unadorned Chain Gauntlets",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24964,
-        "name": "Unadorned Chain Leggings",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24965,
-        "name": "Unadorned Chain Sleeves",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24963,
-        "name": "Unadorned Chain Tunic",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24973,
-        "name": "Unadorned Leather Boots",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24971,
-        "name": "Unadorned Leather Leggings",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24972,
-        "name": "Unadorned Leather Sleeves",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24970,
-        "name": "Unadorned Leather Tunic",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24960,
-        "name": "Unadorned Plate Bracer",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24962,
-        "name": "Unadorned Plate Gauntlets",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24957,
-        "name": "Unadorned Plate Greaves",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24961,
-        "name": "Unadorned Plate Helmet",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24958,
-        "name": "Unadorned Plate Vambraces",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ],
-    "respawn_seconds": 4320
-  },
-  "an_elder_shard_wyvern|Temple of Veeshan": {
+  "an_elder_shard_wyvern (+1)|Temple of Veeshan": {
     "mob": "an_elder_shard_wyvern",
+    "mobs": [
+      "an_elder_shard_wyvern",
+      "an_emerald_watcher"
+    ],
     "zone": "Temple of Veeshan",
     "loot": [
       {
@@ -10499,267 +5960,7 @@
           "dkp"
         ]
       }
-    ],
-    "respawn_seconds": 4320
-  },
-  "an_elder_temple_defender|Temple of Veeshan": {
-    "mob": "an_elder_temple_defender",
-    "zone": "Temple of Veeshan",
-    "loot": [
-      {
-        "item_id": 24916,
-        "name": "Ancient Leather Sleeves",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24922,
-        "name": "Ancient Silk Pantaloons",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24926,
-        "name": "Ancient Silk Turban",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24900,
-        "name": "Ancient Tarnished Breastplate",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24909,
-        "name": "Ancient Tarnished Chain Sleeves",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24907,
-        "name": "Ancient Tarnished Chain Tunic",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24902,
-        "name": "Ancient Tarnished Vambraces",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ],
-    "respawn_seconds": 4320
-  },
-  "an_emerald_sky_defender|Temple of Veeshan": {
-    "mob": "an_emerald_sky_defender",
-    "zone": "Temple of Veeshan",
-    "loot": [
-      {
-        "item_id": 24916,
-        "name": "Ancient Leather Sleeves",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24922,
-        "name": "Ancient Silk Pantaloons",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24926,
-        "name": "Ancient Silk Turban",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24900,
-        "name": "Ancient Tarnished Breastplate",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24902,
-        "name": "Ancient Tarnished Vambraces",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ],
-    "respawn_seconds": 4320
-  },
-  "an_emerald_watcher|Temple of Veeshan": {
-    "mob": "an_emerald_watcher",
-    "zone": "Temple of Veeshan",
-    "loot": [
-      {
-        "item_id": 24966,
-        "name": "Unadorned Chain Boots",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24969,
-        "name": "Unadorned Chain Gauntlets",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24964,
-        "name": "Unadorned Chain Leggings",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24965,
-        "name": "Unadorned Chain Sleeves",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24963,
-        "name": "Unadorned Chain Tunic",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ],
-    "respawn_seconds": 4320
-  },
-  "an_onyx_sky_drake|Temple of Veeshan": {
-    "mob": "an_onyx_sky_drake",
-    "zone": "Temple of Veeshan",
-    "loot": [
-      {
-        "item_id": 24900,
-        "name": "Ancient Tarnished Breastplate",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24909,
-        "name": "Ancient Tarnished Chain Sleeves",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24907,
-        "name": "Ancient Tarnished Chain Tunic",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 24902,
-        "name": "Ancient Tarnished Vambraces",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ],
-    "respawn_seconds": 4320
-  },
-  "a_bloody_wolf|The Dawnshroud Peaks": {
-    "mob": "a_bloody_wolf",
-    "zone": "The Dawnshroud Peaks",
-    "loot": [],
-    "respawn_seconds": 700
-  },
-  "a_bluesky_stonegrabber|The Dawnshroud Peaks": {
-    "mob": "a_bluesky_stonegrabber",
-    "zone": "The Dawnshroud Peaks",
-    "loot": [],
-    "respawn_seconds": 700
-  },
-  "a_crazed_zelniak|The Dawnshroud Peaks": {
-    "mob": "a_crazed_zelniak",
-    "zone": "The Dawnshroud Peaks",
-    "loot": [],
-    "respawn_seconds": 700
-  },
-  "a_dire_wolf|The Dawnshroud Peaks": {
-    "mob": "a_dire_wolf",
-    "zone": "The Dawnshroud Peaks",
-    "loot": [],
-    "respawn_seconds": 700
-  },
-  "a_ferocious_wolf|The Dawnshroud Peaks": {
-    "mob": "a_ferocious_wolf",
-    "zone": "The Dawnshroud Peaks",
-    "loot": [],
-    "respawn_seconds": 700
-  },
-  "a_fiery_zelniak|The Dawnshroud Peaks": {
-    "mob": "a_fiery_zelniak",
-    "zone": "The Dawnshroud Peaks",
-    "loot": [],
-    "respawn_seconds": 700
-  },
-  "a_greater_zelniak|The Dawnshroud Peaks": {
-    "mob": "a_greater_zelniak",
-    "zone": "The Dawnshroud Peaks",
-    "loot": [],
-    "respawn_seconds": 700
-  },
-  "a_hardened_stonegrabber|The Dawnshroud Peaks": {
-    "mob": "a_hardened_stonegrabber",
-    "zone": "The Dawnshroud Peaks",
-    "loot": [],
-    "respawn_seconds": 700
-  },
-  "a_light_stonegrabber|The Dawnshroud Peaks": {
-    "mob": "a_light_stonegrabber",
-    "zone": "The Dawnshroud Peaks",
-    "loot": [],
-    "respawn_seconds": 700
-  },
-  "a_lunar_stonegrabber|The Dawnshroud Peaks": {
-    "mob": "a_lunar_stonegrabber",
-    "zone": "The Dawnshroud Peaks",
-    "loot": [],
-    "respawn_seconds": 700
-  },
-  "a_prowling_wolf|The Dawnshroud Peaks": {
-    "mob": "a_prowling_wolf",
-    "zone": "The Dawnshroud Peaks",
-    "loot": [],
-    "respawn_seconds": 700
-  },
-  "a_starved_wolf|The Dawnshroud Peaks": {
-    "mob": "a_starved_wolf",
-    "zone": "The Dawnshroud Peaks",
-    "loot": [],
-    "respawn_seconds": 700
-  },
-  "a_zealous_zelniak|The Dawnshroud Peaks": {
-    "mob": "a_zealous_zelniak",
-    "zone": "The Dawnshroud Peaks",
-    "loot": [],
-    "respawn_seconds": 700
-  },
-  "an_enraged_zelniak|The Dawnshroud Peaks": {
-    "mob": "an_enraged_zelniak",
-    "zone": "The Dawnshroud Peaks",
-    "loot": [],
-    "respawn_seconds": 700
+    ]
   },
   "Thought_Horror_Overfiend|The Deep": {
     "mob": "Thought_Horror_Overfiend",
@@ -10845,48 +6046,6 @@
     ],
     "respawn_seconds": 259200
   },
-  "Gorenaire|The Dreadlands": {
-    "mob": "Gorenaire",
-    "zone": "The Dreadlands",
-    "loot": [
-      {
-        "item_id": 17701,
-        "name": "Kavruul`s Mystic Pouch",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 11601,
-        "name": "Runed Bolster Belt",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ],
-    "respawn_seconds": 302400
-  },
-  "Severilous|The Emerald Jungle": {
-    "mob": "Severilous",
-    "zone": "The Emerald Jungle",
-    "loot": [
-      {
-        "item_id": 17701,
-        "name": "Kavruul`s Mystic Pouch",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 11601,
-        "name": "Runed Bolster Belt",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ],
-    "respawn_seconds": 302400
-  },
   "Crusader_Kezzal|The Grey": {
     "mob": "Crusader_Kezzal",
     "zone": "The Grey",
@@ -10901,15 +6060,9 @@
     ],
     "respawn_seconds": 1200
   },
-  "Retseth_Tretse|The Hole": {
-    "mob": "Retseth_Tretse",
-    "zone": "The Hole",
-    "loot": [],
-    "respawn_seconds": 1024
-  },
   "Terris_Thule|The Lair of Terris Thule": {
     "mob": "Terris_Thule",
-    "zone": "Plane of Time B",
+    "zone": "Plane of Time",
     "loot": [
       {
         "item_id": 10127,
@@ -10954,240 +6107,9 @@
     ],
     "respawn_seconds": 259200
   },
-  "Xi_Vius|The Maiden's Eye": {
-    "mob": "Xi_Vius",
-    "zone": "The Maiden's Eye",
-    "loot": [
-      {
-        "item_id": 32166,
-        "name": "Shaded amice",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 32159,
-        "name": "Shaded cloak",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ],
-    "respawn_seconds": 1559
-  },
-  "Xi_Xaui|The Maiden's Eye": {
-    "mob": "Xi_Xaui",
-    "zone": "The Maiden's Eye",
-    "loot": [
-      {
-        "item_id": 32166,
-        "name": "Shaded amice",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 32159,
-        "name": "Shaded cloak",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ],
-    "respawn_seconds": 1559
-  },
-  "a_coterie_cohort|The Tenebrous Mountains": {
-    "mob": "a_coterie_cohort",
-    "zone": "The Tenebrous Mountains",
-    "loot": [],
-    "respawn_seconds": 700
-  },
-  "a_coterie_dragoon|The Tenebrous Mountains": {
-    "mob": "a_coterie_dragoon",
-    "zone": "The Tenebrous Mountains",
-    "loot": [],
-    "respawn_seconds": 700
-  },
-  "a_coterie_duelist|The Tenebrous Mountains": {
-    "mob": "a_coterie_duelist",
-    "zone": "The Tenebrous Mountains",
-    "loot": [],
-    "respawn_seconds": 700
-  },
-  "a_coterie_fighter|The Tenebrous Mountains": {
-    "mob": "a_coterie_fighter",
-    "zone": "The Tenebrous Mountains",
-    "loot": [],
-    "respawn_seconds": 700
-  },
-  "a_coterie_swordsman|The Tenebrous Mountains": {
-    "mob": "a_coterie_swordsman",
-    "zone": "The Tenebrous Mountains",
-    "loot": [],
-    "respawn_seconds": 700
-  },
-  "a_cral_ligi_guardian|The Tenebrous Mountains": {
-    "mob": "a_cral_ligi_guardian",
-    "zone": "The Tenebrous Mountains",
-    "loot": [],
-    "respawn_seconds": 700
-  },
-  "a_cral_ligi_lorekeeper|The Tenebrous Mountains": {
-    "mob": "a_cral_ligi_lorekeeper",
-    "zone": "The Tenebrous Mountains",
-    "loot": [],
-    "respawn_seconds": 700
-  },
-  "a_cral_ligi_runner|The Tenebrous Mountains": {
-    "mob": "a_cral_ligi_runner",
-    "zone": "The Tenebrous Mountains",
-    "loot": [],
-    "respawn_seconds": 700
-  },
-  "a_cral_ligi_soldier|The Tenebrous Mountains": {
-    "mob": "a_cral_ligi_soldier",
-    "zone": "The Tenebrous Mountains",
-    "loot": [],
-    "respawn_seconds": 700
-  },
-  "a_cral_ligi_tailor|The Tenebrous Mountains": {
-    "mob": "a_cral_ligi_tailor",
-    "zone": "The Tenebrous Mountains",
-    "loot": [],
-    "respawn_seconds": 700
-  },
-  "a_cral_ligi_torchbearer|The Tenebrous Mountains": {
-    "mob": "a_cral_ligi_torchbearer",
-    "zone": "The Tenebrous Mountains",
-    "loot": [],
-    "respawn_seconds": 700
-  },
-  "a_grol_baku_armsman|The Tenebrous Mountains": {
-    "mob": "a_grol_baku_armsman",
-    "zone": "The Tenebrous Mountains",
-    "loot": [],
-    "respawn_seconds": 700
-  },
-  "a_grol_baku_chanter|The Tenebrous Mountains": {
-    "mob": "a_grol_baku_chanter",
-    "zone": "The Tenebrous Mountains",
-    "loot": [],
-    "respawn_seconds": 700
-  },
-  "a_grol_baku_frightling|The Tenebrous Mountains": {
-    "mob": "a_grol_baku_frightling",
-    "zone": "The Tenebrous Mountains",
-    "loot": [],
-    "respawn_seconds": 700
-  },
-  "a_grol_baku_hero|The Tenebrous Mountains": {
-    "mob": "a_grol_baku_hero",
-    "zone": "The Tenebrous Mountains",
-    "loot": [],
-    "respawn_seconds": 700
-  },
-  "a_grol_baku_ritualist|The Tenebrous Mountains": {
-    "mob": "a_grol_baku_ritualist",
-    "zone": "The Tenebrous Mountains",
-    "loot": [],
-    "respawn_seconds": 700
-  },
-  "a_killer_darkwing_bat|The Tenebrous Mountains": {
-    "mob": "a_killer_darkwing_bat",
-    "zone": "The Tenebrous Mountains",
-    "loot": [],
-    "respawn_seconds": 700
-  },
-  "a_light_sonic_wolf|The Tenebrous Mountains": {
-    "mob": "a_light_sonic_wolf",
-    "zone": "The Tenebrous Mountains",
-    "loot": [],
-    "respawn_seconds": 700
-  },
-  "a_meeda_hune_dancer|The Tenebrous Mountains": {
-    "mob": "a_meeda_hune_dancer",
-    "zone": "The Tenebrous Mountains",
-    "loot": [],
-    "respawn_seconds": 700
-  },
-  "a_meeda_hune_hero|The Tenebrous Mountains": {
-    "mob": "a_meeda_hune_hero",
-    "zone": "The Tenebrous Mountains",
-    "loot": [],
-    "respawn_seconds": 700
-  },
-  "a_meeda_hune_hopeful|The Tenebrous Mountains": {
-    "mob": "a_meeda_hune_hopeful",
-    "zone": "The Tenebrous Mountains",
-    "loot": [],
-    "respawn_seconds": 700
-  },
-  "a_meeda_hune_justicar|The Tenebrous Mountains": {
-    "mob": "a_meeda_hune_justicar",
-    "zone": "The Tenebrous Mountains",
-    "loot": [],
-    "respawn_seconds": 700
-  },
-  "a_meeda_hune_noble|The Tenebrous Mountains": {
-    "mob": "a_meeda_hune_noble",
-    "zone": "The Tenebrous Mountains",
-    "loot": [],
-    "respawn_seconds": 700
-  },
-  "a_meeda_hune_soldier|The Tenebrous Mountains": {
-    "mob": "a_meeda_hune_soldier",
-    "zone": "The Tenebrous Mountains",
-    "loot": [],
-    "respawn_seconds": 700
-  },
-  "a_nasty_darkwing_bat|The Tenebrous Mountains": {
-    "mob": "a_nasty_darkwing_bat",
-    "zone": "The Tenebrous Mountains",
-    "loot": [],
-    "respawn_seconds": 700
-  },
-  "a_shadowed_darkwing_bat|The Tenebrous Mountains": {
-    "mob": "a_shadowed_darkwing_bat",
-    "zone": "The Tenebrous Mountains",
-    "loot": [],
-    "respawn_seconds": 700
-  },
-  "a_tenacious_darkwing_bat|The Tenebrous Mountains": {
-    "mob": "a_tenacious_darkwing_bat",
-    "zone": "The Tenebrous Mountains",
-    "loot": [],
-    "respawn_seconds": 700
-  },
-  "an_ancient_darkwing_bat|The Tenebrous Mountains": {
-    "mob": "an_ancient_darkwing_bat",
-    "zone": "The Tenebrous Mountains",
-    "loot": [],
-    "respawn_seconds": 700
-  },
-  "Faydedar|Timorous Deep": {
-    "mob": "Faydedar",
-    "zone": "Timorous Deep",
-    "loot": [
-      {
-        "item_id": 17701,
-        "name": "Kavruul`s Mystic Pouch",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 11601,
-        "name": "Runed Bolster Belt",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ],
-    "respawn_seconds": 302400
-  },
   "Saryrn|Torment, the Plane of Pain": {
     "mob": "Saryrn",
-    "zone": "Plane of Time B",
+    "zone": "Plane of Time",
     "loot": [
       {
         "item_id": 15806,
@@ -11545,284 +6467,6 @@
       }
     ],
     "respawn_seconds": 259200
-  },
-  "a_torrid_elemental|Tower of Solusek Ro": {
-    "mob": "a_torrid_elemental",
-    "zone": "Tower of Solusek Ro",
-    "loot": [
-      {
-        "item_id": 16298,
-        "name": "Ornate Boot Mold",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ],
-    "respawn_seconds": 3508
-  },
-  "a_blessed_underbulk|Twilight": {
-    "mob": "a_blessed_underbulk",
-    "zone": "Twilight",
-    "loot": [],
-    "respawn_seconds": 1200
-  },
-  "a_cral_ligi_diver|Twilight": {
-    "mob": "a_cral_ligi_diver",
-    "zone": "Twilight",
-    "loot": [],
-    "respawn_seconds": 1200
-  },
-  "a_cral_ligi_guardian|Twilight": {
-    "mob": "a_cral_ligi_guardian",
-    "zone": "Twilight",
-    "loot": [],
-    "respawn_seconds": 1200
-  },
-  "a_cral_ligi_hero|Twilight": {
-    "mob": "a_cral_ligi_hero",
-    "zone": "Twilight",
-    "loot": [],
-    "respawn_seconds": 1200
-  },
-  "a_cral_ligi_painter|Twilight": {
-    "mob": "a_cral_ligi_painter",
-    "zone": "Twilight",
-    "loot": [],
-    "respawn_seconds": 1200
-  },
-  "a_cral_ligi_polisher|Twilight": {
-    "mob": "a_cral_ligi_polisher",
-    "zone": "Twilight",
-    "loot": [],
-    "respawn_seconds": 1200
-  },
-  "a_cral_ligi_shadowmaster|Twilight": {
-    "mob": "a_cral_ligi_shadowmaster",
-    "zone": "Twilight",
-    "loot": [],
-    "respawn_seconds": 1200
-  },
-  "a_cral_ligi_shaman|Twilight": {
-    "mob": "a_cral_ligi_shaman",
-    "zone": "Twilight",
-    "loot": [],
-    "respawn_seconds": 1200
-  },
-  "a_cral_ligi_spiritward|Twilight": {
-    "mob": "a_cral_ligi_spiritward",
-    "zone": "Twilight",
-    "loot": [],
-    "respawn_seconds": 1200
-  },
-  "a_cral_ligi_warder|Twilight": {
-    "mob": "a_cral_ligi_warder",
-    "zone": "Twilight",
-    "loot": [],
-    "respawn_seconds": 1800
-  },
-  "a_cral_ligi_warlord|Twilight": {
-    "mob": "a_cral_ligi_warlord",
-    "zone": "Twilight",
-    "loot": [],
-    "respawn_seconds": 1200
-  },
-  "a_cral_ligi_warmaster|Twilight": {
-    "mob": "a_cral_ligi_warmaster",
-    "zone": "Twilight",
-    "loot": [],
-    "respawn_seconds": 1200
-  },
-  "a_cral_ligi_warmonger|Twilight": {
-    "mob": "a_cral_ligi_warmonger",
-    "zone": "Twilight",
-    "loot": [],
-    "respawn_seconds": 1200
-  },
-  "a_cral_ligi_worker|Twilight": {
-    "mob": "a_cral_ligi_worker",
-    "zone": "Twilight",
-    "loot": [],
-    "respawn_seconds": 1800
-  },
-  "a_greater_sea_turtle|Twilight": {
-    "mob": "a_greater_sea_turtle",
-    "zone": "Twilight",
-    "loot": [],
-    "respawn_seconds": 1200
-  },
-  "a_grol_baku_contender|Twilight": {
-    "mob": "a_grol_baku_contender",
-    "zone": "Twilight",
-    "loot": [],
-    "respawn_seconds": 1200
-  },
-  "a_grol_baku_drummer|Twilight": {
-    "mob": "a_grol_baku_drummer",
-    "zone": "Twilight",
-    "loot": [],
-    "respawn_seconds": 1200
-  },
-  "a_grol_baku_holyman|Twilight": {
-    "mob": "a_grol_baku_holyman",
-    "zone": "Twilight",
-    "loot": [],
-    "respawn_seconds": 1200
-  },
-  "a_grol_baku_idolist|Twilight": {
-    "mob": "a_grol_baku_idolist",
-    "zone": "Twilight",
-    "loot": [],
-    "respawn_seconds": 1200
-  },
-  "a_grol_baku_lifemaster|Twilight": {
-    "mob": "a_grol_baku_lifemaster",
-    "zone": "Twilight",
-    "loot": [],
-    "respawn_seconds": 1200
-  },
-  "a_grol_baku_nightwalker|Twilight": {
-    "mob": "a_grol_baku_nightwalker",
-    "zone": "Twilight",
-    "loot": [],
-    "respawn_seconds": 1200
-  },
-  "a_grol_baku_rocklord|Twilight": {
-    "mob": "a_grol_baku_rocklord",
-    "zone": "Twilight",
-    "loot": [],
-    "respawn_seconds": 1200
-  },
-  "a_grol_baku_warlord|Twilight": {
-    "mob": "a_grol_baku_warlord",
-    "zone": "Twilight",
-    "loot": [],
-    "respawn_seconds": 1200
-  },
-  "a_horrid_shadow|Twilight": {
-    "mob": "a_horrid_shadow",
-    "zone": "Twilight",
-    "loot": [],
-    "respawn_seconds": 1800
-  },
-  "a_powerful_underbulk|Twilight": {
-    "mob": "a_powerful_underbulk",
-    "zone": "Twilight",
-    "loot": [],
-    "respawn_seconds": 1200
-  },
-  "a_resolute_sea_turtle|Twilight": {
-    "mob": "a_resolute_sea_turtle",
-    "zone": "Twilight",
-    "loot": [],
-    "respawn_seconds": 1200
-  },
-  "a_sinister_shadow|Twilight": {
-    "mob": "a_sinister_shadow",
-    "zone": "Twilight",
-    "loot": [],
-    "respawn_seconds": 1800
-  },
-  "a_swift_air_elemental|Twilight": {
-    "mob": "a_swift_air_elemental",
-    "zone": "Twilight",
-    "loot": [],
-    "respawn_seconds": 1200
-  },
-  "a_tenacious_sea_turtle|Twilight": {
-    "mob": "a_tenacious_sea_turtle",
-    "zone": "Twilight",
-    "loot": [],
-    "respawn_seconds": 1200
-  },
-  "a_tenacious_shadow|Twilight": {
-    "mob": "a_tenacious_shadow",
-    "zone": "Twilight",
-    "loot": [],
-    "respawn_seconds": 1800
-  },
-  "a_toughened_underbulk|Twilight": {
-    "mob": "a_toughened_underbulk",
-    "zone": "Twilight",
-    "loot": [],
-    "respawn_seconds": 1200
-  },
-  "a_triumphant_sea_turtle|Twilight": {
-    "mob": "a_triumphant_sea_turtle",
-    "zone": "Twilight",
-    "loot": [],
-    "respawn_seconds": 1200
-  },
-  "a_vas_ren_bead_collector|Twilight": {
-    "mob": "a_vas_ren_bead_collector",
-    "zone": "Twilight",
-    "loot": [],
-    "respawn_seconds": 1200
-  },
-  "a_vas_ren_blesser|Twilight": {
-    "mob": "a_vas_ren_blesser",
-    "zone": "Twilight",
-    "loot": [],
-    "respawn_seconds": 1200
-  },
-  "a_vas_ren_dawnlord|Twilight": {
-    "mob": "a_vas_ren_dawnlord",
-    "zone": "Twilight",
-    "loot": [],
-    "respawn_seconds": 1200
-  },
-  "a_vas_ren_holymaster|Twilight": {
-    "mob": "a_vas_ren_holymaster",
-    "zone": "Twilight",
-    "loot": [],
-    "respawn_seconds": 1200
-  },
-  "a_vas_ren_tenor|Twilight": {
-    "mob": "a_vas_ren_tenor",
-    "zone": "Twilight",
-    "loot": [],
-    "respawn_seconds": 1200
-  },
-  "a_venerable_sea_turtle|Twilight": {
-    "mob": "a_venerable_sea_turtle",
-    "zone": "Twilight",
-    "loot": [],
-    "respawn_seconds": 1200
-  },
-  "a_wayward_sea_turtle|Twilight": {
-    "mob": "a_wayward_sea_turtle",
-    "zone": "Twilight",
-    "loot": [],
-    "respawn_seconds": 1200
-  },
-  "a_wretched_shadow|Twilight": {
-    "mob": "a_wretched_shadow",
-    "zone": "Twilight",
-    "loot": [],
-    "respawn_seconds": 1800
-  },
-  "an_air_elemental|Twilight": {
-    "mob": "an_air_elemental",
-    "zone": "Twilight",
-    "loot": [],
-    "respawn_seconds": 1200
-  },
-  "an_enormous_underbulk|Twilight": {
-    "mob": "an_enormous_underbulk",
-    "zone": "Twilight",
-    "loot": [],
-    "respawn_seconds": 1200
-  },
-  "an_immense_underbulk|Twilight": {
-    "mob": "an_immense_underbulk",
-    "zone": "Twilight",
-    "loot": [],
-    "respawn_seconds": 1200
-  },
-  "an_unholy_shadow|Twilight": {
-    "mob": "an_unholy_shadow",
-    "zone": "Twilight",
-    "loot": [],
-    "respawn_seconds": 1800
   },
   "Druushk|Veeshan's Peak": {
     "mob": "Druushk",
@@ -12677,8 +7321,14 @@
     ],
     "respawn_seconds": 561600
   },
-  "Eom_Thall|Vex Thal": {
+  "Eom_Thall (+3)|Vex Thal": {
     "mob": "Eom_Thall",
+    "mobs": [
+      "Eom_Thall",
+      "Eom_Thall_Xakra",
+      "Eom_Zethon",
+      "Eom_Zethon_Xakra"
+    ],
     "zone": "Vex Thal",
     "loot": [
       {
@@ -12765,281 +7415,7 @@
           "dkp"
         ]
       }
-    ],
-    "respawn_seconds": 2640
-  },
-  "Eom_Thall_Xakra|Vex Thal": {
-    "mob": "Eom_Thall_Xakra",
-    "zone": "Vex Thal",
-    "loot": [
-      {
-        "item_id": 28881,
-        "name": "Boots of Silent Dreams",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 28891,
-        "name": "Bracer of the Silent Star",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 28892,
-        "name": "Cap of the Silent Star",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 28887,
-        "name": "Cloak of Icy Shadows",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 28890,
-        "name": "Cord of Midnight",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 28885,
-        "name": "Gorget of Superiority",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 28889,
-        "name": "Living Symbol",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 28884,
-        "name": "Ring of Rage",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 28883,
-        "name": "Shaded Amice",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 28888,
-        "name": "Shadow Footpads",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 28882,
-        "name": "Steel Skin Armplates",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 28886,
-        "name": "Umbracite Bracer",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ],
-    "respawn_seconds": 5280
-  },
-  "Eom_Zethon|Vex Thal": {
-    "mob": "Eom_Zethon",
-    "zone": "Vex Thal",
-    "loot": [
-      {
-        "item_id": 28881,
-        "name": "Boots of Silent Dreams",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 28891,
-        "name": "Bracer of the Silent Star",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 28892,
-        "name": "Cap of the Silent Star",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 28887,
-        "name": "Cloak of Icy Shadows",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 28890,
-        "name": "Cord of Midnight",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 28885,
-        "name": "Gorget of Superiority",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 28889,
-        "name": "Living Symbol",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 28884,
-        "name": "Ring of Rage",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 28883,
-        "name": "Shaded Amice",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 28888,
-        "name": "Shadow Footpads",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 28882,
-        "name": "Steel Skin Armplates",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 28886,
-        "name": "Umbracite Bracer",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ],
-    "respawn_seconds": 5280
-  },
-  "Eom_Zethon_Xakra|Vex Thal": {
-    "mob": "Eom_Zethon_Xakra",
-    "zone": "Vex Thal",
-    "loot": [
-      {
-        "item_id": 28881,
-        "name": "Boots of Silent Dreams",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 28891,
-        "name": "Bracer of the Silent Star",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 28892,
-        "name": "Cap of the Silent Star",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 28887,
-        "name": "Cloak of Icy Shadows",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 28890,
-        "name": "Cord of Midnight",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 28885,
-        "name": "Gorget of Superiority",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 28889,
-        "name": "Living Symbol",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 28884,
-        "name": "Ring of Rage",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 28883,
-        "name": "Shaded Amice",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 28888,
-        "name": "Shadow Footpads",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 28882,
-        "name": "Steel Skin Armplates",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 28886,
-        "name": "Umbracite Bracer",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ],
-    "respawn_seconds": 5280
+    ]
   },
   "Kaas_Thox_Xi_Ans_Dyek|Vex Thal": {
     "mob": "Kaas_Thox_Xi_Ans_Dyek",
@@ -13899,8 +8275,13 @@
     ],
     "respawn_seconds": 561600
   },
-  "Bufa|Western Wastes": {
+  "Bufa (+2)|Western Wastes": {
     "mob": "Bufa",
+    "mobs": [
+      "Bufa",
+      "Ionat",
+      "Mazi"
+    ],
     "zone": "Western Wastes",
     "loot": [
       {
@@ -13910,8 +8291,7 @@
           "dkp"
         ]
       }
-    ],
-    "respawn_seconds": 32400
+    ]
   },
   "Harla_Dar|Western Wastes": {
     "mob": "Harla_Dar",
@@ -13934,8 +8314,13 @@
     ],
     "respawn_seconds": 259200
   },
-  "Hechaeva|Western Wastes": {
+  "Hechaeva (+2)|Western Wastes": {
     "mob": "Hechaeva",
+    "mobs": [
+      "Hechaeva",
+      "Neordla",
+      "Quoza"
+    ],
     "zone": "Western Wastes",
     "loot": [
       {
@@ -13945,22 +8330,7 @@
           "dkp"
         ]
       }
-    ],
-    "respawn_seconds": 7200
-  },
-  "Ionat|Western Wastes": {
-    "mob": "Ionat",
-    "zone": "Western Wastes",
-    "loot": [
-      {
-        "item_id": 27141,
-        "name": "Peerless Dragonleg Breeches",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ],
-    "respawn_seconds": 7200
+    ]
   },
   "Klandicar|Western Wastes": {
     "mob": "Klandicar",
@@ -14010,48 +8380,6 @@
       }
     ],
     "respawn_seconds": 345600
-  },
-  "Mazi|Western Wastes": {
-    "mob": "Mazi",
-    "zone": "Western Wastes",
-    "loot": [
-      {
-        "item_id": 27141,
-        "name": "Peerless Dragonleg Breeches",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ],
-    "respawn_seconds": 7200
-  },
-  "Neordla|Western Wastes": {
-    "mob": "Neordla",
-    "zone": "Western Wastes",
-    "loot": [
-      {
-        "item_id": 27156,
-        "name": "Matchless Dragonspine Vambraces",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ],
-    "respawn_seconds": 14400
-  },
-  "Quoza|Western Wastes": {
-    "mob": "Quoza",
-    "zone": "Western Wastes",
-    "loot": [
-      {
-        "item_id": 27156,
-        "name": "Matchless Dragonspine Vambraces",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ],
-    "respawn_seconds": 32400
   },
   "Sontalak|Western Wastes": {
     "mob": "Sontalak",
