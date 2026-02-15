@@ -26,23 +26,35 @@ export default function LootSearch() {
   const [error, setError] = useState('')
 
   useEffect(() => {
-    const limit = 50000
-    Promise.all([
-      supabase.from('raid_loot').select('id, raid_id, event_id, item_name, character_name, char_id, cost').limit(limit),
-      supabase.from('raids').select('raid_id, raid_name, date_iso').limit(limit),
-    ]).then(([l, r]) => {
-      if (l.error) {
-        setError(l.error.message)
-        setLoading(false)
-        return
-      }
-      setLoot(l.data || [])
+    const PAGE = 1000
+    const MAX_LOOT_PAGES = 20
+    const run = async () => {
+      const raidRes = await supabase.from('raids').select('raid_id, raid_name, date_iso').limit(50000)
       const raidMap = {}
-      ;(r.data || []).forEach((row) => { raidMap[row.raid_id] = { name: row.raid_name || row.raid_id, date_iso: row.date_iso || '' } })
+      ;(raidRes.data || []).forEach((row) => { raidMap[row.raid_id] = { name: row.raid_name || row.raid_id, date_iso: row.date_iso || '' } })
       setRaids(raidMap)
+
+      const allLoot = []
+      for (let from = 0; from < MAX_LOOT_PAGES * PAGE; from += PAGE) {
+        const to = from + PAGE - 1
+        const { data, error } = await supabase
+          .from('raid_loot')
+          .select('id, raid_id, event_id, item_name, character_name, char_id, cost')
+          .order('id', { ascending: false })
+          .range(from, to)
+        if (error) {
+          setError(error.message)
+          setLoading(false)
+          return
+        }
+        allLoot.push(...(data || []))
+        if (!data || data.length < PAGE) break
+      }
+      setLoot(allLoot)
       setLoading(false)
-    })
-    supabase.from('raid_classifications').select('raid_id, mob').limit(limit).then(({ data }) => {
+    }
+    run()
+    supabase.from('raid_classifications').select('raid_id, mob').limit(50000).then(({ data }) => {
       const raidByMob = {}
       ;(data || []).forEach((row) => {
         if (!raidByMob[row.mob]) raidByMob[row.mob] = []

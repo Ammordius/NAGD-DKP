@@ -187,14 +187,13 @@ export default function ItemPage() {
   return (
     <div className="container">
       <p><Link to="/loot">← Loot search</Link> · <Link to="/mobs">Mob loot</Link></p>
-      <h1>{itemName || '—'}</h1>
-      <p style={{ color: '#a1a1aa', marginBottom: '1rem' }}>
+      <h1 style={{ marginBottom: '1rem' }}>
         {takpId != null ? (
-          <a href={`${TAKP_ITEM_BASE}${takpId}`} target="_blank" rel="noopener noreferrer">View on TAKP AllaClone</a>
+          <a href={`${TAKP_ITEM_BASE}${takpId}`} target="_blank" rel="noopener noreferrer">{itemName || '—'}</a>
         ) : (
-          <span>Item not in mob loot table (no TAKP link)</span>
+          itemName || '—'
         )}
-      </p>
+      </h1>
 
       {lastThree.length > 0 && (
         <div className="card" style={{ borderLeft: '4px solid #7c3aed' }}>
