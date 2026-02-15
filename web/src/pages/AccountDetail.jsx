@@ -125,6 +125,11 @@ export default function AccountDetail({ isOfficer, profile }) {
                 if (!totalRaidDkp[ev.raid_id]) totalRaidDkp[ev.raid_id] = 0
                 totalRaidDkp[ev.raid_id] += v
               })
+              const totalByRaid = {}
+              ;(eRes.data || []).forEach((ev) => {
+                if (!totalByRaid[ev.raid_id]) totalByRaid[ev.raid_id] = 0
+                totalByRaid[ev.raid_id] += parseFloat(ev.dkp_value || 0)
+              })
               const dkpByRaid = {}
               if (evAttRes.data?.length > 0) {
                 evAttRes.data.forEach((a) => {
@@ -132,12 +137,14 @@ export default function AccountDetail({ isOfficer, profile }) {
                   if (!dkpByRaid[a.raid_id]) dkpByRaid[a.raid_id] = 0
                   dkpByRaid[a.raid_id] += eventDkp[k] || 0
                 })
-              } else {
-                const totalByRaid = {}
-                ;(eRes.data || []).forEach((ev) => {
-                  if (!totalByRaid[ev.raid_id]) totalByRaid[ev.raid_id] = 0
-                  totalByRaid[ev.raid_id] += parseFloat(ev.dkp_value || 0)
+                // Fallback: for raids where we have raid_attendance but no event-level rows, use full raid total
+                const attRaidIds = new Set((attRes.data || []).map((r) => r.raid_id))
+                raidList.forEach((raidId) => {
+                  if ((dkpByRaid[raidId] ?? 0) === 0 && attRaidIds.has(raidId)) {
+                    dkpByRaid[raidId] = totalByRaid[raidId] ?? 0
+                  }
                 })
+              } else {
                 ;(attRes.data || []).forEach((a) => {
                   if (!dkpByRaid[a.raid_id]) dkpByRaid[a.raid_id] = 0
                   dkpByRaid[a.raid_id] += totalByRaid[a.raid_id] || 0
@@ -220,7 +227,7 @@ export default function AccountDetail({ isOfficer, profile }) {
         Account <code>{accountId}</code>
         {account.toon_count != null && <span style={{ marginLeft: '0.5rem' }}>({account.toon_count} toons)</span>}
         {isMyAccount && <span style={{ marginLeft: '0.5rem', color: '#a78bfa' }}> {MIDDLE_DOT} This is your account</span>}
-        {profile && !isMyAccount && (
+        {profile && !isMyAccount && !myAccountId && (
           <button type="button" className="btn btn-ghost" style={{ marginLeft: '0.5rem', fontSize: '0.875rem' }} onClick={handleClaimAccount} disabled={claimLoading}>
             {claimLoading ? 'Claiming...' : 'Claim this account'}
           </button>

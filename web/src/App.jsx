@@ -13,6 +13,7 @@ import AccountDetail from './pages/AccountDetail'
 import ItemPage from './pages/ItemPage'
 import CharacterPage from './pages/CharacterPage'
 import Officer from './pages/Officer'
+import Profile from './pages/Profile'
 
 export default function App() {
   const [session, setSession] = useState(null)
@@ -68,6 +69,7 @@ export default function App() {
         <a href="/loot">Loot search</a>
         <a href="/mobs">Mob loot</a>
         <a href="/accounts">Accounts</a>
+        <a href="/profile">Profile</a>
         {isOfficer && <a href="/officer" style={{ color: '#fbbf24' }}>Officer</a>}
         <span className="role">{profile?.role === 'officer' ? 'Officer' : 'Player'}</span>
         <button
@@ -87,6 +89,7 @@ export default function App() {
         <Route path="/mobs" element={<MobLoot />} />
         <Route path="/accounts" element={<Accounts />} />
         <Route path="/accounts/:accountId" element={<AccountDetail isOfficer={isOfficer} profile={profile} />} />
+        <Route path="/profile" element={<Profile profile={profile} onProfileUpdate={() => session?.user?.id && fetchProfile(session.user.id)} />} />
         <Route path="/items/:itemNameEncoded" element={<ItemPage />} />
         <Route path="/characters/:charKey" element={<CharacterPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
