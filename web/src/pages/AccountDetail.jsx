@@ -6,6 +6,9 @@ const MAGELO_BASE = 'https://www.takproject.net/magelo/character.php?char='
 const MIDDLE_DOT = '\u00B7'
 
 const PAGE = 1000
+const ACTIVITY_PAGE_SIZE = 50
+/** Only paginate activity when raid count exceeds this (e.g. 1611 raids). */
+const ACTIVITY_PAGINATION_THRESHOLD = 100
 const IN_CHUNK = 150 // avoid URL length limits and timeouts when filtering by 1000+ ids
 
 async function fetchAll(table, select = '*', filter) {
@@ -40,6 +43,7 @@ async function fetchByChunkedIn(table, select, column, values) {
 export default function AccountDetail({ isOfficer, profile }) {
   const { accountId } = useParams()
   const [tab, setTab] = useState('activity')
+  const [activityPage, setActivityPage] = useState(1)
   const [account, setAccount] = useState(null)
   const [characters, setCharacters] = useState([])
   const [raids, setRaids] = useState({})
@@ -153,6 +157,7 @@ export default function AccountDetail({ isOfficer, profile }) {
               items: lootByRaid[raidId] || [],
             })).sort((a, b) => (b.date || '').localeCompare(a.date || ''))
             setActivityByRaid(activity)
+            setActivityPage(1)
             setLoading(false)
           }).catch((err) => {
             setError(err?.message || 'Failed to load raid data')
@@ -326,29 +331,106 @@ export default function AccountDetail({ isOfficer, profile }) {
           {activityByRaid.length === 0 ? (
             <p style={{ color: '#71717a' }}>No raid activity recorded.</p>
           ) : (
-            <ul style={{ listStyle: 'none', paddingLeft: 0, margin: 0 }}>
-              {activityByRaid.map((act) => (
-                <li key={act.raid_id} style={{ marginBottom: '1.5rem', paddingBottom: '1rem', borderBottom: '1px solid #27272a' }}>
-                  <p style={{ margin: '0 0 0.25rem 0' }}>
-                    <Link to={`/raids/${act.raid_id}`}><strong>{act.raid_name}</strong></Link>
-                    {act.date && <span style={{ color: '#71717a', marginLeft: '0.5rem' }}>{act.date}</span>}
-                    <span style={{ marginLeft: '0.5rem' }}>{MIDDLE_DOT} <strong>Earned: {Number(act.dkpEarned ?? 0).toFixed(0)}{act.dkpRaidTotal != null && act.dkpRaidTotal > 0 ? ` / ${Number(act.dkpRaidTotal).toFixed(0)}` : ''}</strong> DKP</span>
-                  </p>
-                  {act.items.length > 0 && (
-                    <ul style={{ margin: '0.25rem 0 0 1.25rem', paddingLeft: 0, listStyle: 'none' }}>
-                      {act.items.map((row, i) => (
-                        <li key={i} style={{ marginBottom: '0.25rem', fontSize: '0.9rem' }}>
-                          <Link to={`/items/${encodeURIComponent(row.item_name || '')}`}>{row.item_name || '—'}</Link>
-                          {' '}{MIDDLE_DOT}{' '}
-                          <Link to={`/characters/${encodeURIComponent(row.character_name || row.char_id || '')}`}>{row.character_name || row.char_id || '—'}</Link>
-                          {row.cost != null && row.cost !== '' && <> {MIDDLE_DOT} {row.cost} DKP</>}
+            <>
+              {(() => {
+                const total = activityByRaid.length
+                const usePagination = total > ACTIVITY_PAGINATION_THRESHOLD
+                const totalPages = usePagination ? Math.max(1, Math.ceil(total / ACTIVITY_PAGE_SIZE)) : 1
+                const page = Math.min(Math.max(1, activityPage), totalPages)
+                const start = usePagination ? (page - 1) * ACTIVITY_PAGE_SIZE : 0
+                const activityToShow = usePagination ? activityByRaid.slice(start, start + ACTIVITY_PAGE_SIZE) : activityByRaid
+                return (
+                  <>
+                    {usePagination && (
+                      <>
+                        <p style={{ color: '#a1a1aa', fontSize: '0.875rem', marginBottom: '0.75rem' }}>
+                          Showing {start + 1}–{start + activityToShow.length} of {total} raids
+                          {totalPages > 1 && (
+                            <span style={{ marginLeft: '0.5rem' }}>
+                              {MIDDLE_DOT} Page {page} of {totalPages}
+                            </span>
+                          )}
+                        </p>
+                        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap' }}>
+                          {totalPages > 10 && (
+                            <button
+                              type="button"
+                              className="btn btn-ghost"
+                              disabled={page <= 1}
+                              onClick={() => setActivityPage(1)}
+                            >
+                              First
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            className="btn btn-ghost"
+                            disabled={page <= 1}
+                            onClick={() => setActivityPage((p) => Math.max(1, p - 1))}
+                          >
+                            Previous
+                          </button>
+                          {totalPages <= 10 && (
+                            Array.from({ length: totalPages }, (_, i) => i + 1).map((n) => (
+                              <button
+                                key={n}
+                                type="button"
+                                className={n === page ? 'btn' : 'btn btn-ghost'}
+                                style={{ minWidth: '2.25rem', padding: '0.25rem 0.5rem' }}
+                                onClick={() => setActivityPage(n)}
+                              >
+                                {n}
+                              </button>
+                            ))
+                          )}
+                          <button
+                            type="button"
+                            className="btn btn-ghost"
+                            disabled={page >= totalPages}
+                            onClick={() => setActivityPage((p) => Math.min(totalPages, p + 1))}
+                          >
+                            Next
+                          </button>
+                          {totalPages > 10 && (
+                            <button
+                              type="button"
+                              className="btn btn-ghost"
+                              disabled={page >= totalPages}
+                              onClick={() => setActivityPage(totalPages)}
+                            >
+                              Last
+                            </button>
+                          )}
+                        </div>
+                      </>
+                    )}
+                    <ul style={{ listStyle: 'none', paddingLeft: 0, margin: 0 }}>
+                      {activityToShow.map((act) => (
+                        <li key={act.raid_id} style={{ marginBottom: '1.5rem', paddingBottom: '1rem', borderBottom: '1px solid #27272a' }}>
+                          <p style={{ margin: '0 0 0.25rem 0' }}>
+                            <Link to={`/raids/${act.raid_id}`}><strong>{act.raid_name}</strong></Link>
+                            {act.date && <span style={{ color: '#71717a', marginLeft: '0.5rem' }}>{act.date}</span>}
+                            <span style={{ marginLeft: '0.5rem' }}>{MIDDLE_DOT} <strong>Earned: {Number(act.dkpEarned ?? 0).toFixed(0)}{act.dkpRaidTotal != null && act.dkpRaidTotal > 0 ? ` / ${Number(act.dkpRaidTotal).toFixed(0)}` : ''}</strong> DKP</span>
+                          </p>
+                          {act.items.length > 0 && (
+                            <ul style={{ margin: '0.25rem 0 0 1.25rem', paddingLeft: 0, listStyle: 'none' }}>
+                              {act.items.map((row, i) => (
+                                <li key={i} style={{ marginBottom: '0.25rem', fontSize: '0.9rem' }}>
+                                  <Link to={`/items/${encodeURIComponent(row.item_name || '')}`}>{row.item_name || '—'}</Link>
+                                  {' '}{MIDDLE_DOT}{' '}
+                                  <Link to={`/characters/${encodeURIComponent(row.character_name || row.char_id || '')}`}>{row.character_name || row.char_id || '—'}</Link>
+                                  {row.cost != null && row.cost !== '' && <> {MIDDLE_DOT} {row.cost} DKP</>}
+                                </li>
+                              ))}
+                            </ul>
+                          )}
                         </li>
                       ))}
                     </ul>
-                  )}
-                </li>
-              ))}
-            </ul>
+                  </>
+                )
+              })()}
+            </>
           )}
         </div>
       )}
