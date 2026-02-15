@@ -57,19 +57,18 @@ function parseChannelList(paste) {
 function parseLootLog(paste) {
   const lines = (paste || '').split(/\r?\n/).map((l) => l.trim()).filter(Boolean)
   const results = []
-  const gratsOrCongrats = /(?:grats|congrats)/i
   for (const line of lines) {
     const quoted = line.match(/'([^']+)'/)?.[1] || line
     let itemName = ''
     let characterName = ''
     let cost = 0
 
-    // Explicit DKP: "... grats/congrats Name ... N DKP"
-    const explicitDkp = quoted.match(/\b(?:grats|congrats)\s+([^,]+?).*?\s+(\d+)\s*dkp/i)
+    // Explicit DKP: "... grats/congrats Name ... N DKP" (name is text before the number that precedes "dkp")
+    const explicitDkp = quoted.match(/\b(?:grats|congrats)\s+(.+?)\s+(\d+)\s*dkp/i)
     if (explicitDkp) {
-      characterName = explicitDkp[1].trim()
+      characterName = explicitDkp[1].trim().replace(/,\s*$/, '')
       cost = parseInt(explicitDkp[2], 10)
-      itemName = quoted.replace(/\s*(?:grats|congrats)\s+[^,]+.*$/i, '').trim()
+      itemName = quoted.replace(/\s*(?:grats|congrats)\s+[\s\S]+$/i, '').trim()
     } else {
       // "Item no bids - Name w/ 764/777 grats" (0 DKP)
       const noBids = quoted.match(/^(.+?)\s+no bids\s*-\s*(\S+)\s+w\/\s*\d+\/\d+\s*grats\s*$/i)
@@ -505,18 +504,26 @@ export default function Officer({ isOfficer }) {
     setLootResult(null)
     setError('')
     const event_id = events.length > 0 ? events[0].event_id : 'loot'
+    const unmatched = []
     let inserted = 0
     for (const row of parsed) {
       const char = nameToChar[row.characterName.toLowerCase()]
+      if (!char) {
+        unmatched.push(`${row.characterName} (${row.itemName})`)
+        continue
+      }
       const { error: err } = await supabase.from('raid_loot').insert({
         raid_id: selectedRaidId,
         event_id,
         item_name: row.itemName,
-        char_id: char?.char_id ?? '',
-        character_name: row.characterName,
+        char_id: char.char_id,
+        character_name: char.name,
         cost: String(row.cost),
       })
       if (!err) inserted++
+    }
+    if (unmatched.length > 0) {
+      setError(`Character(s) not on DKP list (loot not added): ${unmatched.join('; ')}. Add the character first or fix the name in the log.`)
     }
     setLootResult({ fromLog: true, inserted, total: parsed.length })
     setLootLogPaste('')
