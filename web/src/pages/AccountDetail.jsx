@@ -84,9 +84,11 @@ export default function AccountDetail({ isOfficer, profile }) {
           setCharacters(chars)
           const names = chars.map((c) => c.name).filter(Boolean)
           // Also fetch event attendance by character_name so we pick up rows keyed by name (e.g. from Officer tool)
-          const evAttPromise = names.length > 0
+          const byNameFetch = names.length > 0
             ? fetchAll('raid_event_attendance', 'raid_id, event_id, char_id, character_name', (q) => q.in('character_name', names))
             : Promise.resolve({ data: [] })
+          const timeout = (ms) => new Promise((_, rej) => setTimeout(() => rej(new Error('Request timeout')), ms))
+          const evAttPromise = Promise.race([byNameFetch, timeout(15000)]).catch(() => ({ data: [] }))
           evAttPromise.then((evAttByNameRes) => {
             const seen = new Set()
             const evAttRes = { data: [] }
@@ -156,10 +158,25 @@ export default function AccountDetail({ isOfficer, profile }) {
               })).sort((a, b) => (b.date || '').localeCompare(a.date || ''))
               setActivityByRaid(activity)
               setLoading(false)
+            }).catch((err) => {
+              setError(err?.message || 'Failed to load raid data')
+              setLoading(false)
             })
+          }).catch((err) => {
+            setError(err?.message || 'Failed to load activity')
+            setLoading(false)
           })
+        }).catch((err) => {
+          setError(err?.message || 'Failed to load characters')
+          setLoading(false)
         })
+      }).catch((err) => {
+        setError(err?.message || 'Failed to load account')
+        setLoading(false)
       })
+    }).catch((err) => {
+      setError(err?.message || 'Failed to load')
+      setLoading(false)
     })
   }, [accountId, refreshKey])
 
