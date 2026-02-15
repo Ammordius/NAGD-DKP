@@ -656,7 +656,7 @@
   },
   "Calris_Bristlebranch|": {
     "mob": "Calris_Bristlebranch",
-    "zone": "",
+    "zone": "Plane of Earth",
     "loot": [
       {
         "item_id": 25695,
@@ -806,7 +806,7 @@
       "Pwelon_of_Vapor",
       "Vamuil_of_Water"
     ],
-    "zone": "Plane of Water",
+    "zone": "Plane of Earth",
     "loot": [
       {
         "item_id": 16369,
@@ -2316,7 +2316,7 @@
       "a_torrid_elemental",
       "an_Enchanted_War_Boar"
     ],
-    "zone": "Plane of Time",
+    "zone": "Tower of Solusek Ro",
     "loot": [
       {
         "item_id": 16298,
