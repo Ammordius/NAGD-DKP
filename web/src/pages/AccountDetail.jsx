@@ -200,7 +200,7 @@ export default function AccountDetail({ isOfficer, profile }) {
     setRefreshKey((k) => k + 1)
   }
 
-  if (loading) return <div className="container">Loading account…</div>
+  if (loading) return <div className="container">Loading account...</div>
   if (error) return <div className="container"><span className="error">{error}</span> <Link to="/accounts">← Accounts</Link></div>
   if (!account) return <div className="container">Account not found. <Link to="/accounts">← Accounts</Link></div>
 
@@ -211,10 +211,10 @@ export default function AccountDetail({ isOfficer, profile }) {
       <p style={{ color: '#a1a1aa', marginBottom: '1rem' }}>
         Account <code>{accountId}</code>
         {account.toon_count != null && <span style={{ marginLeft: '0.5rem' }}>({account.toon_count} toons)</span>}
-        {isMyAccount && <span style={{ marginLeft: '0.5rem', color: '#a78bfa' }}· This is your account</span>}
+        {isMyAccount && <span style={{ marginLeft: '0.5rem', color: '#a78bfa' }}> \u00B7 This is your account</span>}
         {profile && !isMyAccount && (
           <button type="button" className="btn btn-ghost" style={{ marginLeft: '0.5rem', fontSize: '0.875rem' }} onClick={handleClaimAccount} disabled={claimLoading}>
-            {claimLoading ? 'Claiming…' : 'Claim this account'}
+            {claimLoading ? 'Claiming...' : 'Claim this account'}
           </button>
         )}
       </p>
@@ -267,7 +267,7 @@ export default function AccountDetail({ isOfficer, profile }) {
                         {[c.class_name, c.level].filter(Boolean).join(' ')}
                       </span>
                     )}
-                    {' · '}
+                    {' \u00B7 '}
                     <a href={mageloUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: '0.9rem', color: '#a78bfa' }}>
                       Magelo
                     </a>
@@ -295,7 +295,7 @@ export default function AccountDetail({ isOfficer, profile }) {
           {addCharError && <p style={{ color: '#f87171', fontSize: '0.875rem', marginBottom: '0.5rem' }}>{addCharError}</p>}
           <div style={{ display: 'flex', gap: '0.5rem' }}>
             <button type="button" className="btn" onClick={handleAddCharacter} disabled={addCharLoading}>
-              {addCharLoading ? 'Adding…' : 'Add'}
+              {addCharLoading ? 'Adding...' : 'Add'}
             </button>
             <button type="button" className="btn btn-ghost" onClick={() => { setAddCharOpen(false); setAddCharError(''); setAddCharInput(''); }} disabled={addCharLoading}>
               Cancel
@@ -307,7 +307,7 @@ export default function AccountDetail({ isOfficer, profile }) {
       {tab === 'activity' && (
         <div className="card">
           <h2 style={{ marginTop: 0 }}>Activity (earned DKP and items by raid)</h2>
-          <p style={{ color: '#a1a1aa', fontSize: '0.875rem', marginBottom: '1rem' }}>Reverse chronological. Each raid shows DKP earned and items won by this account’s characters.</p>
+          <p style={{ color: '#a1a1aa', fontSize: '0.875rem', marginBottom: '1rem' }}>Reverse chronological. Each raid shows DKP earned and items won by the characters on this account.</p>
           {activityByRaid.length === 0 ? (
             <p style={{ color: '#71717a' }}>No raid activity recorded.</p>
           ) : (
@@ -317,16 +317,16 @@ export default function AccountDetail({ isOfficer, profile }) {
                   <p style={{ margin: '0 0 0.25rem 0' }}>
                     <Link to={`/raids/${act.raid_id}`}><strong>{act.raid_name}</strong></Link>
                     {act.date && <span style={{ color: '#71717a', marginLeft: '0.5rem' }}>{act.date}</span>}
-                    <span style={{ marginLeft: '0.5rem' }}>· <strong>Earned: {Number(act.dkpEarned ?? 0).toFixed(0)}</strong> DKP</span>
+                    <span style={{ marginLeft: '0.5rem' }}>\u00B7 <strong>Earned: {Number(act.dkpEarned ?? 0).toFixed(0)}</strong> DKP</span>
                   </p>
                   {act.items.length > 0 && (
                     <ul style={{ margin: '0.25rem 0 0 1.25rem', paddingLeft: 0, listStyle: 'none' }}>
                       {act.items.map((row, i) => (
                         <li key={i} style={{ marginBottom: '0.25rem', fontSize: '0.9rem' }}>
                           <Link to={`/items/${encodeURIComponent(row.item_name || '')}`}>{row.item_name || '—'}</Link>
-                          {' · '}
+                          {' \u00B7 '}
                           <Link to={`/characters/${encodeURIComponent(row.character_name || row.char_id || '')}`}>{row.character_name || row.char_id || '—'}</Link>
-                          {row.cost != null && row.cost !== '' && <> · {row.cost} DKP</>}
+                          {row.cost != null && row.cost !== '' && <> \u00B7 {row.cost} DKP</>}
                         </li>
                       ))}
                     </ul>
