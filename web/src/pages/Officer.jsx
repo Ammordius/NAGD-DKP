@@ -116,6 +116,7 @@ export default function Officer({ isOfficer }) {
   const [loot, setLoot] = useState([])
   const [eventAttendance, setEventAttendance] = useState([])
   const [characters, setCharacters] = useState([])
+  const [charIdToAccountId, setCharIdToAccountId] = useState({})
   const [itemNames, setItemNames] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -180,6 +181,12 @@ export default function Officer({ isOfficer }) {
     await loadRaids()
     const charsRes = await supabase.from('characters').select('char_id, name').limit(5000)
     if (charsRes.data) setCharacters(charsRes.data)
+    const caRes = await supabase.from('character_account').select('char_id, account_id').limit(10000)
+    const map = {}
+    ;(caRes.data || []).forEach((r) => {
+      if (r.char_id && r.account_id && map[r.char_id] == null) map[r.char_id] = r.account_id
+    })
+    setCharIdToAccountId(map)
     // Fetch all distinct item_name from raid_loot (paginate; Supabase returns max 1000 per request)
     const allItemRows = []
     let from = 0
@@ -364,18 +371,29 @@ export default function Officer({ isOfficer }) {
     const matched = []
     const unmatched = []
     const duplicates = []
+    const sameAccount = []
     const seenCharId = new Set()
+    const seenAccountKey = new Set()
     for (const n of names) {
       const key = n.toLowerCase().trim()
       const char = nameToChar[key]
-      if (char && !seenCharId.has(char.char_id)) {
-        seenCharId.add(char.char_id)
-        matched.push({ char_id: char.char_id, character_name: char.name })
-      } else if (char && seenCharId.has(char.char_id)) {
-        duplicates.push(n)
-      } else {
+      if (!char) {
         unmatched.push(n)
+        continue
       }
+      if (seenCharId.has(char.char_id)) {
+        duplicates.push(n)
+        continue
+      }
+      const accountId = charIdToAccountId[char.char_id] || null
+      const accountKey = accountId != null ? String(accountId) : char.char_id
+      if (seenAccountKey.has(accountKey)) {
+        sameAccount.push(n)
+        continue
+      }
+      seenCharId.add(char.char_id)
+      seenAccountKey.add(accountKey)
+      matched.push({ char_id: char.char_id, character_name: char.name })
     }
     if (matched.length > 0) {
       const { error: attErr } = await supabase.from('raid_event_attendance').insert(
@@ -423,6 +441,7 @@ export default function Officer({ isOfficer }) {
       matched: matched.length,
       unmatched: unmatched.length > 0 ? unmatched : null,
       duplicates: duplicates.length > 0 ? duplicates : null,
+      sameAccount: sameAccount.length > 0 ? sameAccount : null,
       event_id,
       missingFromThisTic: missingFromThisTic.length > 0 ? missingFromThisTic : null,
       newThisTic: events.length === 0 ? matched.map((m) => m.character_name) : matched.filter((m) => !eventAttendance.some((r) => String(r.char_id) === String(m.char_id))).map((m) => m.character_name),
@@ -708,6 +727,9 @@ export default function Officer({ isOfficer }) {
                 )}
                 {ticResult.duplicates?.length > 0 && (
                   <p style={{ color: '#a78bfa', marginBottom: '0.25rem' }}><strong>Duplicates</strong> (in paste again, not double-counted): {ticResult.duplicates.join(', ')}</p>
+                )}
+                {ticResult.sameAccount?.length > 0 && (
+                  <p style={{ color: '#a78bfa', marginBottom: '0.25rem' }}><strong>Same account</strong> (other toon already credited this tic): {ticResult.sameAccount.join(', ')}</p>
                 )}
                 {ticResult.missingFromThisTic?.length > 0 && (
                   <p style={{ color: '#f97316', marginBottom: '0.25rem' }}><strong>Missing from this tic</strong> (were in earlier tics this raid): {ticResult.missingFromThisTic.join(', ')}</p>
