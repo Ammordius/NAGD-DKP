@@ -35,7 +35,7 @@ export default function App() {
   }, [])
 
   async function fetchProfile(userId) {
-    const { data } = await supabase.from('profiles').select('role').eq('id', userId).single()
+    const { data } = await supabase.from('profiles').select('role, account_id').eq('id', userId).single()
     setProfile(data)
     setLoading(false)
   }
@@ -86,7 +86,7 @@ export default function App() {
         <Route path="/loot" element={<LootSearch />} />
         <Route path="/mobs" element={<MobLoot />} />
         <Route path="/accounts" element={<Accounts />} />
-        <Route path="/accounts/:accountId" element={<AccountDetail />} />
+        <Route path="/accounts/:accountId" element={<AccountDetail isOfficer={isOfficer} profile={profile} />} />
         <Route path="/items/:itemNameEncoded" element={<ItemPage />} />
         <Route path="/characters/:charKey" element={<CharacterPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />

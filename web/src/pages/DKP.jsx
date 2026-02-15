@@ -34,9 +34,18 @@ function applyAdjustmentsAndBalance(list, adjustmentsMap) {
   list.sort((a, b) => b.balance - a.balance)
 }
 
-function buildAccountLeaderboard(list, caData, accData) {
+function buildAccountLeaderboard(list, caData, accData, charData) {
   const charToAccount = {}
   ;(caData || []).forEach((r) => { charToAccount[String(r.char_id)] = r.account_id })
+  const nameToAccount = {}
+  if (charData?.length) {
+    const charIdToName = {}
+    charData.forEach((c) => { if (c.name) charIdToName[String(c.char_id)] = c.name })
+    ;(caData || []).forEach((r) => {
+      const name = charIdToName[String(r.char_id)]
+      if (name) nameToAccount[name] = r.account_id
+    })
+  }
   const accountNames = {}
   ;(accData || []).forEach((r) => {
     const display = (r.display_name || '').trim()
@@ -45,7 +54,7 @@ function buildAccountLeaderboard(list, caData, accData) {
   })
   const byAccount = {}
   list.forEach((r) => {
-    const aid = charToAccount[String(r.char_id)] ?? '_no_account_'
+    const aid = charToAccount[String(r.char_id)] ?? nameToAccount[String(r.name || '')] ?? '_no_account_'
     if (!byAccount[aid]) byAccount[aid] = { account_id: aid, earned: 0, spent: 0, earned_30d: 0, earned_60d: 0, name: accountNames[aid] || (aid === '_no_account_' ? '(no account)' : aid) }
     byAccount[aid].earned += r.earned
     byAccount[aid].spent += r.spent
@@ -80,6 +89,7 @@ export default function DKP({ isOfficer }) {
   const [activeMutating, setActiveMutating] = useState(false)
   const [caData, setCaData] = useState(null)
   const [accData, setAccData] = useState(null)
+  const [charData, setCharData] = useState(null)
   const [periodTotals, setPeriodTotals] = useState({ '30d': 0, '60d': 0 })
 
   // Load summary + adjustments + active + character_account + accounts so we always show one row per account.
@@ -90,11 +100,13 @@ export default function DKP({ isOfficer }) {
       supabase.from('dkp_adjustments').select('character_name, earned_delta, spent_delta').limit(1000),
       fetchAllRows('active_raiders', 'character_key'),
       supabase.from('dkp_period_totals').select('period, total_dkp'),
+      fetchAllRows('character_account', 'char_id, account_id'),
+      fetchAllRows('accounts', 'account_id, toon_names, display_name'),
+      fetchAllRows('characters', 'char_id, name'),
     ]
-    tables.push(fetchAllRows('character_account', 'char_id, account_id'))
-    tables.push(fetchAllRows('accounts', 'account_id, toon_names, display_name'))
     const results = await Promise.all(tables)
-    const [summary, adj, active, periodTotalsRes, ca, acc] = results
+    const [summary, adj, active, periodTotalsRes, ca, acc, charDataRes] = results
+    const charData = charDataRes?.data ?? []
     if (summary.error) return { ok: false, error: summary.error }
     const rows = summary.data || []
     if (rows.length === 0) return { ok: false }
@@ -126,7 +138,8 @@ export default function DKP({ isOfficer }) {
     applyAdjustmentsAndBalance(list, adjustmentsMap)
     if (ca?.data) setCaData(ca.data)
     if (acc?.data) setAccData(acc.data)
-    const accountList = buildAccountLeaderboard(list, ca?.data ?? [], acc?.data ?? [])
+    setCharData(charData)
+    const accountList = buildAccountLeaderboard(list, ca?.data ?? [], acc?.data ?? [], charData)
     setLeaderboard(list)
     setAccountLeaderboard(accountList)
     const updatedAt = rows[0]?.updated_at ?? null
@@ -135,15 +148,15 @@ export default function DKP({ isOfficer }) {
     return { ok: true, list, accountList, summaryUpdatedAt: updatedAt }
   }, [])
 
-  // When we get ca/acc data, rebuild account leaderboard from current character list.
+  // When we get ca/acc/char data, rebuild account leaderboard from current character list.
   useEffect(() => {
     if (caData === null || accData === null || leaderboard.length === 0) return
-    const accountList = buildAccountLeaderboard(leaderboard, caData, accData)
+    const accountList = buildAccountLeaderboard(leaderboard, caData, accData, charData ?? [])
     setAccountLeaderboard(accountList)
-  }, [caData, accData, leaderboard])
+  }, [caData, accData, charData, leaderboard])
 
   const loadLive = useCallback(async () => {
-    const [att, ev, evAtt, loot, ca, acc, adj] = await Promise.all([
+    const [att, ev, evAtt, loot, ca, acc, adj, charRes] = await Promise.all([
       fetchAllRows('raid_attendance', 'raid_id, char_id, character_name'),
       fetchAllRows('raid_events', 'raid_id, event_id, dkp_value'),
       fetchAllRows('raid_event_attendance', 'raid_id, event_id, char_id, character_name'),
@@ -151,6 +164,7 @@ export default function DKP({ isOfficer }) {
       fetchAllRows('character_account', 'char_id, account_id'),
       fetchAllRows('accounts', 'account_id, toon_names, display_name'),
       supabase.from('dkp_adjustments').select('character_name, earned_delta, spent_delta').limit(1000),
+      fetchAllRows('characters', 'char_id, name'),
     ])
     const err = att.error || ev.error || evAtt.error || loot.error || ca.error || acc.error
     if (err) return { ok: false, error: err }
@@ -198,7 +212,8 @@ export default function DKP({ isOfficer }) {
       spent: spent[key] || 0,
     }))
     applyAdjustmentsAndBalance(list, adjustmentsMap)
-    const accountList = buildAccountLeaderboard(list, ca.data, acc.data)
+    const charData = charRes?.data ?? []
+    const accountList = buildAccountLeaderboard(list, ca.data, acc.data, charData)
     setLeaderboard(list)
     setAccountLeaderboard(accountList)
     setSummaryUpdatedAt(null)

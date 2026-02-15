@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 
@@ -21,15 +21,34 @@ async function fetchAll(table, select = '*', filter) {
   return { data: all, error: null }
 }
 
-export default function AccountDetail() {
+export default function AccountDetail({ isOfficer, profile }) {
   const { accountId } = useParams()
-  const [tab, setTab] = useState('characters')
+  const [tab, setTab] = useState('activity')
   const [account, setAccount] = useState(null)
   const [characters, setCharacters] = useState([])
   const [raids, setRaids] = useState({})
   const [activityByRaid, setActivityByRaid] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [refreshKey, setRefreshKey] = useState(0)
+  const [addCharOpen, setAddCharOpen] = useState(false)
+  const [addCharInput, setAddCharInput] = useState('')
+  const [addCharError, setAddCharError] = useState('')
+  const [addCharLoading, setAddCharLoading] = useState(false)
+  const [claimLoading, setClaimLoading] = useState(false)
+  const [myAccountId, setMyAccountId] = useState(profile?.account_id ?? null)
+  const isMyAccount = myAccountId === accountId
+  const canAddChar = isOfficer || isMyAccount
+
+  useEffect(() => {
+    if (!accountId || !profile) return
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (!user) return
+      supabase.from('profiles').select('account_id').eq('id', user.id).single().then(({ data }) => {
+        setMyAccountId(data?.account_id ?? null)
+      })
+    })
+  }, [accountId, profile, refreshKey])
 
   useEffect(() => {
     if (!accountId) {
@@ -59,70 +78,127 @@ export default function AccountDetail() {
           fetchAll('raid_attendance', 'raid_id, char_id, character_name', (q) => q.in('char_id', charIds)),
           fetchAll('raid_event_attendance', 'raid_id, event_id, char_id, character_name', (q) => q.in('char_id', charIds)),
           fetchAll('raid_loot', 'raid_id, char_id, character_name, item_name, cost', (q) => q.in('char_id', charIds)),
-        ]).then(([chRes, attRes, evAttRes, lootRes]) => {
+        ]).then(([chRes, attRes, evAttByCharId, lootRes]) => {
           const chars = (chRes.data || []).map((c) => ({ ...c, displayName: c.name || c.char_id }))
           setCharacters(chars)
-          const raidIds = new Set([
-            ...(attRes.data || []).map((r) => r.raid_id),
-            ...(lootRes.data || []).map((r) => r.raid_id),
-          ])
-          if (raidIds.size === 0) {
-            setRaids({})
-            setActivityByRaid([])
-            setLoading(false)
-            return
-          }
-          const raidList = [...raidIds]
-          Promise.all([
-            supabase.from('raids').select('raid_id, raid_name, date_iso').in('raid_id', raidList),
-            supabase.from('raid_events').select('raid_id, event_id, dkp_value').in('raid_id', raidList),
-          ]).then(([rRes, eRes]) => {
-            const rMap = {}
-            ;(rRes.data || []).forEach((row) => { rMap[row.raid_id] = row })
-            setRaids(rMap)
-            const eventDkp = {}
-            ;(eRes.data || []).forEach((ev) => {
-              eventDkp[`${ev.raid_id}|${ev.event_id}`] = parseFloat(ev.dkp_value || 0)
-            })
-            const dkpByRaid = {}
-            if (evAttRes.data?.length > 0) {
-              evAttRes.data.forEach((a) => {
-                const k = `${a.raid_id}|${a.event_id}`
-                if (!dkpByRaid[a.raid_id]) dkpByRaid[a.raid_id] = 0
-                dkpByRaid[a.raid_id] += eventDkp[k] || 0
-              })
-            } else {
-              const totalByRaid = {}
-              ;(eRes.data || []).forEach((ev) => {
-                if (!totalByRaid[ev.raid_id]) totalByRaid[ev.raid_id] = 0
-                totalByRaid[ev.raid_id] += parseFloat(ev.dkp_value || 0)
-              })
-              ;(attRes.data || []).forEach((a) => {
-                if (!dkpByRaid[a.raid_id]) dkpByRaid[a.raid_id] = 0
-                dkpByRaid[a.raid_id] += totalByRaid[a.raid_id] || 0
-              })
+          const names = chars.map((c) => c.name).filter(Boolean)
+          // Also fetch event attendance by character_name so we pick up rows keyed by name (e.g. from Officer tool)
+          const evAttPromise = names.length > 0
+            ? fetchAll('raid_event_attendance', 'raid_id, event_id, char_id, character_name', (q) => q.in('character_name', names))
+            : Promise.resolve({ data: [] })
+          evAttPromise.then((evAttByNameRes) => {
+            const seen = new Set()
+            const evAttRes = { data: [] }
+            for (const row of [...(evAttByCharId.data || []), ...(evAttByNameRes.data || [])]) {
+              const key = `${row.raid_id}|${row.event_id}|${row.char_id || row.character_name || ''}`
+              if (seen.has(key)) continue
+              seen.add(key)
+              evAttRes.data.push(row)
             }
-            const lootByRaid = {}
-            ;(lootRes.data || []).forEach((row) => {
-              if (!lootByRaid[row.raid_id]) lootByRaid[row.raid_id] = []
-              lootByRaid[row.raid_id].push(row)
+            const raidIds = new Set([
+              ...(attRes.data || []).map((r) => r.raid_id),
+              ...(lootRes.data || []).map((r) => r.raid_id),
+              ...(evAttRes.data || []).map((r) => r.raid_id),
+            ])
+            if (raidIds.size === 0) {
+              setRaids({})
+              setActivityByRaid([])
+              setLoading(false)
+              return
+            }
+            const raidList = [...raidIds]
+            Promise.all([
+              supabase.from('raids').select('raid_id, raid_name, date_iso').in('raid_id', raidList),
+              supabase.from('raid_events').select('raid_id, event_id, dkp_value').in('raid_id', raidList),
+            ]).then(([rRes, eRes]) => {
+              const rMap = {}
+              ;(rRes.data || []).forEach((row) => { rMap[row.raid_id] = row })
+              setRaids(rMap)
+              const eventDkp = {}
+              ;(eRes.data || []).forEach((ev) => {
+                eventDkp[`${ev.raid_id}|${ev.event_id}`] = parseFloat(ev.dkp_value || 0)
+              })
+              const dkpByRaid = {}
+              if (evAttRes.data?.length > 0) {
+                evAttRes.data.forEach((a) => {
+                  const k = `${a.raid_id}|${a.event_id}`
+                  if (!dkpByRaid[a.raid_id]) dkpByRaid[a.raid_id] = 0
+                  dkpByRaid[a.raid_id] += eventDkp[k] || 0
+                })
+              } else {
+                const totalByRaid = {}
+                ;(eRes.data || []).forEach((ev) => {
+                  if (!totalByRaid[ev.raid_id]) totalByRaid[ev.raid_id] = 0
+                  totalByRaid[ev.raid_id] += parseFloat(ev.dkp_value || 0)
+                })
+                ;(attRes.data || []).forEach((a) => {
+                  if (!dkpByRaid[a.raid_id]) dkpByRaid[a.raid_id] = 0
+                  dkpByRaid[a.raid_id] += totalByRaid[a.raid_id] || 0
+                })
+              }
+              const lootByRaid = {}
+              ;(lootRes.data || []).forEach((row) => {
+                if (!lootByRaid[row.raid_id]) lootByRaid[row.raid_id] = []
+                lootByRaid[row.raid_id].push(row)
+              })
+              const activity = raidList.map((raidId) => ({
+                raid_id: raidId,
+                date: (rMap[raidId]?.date_iso || '').slice(0, 10),
+                raid_name: rMap[raidId]?.raid_name || raidId,
+                dkpEarned: dkpByRaid[raidId] ?? 0,
+                items: lootByRaid[raidId] || [],
+              })).sort((a, b) => (b.date || '').localeCompare(a.date || ''))
+              setActivityByRaid(activity)
+              setLoading(false)
             })
-            const activity = raidList.map((raidId) => ({
-              raid_id: raidId,
-              date: (rMap[raidId]?.date_iso || '').slice(0, 10),
-              raid_name: rMap[raidId]?.raid_name || raidId,
-              dkpEarned: dkpByRaid[raidId] ?? 0,
-              items: lootByRaid[raidId] || [],
-            })).sort((a, b) => (b.date || '').localeCompare(a.date || ''))
-            setActivityByRaid(activity)
-            setLoading(false)
           })
         })
       })
     })
-  }, [accountId])
+  }, [accountId, refreshKey])
 
   const displayName = account?.display_name?.trim() || account?.toon_names?.split(',')[0]?.trim() || accountId
+
+  async function handleClaimAccount() {
+    setClaimLoading(true)
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) {
+      setClaimLoading(false)
+      return
+    }
+    const { error: updErr } = await supabase.from('profiles').update({ account_id: accountId }).eq('id', user.id)
+    setClaimLoading(false)
+    if (updErr) setError(updErr.message)
+    else setMyAccountId(accountId)
+  }
+
+  async function handleAddCharacter() {
+    const raw = addCharInput.trim()
+    if (!raw) {
+      setAddCharError('Enter a character name or char_id')
+      return
+    }
+    setAddCharError('')
+    setAddCharLoading(true)
+    const { data: byId } = await supabase.from('characters').select('char_id, name').eq('char_id', raw).limit(1)
+    const { data: byName } = await supabase.from('characters').select('char_id, name').ilike('name', raw).limit(2)
+    const chars = (byId?.length ? byId : byName) || []
+    const char = (chars.length === 1) ? chars[0] : (chars.length > 1 && chars.some((c) => (c.name || '').toLowerCase() === raw.toLowerCase())) ? chars.find((c) => (c.name || '').toLowerCase() === raw.toLowerCase()) : chars[0]
+    if (!char?.char_id) {
+      setAddCharError(chars?.length > 1 ? 'Multiple characters match; use exact name or char_id' : 'Character not found in database')
+      setAddCharLoading(false)
+      return
+    }
+    const { error: insErr } = await supabase.from('character_account').insert({ char_id: char.char_id, account_id: accountId })
+    setAddCharLoading(false)
+    if (insErr) {
+      setAddCharError(insErr.message)
+      return
+    }
+    setAddCharOpen(false)
+    setAddCharInput('')
+    setRefreshKey((k) => k + 1)
+  }
 
   if (loading) return <div className="container">Loading account…</div>
   if (error) return <div className="container"><span className="error">{error}</span> <Link to="/accounts">← Accounts</Link></div>
@@ -135,16 +211,15 @@ export default function AccountDetail() {
       <p style={{ color: '#a1a1aa', marginBottom: '1rem' }}>
         Account <code>{accountId}</code>
         {account.toon_count != null && <span style={{ marginLeft: '0.5rem' }}>({account.toon_count} toons)</span>}
+        {isMyAccount && <span style={{ marginLeft: '0.5rem', color: '#a78bfa' }}· This is your account</span>}
+        {profile && !isMyAccount && (
+          <button type="button" className="btn btn-ghost" style={{ marginLeft: '0.5rem', fontSize: '0.875rem' }} onClick={handleClaimAccount} disabled={claimLoading}>
+            {claimLoading ? 'Claiming…' : 'Claim this account'}
+          </button>
+        )}
       </p>
 
       <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', borderBottom: '1px solid #27272a', paddingBottom: '0.5rem' }}>
-        <button
-          type="button"
-          className={tab === 'characters' ? 'btn' : 'btn btn-ghost'}
-          onClick={() => setTab('characters')}
-        >
-          Characters
-        </button>
         <button
           type="button"
           className={tab === 'activity' ? 'btn' : 'btn btn-ghost'}
@@ -152,13 +227,33 @@ export default function AccountDetail() {
         >
           Activity
         </button>
+        <button
+          type="button"
+          className={tab === 'characters' ? 'btn' : 'btn btn-ghost'}
+          onClick={() => setTab('characters')}
+        >
+          Characters
+        </button>
       </div>
 
       {tab === 'characters' && (
         <div className="card">
-          <h2 style={{ marginTop: 0 }}>Characters</h2>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+            <h2 style={{ marginTop: 0 }}>Characters</h2>
+            {canAddChar && (
+              <button
+                type="button"
+                className="btn btn-ghost"
+                style={{ padding: '0.25rem 0.5rem', fontSize: '1.25rem', lineHeight: 1 }}
+                onClick={() => { setAddCharOpen(true); setAddCharError(''); setAddCharInput(''); }}
+                title="Add alt to this account"
+              >
+                +
+              </button>
+            )}
+          </div>
           {characters.length === 0 ? (
-            <p style={{ color: '#71717a' }}>No characters linked to this account.</p>
+            <p style={{ color: '#71717a' }}>No characters linked to this account.{canAddChar && ' Use + to add a character.'}</p>
           ) : (
             <ul style={{ listStyle: 'none', paddingLeft: 0, margin: 0 }}>
               {characters.map((c) => {
@@ -181,6 +276,31 @@ export default function AccountDetail() {
               })}
             </ul>
           )}
+        </div>
+      )}
+
+      {addCharOpen && (
+        <div className="card" style={{ marginTop: '1rem', maxWidth: '24rem' }}>
+          <h3 style={{ marginTop: 0 }}>Add character to account</h3>
+          <p style={{ color: '#a1a1aa', fontSize: '0.875rem', marginBottom: '0.75rem' }}>Enter character name or char_id. Character must exist in the database.</p>
+          <input
+            type="text"
+            className="input"
+            placeholder="Character name or char_id"
+            value={addCharInput}
+            onChange={(e) => setAddCharInput(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleAddCharacter()}
+            style={{ marginBottom: '0.5rem', width: '100%' }}
+          />
+          {addCharError && <p style={{ color: '#f87171', fontSize: '0.875rem', marginBottom: '0.5rem' }}>{addCharError}</p>}
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <button type="button" className="btn" onClick={handleAddCharacter} disabled={addCharLoading}>
+              {addCharLoading ? 'Adding…' : 'Add'}
+            </button>
+            <button type="button" className="btn btn-ghost" onClick={() => { setAddCharOpen(false); setAddCharError(''); setAddCharInput(''); }} disabled={addCharLoading}>
+              Cancel
+            </button>
+          </div>
         </div>
       )}
 

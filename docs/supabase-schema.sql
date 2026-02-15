@@ -125,6 +125,7 @@ ALTER TABLE dkp_summary ADD COLUMN IF NOT EXISTS last_activity_date DATE;
 ALTER TABLE dkp_summary ADD COLUMN IF NOT EXISTS earned_30d INTEGER;
 ALTER TABLE dkp_summary ADD COLUMN IF NOT EXISTS earned_60d INTEGER;
 ALTER TABLE accounts ADD COLUMN IF NOT EXISTS display_name TEXT;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS account_id TEXT REFERENCES accounts(account_id);
 
 -- Parse raids.date_iso to DATE safely (handles YYYY-MM-DD, YYYY-MM-DDThh:mm:ss, empty/null). Returns NULL if not parseable.
 CREATE OR REPLACE FUNCTION public.raid_date_parsed(iso_text TEXT)
@@ -434,11 +435,13 @@ ALTER TABLE active_raiders ENABLE ROW LEVEL SECURITY;
 -- Profiles: one SELECT (own row or officer), one UPDATE (own row or officer)
 DROP POLICY IF EXISTS "Users can read own profile" ON profiles;
 DROP POLICY IF EXISTS "Officers can read all profiles" ON profiles;
+DROP POLICY IF EXISTS "Profiles select" ON profiles;
 CREATE POLICY "Profiles select" ON profiles
   FOR SELECT USING (auth.uid() = id OR public.is_officer());
 
 DROP POLICY IF EXISTS "Users can update own profile (limited)" ON profiles;
 DROP POLICY IF EXISTS "Officers can update profiles" ON profiles;
+DROP POLICY IF EXISTS "Profiles update" ON profiles;
 CREATE POLICY "Profiles update" ON profiles
   FOR UPDATE USING (auth.uid() = id OR public.is_officer())
   WITH CHECK (auth.uid() = id OR public.is_officer());
@@ -450,6 +453,15 @@ DROP POLICY IF EXISTS "Authenticated read accounts" ON accounts;
 CREATE POLICY "Authenticated read accounts" ON accounts FOR SELECT TO authenticated USING (true);
 DROP POLICY IF EXISTS "Authenticated read character_account" ON character_account;
 CREATE POLICY "Authenticated read character_account" ON character_account FOR SELECT TO authenticated USING (true);
+DROP POLICY IF EXISTS "Officers manage character_account" ON character_account;
+CREATE POLICY "Officers manage character_account" ON character_account FOR ALL TO authenticated
+  USING (public.is_officer())
+  WITH CHECK (public.is_officer());
+DROP POLICY IF EXISTS "Users add character to own claimed account" ON character_account;
+CREATE POLICY "Users add character to own claimed account" ON character_account FOR INSERT TO authenticated
+  WITH CHECK (
+    (SELECT account_id FROM public.profiles WHERE id = auth.uid()) = character_account.account_id
+  );
 DROP POLICY IF EXISTS "Authenticated read raids" ON raids;
 CREATE POLICY "Authenticated read raids" ON raids FOR SELECT TO authenticated USING (true);
 DROP POLICY IF EXISTS "Authenticated read raid_events" ON raid_events;
