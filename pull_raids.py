@@ -33,8 +33,12 @@ RAID_DETAILS_URL = BASE + "/rapid_raid/raid_details.php"
 
 
 def parse_cookie_header(cookie_header: str) -> Dict[str, str]:
+    """Parse a Chrome 'Cookie:' header into a dict. Strips leading 'Cookie:' if present."""
+    s = cookie_header.strip()
+    if s.lower().startswith("cookie:"):
+        s = s[7:].strip()
     cookies: Dict[str, str] = {}
-    for part in cookie_header.split(";"):
+    for part in s.split(";"):
         part = part.strip()
         if not part or "=" not in part:
             continue
@@ -172,11 +176,14 @@ def main():
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         "Referer": BASE + "/",
         "Accept-Language": "en-US,en;q=0.9",
+        "Connection": "keep-alive",
     }
     session = requests.Session()
     session.headers.update(headers)
+    # Set domain and path so cookies are sent on first request
+    cookie_domain = "azureguardtakp.gamerlaunch.com"
     for k, v in cookies.items():
-        session.cookies.set(k, v)
+        session.cookies.set(k, v, domain=cookie_domain, path="/")
 
     gid = str(args.gid)
 
@@ -186,6 +193,13 @@ def main():
     try:
         r = session.get(first_url, timeout=args.timeout)
         r.raise_for_status()
+    except requests.HTTPError as e:
+        print(f"Failed to fetch past raids list: {e}", file=sys.stderr)
+        if e.response is not None and e.response.status_code == 403:
+            print("403 Forbidden: Copy cookies from Chrome DevTools while on the raids page:", file=sys.stderr)
+            print("  F12 -> Network -> refresh page -> click a request -> Headers -> copy the full Cookie value.", file=sys.stderr)
+            print("  Paste into cookies.txt (one line; 'Cookie:' prefix is OK).", file=sys.stderr)
+        sys.exit(3)
     except Exception as e:
         print(f"Failed to fetch past raids list: {e}", file=sys.stderr)
         sys.exit(3)

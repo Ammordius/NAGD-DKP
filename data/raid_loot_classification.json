@@ -1,0 +1,28 @@
+{
+  "_comment": "Plane of Time loot: classify by phase (P1/P3) instead of individual bosses. Used by build_dkp_mob_loot.py and DKP site for matching.",
+  "classifications": {
+    "Cloak of Wishes": { "mob": "P3", "zone": "Plane of Time" },
+    "Dagger of Distraction": { "mob": "P3", "zone": "Plane of Time" },
+    "Necklace of Celestial Energy": { "mob": "P3", "zone": "Plane of Time" },
+    "Ossein of Limitless Time": { "mob": "P3", "zone": "Plane of Time" },
+    "Protective Sleeves": { "mob": "P3", "zone": "Plane of Time" },
+    "Time Phased Quintessence": { "mob": "P3", "zone": "Plane of Time" },
+    "Time Traveler's Abandoned Notebook": { "mob": "P3", "zone": "Plane of Time" },
+    "Earring of Xaoth Kor": { "mob": "P3 Guardian", "zone": "Plane of Time" },
+    "Ethereal Destroyer": { "mob": "P3 Guardian", "zone": "Plane of Time" },
+    "Faceguard of Frenzy": { "mob": "P3 Guardian", "zone": "Plane of Time" },
+    "Fiery Crystal Guard": { "mob": "P3 Guardian", "zone": "Plane of Time" },
+    "Mask of Strategic Insight": { "mob": "P3 Guardian", "zone": "Plane of Time" },
+    "Pauldrons of Purity": { "mob": "P3 Guardian", "zone": "Plane of Time" },
+    "Timeless Coral Greatsword": { "mob": "P3 Guardian", "zone": "Plane of Time" },
+    "Mask of Conceptual Energy": { "mob": "P1", "zone": "Plane of Time" },
+    "Pulsing Emerald Hoop": { "mob": "P1", "zone": "Plane of Time" },
+    "Ring of Force": { "mob": "P1", "zone": "Plane of Time" },
+    "Smooth Onyx Torque": { "mob": "P1", "zone": "Plane of Time" },
+    "Wristguard of Keen Vision": { "mob": "P1", "zone": "Plane of Time" }
+  },
+  "aliases": {
+    "Ossien of Limitless Time": "Ossein of Limitless Time",
+    "Smoothe Onyx Torque": "Smooth Onyx Torque"
+  }
+}

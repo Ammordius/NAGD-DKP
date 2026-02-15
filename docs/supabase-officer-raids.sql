@@ -68,6 +68,8 @@ CREATE POLICY "Officers manage active_raiders" ON active_raiders FOR ALL TO auth
   WITH CHECK (public.is_officer());
 
 -- Cascading delete: removes all attendance, events, loot, and the raid. Officers only.
+-- Disables refresh triggers during delete to avoid statement timeout (each trigger would run
+-- full refresh or per-row refresh). Runs a single refresh_dkp_summary_internal() at the end.
 CREATE OR REPLACE FUNCTION public.delete_raid(p_raid_id TEXT)
 RETURNS void
 LANGUAGE plpgsql
@@ -78,6 +80,17 @@ BEGIN
   IF NOT public.is_officer() THEN
     RAISE EXCEPTION 'Only officers can delete raids';
   END IF;
+
+  -- Allow more time for deletes + one full refresh (Supabase default can be as low as 8s).
+  SET LOCAL statement_timeout = '120s';
+
+  -- Disable triggers that would run full refresh or per-row refresh on each delete (causes timeout).
+  ALTER TABLE raid_loot DISABLE TRIGGER full_refresh_dkp_after_loot_change;
+  ALTER TABLE raid_event_attendance DISABLE TRIGGER full_refresh_dkp_after_event_attendance_change;
+  ALTER TABLE raid_event_attendance DISABLE TRIGGER refresh_raid_totals_after_event_attendance_del;
+  ALTER TABLE raid_attendance DISABLE TRIGGER full_refresh_dkp_after_attendance_change;
+  ALTER TABLE raid_events DISABLE TRIGGER refresh_raid_totals_after_events_del;
+
   DELETE FROM raid_loot WHERE raid_id = p_raid_id;
   DELETE FROM raid_attendance_dkp WHERE raid_id = p_raid_id;
   DELETE FROM raid_dkp_totals WHERE raid_id = p_raid_id;
@@ -86,5 +99,15 @@ BEGIN
   DELETE FROM raid_events WHERE raid_id = p_raid_id;
   DELETE FROM raid_classifications WHERE raid_id = p_raid_id;
   DELETE FROM raids WHERE raid_id = p_raid_id;
+
+  -- Single full refresh so dkp_summary and dkp_period_totals stay correct.
+  PERFORM refresh_dkp_summary_internal();
+
+  -- Re-enable triggers (same order as disable).
+  ALTER TABLE raid_events ENABLE TRIGGER refresh_raid_totals_after_events_del;
+  ALTER TABLE raid_attendance ENABLE TRIGGER full_refresh_dkp_after_attendance_change;
+  ALTER TABLE raid_event_attendance ENABLE TRIGGER refresh_raid_totals_after_event_attendance_del;
+  ALTER TABLE raid_event_attendance ENABLE TRIGGER full_refresh_dkp_after_event_attendance_change;
+  ALTER TABLE raid_loot ENABLE TRIGGER full_refresh_dkp_after_loot_change;
 END;
 $$;

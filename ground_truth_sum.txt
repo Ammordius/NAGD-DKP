@@ -1,0 +1,301 @@
+	Inacht [+]	Ogre	Beastlord	65	4,990	3,729	1,261	Thu Feb 12, 2026	
+33/35 (94%)
+67/69 (97%)
+	Baily [+]	Human	Druid	65	2,686	2,338	348	Thu Apr 10, 2025	
+0/35 (0%)
+0/69 (0%)
+	Radda [+]	Iksar	Warrior	60	1,845	1,635	210	Thu Nov 13, 2025	
+0/35 (0%)
+0/69 (0%)
+	Pickletickle [+]	Halfling	Ranger	65	1,105	897	208	Thu Jul 03, 2025	
+0/35 (0%)
+0/69 (0%)
+	Rimidal [+]	High Elf	Enchanter	65	4,595	4,398	197	Mon Feb 09, 2026	
+19/35 (54%)
+24/69 (35%)
+	Crushzilla [+]	Iksar	Monk	65	4,097	3,917	180	Thu Feb 12, 2026	
+35/35 (100%)
+69/69 (100%)
+	Fayze [+]	Dark Elf	Enchanter	65	2,371	2,192	179	Thu Feb 12, 2026	
+23/35 (66%)
+33/69 (48%)
+	Vanuk [+]	Iksar	Necromancer	65	877	734	143	Thu May 15, 2025	
+0/35 (0%)
+0/69 (0%)
+	Diox [+]	High Elf	Enchanter	65	1,798	1,664	134	Thu Oct 16, 2025	
+0/35 (0%)
+0/69 (0%)
+	Akbar [+]	Iksar	Beastlord	65	944	812	132	Thu Feb 12, 2026	
+35/35 (100%)
+69/69 (100%)
+	Bhodi [+]	Halfling	Druid	65	2,807	2,682	125	Thu Feb 12, 2026	
+35/35 (100%)
+69/69 (100%)
+	Uberest [+]	Vah Shir	Rogue	65	623	501	122	Thu Feb 12, 2026	
+35/35 (100%)
+67/69 (97%)
+	Zender [+]	Dwarf	Warrior	65	2,358	2,244	114	Mon Feb 09, 2026	
+13/35 (37%)
+31/69 (45%)
+	Rgrok [+]	Ogre	Warrior	65	219	108	111	Thu Feb 12, 2026	
+35/35 (100%)
+68/69 (99%)
+	Shoosh [+]	Human	Bard	65	1,976	1,873	103	Tue Nov 25, 2025	
+0/35 (0%)
+0/69 (0%)
+	Lamia [+]	Dark Elf	Shadow Knight	65	3,014	2,917	97	Thu Feb 12, 2026	
+11/35 (31%)
+11/69 (16%)
+	Zentile [+]	Iksar	Monk	65	1,643	1,550	93	Mon Feb 09, 2026	
+6/35 (17%)
+15/69 (22%)
+	Shortok [+]	Dwarf	Cleric	65	613	524	89	Tue Feb 03, 2026	
+2/35 (6%)
+4/69 (6%)
+	Monara [+]	Barbarian	Rogue	65	956	881	75	Thu Feb 12, 2026	
+35/35 (100%)
+60/69 (87%)
+	Rembylynn [+]	Vah Shir	Beastlord	65	606	532	74	Thu Feb 12, 2026	
+35/35 (100%)
+66/69 (96%)
+	Debrie [+]	Dark Elf	Enchanter	65	655	582	73	Thu Feb 12, 2026	
+35/35 (100%)
+67/69 (97%)
+	Dopp [+]	Gnome	Cleric	65	748	684	64	Thu Feb 05, 2026	
+28/35 (80%)
+43/69 (62%)
+	Gheff [+]	Barbarian	Shaman	65	2,188	2,128	60	Tue Oct 28, 2025	
+0/35 (0%)
+0/69 (0%)
+	Dula Allazaward [+]	Human	Cleric	60	2,037	1,978	59	Thu Sep 04, 2025	
+0/35 (0%)
+0/69 (0%)
+	Jarisy [+]	Wood Elf	Bard	65	2,137	2,078	59	Thu Feb 12, 2026	
+35/35 (100%)
+67/69 (97%)
+	Pursuit [+]	Halfling	Ranger	65	772	715	57	Thu Feb 12, 2026	
+24/35 (69%)
+45/69 (65%)
+	Pugnacious [+]	Iksar	Monk	65	736	682	54	Thu Feb 12, 2026	
+35/35 (100%)
+69/69 (100%)
+	Savok [+]	Wood Elf	Bard	65	3,604	3,551	53	Mon Jan 12, 2026	
+0/35 (0%)
+3/69 (4%)
+	Elrontaur [+]	Half Elf	Ranger	65	381	310	50	Thu Feb 05, 2026	
+7/35 (20%)
+21/69 (30%)
+	Minpal [+]	High Elf	Paladin	53	1,036	986	50	Thu Feb 12, 2026	
+27/35 (77%)
+50/69 (72%)
+	Spreckles [+]	Iksar	Monk	65	1,345	1,296	49	Tue Jul 15, 2025	
+0/35 (0%)
+0/69 (0%)
+	Serro [+]	Halfling	Druid	65	2,224	2,175	49	Thu Feb 05, 2026	
+27/35 (77%)
+51/69 (74%)
+	Kovah [+]	Dwarf	Paladin	65	272	227	45	Thu Feb 12, 2026	
+11/35 (31%)
+21/69 (30%)
+	Meww [+]	Vah Shir	Bard	65	1,007	963	44	Mon Jan 26, 2026	
+8/35 (23%)
+18/69 (26%)
+	Adilene [+]	High Elf	Cleric	65	205	162	43	Thu Feb 05, 2026	
+23/35 (66%)
+40/69 (58%)
+	Thornwood [+]	Halfling	Ranger	65	148	106	42	Thu Jan 08, 2026	
+0/35 (0%)
+10/69 (14%)
+	Barndog [+]	Dwarf	Paladin	52	630	589	41	Thu Feb 12, 2026	
+35/35 (100%)
+59/69 (86%)
+	Captainhash [+]	Ogre	Warrior	65	51	10	41	Mon Dec 22, 2025	
+0/35 (0%)
+4/69 (6%)
+	Cavalier [+]	Gnome	Paladin	65	1,536	1,497	39	Thu Feb 05, 2026	
+9/35 (26%)
+14/69 (20%)
+	Wildcaller [+]	Wood Elf	Druid	65	46	9	37	Mon Jan 12, 2026	
+0/35 (0%)
+10/69 (14%)
+	Aldiss [+]	Wood Elf	Druid	65	588	552	36	Thu Feb 12, 2026	
+35/35 (100%)
+69/69 (100%)
+	Sverder [+]	Iksar	Necromancer	65	83	47	36	Thu Feb 05, 2026	
+8/35 (23%)
+14/69 (20%)
+	Ammordius [+]	Half Elf	Bard	65	820	787	33	Thu Feb 12, 2026	
+35/35 (100%)
+63/69 (91%)
+	Slay [+]	Barbarian	Warrior	65	2,631	2,599	32	Mon Feb 09, 2026	
+21/35 (60%)
+33/69 (48%)
+	Walex [+]	Dark Elf	Enchanter	65	3,213	3,182	31	Thu Dec 04, 2025	
+0/35 (0%)
+0/69 (0%)
+	Bopp [+]	Gnome	Paladin	65	554	523	31	Thu Feb 12, 2026	
+35/35 (100%)
+62/69 (90%)
+	Headcrushar [+]	Iksar	Monk	54	209	179	30	Mon Feb 09, 2026	
+25/35 (71%)
+52/69 (75%)
+	Fireblade [+]	Dwarf	Paladin	65	173	143	30	Thu Feb 12, 2026	
+21/35 (60%)
+25/69 (36%)
+	Tuluvien [+]	Wood Elf	Ranger	65	675	646	29	Thu Feb 12, 2026	
+35/35 (100%)
+59/69 (86%)
+	Xaiterlyn [+]	Wood Elf	Ranger	65	1,040	1,013	27	Tue Dec 30, 2025	
+0/35 (0%)
+4/69 (6%)
+	Fanglore [+]	Barbarian	Shaman	65	239	213	26	Wed Apr 09, 2025	
+0/35 (0%)
+0/69 (0%)
+	Zaltak [+]	Iksar	Necromancer	65	444	419	25	Thu Feb 12, 2026	
+35/35 (100%)
+69/69 (100%)
+	Tesadar [+]	Half Elf	Druid	65	118	93	25	Mon Dec 01, 2025	
+0/35 (0%)
+0/69 (0%)
+	Warboss [+]	Ogre	Warrior	65	1,315	1,291	24	Mon Feb 09, 2026	
+3/35 (9%)
+7/69 (10%)
+	Hamorf [+]	Barbarian	Beastlord	65	215	192	23	Tue Feb 03, 2026	
+10/35 (29%)
+13/69 (19%)
+	Tudogs [+]	Vah Shir	Beastlord	65	265	242	23	Tue Jan 27, 2026	
+3/35 (9%)
+22/69 (32%)
+	Handolur [+]	Dwarf	Cleric	65	21	0	21	Mon Feb 03, 2025	
+0/35 (0%)
+0/69 (0%)
+	Zelus [+]	Vah Shir	Shaman	65	40	19	21	Thu Jan 15, 2026	
+2/35 (6%)
+5/69 (7%)
+	Bizo [+]	Gnome	Cleric	65	572	553	19	Mon Feb 02, 2026	
+9/35 (26%)
+12/69 (17%)
+	Skaruga [+]	Gnome	Shadow Knight	65	353	334	19	Tue Dec 30, 2025	
+0/35 (0%)
+6/69 (9%)
+	Hinora [+]	Barbarian	Warrior	65	18	0	18	Mon Aug 25, 2025	
+0/35 (0%)
+0/69 (0%)
+	Elcid [+]	High Elf	Wizard	65	57	40	17	Thu Jun 05, 2025	
+0/35 (0%)
+0/69 (0%)
+	Threllin 	Dwarf	Warrior	65	128	111	17	Tue Feb 10, 2026	
+27/35 (77%)
+49/69 (71%)
+	Pigpen [+]	Gnome	Paladin	65	288	271	17	Mon Feb 09, 2026	
+15/35 (43%)
+33/69 (48%)
+	Beanwolf [+]	Barbarian	Beastlord	56	319	304	15	Thu Feb 12, 2026	
+26/35 (74%)
+48/69 (70%)
+	Meriadoc [+]	Halfling	Warrior	65	88	74	14	Thu Jan 22, 2026	
+3/35 (9%)
+3/69 (4%)
+	Manstache [+]	Halfling	Rogue	65	35	21	14	Mon Apr 07, 2025	
+0/35 (0%)
+0/69 (0%)
+	Culkasi [+]	Human	Monk	65	696	683	13	Thu Jan 22, 2026	
+3/35 (9%)
+3/69 (4%)
+	Wesley 	Erudite	Magician	65	21	9	12	Thu Sep 11, 2025	
+0/35 (0%)
+0/69 (0%)
+	Rangerwoodelf [+]	Wood Elf	Warrior	65	549	538	11	Thu Feb 12, 2026	
+35/35 (100%)
+69/69 (100%)
+	Noze [+]	Halfling	Ranger	52	11	0	11	Mon Feb 02, 2026	
+6/35 (17%)
+6/69 (9%)
+	Thian [+]	Wood Elf	Rogue	65	149	138	11	Thu May 15, 2025	
+0/35 (0%)
+0/69 (0%)
+	Stickie [+]	Troll	Beastlord	65	11	0	11	Thu Jan 29, 2026	
+10/35 (29%)
+10/69 (14%)
+	Omegalord [+]	Iksar	Beastlord	65	11	0	11	Mon Jul 28, 2025	
+0/35 (0%)
+0/69 (0%)
+	Darco [+]	Dark Elf	Enchanter	65	10	0	10	Thu Feb 12, 2026	
+10/35 (29%)
+10/69 (14%)
+	Xcivi [+]	Dark Elf	Shadow Knight	65	82	72	10	Mon Dec 22, 2025	
+0/35 (0%)
+4/69 (6%)
+	Tolsarian [+]	Half Elf	Ranger	65	71	62	9	Mon Feb 09, 2026	
+15/35 (43%)
+34/69 (49%)
+	Tyrreni [+]	Vah Shir	Beastlord	65	52	43	9	Mon Dec 22, 2025	
+0/35 (0%)
+4/69 (6%)
+	Silent [+]	Wood Elf	Rogue	65	549	540	9	Thu Feb 12, 2026	
+23/35 (66%)
+52/69 (75%)
+	Jisu [+]	Dark Elf	Shadow Knight	65	8	0	8	Tue Nov 25, 2025	
+0/35 (0%)
+0/69 (0%)
+	Neokkin [+]	Dark Elf	Cleric	65	526	519	7	Mon Apr 14, 2025	
+0/35 (0%)
+0/69 (0%)
+	Jyslia [+]	Human	Monk	65	1,448	1,442	6	Thu Feb 12, 2026	
+33/35 (94%)
+67/69 (97%)
+	Yuukii [+]	Vah Shir	Beastlord	65	269	264	5	Thu Feb 12, 2026	
+34/35 (97%)
+65/69 (94%)
+	Timmysk [+]	Iksar	Shadow Knight	65	7	2	5	Tue Sep 09, 2025	
+0/35 (0%)
+0/69 (0%)
+	Necrophobia [+]	Dark Elf	Shadow Knight	65	4	0	4	Thu Sep 05, 2024	
+0/35 (0%)
+0/69 (0%)
+	Tuen [+]	Dark Elf	Wizard	65	68	65	3	Thu Oct 16, 2025	
+0/35 (0%)
+0/69 (0%)
+	Nemce [+]	Human	Magician	60	1,288	1,285	3	Thu Sep 04, 2025	
+0/35 (0%)
+0/69 (0%)
+	Kohler [+]	High Elf	Cleric	65	85	82	3	Thu Jan 16, 2025	
+0/35 (0%)
+0/69 (0%)
+	Clegane [+]	Ogre	Warrior	65	137	135	2	Thu Feb 05, 2026	
+10/35 (29%)
+25/69 (36%)
+	Fridgelargemeat [+]	Troll	Shaman	65	2	0	2	Thu Aug 28, 2025	
+0/35 (0%)
+0/69 (0%)
+	Freedom [+]	Iksar	Monk	65	0	0	0	N/A	
+0/35 (0%)
+0/69 (0%)
+	Paen 	Troll	Beastlord	32	0	0	0	N/A	
+0/35 (0%)
+0/69 (0%)
+	Bruceh 	Vah Shir	Beastlord	63	0	0	0	N/A	
+0/35 (0%)
+0/69 (0%)
+	Gekal 	Vah Shir	Beastlord	65	0	0	0	N/A	
+0/35 (0%)
+0/69 (0%)
+	Aurellia 	High Elf	Paladin	55	0	0	0	N/A	
+0/35 (0%)
+0/69 (0%)
+	Notoriousone [+]	Wood Elf	Rogue	65	0	0	0	N/A	
+0/35 (0%)
+0/69 (0%)
+	Cavalier_Backup 	Gnome	Paladin	1	0	0	0	N/A	
+0/35 (0%)
+0/69 (0%)
+	Thanatos 	Iksar	Necromancer	65	0	0	0	N/A	
+0/35 (0%)
+0/69 (0%)
+	Askepios 	Wood Elf	Ranger	65	0	0	0	N/A	
+0/35 (0%)
+0/69 (0%)
+	Princevelium 	High Elf	Paladin	1	0	0	0	N/A	
+0/35 (0%)
+0/69 (0%)
+
