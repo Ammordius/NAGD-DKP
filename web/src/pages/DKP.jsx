@@ -38,8 +38,9 @@ function buildAccountLeaderboard(list, caData, accData) {
   ;(caData || []).forEach((r) => { charToAccount[String(r.char_id)] = r.account_id })
   const accountNames = {}
   ;(accData || []).forEach((r) => {
+    const display = (r.display_name || '').trim()
     const first = (r.toon_names || '').split(',')[0]?.trim() || r.account_id
-    accountNames[r.account_id] = first
+    accountNames[r.account_id] = display || first
   })
   const byAccount = {}
   list.forEach((r) => {
@@ -90,7 +91,7 @@ export default function DKP({ isOfficer }) {
       supabase.from('dkp_period_totals').select('period, total_dkp'),
     ]
     tables.push(fetchAllRows('character_account', 'char_id, account_id'))
-    tables.push(fetchAllRows('accounts', 'account_id, toon_names'))
+    tables.push(fetchAllRows('accounts', 'account_id, toon_names, display_name'))
     const results = await Promise.all(tables)
     const [summary, adj, active, periodTotalsRes, ca, acc] = results
     if (summary.error) return { ok: false, error: summary.error }
@@ -147,7 +148,7 @@ export default function DKP({ isOfficer }) {
       fetchAllRows('raid_event_attendance', 'raid_id, event_id, char_id, character_name'),
       fetchAllRows('raid_loot', 'char_id, character_name, cost'),
       fetchAllRows('character_account', 'char_id, account_id'),
-      fetchAllRows('accounts', 'account_id, toon_names'),
+      fetchAllRows('accounts', 'account_id, toon_names, display_name'),
       supabase.from('dkp_adjustments').select('character_name, earned_delta, spent_delta').limit(1000),
     ])
     const err = att.error || ev.error || evAtt.error || loot.error || ca.error || acc.error
