@@ -3346,7 +3346,7 @@
   },
   "Cazic_Thule|Plane of Fear": {
     "mob": "Cazic_Thule",
-    "zone": "Plane of Time",
+    "zone": "Plane of Fear",
     "loot": [
       {
         "item_id": 11646,
