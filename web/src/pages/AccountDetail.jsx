@@ -83,14 +83,16 @@ export default function AccountDetail({ isOfficer, profile }) {
           const chars = (chRes.data || []).map((c) => ({ ...c, displayName: c.name || c.char_id }))
           setCharacters(chars)
           const names = chars.map((c) => c.name).filter(Boolean)
-          // Also fetch event attendance by character_name so we pick up rows keyed by name (e.g. from Officer tool)
-          const evAttPromise = names.length > 0
-            ? fetchAll('raid_event_attendance', 'raid_id, event_id, char_id, character_name', (q) => q.in('character_name', names)).then((r) => r).catch(() => ({ data: [] }))
-            : Promise.resolve({ data: [] })
-          evAttPromise.then((evAttByNameRes) => {
+          // Also fetch event attendance by character_name so we pick up rows keyed by name (e.g. from Officer tool).
+          // Fetch per name to avoid .in() limits/failures; merge and dedupe.
+          const evAttByNamePromise = names.length > 0
+            ? Promise.all(names.map((name) => fetchAll('raid_event_attendance', 'raid_id, event_id, char_id, character_name', (q) => q.eq('character_name', name))))
+            : Promise.resolve([])
+          evAttByNamePromise.then((byNameResults) => {
+            const byNameRows = (byNameResults || []).flatMap((r) => r.data || [])
             const seen = new Set()
             const evAttRes = { data: [] }
-            for (const row of [...(evAttByCharId.data || []), ...(evAttByNameRes.data || [])]) {
+            for (const row of [...(evAttByCharId.data || []), ...byNameRows]) {
               const key = `${row.raid_id}|${row.event_id}|${row.char_id || row.character_name || ''}`
               if (seen.has(key)) continue
               seen.add(key)
