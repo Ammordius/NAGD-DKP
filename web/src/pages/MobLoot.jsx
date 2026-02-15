@@ -6,10 +6,42 @@ import { createCache } from '../lib/cache'
 const LAST3_CACHE_KEY = 'mob_loot_last3_v1'
 const CACHE_TTL = 10 * 60 * 1000
 
+/** Infer canonical zone from raid title (e.g. "Potime", "Time Day 1" -> "Plane of Time"). */
+function inferZoneFromRaidName(raidName) {
+  if (!raidName || typeof raidName !== 'string') return ''
+  const s = raidName.toLowerCase().trim()
+  const rules = [
+    { keys: ['plane of time', 'potime', 'time day', 'time p1', 'time raid', 'time p1-4', 'slinkytime', 'time again', 'time for time', 'p1-3', 'p1-4', 'p2 ', 'p3 ', 'p4 '], zone: 'Plane of Time' },
+    { keys: ['plane of water', 'water minis', 'coirnav', 'hydrotha', 'corinav'], zone: 'Plane of Water' },
+    { keys: ['plane of fire', 'fire minis', 'fennin'], zone: 'Plane of Fire' },
+    { keys: ['plane of earth', 'poe2', 'poe ', 'poe kill', ' earth ', 'tantisala', 'rathe council', 'earth stuff'], zone: 'Plane of Earth' },
+    { keys: ['plane of air', ' air ', 'xegony', 'sigismond'], zone: 'Plane of Air' },
+    { keys: ['vex thal', ' vt ', 'tvx'], zone: 'Vex Thal' },
+    { keys: ['temple of veeshan', ' tov ', 'vulak', 'veeshan'], zone: 'Temple of Veeshan' },
+    { keys: ['ssra', 'ssraeshza', 'empire'], zone: 'Temple of Ssraeshza' },
+    { keys: ['cursed', 'necropolis'], zone: 'The Cursed Necropolis' },
+    { keys: ['sleeper', 'tomb'], zone: "Sleeper's Tomb" },
+    { keys: ['kael', 'drakkal'], zone: 'Kael Drakkal' },
+    { keys: ['dozekar', ' doze '], zone: 'Dozekar' },
+    { keys: ['burrower', 'deep burrower'], zone: 'Deep' },
+    { keys: ['rhag', 'rhags'], zone: 'The Grey' },
+    { keys: ['nagafen', 'nagafen\'s'], zone: "Nagafen's Lair" },
+    { keys: ['icewell', 'dain'], zone: 'Icewell Keep' },
+  ]
+  for (const { keys, zone } of rules) {
+    if (keys.some((k) => s.includes(k))) return zone
+  }
+  return ''
+}
+
+function normalizeMobKey(mob) {
+  if (!mob || typeof mob !== 'string') return ''
+  return mob.replace(/^#/, '').replace(/\|$/, '').trim().toLowerCase()
+}
+
 /**
  * Lists mobs and their DKP loot from data/dkp_mob_loot.json (copied to web/public/dkp_mob_loot.json).
- * Each entry: { mob, zone, loot: [{ item_id, name, sources }] }.
- * Item names link to item page; last 3 drops (costs) and rolling average from raid_loot.
+ * Zones enriched from raid_classifications + raid names (e.g. Bertoxxulous -> Plane of Time). Grouped by zone.
  */
 export default function MobLoot() {
   const [data, setData] = useState(null)
@@ -18,6 +50,7 @@ export default function MobLoot() {
   const [loading, setLoading] = useState(true)
   const [expanded, setExpanded] = useState({})
   const [itemLast3, setItemLast3] = useState({})
+  const [mobZoneFromRaids, setMobZoneFromRaids] = useState({})
 
   useEffect(() => {
     fetch('/dkp_mob_loot.json')
@@ -25,6 +58,53 @@ export default function MobLoot() {
       .then((json) => setData(json || null))
       .catch(() => setData(null))
       .finally(() => setLoading(false))
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    const run = async () => {
+      const { data: raidRows } = await supabase.from('raids').select('raid_id, raid_name')
+      if (cancelled) return
+      const raidIdToName = {}
+      ;(raidRows || []).forEach((r) => { raidIdToName[r.raid_id] = (r.raid_name || '').trim() })
+
+      const allClass = []
+      let from = 0
+      const PAGE = 2000
+      while (true) {
+        const { data: chunk } = await supabase.from('raid_classifications').select('raid_id, mob, zone').range(from, from + PAGE - 1)
+        if (cancelled) return
+        if (!chunk?.length) break
+        allClass.push(...chunk)
+        if (chunk.length < PAGE) break
+        from += PAGE
+      }
+      if (cancelled) return
+
+      const mobToZones = {}
+      allClass.forEach((row) => {
+        const mob = (row.mob || '').trim()
+        if (!mob) return
+        const key = normalizeMobKey(mob)
+        const zoneFromDb = (row.zone || '').trim()
+        const raidName = raidIdToName[row.raid_id] || ''
+        const inferred = inferZoneFromRaidName(raidName)
+        const zone = zoneFromDb || inferred
+        if (!zone) return
+        if (!mobToZones[key]) mobToZones[key] = []
+        mobToZones[key].push(zone)
+      })
+      const mobToZone = {}
+      Object.entries(mobToZones).forEach(([key, zones]) => {
+        const counts = {}
+        zones.forEach((z) => { counts[z] = (counts[z] || 0) + 1 })
+        const best = Object.entries(counts).sort((a, b) => b[1] - a[1])[0]
+        if (best) mobToZone[key] = best[0]
+      })
+      if (!cancelled) setMobZoneFromRaids(mobToZone)
+    }
+    run()
+    return () => { cancelled = true }
   }, [])
 
   useEffect(() => {
@@ -91,8 +171,17 @@ export default function MobLoot() {
     return list.sort((a, b) => (a.mob || '').localeCompare(b.mob || ''))
   }, [data])
 
-  const entriesWithDkp = useMemo(() => {
+  const entriesWithZone = useMemo(() => {
     return entries.map((e) => {
+      const fromJson = (e.zone || '').trim()
+      const fromRaids = mobZoneFromRaids[normalizeMobKey(e.mob)]
+      const displayZone = fromJson || fromRaids || 'Other / Unknown'
+      return { ...e, displayZone }
+    })
+  }, [entries, mobZoneFromRaids])
+
+  const entriesWithDkp = useMemo(() => {
+    return entriesWithZone.map((e) => {
       let totalAvgDkp = 0
       ;(e.loot || []).forEach((item) => {
         const name = (item.name || '').trim().toLowerCase()
@@ -101,7 +190,7 @@ export default function MobLoot() {
       })
       return { ...e, totalAvgDkp }
     })
-  }, [entries, itemLast3])
+  }, [entriesWithZone, itemLast3])
 
   const filtered = useMemo(() => {
     let list = entriesWithDkp
@@ -110,7 +199,7 @@ export default function MobLoot() {
       list = list.filter(
         (e) =>
           (e.mob || '').toLowerCase().includes(q) ||
-          (e.zone || '').toLowerCase().includes(q)
+          (e.displayZone || '').toLowerCase().includes(q)
       )
     }
     const min = parseFloat(minAvgDkp)
@@ -123,14 +212,27 @@ export default function MobLoot() {
   const byZone = useMemo(() => {
     const groups = {}
     filtered.forEach((e) => {
-      const z = (e.zone || '').trim() || '—'
+      const z = (e.displayZone || '').trim() || 'Other / Unknown'
       if (!groups[z]) groups[z] = []
       groups[z].push(e)
     })
     Object.keys(groups).forEach((z) => {
       groups[z].sort((a, b) => (a.mob || '').localeCompare(b.mob || ''))
     })
-    return Object.entries(groups).sort((a, b) => a[0].localeCompare(b[0]))
+    const bottomZones = new Set(['Other / Unknown', '—', ''])
+    const zoneEntries = Object.entries(groups)
+    const totalDkp = (entries) => entries.reduce((sum, e) => sum + (e.totalAvgDkp || 0), 0)
+    zoneEntries.sort((a, b) => {
+      const [zoneA, entriesA] = a
+      const [zoneB, entriesB] = b
+      const aBottom = bottomZones.has(zoneA)
+      const bBottom = bottomZones.has(zoneB)
+      if (aBottom && bBottom) return zoneA.localeCompare(zoneB)
+      if (aBottom) return 1
+      if (bBottom) return -1
+      return totalDkp(entriesB) - totalDkp(entriesA)
+    })
+    return zoneEntries
   }, [filtered])
 
   const toggle = (key) => {
@@ -150,7 +252,7 @@ export default function MobLoot() {
     <div className="container">
       <h1>Loot by mob</h1>
       <p style={{ color: '#71717a', marginBottom: '1rem' }}>
-        DKP loot table per mob (from dkp_mob_loot.json). Search by mob or zone.
+        DKP loot table per mob. Zones from dkp_mob_loot or inferred from raid names (e.g. Potime → Plane of Time). Search by mob or zone.
       </p>
       <div className="search-bar">
         <label>
@@ -216,7 +318,7 @@ export default function MobLoot() {
                           </button>
                         </td>
                         <td>{e.mob.replace(/^#/, '')}</td>
-                        <td style={{ color: '#a1a1aa' }}>{e.zone || '—'}</td>
+                        <td style={{ color: '#a1a1aa' }}>{e.displayZone || '—'}</td>
                         <td>{e.loot.length}</td>
                         <td style={{ color: '#a78bfa' }}>{e.totalAvgDkp > 0 ? Number(e.totalAvgDkp).toFixed(1) : '—'}</td>
                       </tr>
