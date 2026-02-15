@@ -82,8 +82,8 @@ export default function RaidDetail() {
             {loot.length === 0 && <tr><td colSpan={3}>No loot recorded</td></tr>}
             {loot.map((row, i) => (
               <tr key={row.id || i}>
-                <td>{row.item_name || '—'}</td>
-                <td>{row.character_name}</td>
+                <td><Link to={`/items/${encodeURIComponent(row.item_name || '')}`}>{row.item_name || '—'}</Link></td>
+                <td><Link to={`/characters/${encodeURIComponent(row.character_name || row.char_id || '')}`}>{row.character_name || row.char_id || '—'}</Link></td>
                 <td>{row.cost}</td>
               </tr>
             ))}
@@ -93,7 +93,13 @@ export default function RaidDetail() {
 
       <h2>Attendees</h2>
       <div className="card">
-        <p style={{ margin: 0 }}>{attendance.map((a) => a.character_name).join(', ')}</p>
+        <p style={{ margin: 0 }}>
+          {attendance.map((a) => (
+            <Link key={a.char_id || a.character_name} to={`/characters/${encodeURIComponent(a.character_name || a.char_id || '')}`} style={{ marginRight: '0.5rem' }}>
+              {a.character_name || a.char_id}
+            </Link>
+          ))}
+        </p>
       </div>
     </div>
   )

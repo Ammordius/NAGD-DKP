@@ -1,14 +1,18 @@
 import { useEffect, useState, useMemo, Fragment } from 'react'
+import { Link } from 'react-router-dom'
+import { supabase } from '../lib/supabase'
 
 /**
  * Lists mobs and their DKP loot from data/dkp_mob_loot.json (copied to web/public/dkp_mob_loot.json).
  * Each entry: { mob, zone, loot: [{ item_id, name, sources }] }.
+ * Item names link to item page; last 3 drops (costs) and rolling average from raid_loot.
  */
 export default function MobLoot() {
   const [data, setData] = useState(null)
   const [query, setQuery] = useState('')
   const [loading, setLoading] = useState(true)
   const [expanded, setExpanded] = useState({})
+  const [itemLast3, setItemLast3] = useState({})
 
   useEffect(() => {
     fetch('/dkp_mob_loot.json')
@@ -16,6 +20,39 @@ export default function MobLoot() {
       .then((json) => setData(json || null))
       .catch(() => setData(null))
       .finally(() => setLoading(false))
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    const run = async () => {
+      const { data: lootRows } = await supabase.from('raid_loot').select('raid_id, item_name, cost').limit(20000)
+      if (cancelled || !lootRows?.length) return
+      const raidIds = [...new Set(lootRows.map((r) => r.raid_id))]
+      const { data: raidRows } = await supabase.from('raids').select('raid_id, date_iso').in('raid_id', raidIds)
+      if (cancelled) return
+      const dateByRaid = {}
+      ;(raidRows || []).forEach((row) => { dateByRaid[row.raid_id] = (row.date_iso || '').slice(0, 10) })
+      const byItem = {}
+      lootRows.forEach((row) => {
+        const name = (row.item_name || '').trim().toLowerCase()
+        if (!name) return
+        if (!byItem[name]) byItem[name] = []
+        byItem[name].push({ cost: row.cost, date: dateByRaid[row.raid_id] || '' })
+      })
+      Object.keys(byItem).forEach((name) => {
+        byItem[name].sort((a, b) => (b.date || '').localeCompare(a.date || ''))
+        byItem[name] = byItem[name].slice(0, 3)
+      })
+      const last3Map = {}
+      Object.entries(byItem).forEach(([key, arr]) => {
+        const costs = arr.map((r) => Number(r.cost))
+        const avg = costs.length ? (costs.reduce((s, c) => s + c, 0) / costs.length).toFixed(1) : null
+        last3Map[key] = { values: arr.map((r) => r.cost ?? '—'), avg }
+      })
+      if (!cancelled) setItemLast3(last3Map)
+    }
+    run()
+    return () => { cancelled = true }
   }, [])
 
   const entries = useMemo(() => {
@@ -111,15 +148,27 @@ export default function MobLoot() {
                       <td colSpan={4} style={{ padding: '0.5rem 1rem', verticalAlign: 'top', backgroundColor: 'rgba(0,0,0,0.2)' }}>
                         <table style={{ margin: 0 }}>
                           <thead>
-                            <tr><th>Item</th><th>Sources</th></tr>
+                            <tr><th>Item</th><th>Last 3 drops (DKP)</th><th>Rolling avg</th><th>Sources</th></tr>
                           </thead>
                           <tbody>
-                            {e.loot.map((item) => (
-                              <tr key={item.item_id || item.name}>
-                                <td>{item.name || '—'}</td>
-                                <td style={{ fontSize: '0.875rem', color: '#a1a1aa' }}>{(item.sources || []).join(', ') || '—'}</td>
-                              </tr>
-                            ))}
+                            {e.loot.map((item) => {
+                              const name = item.name || '—'
+                              const last3 = itemLast3[(name || '').trim().toLowerCase()]
+                              return (
+                                <tr key={item.item_id || item.name}>
+                                  <td>
+                                    <Link to={`/items/${encodeURIComponent(name)}`}>{name}</Link>
+                                  </td>
+                                  <td style={{ fontSize: '0.875rem' }}>
+                                    {last3?.values?.length ? last3.values.join(', ') : '—'}
+                                  </td>
+                                  <td style={{ fontSize: '0.875rem', color: '#a78bfa' }}>
+                                    {last3?.avg != null ? last3.avg : '—'}
+                                  </td>
+                                  <td style={{ fontSize: '0.875rem', color: '#a1a1aa' }}>{(item.sources || []).join(', ') || '—'}</td>
+                                </tr>
+                              )
+                            })}
                           </tbody>
                         </table>
                       </td>

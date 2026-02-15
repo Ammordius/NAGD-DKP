@@ -9,6 +9,9 @@ import DKP from './pages/DKP'
 import LootSearch from './pages/LootSearch'
 import MobLoot from './pages/MobLoot'
 import Accounts from './pages/Accounts'
+import AccountDetail from './pages/AccountDetail'
+import ItemPage from './pages/ItemPage'
+import CharacterPage from './pages/CharacterPage'
 
 export default function App() {
   const [session, setSession] = useState(null)
@@ -81,6 +84,9 @@ export default function App() {
         <Route path="/loot" element={<LootSearch />} />
         <Route path="/mobs" element={<MobLoot />} />
         <Route path="/accounts" element={<Accounts />} />
+        <Route path="/accounts/:accountId" element={<AccountDetail />} />
+        <Route path="/items/:itemNameEncoded" element={<ItemPage />} />
+        <Route path="/characters/:charKey" element={<CharacterPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </>

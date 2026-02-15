@@ -130,12 +130,12 @@ export default function LootSearch() {
             <tbody>
               {filteredLoot.slice(0, 500).map((row, i) => (
                 <tr key={row.id || `${row.raid_id}-${row.item_name}-${i}`}>
-                  <td>{row.item_name || '—'}</td>
+                  <td><Link to={`/items/${encodeURIComponent(row.item_name || '')}`}>{row.item_name || '—'}</Link></td>
                   <td style={{ color: '#a1a1aa', fontSize: '0.875rem' }}>
                     {itemSourceLabel(itemSources, row.item_name) ?? '—'}
                   </td>
                   <td><Link to={`/raids/${row.raid_id}`}>{raids[row.raid_id] || row.raid_id}</Link></td>
-                  <td>{row.character_name || '—'}</td>
+                  <td><Link to={`/characters/${encodeURIComponent(row.character_name || row.char_id || '')}`}>{row.character_name || row.char_id || '—'}</Link></td>
                   <td>{row.cost ?? '—'}</td>
                 </tr>
               ))}

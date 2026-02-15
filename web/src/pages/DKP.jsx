@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
+import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 
 // Supabase/PostgREST returns at most 1000 rows per query. Paginate to fetch all rows.
@@ -361,7 +362,7 @@ export default function DKP({ isOfficer }) {
               const cell60 = total60 > 0 ? `${e60} / ${total60}` : '—'
               return (
                 <tr key={r.account_id + i}>
-                  <td>{r.name}</td>
+                  <td><Link to={`/accounts/${r.account_id}`}>{r.name}</Link></td>
                   <td>{Number(r.earned)}</td>
                   <td>{Number(r.spent)}</td>
                   <td><strong>{Number(r.balance)}</strong></td>

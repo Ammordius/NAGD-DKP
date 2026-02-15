@@ -11,7 +11,7 @@ export default function Accounts() {
   useEffect(() => {
     const limit = 10000
     Promise.all([
-      supabase.from('accounts').select('account_id, toon_count').limit(limit),
+      supabase.from('accounts').select('account_id, toon_count, display_name').limit(limit),
       supabase.from('character_account').select('account_id, char_id').limit(limit),
       supabase.from('characters').select('char_id, name, class_name, level').limit(limit),
     ]).then(([a, ca, ch]) => {
@@ -30,6 +30,7 @@ export default function Accounts() {
       const accList = (a.data || []).map((acc) => ({
         account_id: acc.account_id,
         toon_count: acc.toon_count,
+        display_name: acc.display_name,
         char_ids: byAccount[acc.account_id] || [],
         characters: (byAccount[acc.account_id] || []).map((cid) => charMap[cid]).filter(Boolean),
       }))
@@ -79,7 +80,12 @@ export default function Accounts() {
                     </button>
                   </td>
                   <td>
-                    <code>{acc.account_id}</code>
+                    <Link to={`/accounts/${acc.account_id}`}>
+                      <code>{acc.account_id}</code>
+                    </Link>
+                    {acc.display_name && (
+                      <span style={{ marginLeft: '0.5rem' }}>{acc.display_name}</span>
+                    )}
                     {acc.toon_count != null && (
                       <span style={{ marginLeft: '0.5rem', color: '#71717a', fontSize: '0.875rem' }}>
                         ({acc.toon_count} toons)
@@ -93,7 +99,7 @@ export default function Accounts() {
                       <ul style={{ margin: 0, paddingLeft: '1.25rem', listStyle: 'disc' }}>
                         {chars.map((c) => (
                           <li key={c.char_id}>
-                            <Link to={`/dkp`}>{c.name || c.char_id}</Link>
+                            <Link to={`/characters/${encodeURIComponent(c.name || c.char_id)}`}>{c.name || c.char_id}</Link>
                             {(c.class_name || c.level) && (
                               <span style={{ color: '#71717a', fontSize: '0.875rem' }}>
                                 {' '}{[c.class_name, c.level].filter(Boolean).join(' · ')}
@@ -105,7 +111,9 @@ export default function Accounts() {
                     ) : (
                       <span className="raid-badges">
                         {chars.slice(0, 4).map((c) => (
-                          <span key={c.char_id} className="badge">{c.name || c.char_id}</span>
+                          <span key={c.char_id} className="badge">
+                            <Link to={`/characters/${encodeURIComponent(c.name || c.char_id)}`} style={{ color: 'inherit' }}>{c.name || c.char_id}</Link>
+                          </span>
                         ))}
                         {chars.length > 4 && <span className="badge">+{chars.length - 4}</span>}
                       </span>
