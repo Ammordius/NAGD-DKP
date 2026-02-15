@@ -6,6 +6,8 @@ const MAGELO_BASE = 'https://www.takproject.net/magelo/character.php?char='
 const MIDDLE_DOT = '\u00B7'
 
 const PAGE = 1000
+const IN_CHUNK = 150 // avoid URL length limits and timeouts when filtering by 1000+ ids
+
 async function fetchAll(table, select = '*', filter) {
   const all = []
   let from = 0
@@ -18,6 +20,19 @@ async function fetchAll(table, select = '*', filter) {
     all.push(...(data || []))
     if (!data || data.length < PAGE) break
     from += PAGE
+  }
+  return { data: all, error: null }
+}
+
+/** Fetch rows where column is in values, in chunks to avoid URL length limits and timeouts. */
+async function fetchByChunkedIn(table, select, column, values) {
+  if (!values.length) return { data: [], error: null }
+  const all = []
+  for (let i = 0; i < values.length; i += IN_CHUNK) {
+    const chunk = values.slice(i, i + IN_CHUNK)
+    const { data, error } = await supabase.from(table).select(select).in(column, chunk)
+    if (error) return { data: null, error }
+    all.push(...(data || []))
   }
   return { data: all, error: null }
 }
@@ -101,9 +116,14 @@ export default function AccountDetail({ isOfficer, profile }) {
           }
           const raidList = [...raidIds]
           Promise.all([
-            supabase.from('raids').select('raid_id, raid_name, date_iso').in('raid_id', raidList),
-            fetchAll('raid_dkp_totals', 'raid_id, total_dkp', (q) => q.in('raid_id', raidList), { order: { column: 'raid_id', ascending: true } }),
+            fetchByChunkedIn('raids', 'raid_id, raid_name, date_iso', 'raid_id', raidList),
+            fetchByChunkedIn('raid_dkp_totals', 'raid_id, total_dkp', 'raid_id', raidList),
           ]).then(([rRes, totalsRes]) => {
+            if (rRes?.error) {
+              setError(rRes.error?.message || 'Failed to load raids')
+              setLoading(false)
+              return
+            }
             if (totalsRes?.error) {
               setError(totalsRes.error?.message || 'Failed to load raid totals')
               setLoading(false)
