@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo } from 'react'
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 
@@ -391,6 +391,13 @@ export default function Officer({ isOfficer }) {
     return itemNames.filter((n) => n.toLowerCase().includes(q)).slice(0, 50)
   }, [itemNames, lootItemQuery])
 
+  const addRaidSectionRef = useRef(null)
+  const raidPasteRef = useRef(null)
+  const focusAddRaid = () => {
+    addRaidSectionRef.current?.scrollIntoView({ behavior: 'smooth' })
+    setTimeout(() => raidPasteRef.current?.focus(), 300)
+  }
+
   if (!isOfficer) return null
 
   return (
@@ -399,15 +406,21 @@ export default function Officer({ isOfficer }) {
       <p style={{ color: '#a1a1aa' }}>
         Add raids from Discord, paste DKP tics (channel lists), add loot manually or from logs. All edits require officer permissions.
       </p>
+      <div style={{ marginBottom: '1rem' }}>
+        <button type="button" className="btn" onClick={focusAddRaid} style={{ fontWeight: 'bold' }}>
+          + New raid
+        </button>
+      </div>
       {error && <p className="error" style={{ marginBottom: '1rem' }}>{error}</p>}
 
       {/* Add raid */}
-      <section className="card" style={{ marginBottom: '1.5rem' }}>
+      <section ref={addRaidSectionRef} className="card" style={{ marginBottom: '1.5rem' }}>
         <h2 style={{ marginTop: 0 }}>Add raid</h2>
         <p style={{ color: '#71717a', fontSize: '0.9rem' }}>
           Paste a line from Discord, e.g. <code>Thursday 02/12 9pm est: Water Minis + Cursed/Emp - February 12, 2026 8:00 PM</code>
         </p>
         <textarea
+          ref={raidPasteRef}
           value={raidPaste}
           onChange={(e) => setRaidPaste(e.target.value)}
           placeholder="Thursday 02/12 9pm est: Water Minis + Cursed/Emp - February 12, 2026 8:00 PM"
@@ -415,7 +428,7 @@ export default function Officer({ isOfficer }) {
           style={{ width: '100%', maxWidth: '600px', padding: '0.5rem', marginBottom: '0.5rem' }}
         />
         <div>
-          <button type="button" onClick={handleAddRaid} disabled={mutating || !raidPaste.trim()}>
+          <button type="button" className="btn" onClick={handleAddRaid} disabled={mutating || !raidPaste.trim()}>
             {mutating ? 'Creating…' : 'Create raid'}
           </button>
         </div>

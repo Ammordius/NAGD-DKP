@@ -25,7 +25,8 @@ CREATE TABLE IF NOT EXISTS accounts (
   account_id TEXT PRIMARY KEY,
   char_ids TEXT,
   toon_names TEXT,
-  toon_count INTEGER
+  toon_count INTEGER,
+  display_name TEXT
 );
 
 CREATE TABLE IF NOT EXISTS character_account (
@@ -123,6 +124,17 @@ CREATE TABLE IF NOT EXISTS active_raiders (
 ALTER TABLE dkp_summary ADD COLUMN IF NOT EXISTS last_activity_date DATE;
 ALTER TABLE dkp_summary ADD COLUMN IF NOT EXISTS earned_30d INTEGER;
 ALTER TABLE dkp_summary ADD COLUMN IF NOT EXISTS earned_60d INTEGER;
+ALTER TABLE accounts ADD COLUMN IF NOT EXISTS display_name TEXT;
+
+-- Parse raids.date_iso to DATE safely (handles YYYY-MM-DD, YYYY-MM-DDThh:mm:ss, empty/null). Returns NULL if not parseable.
+CREATE OR REPLACE FUNCTION public.raid_date_parsed(iso_text TEXT)
+RETURNS DATE LANGUAGE sql IMMUTABLE AS $$
+  SELECT CASE
+    WHEN iso_text IS NOT NULL AND trim(iso_text) ~ '^\d{4}-\d{2}-\d{2}'
+    THEN (SUBSTRING(trim(iso_text) FROM 1 FOR 10))::date
+    ELSE NULL
+  END
+$$;
 
 -- Indexes for common queries
 CREATE INDEX IF NOT EXISTS idx_raid_events_raid ON raid_events(raid_id);
@@ -158,9 +170,9 @@ BEGIN
         (CASE WHEN COALESCE(trim(rea.char_id::text), '') = '' THEN COALESCE(trim(rea.character_name), 'unknown') ELSE trim(rea.char_id::text) END) AS character_key,
         MAX(COALESCE(trim(rea.character_name), rea.char_id::text, 'unknown')) AS character_name,
         SUM(COALESCE((re.dkp_value::numeric), 0)) AS earned,
-        (SUM(CASE WHEN r.date_iso IS NOT NULL AND (r.date_iso::date) >= (current_date - 30) THEN COALESCE((re.dkp_value::numeric), 0) ELSE 0 END))::INTEGER AS earned_30d,
-        (SUM(CASE WHEN r.date_iso IS NOT NULL AND (r.date_iso::date) >= (current_date - 60) THEN COALESCE((re.dkp_value::numeric), 0) ELSE 0 END))::INTEGER AS earned_60d,
-        MAX((r.date_iso::date)) AS last_activity_date
+        (SUM(CASE WHEN raid_date_parsed(r.date_iso) >= (current_date - 30) THEN COALESCE((re.dkp_value::numeric), 0) ELSE 0 END))::INTEGER AS earned_30d,
+        (SUM(CASE WHEN raid_date_parsed(r.date_iso) >= (current_date - 60) THEN COALESCE((re.dkp_value::numeric), 0) ELSE 0 END))::INTEGER AS earned_60d,
+        MAX(raid_date_parsed(r.date_iso)) AS last_activity_date
       FROM raid_event_attendance rea
       LEFT JOIN raid_events re ON re.raid_id = rea.raid_id AND re.event_id = rea.event_id
       LEFT JOIN raids r ON r.raid_id = rea.raid_id
@@ -174,9 +186,9 @@ BEGIN
         (CASE WHEN COALESCE(trim(ra.char_id::text), '') = '' THEN COALESCE(trim(ra.character_name), 'unknown') ELSE trim(ra.char_id::text) END) AS character_key,
         MAX(COALESCE(trim(ra.character_name), ra.char_id::text, 'unknown')) AS character_name,
         SUM(COALESCE(raid_totals.dkp, 0)) AS earned,
-        (SUM(CASE WHEN r.date_iso IS NOT NULL AND (r.date_iso::date) >= (current_date - 30) THEN COALESCE(raid_totals.dkp, 0) ELSE 0 END))::INTEGER AS earned_30d,
-        (SUM(CASE WHEN r.date_iso IS NOT NULL AND (r.date_iso::date) >= (current_date - 60) THEN COALESCE(raid_totals.dkp, 0) ELSE 0 END))::INTEGER AS earned_60d,
-        MAX((r.date_iso::date)) AS last_activity_date
+        (SUM(CASE WHEN raid_date_parsed(r.date_iso) >= (current_date - 30) THEN COALESCE(raid_totals.dkp, 0) ELSE 0 END))::INTEGER AS earned_30d,
+        (SUM(CASE WHEN raid_date_parsed(r.date_iso) >= (current_date - 60) THEN COALESCE(raid_totals.dkp, 0) ELSE 0 END))::INTEGER AS earned_60d,
+        MAX(raid_date_parsed(r.date_iso)) AS last_activity_date
       FROM raid_attendance ra
       LEFT JOIN (SELECT raid_id, SUM((dkp_value::numeric)) AS dkp FROM raid_events GROUP BY raid_id) raid_totals ON ra.raid_id = raid_totals.raid_id
       LEFT JOIN raids r ON r.raid_id = ra.raid_id
@@ -203,11 +215,11 @@ BEGIN
   ),
   activity_dates AS (
     SELECT character_key, MAX(raid_date) AS last_activity_date FROM (
-      SELECT (CASE WHEN COALESCE(trim(rea.char_id::text), '') = '' THEN COALESCE(trim(rea.character_name), 'unknown') ELSE trim(rea.char_id::text) END) AS character_key, (r.date_iso::date) AS raid_date FROM raid_event_attendance rea JOIN raids r ON r.raid_id = rea.raid_id WHERE r.date_iso IS NOT NULL
+      SELECT (CASE WHEN COALESCE(trim(rea.char_id::text), '') = '' THEN COALESCE(trim(rea.character_name), 'unknown') ELSE trim(rea.char_id::text) END) AS character_key, raid_date_parsed(r.date_iso) AS raid_date FROM raid_event_attendance rea JOIN raids r ON r.raid_id = rea.raid_id
       UNION ALL
-      SELECT (CASE WHEN COALESCE(trim(ra.char_id::text), '') = '' THEN COALESCE(trim(ra.character_name), 'unknown') ELSE trim(ra.char_id::text) END), (r.date_iso::date) FROM raid_attendance ra JOIN raids r ON r.raid_id = ra.raid_id WHERE r.date_iso IS NOT NULL
+      SELECT (CASE WHEN COALESCE(trim(ra.char_id::text), '') = '' THEN COALESCE(trim(ra.character_name), 'unknown') ELSE trim(ra.char_id::text) END), raid_date_parsed(r.date_iso) FROM raid_attendance ra JOIN raids r ON r.raid_id = ra.raid_id
       UNION ALL
-      SELECT (CASE WHEN COALESCE(trim(rl.char_id::text), '') = '' THEN COALESCE(trim(rl.character_name), 'unknown') ELSE trim(rl.char_id::text) END), (r.date_iso::date) FROM raid_loot rl JOIN raids r ON r.raid_id = rl.raid_id WHERE r.date_iso IS NOT NULL
+      SELECT (CASE WHEN COALESCE(trim(rl.char_id::text), '') = '' THEN COALESCE(trim(rl.character_name), 'unknown') ELSE trim(rl.char_id::text) END), raid_date_parsed(r.date_iso) FROM raid_loot rl JOIN raids r ON r.raid_id = rl.raid_id
     ) t
     WHERE raid_date IS NOT NULL
     GROUP BY character_key
@@ -227,17 +239,28 @@ BEGIN
   FROM combined c
   LEFT JOIN activity_dates ad ON ad.character_key = c.character_key;
 
-  -- Update period totals (total DKP available in last 30d and 60d from all raids).
+  -- Update period totals (total DKP available in last 30d and 60d from all raids). Use raid dates from raids.date_iso.
   INSERT INTO dkp_period_totals (period, total_dkp)
-  SELECT '30d', COALESCE(SUM((re.dkp_value::numeric)), 0) FROM raid_events re JOIN raids r ON r.raid_id = re.raid_id WHERE r.date_iso IS NOT NULL AND (r.date_iso::date) >= (current_date - 30)
+  SELECT '30d', COALESCE(SUM((re.dkp_value::numeric)), 0) FROM raid_events re JOIN raids r ON r.raid_id = re.raid_id WHERE raid_date_parsed(r.date_iso) >= (current_date - 30)
   ON CONFLICT (period) DO UPDATE SET total_dkp = EXCLUDED.total_dkp;
   INSERT INTO dkp_period_totals (period, total_dkp)
-  SELECT '60d', COALESCE(SUM((re.dkp_value::numeric)), 0) FROM raid_events re JOIN raids r ON r.raid_id = re.raid_id WHERE r.date_iso IS NOT NULL AND (r.date_iso::date) >= (current_date - 60)
+  SELECT '60d', COALESCE(SUM((re.dkp_value::numeric)), 0) FROM raid_events re JOIN raids r ON r.raid_id = re.raid_id WHERE raid_date_parsed(r.date_iso) >= (current_date - 60)
   ON CONFLICT (period) DO UPDATE SET total_dkp = EXCLUDED.total_dkp;
 END;
 $$;
 
--- RPC: officers only. Calls internal refresh.
+-- Helper for RLS and RPCs: is current user an officer? (SECURITY DEFINER so reading profiles doesn't trigger RLS recursion.)
+CREATE OR REPLACE FUNCTION public.is_officer()
+RETURNS boolean
+LANGUAGE sql
+SECURITY DEFINER
+STABLE
+SET search_path = public
+AS $$
+  SELECT EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'officer');
+$$;
+
+-- RPC: officers only when called with auth (e.g. from app). When auth.uid() is NULL (e.g. SQL Editor, pg_cron), allow so admins can run refresh.
 CREATE OR REPLACE FUNCTION public.refresh_dkp_summary()
 RETURNS void
 LANGUAGE plpgsql
@@ -245,7 +268,7 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 BEGIN
-  IF NOT (SELECT EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'officer')) THEN
+  IF auth.uid() IS NOT NULL AND NOT public.is_officer() THEN
     RAISE EXCEPTION 'Only officers can refresh DKP summary';
   END IF;
   PERFORM refresh_dkp_summary_internal();
@@ -341,18 +364,21 @@ $$;
 
 -- Triggers: only on INSERT so we only apply delta (new rows). For DELETE/UPDATE run full refresh.
 DROP TRIGGER IF EXISTS refresh_dkp_after_event_attendance ON raid_event_attendance;
+DROP TRIGGER IF EXISTS delta_dkp_after_event_attendance ON raid_event_attendance;
 CREATE TRIGGER delta_dkp_after_event_attendance
   AFTER INSERT ON raid_event_attendance
   REFERENCING NEW TABLE AS new_rows
   FOR EACH STATEMENT EXECUTE FUNCTION public.trigger_delta_event_attendance();
 
 DROP TRIGGER IF EXISTS refresh_dkp_after_attendance ON raid_attendance;
+DROP TRIGGER IF EXISTS delta_dkp_after_attendance ON raid_attendance;
 CREATE TRIGGER delta_dkp_after_attendance
   AFTER INSERT ON raid_attendance
   REFERENCING NEW TABLE AS new_rows
   FOR EACH STATEMENT EXECUTE FUNCTION public.trigger_delta_attendance();
 
 DROP TRIGGER IF EXISTS refresh_dkp_after_loot ON raid_loot;
+DROP TRIGGER IF EXISTS delta_dkp_after_loot ON raid_loot;
 CREATE TRIGGER delta_dkp_after_loot
   AFTER INSERT ON raid_loot
   REFERENCING NEW TABLE AS new_rows
@@ -405,27 +431,17 @@ ALTER TABLE dkp_summary ENABLE ROW LEVEL SECURITY;
 ALTER TABLE dkp_period_totals ENABLE ROW LEVEL SECURITY;
 ALTER TABLE active_raiders ENABLE ROW LEVEL SECURITY;
 
--- Profiles: users read own row; officers read all (drop first so script is re-runnable)
+-- Profiles: one SELECT (own row or officer), one UPDATE (own row or officer)
 DROP POLICY IF EXISTS "Users can read own profile" ON profiles;
-CREATE POLICY "Users can read own profile" ON profiles
-  FOR SELECT USING (auth.uid() = id);
-
 DROP POLICY IF EXISTS "Officers can read all profiles" ON profiles;
-CREATE POLICY "Officers can read all profiles" ON profiles
-  FOR SELECT USING (
-    EXISTS (SELECT 1 FROM profiles p WHERE p.id = auth.uid() AND p.role = 'officer')
-  );
+CREATE POLICY "Profiles select" ON profiles
+  FOR SELECT USING (auth.uid() = id OR public.is_officer());
 
 DROP POLICY IF EXISTS "Users can update own profile (limited)" ON profiles;
-CREATE POLICY "Users can update own profile (limited)" ON profiles
-  FOR UPDATE USING (auth.uid() = id)
-  WITH CHECK (auth.uid() = id);
-
 DROP POLICY IF EXISTS "Officers can update profiles" ON profiles;
-CREATE POLICY "Officers can update profiles" ON profiles
-  FOR UPDATE USING (
-    EXISTS (SELECT 1 FROM profiles p WHERE p.id = auth.uid() AND p.role = 'officer')
-  );
+CREATE POLICY "Profiles update" ON profiles
+  FOR UPDATE USING (auth.uid() = id OR public.is_officer())
+  WITH CHECK (auth.uid() = id OR public.is_officer());
 
 -- Data tables: any authenticated user can read (drop first so script is re-runnable)
 DROP POLICY IF EXISTS "Authenticated read characters" ON characters;
@@ -455,11 +471,9 @@ CREATE POLICY "Authenticated read dkp_period_totals" ON dkp_period_totals FOR SE
 DROP POLICY IF EXISTS "Authenticated read active_raiders" ON active_raiders;
 CREATE POLICY "Authenticated read active_raiders" ON active_raiders FOR SELECT TO authenticated USING (true);
 DROP POLICY IF EXISTS "Officers manage active_raiders" ON active_raiders;
-CREATE POLICY "Officers manage active_raiders" ON active_raiders FOR ALL TO authenticated USING (
-  EXISTS (SELECT 1 FROM profiles p WHERE p.id = auth.uid() AND p.role = 'officer')
-) WITH CHECK (
-  EXISTS (SELECT 1 FROM profiles p WHERE p.id = auth.uid() AND p.role = 'officer')
-);
+CREATE POLICY "Officers manage active_raiders" ON active_raiders FOR ALL TO authenticated
+  USING (public.is_officer())
+  WITH CHECK (public.is_officer());
 
 -- 5) First officer: run after creating your user in Supabase Auth (replace YOUR_USER_UUID)
 -- INSERT INTO profiles (id, email, role) VALUES ('YOUR_USER_UUID', 'your@email.com', 'officer')
