@@ -1,6 +1,10 @@
 import { useEffect, useState, useMemo, Fragment } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { createCache } from '../lib/cache'
+
+const LAST3_CACHE_KEY = 'mob_loot_last3_v1'
+const CACHE_TTL = 10 * 60 * 1000
 
 /**
  * Lists mobs and their DKP loot from data/dkp_mob_loot.json (copied to web/public/dkp_mob_loot.json).
@@ -24,6 +28,12 @@ export default function MobLoot() {
 
   useEffect(() => {
     let cancelled = false
+    const cache = createCache(LAST3_CACHE_KEY, CACHE_TTL)
+    const cached = cache.get()
+    if (cached && typeof cached === 'object' && Object.keys(cached).length > 0) {
+      setItemLast3(cached)
+    }
+
     const PAGE = 1000
     const run = async () => {
       const allLoot = []
@@ -58,7 +68,10 @@ export default function MobLoot() {
         const avg = costs.length ? (costs.reduce((s, c) => s + c, 0) / costs.length).toFixed(1) : null
         last3Map[key] = { values: recent.map((r) => r.cost ?? '—'), avg }
       })
-      if (!cancelled) setItemLast3(last3Map)
+      if (!cancelled) {
+        setItemLast3(last3Map)
+        cache.set(last3Map)
+      }
     }
     run()
     return () => { cancelled = true }

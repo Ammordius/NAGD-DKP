@@ -109,13 +109,13 @@ export default function RaidDetail() {
                   {hasList && isExpanded && (
                     <tr key={`${e.event_id}-attendees`}>
                       <td colSpan={5} style={{ padding: '0.5rem 1rem', verticalAlign: 'top', backgroundColor: 'rgba(0,0,0,0.2)', borderBottom: '1px solid #27272a' }}>
-                        <p style={{ margin: 0, fontSize: '0.9rem' }}>
+                        <div style={{ maxHeight: '200px', overflowY: 'auto', fontSize: '0.9rem' }}>
                           {attendees.map((a, i) => (
                             <Link key={a.char_id || a.name || i} to={`/characters/${encodeURIComponent(a.name || '')}`} style={{ marginRight: '0.5rem' }}>
                               {a.name}
                             </Link>
                           ))}
-                        </p>
+                        </div>
                       </td>
                     </tr>
                   )}

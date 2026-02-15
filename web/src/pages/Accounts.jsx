@@ -1,6 +1,10 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { createCache } from '../lib/cache'
+
+const CACHE_KEY = 'accounts_list_v1'
+const CACHE_TTL = 10 * 60 * 1000
 
 export default function Accounts() {
   const [accounts, setAccounts] = useState([])
@@ -9,6 +13,13 @@ export default function Accounts() {
   const [expanded, setExpanded] = useState({})
 
   useEffect(() => {
+    const cache = createCache(CACHE_KEY, CACHE_TTL)
+    const cached = cache.get()
+    if (cached?.length) {
+      setAccounts(cached)
+      setLoading(false)
+    }
+
     const limit = 10000
     Promise.all([
       supabase.from('accounts').select('account_id, toon_count, display_name').limit(limit),
@@ -37,6 +48,7 @@ export default function Accounts() {
       accList.sort((x, y) => (y.characters?.length || 0) - (x.characters?.length || 0))
       setAccounts(accList)
       setLoading(false)
+      cache.set(accList)
     })
   }, [])
 

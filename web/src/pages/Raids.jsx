@@ -1,6 +1,10 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { createCache } from '../lib/cache'
+
+const CACHE_KEY = 'raids_list_v1'
+const CACHE_TTL = 10 * 60 * 1000
 
 export default function Raids() {
   const [raids, setRaids] = useState([])
@@ -10,6 +14,15 @@ export default function Raids() {
   const [error, setError] = useState('')
 
   useEffect(() => {
+    const cache = createCache(CACHE_KEY, CACHE_TTL)
+    const cached = cache.get()
+    if (cached?.raids?.length) {
+      setRaids(cached.raids)
+      setEventsByRaid(cached.eventsByRaid || {})
+      setClassificationsByRaid(cached.classificationsByRaid || {})
+      setLoading(false)
+    }
+
     const limit = 200
     Promise.all([
       supabase
@@ -26,8 +39,6 @@ export default function Raids() {
         return
       }
       const raidList = r.data || []
-      setRaids(raidList)
-
       const byRaid = {}
       ;(e.data || []).forEach((ev) => {
         if (!byRaid[ev.raid_id]) byRaid[ev.raid_id] = { totalDkp: 0, events: [] }
@@ -35,17 +46,18 @@ export default function Raids() {
         byRaid[ev.raid_id].totalDkp += v
         byRaid[ev.raid_id].events.push({ ...ev, dkp_value: v })
       })
+      setRaids(raidList)
       setEventsByRaid(byRaid)
       setLoading(false)
-    })
-
-    supabase.from('raid_classifications').select('raid_id, mob, zone').limit(10000).then(({ data }) => {
-      const classByRaid = {}
-      ;(data || []).forEach((row) => {
-        if (!classByRaid[row.raid_id]) classByRaid[row.raid_id] = []
-        classByRaid[row.raid_id].push({ mob: row.mob, zone: row.zone })
+      supabase.from('raid_classifications').select('raid_id, mob, zone').limit(10000).then(({ data }) => {
+        const classByRaid = {}
+        ;(data || []).forEach((row) => {
+          if (!classByRaid[row.raid_id]) classByRaid[row.raid_id] = []
+          classByRaid[row.raid_id].push({ mob: row.mob, zone: row.zone })
+        })
+        setClassificationsByRaid(classByRaid)
+        cache.set({ raids: raidList, eventsByRaid: byRaid, classificationsByRaid: classByRaid })
       })
-      setClassificationsByRaid(classByRaid)
     })
   }, [])
 
