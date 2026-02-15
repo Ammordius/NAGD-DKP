@@ -5650,15 +5650,7 @@
   "a_fire_elemental|Lavastorm Mountains": {
     "mob": "a_fire_elemental",
     "zone": "Lavastorm Mountains",
-    "loot": [
-      {
-        "item_id": 7886,
-        "name": "Essence of Fire",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ],
+    "loot": [],
     "respawn_seconds": 350
   },
   "A_Battle_Horror|Mons Letalis": {
@@ -5828,29 +5820,13 @@
   "lava_guardian|Nagafen's Lair": {
     "mob": "lava_guardian",
     "zone": "Nagafen's Lair",
-    "loot": [
-      {
-        "item_id": 7886,
-        "name": "Essence of Fire",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ],
+    "loot": [],
     "respawn_seconds": 1150
   },
   "a_fire_elemental|Najena": {
     "mob": "a_fire_elemental",
     "zone": "Najena",
-    "loot": [
-      {
-        "item_id": 7886,
-        "name": "Essence of Fire",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ],
+    "loot": [],
     "respawn_seconds": 1080
   },
   "Lady_Vox|Permafrost Caverns": {
@@ -5892,6 +5868,13 @@
         "sources": [
           "raid_item_sources"
         ]
+      },
+      {
+        "item_id": 10229,
+        "name": "Essence of Wind",
+        "sources": [
+          "dkp"
+        ]
       }
     ],
     "respawn_seconds": 345600
@@ -5922,6 +5905,13 @@
         "sources": [
           "dkp",
           "raid_item_sources"
+        ]
+      },
+      {
+        "item_id": 14760,
+        "name": "Essence of Earth",
+        "sources": [
+          "dkp"
         ]
       }
     ],
@@ -6802,29 +6792,13 @@
   "a_crystaline_cloud|Plane of Sky": {
     "mob": "a_crystaline_cloud",
     "zone": "Plane of Sky",
-    "loot": [
-      {
-        "item_id": 10229,
-        "name": "Essence of Wind",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ],
+    "loot": [],
     "respawn_seconds": 28800
   },
   "a_gust_of_wind|Plane of Sky": {
     "mob": "a_gust_of_wind",
     "zone": "Plane of Sky",
-    "loot": [
-      {
-        "item_id": 10229,
-        "name": "Essence of Wind",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ],
+    "loot": [],
     "respawn_seconds": 28800
   },
   "an_azarack|Plane of Sky": {
@@ -7706,29 +7680,13 @@
   "blazing_elemental|Solusek's Eye": {
     "mob": "blazing_elemental",
     "zone": "Solusek's Eye",
-    "loot": [
-      {
-        "item_id": 7886,
-        "name": "Essence of Fire",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ],
+    "loot": [],
     "respawn_seconds": 1200
   },
   "lava_elemental|Solusek's Eye": {
     "mob": "lava_elemental",
     "zone": "Solusek's Eye",
-    "loot": [
-      {
-        "item_id": 7886,
-        "name": "Essence of Fire",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ],
+    "loot": [],
     "respawn_seconds": 930
   },
   "High_Priest_of_Ssraeshza|Ssraeshza Temple": {
@@ -10946,16 +10904,7 @@
   "Retseth_Tretse|The Hole": {
     "mob": "Retseth_Tretse",
     "zone": "The Hole",
-    "loot": [
-      {
-        "item_id": 14760,
-        "name": "Essence of Earth",
-        "sources": [
-          "dkp",
-          "raid_item_sources"
-        ]
-      }
-    ],
+    "loot": [],
     "respawn_seconds": 1024
   },
   "Terris_Thule|The Lair of Terris Thule": {
@@ -11098,15 +11047,7 @@
   "a_cral_ligi_soldier|The Tenebrous Mountains": {
     "mob": "a_cral_ligi_soldier",
     "zone": "The Tenebrous Mountains",
-    "loot": [
-      {
-        "item_id": 10229,
-        "name": "Essence of Wind",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ],
+    "loot": [],
     "respawn_seconds": 700
   },
   "a_cral_ligi_tailor|The Tenebrous Mountains": {
@@ -11196,15 +11137,7 @@
   "a_meeda_hune_soldier|The Tenebrous Mountains": {
     "mob": "a_meeda_hune_soldier",
     "zone": "The Tenebrous Mountains",
-    "loot": [
-      {
-        "item_id": 10229,
-        "name": "Essence of Wind",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ],
+    "loot": [],
     "respawn_seconds": 700
   },
   "a_nasty_darkwing_bat|The Tenebrous Mountains": {
@@ -11642,15 +11575,7 @@
   "a_cral_ligi_guardian|Twilight": {
     "mob": "a_cral_ligi_guardian",
     "zone": "Twilight",
-    "loot": [
-      {
-        "item_id": 10229,
-        "name": "Essence of Wind",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ],
+    "loot": [],
     "respawn_seconds": 1200
   },
   "a_cral_ligi_hero|Twilight": {
@@ -11680,71 +11605,31 @@
   "a_cral_ligi_shaman|Twilight": {
     "mob": "a_cral_ligi_shaman",
     "zone": "Twilight",
-    "loot": [
-      {
-        "item_id": 10229,
-        "name": "Essence of Wind",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ],
+    "loot": [],
     "respawn_seconds": 1200
   },
   "a_cral_ligi_spiritward|Twilight": {
     "mob": "a_cral_ligi_spiritward",
     "zone": "Twilight",
-    "loot": [
-      {
-        "item_id": 10229,
-        "name": "Essence of Wind",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ],
+    "loot": [],
     "respawn_seconds": 1200
   },
   "a_cral_ligi_warder|Twilight": {
     "mob": "a_cral_ligi_warder",
     "zone": "Twilight",
-    "loot": [
-      {
-        "item_id": 10229,
-        "name": "Essence of Wind",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ],
+    "loot": [],
     "respawn_seconds": 1800
   },
   "a_cral_ligi_warlord|Twilight": {
     "mob": "a_cral_ligi_warlord",
     "zone": "Twilight",
-    "loot": [
-      {
-        "item_id": 10229,
-        "name": "Essence of Wind",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ],
+    "loot": [],
     "respawn_seconds": 1200
   },
   "a_cral_ligi_warmaster|Twilight": {
     "mob": "a_cral_ligi_warmaster",
     "zone": "Twilight",
-    "loot": [
-      {
-        "item_id": 10229,
-        "name": "Essence of Wind",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ],
+    "loot": [],
     "respawn_seconds": 1200
   },
   "a_cral_ligi_warmonger|Twilight": {
@@ -11756,15 +11641,7 @@
   "a_cral_ligi_worker|Twilight": {
     "mob": "a_cral_ligi_worker",
     "zone": "Twilight",
-    "loot": [
-      {
-        "item_id": 10229,
-        "name": "Essence of Wind",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ],
+    "loot": [],
     "respawn_seconds": 1800
   },
   "a_greater_sea_turtle|Twilight": {
@@ -11818,15 +11695,7 @@
   "a_grol_baku_warlord|Twilight": {
     "mob": "a_grol_baku_warlord",
     "zone": "Twilight",
-    "loot": [
-      {
-        "item_id": 10229,
-        "name": "Essence of Wind",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ],
+    "loot": [],
     "respawn_seconds": 1200
   },
   "a_horrid_shadow|Twilight": {
@@ -11856,15 +11725,7 @@
   "a_swift_air_elemental|Twilight": {
     "mob": "a_swift_air_elemental",
     "zone": "Twilight",
-    "loot": [
-      {
-        "item_id": 10229,
-        "name": "Essence of Wind",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ],
+    "loot": [],
     "respawn_seconds": 1200
   },
   "a_tenacious_sea_turtle|Twilight": {
@@ -11942,15 +11803,7 @@
   "an_air_elemental|Twilight": {
     "mob": "an_air_elemental",
     "zone": "Twilight",
-    "loot": [
-      {
-        "item_id": 10229,
-        "name": "Essence of Wind",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ],
+    "loot": [],
     "respawn_seconds": 1200
   },
   "an_enormous_underbulk|Twilight": {

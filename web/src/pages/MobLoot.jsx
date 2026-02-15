@@ -14,6 +14,7 @@ const CACHE_TTL = 10 * 60 * 1000
 export default function MobLoot() {
   const [data, setData] = useState(null)
   const [query, setQuery] = useState('')
+  const [minAvgDkp, setMinAvgDkp] = useState('')
   const [loading, setLoading] = useState(true)
   const [expanded, setExpanded] = useState({})
   const [itemLast3, setItemLast3] = useState({})
@@ -90,15 +91,47 @@ export default function MobLoot() {
     return list.sort((a, b) => (a.mob || '').localeCompare(b.mob || ''))
   }, [data])
 
+  const entriesWithDkp = useMemo(() => {
+    return entries.map((e) => {
+      let totalAvgDkp = 0
+      ;(e.loot || []).forEach((item) => {
+        const name = (item.name || '').trim().toLowerCase()
+        const avg = itemLast3[name]?.avg
+        if (avg != null) totalAvgDkp += parseFloat(avg) || 0
+      })
+      return { ...e, totalAvgDkp }
+    })
+  }, [entries, itemLast3])
+
   const filtered = useMemo(() => {
+    let list = entriesWithDkp
     const q = (query || '').trim().toLowerCase()
-    if (!q) return entries
-    return entries.filter(
-      (e) =>
-        (e.mob || '').toLowerCase().includes(q) ||
-        (e.zone || '').toLowerCase().includes(q)
-    )
-  }, [entries, query])
+    if (q) {
+      list = list.filter(
+        (e) =>
+          (e.mob || '').toLowerCase().includes(q) ||
+          (e.zone || '').toLowerCase().includes(q)
+      )
+    }
+    const min = parseFloat(minAvgDkp)
+    if (!Number.isNaN(min) && min > 0) {
+      list = list.filter((e) => e.totalAvgDkp >= min)
+    }
+    return list
+  }, [entriesWithDkp, query, minAvgDkp])
+
+  const byZone = useMemo(() => {
+    const groups = {}
+    filtered.forEach((e) => {
+      const z = (e.zone || '').trim() || '—'
+      if (!groups[z]) groups[z] = []
+      groups[z].push(e)
+    })
+    Object.keys(groups).forEach((z) => {
+      groups[z].sort((a, b) => (a.mob || '').localeCompare(b.mob || ''))
+    })
+    return Object.entries(groups).sort((a, b) => a[0].localeCompare(b[0]))
+  }, [filtered])
 
   const toggle = (key) => {
     setExpanded((prev) => ({ ...prev, [key]: !prev[key] }))
@@ -130,9 +163,22 @@ export default function MobLoot() {
             aria-label="Search mob or zone"
           />
         </label>
+        <label>
+          <span style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.875rem', color: '#a1a1aa' }}>Min total avg DKP</span>
+          <input
+            type="number"
+            min={0}
+            step={1}
+            placeholder="e.g. 50"
+            value={minAvgDkp}
+            onChange={(e) => setMinAvgDkp(e.target.value)}
+            aria-label="Minimum total average DKP"
+            style={{ maxWidth: '120px' }}
+          />
+        </label>
       </div>
       <p style={{ color: '#71717a', fontSize: '0.875rem', marginBottom: '1rem' }}>
-        {filtered.length} mob{filtered.length !== 1 ? 's' : ''}
+        {filtered.length} mob{filtered.length !== 1 ? 's' : ''} (grouped by zone)
       </p>
       <div className="card">
         <table>
@@ -142,63 +188,74 @@ export default function MobLoot() {
               <th>Mob</th>
               <th>Zone</th>
               <th>Loot count</th>
+              <th>Total avg DKP</th>
             </tr>
           </thead>
           <tbody>
-            {filtered.map((e) => {
-              const isOpen = expanded[e.key]
-              return (
-                <Fragment key={e.key}>
-                  <tr>
-                    <td>
-                      <button
-                        type="button"
-                        className="btn btn-ghost"
-                        style={{ padding: '0.25rem', fontSize: '1rem' }}
-                        onClick={() => toggle(e.key)}
-                        aria-expanded={isOpen}
-                      >
-                        {isOpen ? '−' : '+'}
-                      </button>
-                    </td>
-                    <td>{e.mob.replace(/^#/, '')}</td>
-                    <td style={{ color: '#a1a1aa' }}>{e.zone || '—'}</td>
-                    <td>{e.loot.length}</td>
-                  </tr>
-                  {isOpen && (
-                    <tr key={`${e.key}-exp`}>
-                      <td colSpan={4} style={{ padding: '0.5rem 1rem', verticalAlign: 'top', backgroundColor: 'rgba(0,0,0,0.2)' }}>
-                        <table style={{ margin: 0 }}>
-                          <thead>
-                            <tr><th>Item</th><th>Last 3 drops (DKP)</th><th>Rolling avg</th><th>Sources</th></tr>
-                          </thead>
-                          <tbody>
-                            {e.loot.map((item) => {
-                              const name = item.name || '—'
-                              const last3 = itemLast3[(name || '').trim().toLowerCase()]
-                              return (
-                                <tr key={item.item_id || item.name}>
-                                  <td>
-                                    <Link to={`/items/${encodeURIComponent(name)}`}>{name}</Link>
-                                  </td>
-                                  <td style={{ fontSize: '0.875rem' }}>
-                                    {last3?.values?.length ? last3.values.join(', ') : '—'}
-                                  </td>
-                                  <td style={{ fontSize: '0.875rem', color: '#a78bfa' }}>
-                                    {last3?.avg != null ? last3.avg : '—'}
-                                  </td>
-                                  <td style={{ fontSize: '0.875rem', color: '#a1a1aa' }}>{(item.sources || []).join(', ') || '—'}</td>
-                                </tr>
-                              )
-                            })}
-                          </tbody>
-                        </table>
-                      </td>
-                    </tr>
-                  )}
-                </Fragment>
-              )
-            })}
+            {byZone.map(([zoneName, zoneEntries]) => (
+              <Fragment key={zoneName}>
+                <tr style={{ backgroundColor: 'rgba(0,0,0,0.25)' }}>
+                  <td colSpan={5} style={{ padding: '0.5rem 0.75rem', fontWeight: 600, color: '#a78bfa', borderBottom: '1px solid #27272a' }}>
+                    {zoneName}
+                  </td>
+                </tr>
+                {zoneEntries.map((e) => {
+                  const isOpen = expanded[e.key]
+                  return (
+                    <Fragment key={e.key}>
+                      <tr>
+                        <td>
+                          <button
+                            type="button"
+                            className="btn btn-ghost"
+                            style={{ padding: '0.25rem', fontSize: '1rem' }}
+                            onClick={() => toggle(e.key)}
+                            aria-expanded={isOpen}
+                          >
+                            {isOpen ? '−' : '+'}
+                          </button>
+                        </td>
+                        <td>{e.mob.replace(/^#/, '')}</td>
+                        <td style={{ color: '#a1a1aa' }}>{e.zone || '—'}</td>
+                        <td>{e.loot.length}</td>
+                        <td style={{ color: '#a78bfa' }}>{e.totalAvgDkp > 0 ? Number(e.totalAvgDkp).toFixed(1) : '—'}</td>
+                      </tr>
+                      {isOpen && (
+                        <tr key={`${e.key}-exp`}>
+                          <td colSpan={5} style={{ padding: '0.5rem 1rem', verticalAlign: 'top', backgroundColor: 'rgba(0,0,0,0.2)' }}>
+                            <table style={{ margin: 0 }}>
+                              <thead>
+                                <tr><th>Item</th><th>Last 3 drops (DKP)</th><th>Rolling avg</th><th>Sources</th></tr>
+                              </thead>
+                              <tbody>
+                                {e.loot.map((item) => {
+                                  const name = item.name || '—'
+                                  const last3 = itemLast3[(name || '').trim().toLowerCase()]
+                                  return (
+                                    <tr key={item.item_id || item.name}>
+                                      <td>
+                                        <Link to={`/items/${encodeURIComponent(name)}`}>{name}</Link>
+                                      </td>
+                                      <td style={{ fontSize: '0.875rem' }}>
+                                        {last3?.values?.length ? last3.values.join(', ') : '—'}
+                                      </td>
+                                      <td style={{ fontSize: '0.875rem', color: '#a78bfa' }}>
+                                        {last3?.avg != null ? last3.avg : '—'}
+                                      </td>
+                                      <td style={{ fontSize: '0.875rem', color: '#a1a1aa' }}>{(item.sources || []).join(', ') || '—'}</td>
+                                    </tr>
+                                  )
+                                })}
+                              </tbody>
+                            </table>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  )
+                })}
+              </Fragment>
+            ))}
           </tbody>
         </table>
       </div>
