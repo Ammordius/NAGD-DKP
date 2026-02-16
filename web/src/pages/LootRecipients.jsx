@@ -229,7 +229,11 @@ export default function LootRecipients() {
     }
     list.forEach((r) => {
       r.accountDkpTotal = r.account_id ? (accountDkpTotals[r.account_id] ?? 0) : 0
-      const dkpRow = dkpSummary[r.character_key] || (r.char_id && dkpSummary[r.char_id])
+      // dkp_summary.character_key can be either char_id or character name depending on how rows were imported; try all.
+      const charRow = characters.find((c) => (c.name || '').trim() === (r.character_name || r.character_key) || (c.char_id || '').trim() === (r.char_id || '').trim())
+      const dkpRow = dkpSummary[r.character_key] ||
+        (r.char_id && dkpSummary[r.char_id]) ||
+        (charRow && (dkpSummary[(charRow.name || '').trim()] || dkpSummary[(charRow.char_id || '').trim()]))
       r.characterDkpSpentTotal = dkpRow ? dkpRow.spent : 0
     })
     list.sort((a, b) => {
