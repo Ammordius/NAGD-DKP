@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useParams, Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 
 const MAGELO_BASE = 'https://www.takproject.net/magelo/character.php?char='
@@ -40,8 +40,9 @@ async function fetchByChunkedIn(table, select, column, values) {
   return { data: all, error: null }
 }
 
-export default function AccountDetail({ isOfficer, profile }) {
+export default function AccountDetail({ isOfficer, profile, session }) {
   const { accountId } = useParams()
+  const navigate = useNavigate()
   const [tab, setTab] = useState('activity')
   const [activityPage, setActivityPage] = useState(1)
   const [account, setAccount] = useState(null)
@@ -53,6 +54,7 @@ export default function AccountDetail({ isOfficer, profile }) {
   const [refreshKey, setRefreshKey] = useState(0)
   const [addCharOpen, setAddCharOpen] = useState(false)
   const [addCharInput, setAddCharInput] = useState('')
+  const [addCharIdInput, setAddCharIdInput] = useState('')
   const [addCharError, setAddCharError] = useState('')
   const [addCharLoading, setAddCharLoading] = useState(false)
   const [claimLoading, setClaimLoading] = useState(false)
@@ -190,12 +192,12 @@ export default function AccountDetail({ isOfficer, profile }) {
   }, [activityByRaid])
 
   async function handleClaimAccount() {
-    setClaimLoading(true)
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
-      setClaimLoading(false)
+      navigate(`/login?redirect=${encodeURIComponent(`/accounts/${accountId}`)}`, { replace: true })
       return
     }
+    setClaimLoading(true)
     const { error: updErr } = await supabase.from('profiles').update({ account_id: accountId }).eq('id', user.id)
     setClaimLoading(false)
     if (updErr) setError(updErr.message)
@@ -205,28 +207,24 @@ export default function AccountDetail({ isOfficer, profile }) {
   async function handleAddCharacter() {
     const raw = addCharInput.trim()
     if (!raw) {
-      setAddCharError('Enter a character name or char_id')
+      setAddCharError('Enter a character name')
       return
     }
     setAddCharError('')
     setAddCharLoading(true)
-    const { data: byId } = await supabase.from('characters').select('char_id, name').eq('char_id', raw).limit(1)
-    const { data: byName } = await supabase.from('characters').select('char_id, name').ilike('name', raw).limit(2)
-    const chars = (byId?.length ? byId : byName) || []
-    const char = (chars.length === 1) ? chars[0] : (chars.length > 1 && chars.some((c) => (c.name || '').toLowerCase() === raw.toLowerCase())) ? chars.find((c) => (c.name || '').toLowerCase() === raw.toLowerCase()) : chars[0]
-    if (!char?.char_id) {
-      setAddCharError(chars?.length > 1 ? 'Multiple characters match; use exact name or char_id' : 'Character not found in database')
-      setAddCharLoading(false)
-      return
-    }
-    const { error: insErr } = await supabase.from('character_account').insert({ char_id: char.char_id, account_id: accountId })
+    const { error: rpcErr } = await supabase.rpc('add_character_to_my_account', {
+      p_character_name: raw,
+      p_char_id_override: addCharIdInput.trim() || null,
+      p_account_id: accountId,
+    })
     setAddCharLoading(false)
-    if (insErr) {
-      setAddCharError(insErr.message)
+    if (rpcErr) {
+      setAddCharError(rpcErr.message)
       return
     }
     setAddCharOpen(false)
     setAddCharInput('')
+    setAddCharIdInput('')
     setRefreshKey((k) => k + 1)
   }
 
@@ -247,10 +245,18 @@ export default function AccountDetail({ isOfficer, profile }) {
           </span>
         )}
         {isMyAccount && <span style={{ marginLeft: '0.5rem', color: '#a78bfa' }}> {MIDDLE_DOT} This is your account</span>}
-        {profile && !isMyAccount && !myAccountId && (
-          <button type="button" className="btn btn-ghost" style={{ marginLeft: '0.5rem', fontSize: '0.875rem' }} onClick={handleClaimAccount} disabled={claimLoading}>
-            {claimLoading ? 'Claiming...' : 'Claim this account'}
-          </button>
+        {!isMyAccount && (
+          session ? (
+            !myAccountId && (
+              <button type="button" className="btn btn-ghost" style={{ marginLeft: '0.5rem', fontSize: '0.875rem' }} onClick={handleClaimAccount} disabled={claimLoading}>
+                {claimLoading ? 'Claiming...' : 'Claim this account'}
+              </button>
+            )
+          ) : (
+            <Link to={`/login?redirect=${encodeURIComponent(`/accounts/${accountId}`)}`} className="btn btn-ghost" style={{ marginLeft: '0.5rem', fontSize: '0.875rem' }}>
+              Sign in to claim this account
+            </Link>
+          )
         )}
       </p>
 
@@ -280,7 +286,7 @@ export default function AccountDetail({ isOfficer, profile }) {
                 type="button"
                 className="btn btn-ghost"
                 style={{ padding: '0.25rem 0.5rem', fontSize: '1.25rem', lineHeight: 1 }}
-                onClick={() => { setAddCharOpen(true); setAddCharError(''); setAddCharInput(''); }}
+                onClick={() => { setAddCharOpen(true); setAddCharError(''); setAddCharInput(''); setAddCharIdInput(''); }}
                 title="Add alt to this account"
               >
                 +
@@ -317,13 +323,22 @@ export default function AccountDetail({ isOfficer, profile }) {
       {addCharOpen && (
         <div className="card" style={{ marginTop: '1rem', maxWidth: '24rem' }}>
           <h3 style={{ marginTop: 0 }}>Add character to account</h3>
-          <p style={{ color: '#a1a1aa', fontSize: '0.875rem', marginBottom: '0.75rem' }}>Enter character name or char_id. Character must exist in the database.</p>
+          <p style={{ color: '#a1a1aa', fontSize: '0.875rem', marginBottom: '0.75rem' }}>Enter character name. If they’re not in the database, we’ll add them. Optionally provide char ID from server.</p>
           <input
             type="text"
             className="input"
-            placeholder="Character name or char_id"
+            placeholder="Character name (required)"
             value={addCharInput}
             onChange={(e) => setAddCharInput(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleAddCharacter()}
+            style={{ marginBottom: '0.5rem', width: '100%' }}
+          />
+          <input
+            type="text"
+            className="input"
+            placeholder="Char ID (optional, from server)"
+            value={addCharIdInput}
+            onChange={(e) => setAddCharIdInput(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleAddCharacter()}
             style={{ marginBottom: '0.5rem', width: '100%' }}
           />
@@ -332,7 +347,7 @@ export default function AccountDetail({ isOfficer, profile }) {
             <button type="button" className="btn" onClick={handleAddCharacter} disabled={addCharLoading}>
               {addCharLoading ? 'Adding...' : 'Add'}
             </button>
-            <button type="button" className="btn btn-ghost" onClick={() => { setAddCharOpen(false); setAddCharError(''); setAddCharInput(''); }} disabled={addCharLoading}>
+            <button type="button" className="btn btn-ghost" onClick={() => { setAddCharOpen(false); setAddCharError(''); setAddCharInput(''); setAddCharIdInput(''); }} disabled={addCharLoading}>
               Cancel
             </button>
           </div>

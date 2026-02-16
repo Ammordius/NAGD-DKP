@@ -303,6 +303,98 @@ BEGIN
 END;
 $$;
 
+-- RPC: add a character to an account. Links existing character or creates a new one if not in DB.
+-- p_account_id: account to add to (optional); if null, uses current user's claimed account. Officers can pass any account_id.
+-- p_character_name: display name (required). p_char_id_override: optional server char_id; if provided and exists, links that character.
+CREATE OR REPLACE FUNCTION public.add_character_to_my_account(p_character_name text, p_char_id_override text DEFAULT NULL, p_account_id text DEFAULT NULL)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_account_id text;
+  v_my_account_id text;
+  v_char_id text;
+  v_name_trim text;
+  v_char_id_use text;
+BEGIN
+  IF auth.uid() IS NULL THEN
+    RAISE EXCEPTION 'Not authenticated';
+  END IF;
+
+  SELECT account_id INTO v_my_account_id FROM public.profiles WHERE id = auth.uid();
+
+  IF p_account_id IS NOT NULL AND trim(p_account_id) <> '' THEN
+    IF NOT public.is_officer() AND (v_my_account_id IS NULL OR v_my_account_id <> trim(p_account_id)) THEN
+      RAISE EXCEPTION 'You can only add characters to your own claimed account';
+    END IF;
+    v_account_id := trim(p_account_id);
+  ELSE
+    v_account_id := v_my_account_id;
+  END IF;
+
+  IF v_account_id IS NULL THEN
+    RAISE EXCEPTION 'No account claimed. Claim an account first.';
+  END IF;
+
+  v_name_trim := trim(coalesce(p_character_name, ''));
+  IF v_name_trim = '' THEN
+    RAISE EXCEPTION 'Character name is required';
+  END IF;
+
+  -- Resolve character: by char_id override if given, else by name
+  IF p_char_id_override IS NOT NULL AND trim(p_char_id_override) <> '' THEN
+    SELECT c.char_id INTO v_char_id FROM characters c WHERE c.char_id = trim(p_char_id_override) LIMIT 1;
+    IF v_char_id IS NOT NULL THEN
+      INSERT INTO character_account (char_id, account_id) VALUES (v_char_id, v_account_id)
+      ON CONFLICT (char_id, account_id) DO NOTHING;
+      RETURN;
+    END IF;
+  END IF;
+
+  -- Look up by name (exact match preferred, then ilike)
+  SELECT c.char_id INTO v_char_id
+  FROM characters c
+  WHERE trim(coalesce(c.name, '')) = v_name_trim
+  LIMIT 1;
+  IF v_char_id IS NULL THEN
+    SELECT c.char_id INTO v_char_id
+    FROM characters c
+    WHERE c.name ILIKE v_name_trim
+    LIMIT 1;
+  END IF;
+
+  IF v_char_id IS NOT NULL THEN
+    INSERT INTO character_account (char_id, account_id) VALUES (v_char_id, v_account_id)
+    ON CONFLICT (char_id, account_id) DO NOTHING;
+    RETURN;
+  END IF;
+
+  -- Multiple matches by ilike: require exact name or char_id
+  IF (SELECT count(*) FROM characters c WHERE c.name ILIKE v_name_trim) > 1 THEN
+    RAISE EXCEPTION 'Multiple characters match; use exact name or char_id';
+  END IF;
+
+  -- Not found: create new character and link
+  v_char_id_use := coalesce(nullif(trim(p_char_id_override), ''), v_name_trim);
+  INSERT INTO characters (char_id, name) VALUES (v_char_id_use, v_name_trim);
+  INSERT INTO character_account (char_id, account_id) VALUES (v_char_id_use, v_account_id)
+  ON CONFLICT (char_id, account_id) DO NOTHING;
+  RETURN;
+EXCEPTION
+  WHEN unique_violation THEN
+    -- character already exists (e.g. char_id_use taken); try to link it
+    SELECT char_id INTO v_char_id FROM characters WHERE char_id = v_char_id_use LIMIT 1;
+    IF v_char_id IS NOT NULL THEN
+      INSERT INTO character_account (char_id, account_id) VALUES (v_char_id, v_account_id)
+      ON CONFLICT (char_id, account_id) DO NOTHING;
+      RETURN;
+    END IF;
+    RAISE EXCEPTION 'Character with this ID already exists; use a different name or char_id';
+END;
+$$;
+
 -- Full refresh trigger (used only on UPDATE/DELETE so corrections are applied).
 CREATE OR REPLACE FUNCTION public.trigger_refresh_dkp_summary()
 RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
@@ -625,6 +717,23 @@ DROP POLICY IF EXISTS "Officers manage active_raiders" ON active_raiders;
 CREATE POLICY "Officers manage active_raiders" ON active_raiders FOR ALL TO authenticated
   USING (public.is_officer())
   WITH CHECK (public.is_officer());
+
+-- Data tables: anon can read (public browse without login; claim/add chars and officer tools still require login)
+CREATE POLICY "Anon read characters" ON characters FOR SELECT TO anon USING (true);
+CREATE POLICY "Anon read accounts" ON accounts FOR SELECT TO anon USING (true);
+CREATE POLICY "Anon read character_account" ON character_account FOR SELECT TO anon USING (true);
+CREATE POLICY "Anon read raids" ON raids FOR SELECT TO anon USING (true);
+CREATE POLICY "Anon read raid_events" ON raid_events FOR SELECT TO anon USING (true);
+CREATE POLICY "Anon read raid_loot" ON raid_loot FOR SELECT TO anon USING (true);
+CREATE POLICY "Anon read raid_attendance" ON raid_attendance FOR SELECT TO anon USING (true);
+CREATE POLICY "Anon read raid_event_attendance" ON raid_event_attendance FOR SELECT TO anon USING (true);
+CREATE POLICY "Anon read raid_classifications" ON raid_classifications FOR SELECT TO anon USING (true);
+CREATE POLICY "Anon read dkp_adjustments" ON dkp_adjustments FOR SELECT TO anon USING (true);
+CREATE POLICY "Anon read dkp_summary" ON dkp_summary FOR SELECT TO anon USING (true);
+CREATE POLICY "Anon read dkp_period_totals" ON dkp_period_totals FOR SELECT TO anon USING (true);
+CREATE POLICY "Anon read active_raiders" ON active_raiders FOR SELECT TO anon USING (true);
+CREATE POLICY "Anon read raid_dkp_totals" ON raid_dkp_totals FOR SELECT TO anon USING (true);
+CREATE POLICY "Anon read raid_attendance_dkp" ON raid_attendance_dkp FOR SELECT TO anon USING (true);
 
 -- 5) First officer: run after creating your user in Supabase Auth (replace YOUR_USER_UUID)
 -- INSERT INTO profiles (id, email, role) VALUES ('YOUR_USER_UUID', 'your@email.com', 'officer')

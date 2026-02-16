@@ -14,6 +14,12 @@ export default function Profile({ profile, onProfileUpdate }) {
   const [tab, setTab] = useState('activity')
   const [unclaimLoading, setUnclaimLoading] = useState(false)
   const [error, setError] = useState('')
+  const [refreshKey, setRefreshKey] = useState(0)
+  const [addCharOpen, setAddCharOpen] = useState(false)
+  const [addCharInput, setAddCharInput] = useState('')
+  const [addCharIdInput, setAddCharIdInput] = useState('')
+  const [addCharError, setAddCharError] = useState('')
+  const [addCharLoading, setAddCharLoading] = useState(false)
 
   useEffect(() => {
     if (!profile?.account_id) {
@@ -44,7 +50,7 @@ export default function Profile({ profile, onProfileUpdate }) {
       setAccountLoading(false)
       setError('Failed to load account activity')
     })
-  }, [profile?.account_id])
+  }, [profile?.account_id, refreshKey])
 
   async function handleUnclaim() {
     setError('')
@@ -64,6 +70,34 @@ export default function Profile({ profile, onProfileUpdate }) {
     setCharacters([])
     setActivityByRaid([])
     onProfileUpdate?.()
+  }
+
+  async function handleAddCharacter() {
+    const raw = addCharInput.trim()
+    if (!raw) {
+      setAddCharError('Enter a character name')
+      return
+    }
+    if (!profile?.account_id) {
+      setAddCharError('No account claimed')
+      return
+    }
+    setAddCharError('')
+    setAddCharLoading(true)
+    const { error: rpcErr } = await supabase.rpc('add_character_to_my_account', {
+      p_character_name: raw,
+      p_char_id_override: addCharIdInput.trim() || null,
+      p_account_id: null,
+    })
+    setAddCharLoading(false)
+    if (rpcErr) {
+      setAddCharError(rpcErr.message)
+      return
+    }
+    setAddCharOpen(false)
+    setAddCharInput('')
+    setAddCharIdInput('')
+    setRefreshKey((k) => k + 1)
   }
 
   return (
@@ -86,7 +120,7 @@ export default function Profile({ profile, onProfileUpdate }) {
               {' '}(<code>{claimedAccount.account_id}</code>).
             </p>
             <p style={{ color: '#71717a', fontSize: '0.875rem', marginBottom: '0.75rem' }}>
-              View your characters and activity below. You can add characters from the account page. Unclaim below to release it and claim a different account.
+              View your characters and activity below. Use the + on the Characters tab to add alts. Unclaim below to release it and claim a different account.
             </p>
             {error && <p style={{ color: '#f87171', fontSize: '0.875rem', marginBottom: '0.5rem' }}>{error}</p>}
             <button
@@ -128,9 +162,20 @@ export default function Profile({ profile, onProfileUpdate }) {
             <p style={{ color: '#71717a' }}>Loading your account activity...</p>
           ) : tab === 'characters' ? (
             <div className="card">
-              <h2 style={{ marginTop: 0 }}>Characters</h2>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                <h2 style={{ marginTop: 0 }}>Characters</h2>
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  style={{ padding: '0.25rem 0.5rem', fontSize: '1.25rem', lineHeight: 1 }}
+                  onClick={() => { setAddCharOpen(true); setAddCharError(''); setAddCharInput(''); setAddCharIdInput(''); }}
+                  title="Add alt to this account"
+                >
+                  +
+                </button>
+              </div>
               {characters.length === 0 ? (
-                <p style={{ color: '#71717a' }}>No characters linked to this account.</p>
+                <p style={{ color: '#71717a' }}>No characters linked to this account. Use + to add a character.</p>
               ) : (
                 <ul style={{ listStyle: 'none', paddingLeft: 0, margin: 0 }}>
                   {characters.map((c) => {
@@ -154,7 +199,43 @@ export default function Profile({ profile, onProfileUpdate }) {
                 </ul>
               )}
             </div>
-          ) : (
+          ) : null}
+
+          {tab === 'characters' && addCharOpen && (
+            <div className="card" style={{ marginTop: '1rem', maxWidth: '24rem' }}>
+              <h3 style={{ marginTop: 0 }}>Add character to account</h3>
+              <p style={{ color: '#a1a1aa', fontSize: '0.875rem', marginBottom: '0.75rem' }}>Enter character name. If they’re not in the database, we’ll add them. Optionally provide char ID from server.</p>
+              <input
+                type="text"
+                className="input"
+                placeholder="Character name (required)"
+                value={addCharInput}
+                onChange={(e) => setAddCharInput(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleAddCharacter()}
+                style={{ marginBottom: '0.5rem', width: '100%' }}
+              />
+              <input
+                type="text"
+                className="input"
+                placeholder="Char ID (optional, from server)"
+                value={addCharIdInput}
+                onChange={(e) => setAddCharIdInput(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleAddCharacter()}
+                style={{ marginBottom: '0.5rem', width: '100%' }}
+              />
+              {addCharError && <p style={{ color: '#f87171', fontSize: '0.875rem', marginBottom: '0.5rem' }}>{addCharError}</p>}
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <button type="button" className="btn" onClick={handleAddCharacter} disabled={addCharLoading}>
+                  {addCharLoading ? 'Adding...' : 'Add'}
+                </button>
+<button type="button" className="btn btn-ghost" onClick={() => { setAddCharOpen(false); setAddCharError(''); setAddCharInput(''); setAddCharIdInput(''); }} disabled={addCharLoading}>
+              Cancel
+            </button>
+              </div>
+            </div>
+          )}
+
+          {tab === 'activity' ? (
             <div className="card">
               <h2 style={{ marginTop: 0 }}>Activity (earned DKP and items by raid)</h2>
               <p style={{ color: '#a1a1aa', fontSize: '0.875rem', marginBottom: '1rem' }}>Reverse chronological. Each raid shows DKP earned and items won by the characters on this account.</p>
