@@ -46,27 +46,24 @@ The script loads `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` from `web/.env
 - **Schedule:** Runs once per day (e.g. 07:00 UTC).
 - **When it backs up:** Compares current `raid_loot` row count (from Supabase) to the count stored at last backup (in `.ci/last_backup_trigger_count.txt`). If the count changed (or no previous backup), it runs a full backup; otherwise it skips. With ~3 raids per week, you get about **3 backups per week**, not 7.
 - **What it does when backing up:**
-  1. `pg_dump -n public` (schema + data; no `auth` schema), then gzip.
-  2. **Rolling:** Uploads `supabase-backup-YYYY-MM-DD` with **retention-days: 7** → keeps roughly the last 3 backups (3 per week).
+  1. Runs `export_supabase_public_tables.py` (REST API: fetches all public tables to CSV), then compresses with `tar czf backup-YYYY-MM-DD.tar.gz backup/`. Same secrets as the loot-to-character workflow—no database URL or pg_dump.
+  2. **Rolling:** Uploads `supabase-backup-YYYY-MM-DD` (a `.tar.gz`) with **retention-days: 7** → keeps roughly the last 3 backups (3 per week).
   3. **Weekly:** If this is the first backup of the calendar week, uploads `supabase-backup-weekly-YYYY-Www` with **retention-days: 90**.
   4. **Monthly:** If this is the first backup of the month, uploads `supabase-backup-monthly-YYYY-MM` with **retention-days: 90**.
   5. Updates `.ci/last_backup_trigger_count.txt`, `.ci/last_weekly_backup_week.txt`, and `.ci/last_monthly_backup_month.txt` and pushes so the next run knows whether to backup and whether to emit weekly/monthly.
 
-### Required secrets
+### Required secrets (same as loot-to-character)
 
 | Secret | Purpose |
 |--------|--------|
-| `SUPABASE_URL` | Used with service role key to fetch `raid_loot` count (change check). |
-| `SUPABASE_SERVICE_ROLE_KEY` | Same as above. |
-| `SUPABASE_DATABASE_URL` | Postgres connection URI (Session mode) for `pg_dump`. Dashboard → **Database** → **Connection string** → **URI**. |
-
-If `SUPABASE_DATABASE_URL` is unset, the workflow skips the backup so CI still passes (e.g. on forks).
+| `SUPABASE_URL` | Supabase project URL; used for change check and export. |
+| `SUPABASE_SERVICE_ROLE_KEY` | Service role key; used to read all public tables via REST API. |
 
 ---
 
 ## Size estimate for this approach
 
-Assume **~5 MB** per gzipped backup (use your own number from Option B if different).
+Assume **~5 MB** per backup zip (use `estimate_backup_size.py` or Option B/C if you want a number for your DB).
 
 | Tier | What’s kept | Retention | Approx. count | Approx. size |
 |------|----------------------------|------------|----------------|---------------|
@@ -94,18 +91,14 @@ With the tiered strategy above, you use a small fraction of that.
 
 ## Restore from a backup
 
-1. In **Actions** → select the workflow run → **Artifacts**, download the `.sql.gz` you need (rolling, weekly, or monthly).
-2. Decompress: `gunzip backup-YYYY-MM-DD.sql.gz` (or keep `.gz` and use `psql` with a pipe).
-3. Restore (destructive; replace `public` content as needed):
-   ```bash
-   psql "YOUR_DATABASE_URL" -f backup-YYYY-MM-DD.sql
-   ```
-   For a fresh project, apply `docs/supabase-schema.sql` first if the dump doesn’t create schema, then load the dump.
+1. In **Actions** → select the workflow run → **Artifacts**, download the `.tar.gz` you need (rolling, weekly, or monthly).
+2. Decompress: `tar xzf backup-YYYY-MM-DD.tar.gz` → you get a `backup/` directory with one CSV per table (e.g. `raids.csv`, `raid_loot.csv`).
+3. Restore: re-import into Supabase. Use **Table Editor** → select table → **Import data from CSV** for each file, or use `docs/supabase-reset-and-import.sql` then import CSVs in the order listed there. CSV is the standard format Supabase’s importer expects.
 
 ---
 
 ## Summary
 
-- **Estimate size:** One-time `pg_dump -n public` + gzip (or Supabase backup download) gives per-backup size (~5 MB typical).
+- **Estimate size:** Run `estimate_backup_size.py` (or Option B/C) for per-backup size (~5 MB typical).
 - **Conditional backup:** CI runs daily but only backs up when `raid_loot` count has changed (~3 runs per week with 3 raids).
 - **Tiered artifacts:** Rolling (~3, 7-day retention), weekly (90-day), monthly (90-day) → total **~95 MB** typical.

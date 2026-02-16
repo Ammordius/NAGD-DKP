@@ -1,10 +1,7 @@
 # Supabase (public schema) backup only when data has changed; tiered artifacts.
-# Runs on schedule and checks raid_loot count; if unchanged, skips backup (~3 raids/week so most days skip).
-# When backing up: uploads rolling (~last 3), weekly (first backup of week), monthly (first backup of month).
+# Uses same secrets as loot-to-character: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY (REST API export, no pg_dump).
+# When backing up: uploads rolling (~last 3), weekly (first of week), monthly (first of month).
 # See docs/CI-DB-BACKUP.md for size estimate and restore steps.
-#
-# Secrets: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY (for change check), SUPABASE_DATABASE_URL (for pg_dump).
-# If SUPABASE_DATABASE_URL is unset, backup is skipped. workflow_dispatch always runs the change check but can force backup.
 
 name: DB backup (on change)
 
@@ -25,7 +22,6 @@ jobs:
     env:
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-      SUPABASE_DATABASE_URL: ${{ secrets.SUPABASE_DATABASE_URL }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -58,13 +54,9 @@ jobs:
             echo "Backup needed (current=$CURRENT, last=$LAST)."
           fi
 
-      - name: Install PostgreSQL client
-        if: steps.check.outputs.backup_needed == 'true' && env.SUPABASE_DATABASE_URL != ''
-        run: sudo apt-get update && sudo apt-get install -y postgresql-client
-
-      - name: Dump public schema and compress
-        id: dump
-        if: steps.check.outputs.backup_needed == 'true' && env.SUPABASE_DATABASE_URL != ''
+      - name: Export public tables and compress
+        id: export
+        if: steps.check.outputs.backup_needed == 'true'
         run: |
           DATE=$(date -u +%Y-%m-%d)
           ISO_WEEK=$(date -u +%G-W%V)
@@ -72,76 +64,67 @@ jobs:
           echo "date=$DATE" >> $GITHUB_OUTPUT
           echo "iso_week=$ISO_WEEK" >> $GITHUB_OUTPUT
           echo "month=$MONTH" >> $GITHUB_OUTPUT
-          URI="$SUPABASE_DATABASE_URL"
-          if [[ "$URI" != *"sslmode="* ]]; then
-            if [[ "$URI" == *"?"* ]]; then URI="${URI}&sslmode=require"; else URI="${URI}?sslmode=require"; fi
-          fi
-          pg_dump "$URI" -n public --no-owner --no-acl -f "backup-$DATE.sql" || { echo "::error::pg_dump failed"; exit 1; }
-          gzip -f "backup-$DATE.sql"
-          echo "size_bytes=$(stat -c%s backup-$DATE.sql.gz)" >> $GITHUB_OUTPUT
-          echo "Backup size: $(($(stat -c%s backup-$DATE.sql.gz) / 1024)) KB"
+          python export_supabase_public_tables.py --out-dir backup
+          tar czf "backup-$DATE.tar.gz" backup
+          echo "size_bytes=$(stat -c%s backup-$DATE.tar.gz)" >> $GITHUB_OUTPUT
+          echo "Backup size: $(($(stat -c%s backup-$DATE.tar.gz) / 1024)) KB"
 
       - name: Upload rolling backup (~last 3)
-        if: steps.dump.outputs.date != ''
+        if: steps.export.outputs.date != ''
         uses: actions/upload-artifact@v4
         with:
-          name: supabase-backup-${{ steps.dump.outputs.date }}
-          path: backup-${{ steps.dump.outputs.date }}.sql.gz
+          name: supabase-backup-${{ steps.export.outputs.date }}
+          path: backup-${{ steps.export.outputs.date }}.tar.gz
           retention-days: 7
 
       - name: Upload weekly backup (first of week)
         id: weekly
-        if: steps.dump.outputs.date != ''
+        if: steps.export.outputs.date != ''
         run: |
           LAST_WEEK=""
           [ -f .ci/last_weekly_backup_week.txt ] && LAST_WEEK=$(cat .ci/last_weekly_backup_week.txt)
           UPLOAD="false"
-          [ "${{ steps.dump.outputs.iso_week }}" != "$LAST_WEEK" ] && UPLOAD="true"
+          [ "${{ steps.export.outputs.iso_week }}" != "$LAST_WEEK" ] && UPLOAD="true"
           echo "upload_weekly=$UPLOAD" >> $GITHUB_OUTPUT
 
       - name: Upload weekly artifact
-        if: steps.dump.outputs.date != '' && steps.weekly.outputs.upload_weekly == 'true'
+        if: steps.export.outputs.date != '' && steps.weekly.outputs.upload_weekly == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: supabase-backup-weekly-${{ steps.dump.outputs.iso_week }}
-          path: backup-${{ steps.dump.outputs.date }}.sql.gz
+          name: supabase-backup-weekly-${{ steps.export.outputs.iso_week }}
+          path: backup-${{ steps.export.outputs.date }}.tar.gz
           retention-days: 90
 
       - name: Upload monthly backup (first of month)
         id: monthly
-        if: steps.dump.outputs.date != ''
+        if: steps.export.outputs.date != ''
         run: |
           LAST_MONTH=""
           [ -f .ci/last_monthly_backup_month.txt ] && LAST_MONTH=$(cat .ci/last_monthly_backup_month.txt)
           UPLOAD="false"
-          [ "${{ steps.dump.outputs.month }}" != "$LAST_MONTH" ] && UPLOAD="true"
+          [ "${{ steps.export.outputs.month }}" != "$LAST_MONTH" ] && UPLOAD="true"
           echo "upload_monthly=$UPLOAD" >> $GITHUB_OUTPUT
 
       - name: Upload monthly artifact
-        if: steps.dump.outputs.date != '' && steps.monthly.outputs.upload_monthly == 'true'
+        if: steps.export.outputs.date != '' && steps.monthly.outputs.upload_monthly == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: supabase-backup-monthly-${{ steps.dump.outputs.month }}
-          path: backup-${{ steps.dump.outputs.date }}.sql.gz
+          name: supabase-backup-monthly-${{ steps.export.outputs.month }}
+          path: backup-${{ steps.export.outputs.date }}.tar.gz
           retention-days: 90
 
       - name: Record backup and push
-        if: steps.dump.outputs.date != ''
+        if: steps.export.outputs.date != ''
         run: |
           mkdir -p .ci
           echo "${{ steps.check.outputs.current }}" > .ci/last_backup_trigger_count.txt
-          echo "${{ steps.dump.outputs.iso_week }}" > .ci/last_weekly_backup_week.txt
-          echo "${{ steps.dump.outputs.month }}" > .ci/last_monthly_backup_month.txt
+          echo "${{ steps.export.outputs.iso_week }}" > .ci/last_weekly_backup_week.txt
+          echo "${{ steps.export.outputs.month }}" > .ci/last_monthly_backup_month.txt
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add .ci/last_backup_trigger_count.txt .ci/last_weekly_backup_week.txt .ci/last_monthly_backup_month.txt
           git diff --staged --quiet || (git commit -m "chore: update backup trigger and weekly/monthly markers" && git push)
 
-      - name: Skip (no change or no DB URL)
-        if: steps.check.outputs.backup_needed == 'false' || env.SUPABASE_DATABASE_URL == ''
-        run: |
-          if [ -z "$SUPABASE_DATABASE_URL" ]; then
-            echo "SUPABASE_DATABASE_URL not set; skipping (see docs/CI-DB-BACKUP.md)."
-          else
-            echo "No data change; backup skipped."
-          fi
+      - name: Skip (no change)
+        if: steps.check.outputs.backup_needed == 'false'
+        run: echo "No data change; backup skipped."
