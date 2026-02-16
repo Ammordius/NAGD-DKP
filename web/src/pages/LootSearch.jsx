@@ -111,9 +111,9 @@ export default function LootSearch() {
           const missingRaidIds = newRaidIds.filter((rid) => !cached.raids[rid])
           let nextRaids = cached.raids
           if (missingRaidIds.length > 0) {
-            return supabase.from('raids').select('raid_id, raid_name, date_iso').in('raid_id', missingRaidIds).then(({ data: raidRows }) => {
+            return supabase.from('raids').select('raid_id, raid_name, date_iso, date').in('raid_id', missingRaidIds).then(({ data: raidRows }) => {
               const mergedRaids = { ...cached.raids }
-              ;(raidRows || []).forEach((row) => { mergedRaids[row.raid_id] = { name: row.raid_name || row.raid_id, date_iso: row.date_iso || '' } })
+              ;(raidRows || []).forEach((row) => { mergedRaids[row.raid_id] = { name: row.raid_name || row.raid_id, date_iso: row.date_iso || '', date: row.date || '' } })
               const mergedLoot = [...newRows].reverse().concat(cached.loot)
               const newMaxId = Math.max(...mergedLoot.map((r) => r.id).filter(Number.isFinite))
               saveCache(mergedLoot, mergedRaids, newMaxId)
@@ -129,9 +129,9 @@ export default function LootSearch() {
 
     const run = async () => {
       if (cached) return // already showing cache; incremental update above
-      const raidRes = await supabase.from('raids').select('raid_id, raid_name, date_iso').limit(50000)
+      const raidRes = await supabase.from('raids').select('raid_id, raid_name, date_iso, date').limit(50000)
       const raidMap = {}
-      ;(raidRes.data || []).forEach((row) => { raidMap[row.raid_id] = { name: row.raid_name || row.raid_id, date_iso: row.date_iso || '' } })
+      ;(raidRes.data || []).forEach((row) => { raidMap[row.raid_id] = { name: row.raid_name || row.raid_id, date_iso: row.date_iso || '', date: row.date || '' } })
       setRaids(raidMap)
 
       const allLoot = []
@@ -191,7 +191,7 @@ export default function LootSearch() {
         list = list.filter((row) => set.has(row.raid_id))
       }
     }
-    const dateIso = (raidId) => (raids[raidId] && raids[raidId].date_iso) ? String(raids[raidId].date_iso).slice(0, 10) : ''
+    const dateIso = (raidId) => (raids[raidId]?.date_iso && String(raids[raidId].date_iso).trim()) ? String(raids[raidId].date_iso).slice(0, 10) : ''
     list = [...list].sort((a, b) => (dateIso(b.raid_id) || '').localeCompare(dateIso(a.raid_id) || ''))
     return list
   }, [loot, itemQuery, mobFilter, classifications, raids])
@@ -250,7 +250,7 @@ export default function LootSearch() {
             <tbody>
               {filteredLoot.slice(0, 500).map((row, i) => (
                 <tr key={row.id || `${row.raid_id}-${row.item_name}-${i}`}>
-                  <td style={{ color: '#a1a1aa', fontSize: '0.875rem' }}>{(raids[row.raid_id]?.date_iso || '').slice(0, 10) || '—'}</td>
+                  <td style={{ color: '#a1a1aa', fontSize: '0.875rem' }}>{(raids[row.raid_id]?.date_iso && String(raids[row.raid_id].date_iso).trim()) ? String(raids[row.raid_id].date_iso).slice(0, 10) : (raids[row.raid_id]?.date || '—')}</td>
                   <td><Link to={`/items/${encodeURIComponent(row.item_name || '')}`}>{row.item_name || '—'}</Link></td>
                   <td style={{ color: '#a1a1aa', fontSize: '0.875rem' }}>
                     {itemSourceLabel(itemSources, row.item_name, row.raid_id, raids[row.raid_id]?.name, raidToMobs) ?? '—'}

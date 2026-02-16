@@ -161,7 +161,7 @@ export default function ItemPage() {
         return
       }
       const raidIds = [...new Set(rows.map((r) => r.raid_id).filter(Boolean))]
-      supabase.from('raids').select('raid_id, raid_name, date_iso').in('raid_id', raidIds).then((rRes) => {
+      supabase.from('raids').select('raid_id, raid_name, date_iso, date').in('raid_id', raidIds).then((rRes) => {
         const rMap = {}
         ;(rRes.data || []).forEach((row) => { rMap[row.raid_id] = row })
         setRaids(rMap)
@@ -171,15 +171,26 @@ export default function ItemPage() {
     })
   }, [itemName])
 
-  const { historyByDate, lastThree, rollingAvg } = useMemo(() => {
-    const withDate = lootRows.map((row) => ({
+  const { historyByDate, historyAll, lastThree, rollingAvg } = useMemo(() => {
+    const dateIso = (rid) => (raids[rid]?.date_iso && String(raids[rid].date_iso).trim()) ? String(raids[rid].date_iso).slice(0, 10) : null
+    const displayDate = (rid) => dateIso(rid) || raids[rid]?.date || '—'
+    const allRows = lootRows.map((row) => ({
       ...row,
-      date: (raids[row.raid_id]?.date_iso || '').slice(0, 10) || null,
-    })).filter((r) => r.date)
-    withDate.sort((a, b) => (a.date || '').localeCompare(b.date || ''))
-    const last3 = withDate.slice(-3).reverse()
+      date: dateIso(row.raid_id),
+      displayDate: displayDate(row.raid_id),
+    }))
+    // Sort by date (null last), then by id desc so most recent is last
+    allRows.sort((a, b) => {
+      const da = a.date || '9999-99-99'
+      const db = b.date || '9999-99-99'
+      const cmp = da.localeCompare(db)
+      if (cmp !== 0) return cmp
+      return (b.id ?? 0) - (a.id ?? 0)
+    })
+    const withDate = allRows.filter((r) => r.date)
+    const last3 = allRows.slice(-3).reverse()
     const avg = last3.length ? (last3.reduce((s, r) => s + (Number(r.cost) || 0), 0) / last3.length).toFixed(1) : null
-    return { historyByDate: withDate, lastThree: last3, rollingAvg: avg }
+    return { historyByDate: withDate, historyAll: allRows, lastThree: last3, rollingAvg: avg }
   }, [lootRows, raids])
 
   const itemIdMap = useMemo(() => buildItemIdMap(mobLoot), [mobLoot])
@@ -225,10 +236,10 @@ export default function ItemPage() {
             </tr>
           </thead>
           <tbody>
-            {historyByDate.length === 0 && <tr><td colSpan={4}>No drops recorded</td></tr>}
-            {[...historyByDate].reverse().map((row, i) => (
+            {historyAll.length === 0 && <tr><td colSpan={4}>No drops recorded</td></tr>}
+            {[...historyAll].reverse().map((row, i) => (
               <tr key={row.id || i}>
-                <td>{row.date || '—'}</td>
+                <td>{row.displayDate}</td>
                 <td><Link to={`/raids/${row.raid_id}`}>{raids[row.raid_id]?.raid_name || row.raid_id}</Link></td>
                 <td>
                   {(() => {
