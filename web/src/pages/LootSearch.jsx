@@ -248,10 +248,10 @@ export default function LootSearch() {
                 <th>Date</th>
                 <th>Item</th>
                 <th>Cost</th>
-                <th>Drops from</th>
-                <th>Raid</th>
                 <th>Buyer</th>
                 <th>On toon</th>
+                <th>Raid</th>
+                <th>Drops from</th>
               </tr>
             </thead>
             <tbody>
@@ -260,10 +260,6 @@ export default function LootSearch() {
                   <td style={{ color: '#a1a1aa', fontSize: '0.875rem' }}>{(raids[row.raid_id]?.date_iso && String(raids[row.raid_id].date_iso).trim()) ? String(raids[row.raid_id].date_iso).slice(0, 10) : (raids[row.raid_id]?.date || '—')}</td>
                   <td><Link to={`/items/${encodeURIComponent(row.item_name || '')}`}>{row.item_name || '—'}</Link></td>
                   <td>{row.cost ?? '—'}</td>
-                  <td style={{ color: '#a1a1aa', fontSize: '0.875rem' }}>
-                    {itemSourceLabel(itemSources, row.item_name, row.raid_id, raids[row.raid_id]?.name, raidToMobs) ?? '—'}
-                  </td>
-                  <td><Link to={`/raids/${row.raid_id}`}>{raids[row.raid_id]?.name ?? row.raid_id}</Link></td>
                   <td>
                     {(() => {
                       const charName = row.character_name || row.char_id || '—'
@@ -278,6 +274,10 @@ export default function LootSearch() {
                     ) : (
                       <span style={{ color: '#71717a' }}>Unassigned</span>
                     )}
+                  </td>
+                  <td><Link to={`/raids/${row.raid_id}`}>{raids[row.raid_id]?.name ?? row.raid_id}</Link></td>
+                  <td style={{ color: '#a1a1aa', fontSize: '0.875rem' }}>
+                    {itemSourceLabel(itemSources, row.item_name, row.raid_id, raids[row.raid_id]?.name, raidToMobs) ?? '—'}
                   </td>
                 </tr>
               ))}
