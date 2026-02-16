@@ -111,14 +111,14 @@ jobs:
       - name: Run loot-to-character assignment
         if: ${{ env.SUPABASE_URL != '' && env.SUPABASE_SERVICE_ROLE_KEY != '' && steps.check.outputs.new_loot == 'true' }}
         run: |
+          # Do not use --clear-assignments: preserve existing manual/UI assignments from Supabase CSV.
           python assign_loot_to_characters.py \
             --character-file .magelo_dump/TAKP_character.txt \
             --inventory-file .magelo_dump/TAKP_character_inventory.txt \
             --elemental-armor-json data/elemental_armor.json \
             --dkp-elemental-json dkp_elemental_to_magelo.json \
             --out-raid-loot data/raid_loot.csv \
-            --out-counts data/character_loot_assignment_counts.csv \
-            --clear-assignments
+            --out-counts data/character_loot_assignment_counts.csv
 
       - name: Push assignments to Supabase (update by id, no duplicates)
         if: ${{ env.SUPABASE_URL != '' && env.SUPABASE_SERVICE_ROLE_KEY != '' && steps.check.outputs.new_loot == 'true' }}
