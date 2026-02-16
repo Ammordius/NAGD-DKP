@@ -239,7 +239,7 @@ export default function LootRecipients() {
     }
     list.forEach((r) => {
       r.accountDkpTotal = r.account_id ? (accountDkpTotals[r.account_id] ?? 0) : 0
-      // dkp_summary.character_key can be either char_id or character name; try all (keys normalized to string in dkpMap).
+      // Character DKP spent (all time) = sum of raid_loot.cost for this character only (from dkp_summary.spent). Not account.
       const toKey = (v) => (v != null && v !== '') ? String(v).trim() : ''
       const charRow = characters.find((c) => toKey(c.name) === toKey(r.character_name || r.character_key) || toKey(c.char_id) === toKey(r.char_id))
       const dkpRow = dkpSummary[toKey(r.character_key)] ||
@@ -311,7 +311,7 @@ export default function LootRecipients() {
                 <th>Class</th>
                 <th>Loot received (last {months}m)</th>
                 <th style={{ whiteSpace: 'nowrap' }}>DKP spent (window)</th>
-                <th style={{ whiteSpace: 'nowrap' }}>Character DKP total (all time)</th>
+                <th style={{ whiteSpace: 'nowrap' }}>Character DKP spent (all time)</th>
                 <th style={{ whiteSpace: 'nowrap' }}>Account DKP total</th>
               </tr>
             </thead>
