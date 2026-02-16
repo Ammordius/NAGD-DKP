@@ -137,6 +137,8 @@ export default function Officer({ isOfficer }) {
   const [attendance, setAttendance] = useState([])
   const [editingEventId, setEditingEventId] = useState(null)
   const [editingEventDkp, setEditingEventDkp] = useState('')
+  const [editingEventTimeId, setEditingEventTimeId] = useState(null)
+  const [editingEventTimeValue, setEditingEventTimeValue] = useState('')
   const [editingLootId, setEditingLootId] = useState(null)
   const [editingLootCost, setEditingLootCost] = useState('')
   const [expandedEvents, setExpandedEvents] = useState({})
@@ -639,6 +641,19 @@ export default function Officer({ isOfficer }) {
     }
   }
 
+  const handleSaveEventTime = async (eventId) => {
+    if (!selectedRaidId) return
+    const val = String(editingEventTimeValue).trim()
+    setMutating(true)
+    const { error: err } = await supabase.from('raid_events').update({ event_time: val || null }).eq('raid_id', selectedRaidId).eq('event_id', eventId)
+    setMutating(false)
+    if (err) setError(err.message)
+    else {
+      setEditingEventTimeId(null)
+      loadSelectedRaid()
+    }
+  }
+
   const handleSaveLootCost = async (row) => {
     const val = String(editingLootCost).trim()
     setMutating(true)
@@ -1037,7 +1052,7 @@ export default function Officer({ isOfficer }) {
             </p>
             <table>
               <thead>
-                <tr><th style={{ width: '2rem' }}></th><th>#</th><th>Event</th><th>DKP</th><th>Attendees</th><th style={{ width: '5rem' }}></th></tr>
+                <tr><th style={{ width: '2rem' }}></th><th>#</th><th>Event</th><th>DKP</th><th>Time</th><th>Attendees</th><th style={{ width: '5rem' }}></th></tr>
               </thead>
               <tbody>
                 {events.map((e) => {
@@ -1046,6 +1061,7 @@ export default function Officer({ isOfficer }) {
                   const hasList = attendees.length > 0
                   const isExpanded = expandedEvents[e.event_id]
                   const isEditingDkp = editingEventId === e.event_id
+                  const isEditingTime = editingEventTimeId === e.event_id
                   return (
                     <Fragment key={e.event_id}>
                       <tr>
@@ -1072,6 +1088,20 @@ export default function Officer({ isOfficer }) {
                             </>
                           )}
                         </td>
+                        <td>
+                          {isEditingTime ? (
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
+                              <input type="text" value={editingEventTimeValue} onChange={(ev) => setEditingEventTimeValue(ev.target.value)} style={{ width: '12rem', padding: '0.2rem' }} placeholder="e.g. Sun Apr 14 10:17:09 2024" />
+                              <button type="button" className="btn btn-ghost" onClick={() => handleSaveEventTime(e.event_id)} disabled={mutating}>Save</button>
+                              <button type="button" className="btn btn-ghost" onClick={() => setEditingEventTimeId(null)}>Cancel</button>
+                            </span>
+                          ) : (
+                            <>
+                              {e.event_time || '—'}
+                              <button type="button" className="btn btn-ghost" style={{ marginLeft: '0.25rem', fontSize: '0.85rem' }} onClick={() => { setEditingEventTimeId(e.event_id); setEditingEventTimeValue(e.event_time || '') }} title="Edit tic time">✎</button>
+                            </>
+                          )}
+                        </td>
                         <td>{hasList ? `${attendees.length}${isExpanded ? '' : ' — click +'}` : (e.attendee_count ?? '—')}</td>
                         <td>
                           <button type="button" className="btn btn-ghost" style={{ fontSize: '0.85rem', color: '#f87171' }} onClick={() => handleDeleteEvent(e.event_id)} disabled={mutating} title="Remove tic">Remove</button>
@@ -1079,7 +1109,7 @@ export default function Officer({ isOfficer }) {
                       </tr>
                       {hasList && isExpanded && (
                         <tr>
-                          <td colSpan={6} style={{ padding: '0.5rem 1rem', verticalAlign: 'top', backgroundColor: 'rgba(0,0,0,0.2)', borderBottom: '1px solid #27272a' }}>
+                          <td colSpan={7} style={{ padding: '0.5rem 1rem', verticalAlign: 'top', backgroundColor: 'rgba(0,0,0,0.2)', borderBottom: '1px solid #27272a' }}>
                             <div className="attendee-list">
                               {attendees.map((a, i) => {
                                 const name = a.name || a.char_id || ''
