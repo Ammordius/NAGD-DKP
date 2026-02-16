@@ -1,0 +1,96 @@
+# Loot-to-character assignment: link raid_loot to the toon that actually has each item.
+# We need the Magelo dump (character + inventory from TAKP) to know which character has which
+# item; the script matches account loot rows to toons using that inventory. Fully separate
+# from the Magelo repo's CI. Runs at most once per day, or when raid/loot data changes, or manually.
+#
+# To push assignments to Supabase (no duplicates), set repo secrets:
+#   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
+# Then CI will: fetch raid_loot from Supabase (with id) -> assign -> update Supabase by id -> commit CSVs.
+
+name: Loot-to-character assignment
+
+on:
+  schedule:
+    # Once daily at 18:00 UTC (after TAKP Magelo export is typically updated)
+    - cron: '0 18 * * *'
+  push:
+    branches: [main]
+    paths:
+      - 'data/raid_loot.csv'
+      - 'data/raids.csv'
+      - 'data/raid_events.csv'
+      - 'data/character_account.csv'
+  workflow_dispatch:
+
+concurrency:
+  group: loot-to-character
+  cancel-in-progress: false
+
+jobs:
+  assign:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+    steps:
+      - name: Checkout DKP repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      # When Supabase secrets are set: get raid_loot with id so we can update by id (no duplicates).
+      - name: Fetch raid_loot from Supabase
+        if: ${{ env.SUPABASE_URL != '' && env.SUPABASE_SERVICE_ROLE_KEY != '' }}
+        run: python fetch_raid_loot_from_supabase.py --out data/raid_loot.csv
+
+      # Required: Magelo dump tells us which character has which item (character list + per-char inventory).
+      - name: Download Magelo dumps from TAKP (required to determine which character loot went on)
+        run: |
+          mkdir -p .magelo_dump
+          echo "Downloading character dump (names, char_ids)..."
+          curl -sfL -o .magelo_dump/TAKP_character.txt \
+            "https://www.takproject.net/magelo/export/TAKP_character.txt" || {
+            echo "::error::Failed to download TAKP_character.txt"
+            exit 1
+          }
+          echo "Downloading inventory dump (which char_id has which item)..."
+          curl -sfL -o .magelo_dump/TAKP_character_inventory.txt \
+            "https://www.takproject.net/magelo/export/TAKP_character_inventory.txt" || {
+            echo "::error::Failed to download TAKP_character_inventory.txt"
+            exit 1
+          }
+          echo "Character lines: $(wc -l < .magelo_dump/TAKP_character.txt)"
+          echo "Inventory lines: $(wc -l < .magelo_dump/TAKP_character_inventory.txt)"
+
+      - name: Run loot-to-character assignment
+        run: |
+          python assign_loot_to_characters.py \
+            --character-file .magelo_dump/TAKP_character.txt \
+            --inventory-file .magelo_dump/TAKP_character_inventory.txt \
+            --elemental-armor-json data/elemental_armor.json \
+            --out-raid-loot data/raid_loot.csv \
+            --out-counts data/character_loot_assignment_counts.csv
+
+      - name: Push assignments to Supabase (update by id, no duplicates)
+        if: ${{ env.SUPABASE_URL != '' && env.SUPABASE_SERVICE_ROLE_KEY != '' }}
+        run: python update_raid_loot_assignments_supabase.py --csv data/raid_loot.csv
+
+      - name: Commit and push if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/raid_loot.csv data/character_loot_assignment_counts.csv
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "chore: update loot-to-character assignment from Magelo dump"
+            git push
+          fi

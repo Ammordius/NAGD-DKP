@@ -226,6 +226,12 @@ Right now there are no users, so no one can log in. After you run the web app an
 
 ---
 
+## Optional: Loot-to-character assignment (Magelo)
+
+To link each raid loot row to the **toon that actually has the item** (from Magelo): (1) Run **`docs/supabase-loot-to-character.sql`** in the SQL Editor. (2) Put Magelo dumps in place (`character/TAKP_character.txt`, `inventory/TAKP_character_inventory.txt`) and ensure `magelo/elemental_armor.json` exists (e.g. Magelo repo as sibling of `dkp`). (3) Export **`raid_loot`** from Supabase (with **`id`**), save as `data/raid_loot.csv`, then run **`python assign_loot_to_characters.py`** (it preserves `id`). (4) Run **`python update_raid_loot_assignments_supabase.py`** (with `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`) to update existing rows by id—do not re-import the full CSV or you will get duplicates. See **`docs/LOOT-TO-CHARACTER.md`** for full rules and CI.
+
+---
+
 ## Quick checklist
 
 - [ ] Part 1: Supabase project created, password saved
@@ -235,5 +241,6 @@ Right now there are no users, so no one can log in. After you run the web app an
 - [ ] Part 5: Signed up in the app, then ran `UPDATE profiles SET role = 'officer'` with your User UID
 - [ ] Part 6: `web/.env.local` set, `npm run dev` works, you can log in and see Officer
 - [ ] Part 7 (optional): Repo on GitHub, Vercel project with root `web` and env vars, deploy works
+- [ ] Optional: Loot-to-character – run `docs/supabase-loot-to-character.sql`, export raid_loot (with id), run `assign_loot_to_characters.py`, then `update_raid_loot_assignments_supabase.py` (do not re-import raid_loot)
 
 If you tell me which part you’re on and what you see (or any error message), I can give you the exact next click or fix.
