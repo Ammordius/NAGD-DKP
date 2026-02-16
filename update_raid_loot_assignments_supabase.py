@@ -8,7 +8,7 @@ docs/supabase-loot-to-character.sql.
 Requires: SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY (or SUPABASE_ANON_KEY if RLS allows).
   export SUPABASE_URL=https://xxx.supabase.co
   export SUPABASE_SERVICE_ROLE_KEY=eyJ...
-  python update_raid_loot_assignments_supabase.py [--csv path/to/raid_loot.csv] [--batch 200]
+  python update_raid_loot_assignments_supabase.py [--csv path/to/raid_loot.csv] [--batch 1000]
 """
 
 from __future__ import annotations
@@ -22,10 +22,11 @@ from pathlib import Path
 SCRIPT_DIR = Path(__file__).resolve().parent
 DATA_DIR = SCRIPT_DIR / "data"
 DEFAULT_CSV = DATA_DIR / "raid_loot.csv"
-BATCH = 200
+BATCH = 1000  # fewer RPC round-trips; 15 batches for ~15k rows
 
 
 def main() -> int:
+    print("Starting update_raid_loot_assignments_supabase...", flush=True)
     ap = argparse.ArgumentParser(description="Apply raid_loot assignment columns to Supabase by id (no duplicates).")
     ap.add_argument("--csv", type=Path, default=DEFAULT_CSV, help="raid_loot.csv with id and assignment columns")
     ap.add_argument("--batch", type=int, default=BATCH, help="Upsert batch size")
@@ -47,6 +48,7 @@ def main() -> int:
         print(f"CSV not found: {args.csv}", file=sys.stderr)
         return 1
 
+    print(f"Reading CSV {args.csv}...", flush=True)
     rows = []
     with open(args.csv, "r", encoding="utf-8") as f:
         r = csv.DictReader(f)
@@ -77,10 +79,15 @@ def main() -> int:
         print("No rows with valid id found in CSV.")
         return 0
 
+    num_batches = (len(rows) + args.batch - 1) // args.batch
+    print(f"Loaded {len(rows)} rows. Connecting to Supabase...", flush=True)
     client = create_client(url, key)
+    print(f"Updating {len(rows)} rows in {num_batches} batches (batch size {args.batch})...", flush=True)
     n = 0
     for i in range(0, len(rows), args.batch):
         chunk = rows[i : i + args.batch]
+        batch_num = i // args.batch + 1
+        print(f"RPC batch {batch_num}/{num_batches}...", end=" ", flush=True)
         # Use RPC so conflicts are resolved (UPDATE), not ignored. Requires update_raid_loot_assignments(jsonb) in DB.
         resp = client.rpc("update_raid_loot_assignments", {"data": chunk}).execute()
         count = None
@@ -94,8 +101,8 @@ def main() -> int:
             n += count
         else:
             n += len(chunk)
-        print(f"Updated batch {i // args.batch + 1}: {len(chunk)} rows")
-    print(f"Done. Updated {n} raid_loot rows.")
+        print(f"ok ({len(chunk)} rows)", flush=True)
+    print(f"Done. Updated {n} raid_loot rows.", flush=True)
     return 0
 
 
