@@ -12,7 +12,7 @@ export default function LootRecipients() {
   const { getAccountId } = useCharToAccountMap()
   const [months, setMonths] = useState(6)
   const [classFilter, setClassFilter] = useState('')
-  const [sortBy, setSortBy] = useState('accountDkpTotal') // 'accountDkpTotal' | 'dkpSpentToon'
+  const [sortBy, setSortBy] = useState('accountDkpTotal') // 'accountDkpTotal' | 'dkpSpentToon' | 'lastLootFirst'
   const [loot, setLoot] = useState([])
   const [raids, setRaids] = useState({})
   const [characters, setCharacters] = useState([])
@@ -230,6 +230,7 @@ export default function LootRecipients() {
             account_display_name: null,
             lootItems: [],
             dkpSpentOnToon: 0,
+            lastLootDate: null,
           }
         } else {
           const accountId = getAccountId(charName || charId)
@@ -243,12 +244,17 @@ export default function LootRecipients() {
             account_display_name: accountId ? (accounts[accountId] || accountId) : null,
             lootItems: [],
             dkpSpentOnToon: 0,
+            lastLootDate: null,
           }
         }
       }
       const cost = parseFloat(row.cost || 0) || 0
       byKey[key].lootItems.push({ item_name: row.item_name || '—', cost })
       byKey[key].dkpSpentOnToon += cost
+      const raidDate = row.raid_id && raids[row.raid_id] ? raids[row.raid_id].date_iso : null
+      if (raidDate && (!byKey[key].lastLootDate || raidDate > byKey[key].lastLootDate)) {
+        byKey[key].lastLootDate = raidDate
+      }
     })
     let list = Object.values(byKey)
     if (classFilter) {
@@ -269,6 +275,10 @@ export default function LootRecipients() {
         const va = a.accountDkpTotal ?? 0
         const vb = b.accountDkpTotal ?? 0
         if (va !== vb) return vb - va
+      } else if (sortBy === 'lastLootFirst') {
+        const da = a.lastLootDate || ''
+        const db = b.lastLootDate || ''
+        if (da !== db) return db.localeCompare(da) // most recent first (desc date)
       } else {
         const va = a.dkpSpentOnToon ?? 0
         const vb = b.dkpSpentOnToon ?? 0
@@ -277,7 +287,7 @@ export default function LootRecipients() {
       return (a.account_display_name || a.character_name || '').localeCompare(b.account_display_name || b.character_name || '')
     })
     return list
-  }, [loot, characters, accounts, accountDkpTotals, dkpSummary, characterDkpSpent, classFilter, sortBy, getAccountId])
+  }, [loot, raids, characters, accounts, accountDkpTotals, dkpSummary, characterDkpSpent, classFilter, sortBy, getAccountId])
 
   if (loading) return <div className="container">Loading…</div>
   if (error) return <div className="container"><span className="error">{error}</span> <Link to="/">← Home</Link></div>
@@ -312,12 +322,13 @@ export default function LootRecipients() {
           <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} style={{ padding: '0.35rem 0.5rem' }}>
             <option value="accountDkpTotal">Account DKP total (default)</option>
             <option value="dkpSpentToon">DKP spent on character</option>
+            <option value="lastLootFirst">Most recent loot first</option>
           </select>
         </label>
       </div>
       <div className="card">
         <p style={{ color: '#a1a1aa', fontSize: '0.875rem', marginTop: 0 }}>
-          Showing <strong>{recipients.length}</strong> character{recipients.length !== 1 ? 's' : ''} {classFilter ? `(${classFilter})` : ''}. Sorted by {sortBy === 'accountDkpTotal' ? 'account DKP total' : 'DKP spent on character'} (desc).
+          Showing <strong>{recipients.length}</strong> character{recipients.length !== 1 ? 's' : ''} {classFilter ? `(${classFilter})` : ''}. Sorted by {sortBy === 'accountDkpTotal' ? 'account DKP total' : sortBy === 'lastLootFirst' ? 'most recent loot first' : 'DKP spent on character'} (desc).
         </p>
         <AssignedLootDisclaimer />
         <div style={{ overflowX: 'auto' }}>
