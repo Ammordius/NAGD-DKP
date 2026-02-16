@@ -267,7 +267,7 @@ export default function Profile({ profile, onProfileUpdate }) {
                 </ul>
               )}
             </div>
-          )}
+          ) : null}
         </>
       )}
     </div>
