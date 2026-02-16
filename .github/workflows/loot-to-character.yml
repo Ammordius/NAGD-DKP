@@ -5,7 +5,9 @@
 #
 # To push assignments to Supabase (no duplicates), set repo secrets:
 #   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
-# Then CI will: fetch raid_loot from Supabase (with id) -> assign -> update Supabase by id -> commit CSVs.
+# Then CI will: check if raid_loot count changed -> if so, fetch -> assign -> update Supabase by id.
+# The live DB is the source of truth; we do not commit the CSVs. Run at most once daily (cron) or manually.
+# We only pull Magelo and run assignment when there is new loot (count changed); otherwise skip.
 
 name: Loot-to-character assignment
 
@@ -13,13 +15,6 @@ on:
   schedule:
     # Once daily at 18:00 UTC (after TAKP Magelo export is typically updated)
     - cron: '0 18 * * *'
-  push:
-    branches: [main]
-    paths:
-      - 'data/raid_loot.csv'
-      - 'data/raids.csv'
-      - 'data/raid_events.csv'
-      - 'data/character_account.csv'
   workflow_dispatch:
 
 concurrency:
@@ -46,13 +41,30 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      # When Supabase secrets are set: get raid_loot with id so we can update by id (no duplicates).
-      - name: Fetch raid_loot from Supabase
+      # When Supabase secrets set: skip Magelo pull and assignment unless raid_loot count changed.
+      - name: Check for new loot
+        id: check
         if: ${{ env.SUPABASE_URL != '' && env.SUPABASE_SERVICE_ROLE_KEY != '' }}
+        run: |
+          CURRENT=$(python fetch_raid_loot_from_supabase.py --count-only)
+          LAST=""
+          if [ -f .ci/last_raid_loot_count.txt ]; then
+            LAST=$(cat .ci/last_raid_loot_count.txt)
+          fi
+          if [ "$CURRENT" = "$LAST" ] && [ -n "$CURRENT" ]; then
+            echo "new_loot=false" >> $GITHUB_OUTPUT
+            echo "No new loot (count $CURRENT unchanged), skipping Magelo pull and assignment."
+          else
+            echo "new_loot=true" >> $GITHUB_OUTPUT
+            echo "Loot count changed or first run (current=$CURRENT, last=$LAST), will run assignment."
+          fi
+
+      - name: Fetch raid_loot from Supabase
+        if: ${{ env.SUPABASE_URL != '' && env.SUPABASE_SERVICE_ROLE_KEY != '' && steps.check.outputs.new_loot == 'true' }}
         run: python fetch_raid_loot_from_supabase.py --out data/raid_loot.csv
 
-      # Required: Magelo dump tells us which character has which item (character list + per-char inventory).
-      - name: Download Magelo dumps from TAKP (required to determine which character loot went on)
+      - name: Download Magelo dumps from TAKP
+        if: ${{ env.SUPABASE_URL != '' && env.SUPABASE_SERVICE_ROLE_KEY != '' && steps.check.outputs.new_loot == 'true' }}
         run: |
           mkdir -p .magelo_dump
           echo "Downloading character dump (names, char_ids)..."
@@ -71,6 +83,7 @@ jobs:
           echo "Inventory lines: $(wc -l < .magelo_dump/TAKP_character_inventory.txt)"
 
       - name: Run loot-to-character assignment
+        if: ${{ env.SUPABASE_URL != '' && env.SUPABASE_SERVICE_ROLE_KEY != '' && steps.check.outputs.new_loot == 'true' }}
         run: |
           python assign_loot_to_characters.py \
             --character-file .magelo_dump/TAKP_character.txt \
@@ -80,17 +93,20 @@ jobs:
             --out-counts data/character_loot_assignment_counts.csv
 
       - name: Push assignments to Supabase (update by id, no duplicates)
-        if: ${{ env.SUPABASE_URL != '' && env.SUPABASE_SERVICE_ROLE_KEY != '' }}
+        if: ${{ env.SUPABASE_URL != '' && env.SUPABASE_SERVICE_ROLE_KEY != '' && steps.check.outputs.new_loot == 'true' }}
         run: python update_raid_loot_assignments_supabase.py --csv data/raid_loot.csv
 
-      - name: Commit and push if changed
+      - name: Record raid_loot count
+        if: ${{ env.SUPABASE_URL != '' && env.SUPABASE_SERVICE_ROLE_KEY != '' && steps.check.outputs.new_loot == 'true' }}
         run: |
+          mkdir -p .ci
+          python fetch_raid_loot_from_supabase.py --count-only > .ci/last_raid_loot_count.txt
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add data/raid_loot.csv data/character_loot_assignment_counts.csv
+          git add .ci/last_raid_loot_count.txt
           if git diff --staged --quiet; then
-            echo "No changes to commit"
+            echo "No count file change"
           else
-            git commit -m "chore: update loot-to-character assignment from Magelo dump"
+            git commit -m "chore: update last_raid_loot_count for loot-to-character skip check"
             git push
           fi

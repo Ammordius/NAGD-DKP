@@ -7,6 +7,7 @@ Requires: SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY (or SUPABASE_ANON_KEY if RL
   export SUPABASE_URL=https://xxx.supabase.co
   export SUPABASE_SERVICE_ROLE_KEY=eyJ...
   python fetch_raid_loot_from_supabase.py [--out data/raid_loot.csv]
+  python fetch_raid_loot_from_supabase.py --count-only   # print total row count only (for CI skip check)
 """
 
 from __future__ import annotations
@@ -26,6 +27,7 @@ PAGE_SIZE = 1000
 def main() -> int:
     ap = argparse.ArgumentParser(description="Fetch raid_loot from Supabase to CSV (with id).")
     ap.add_argument("--out", type=Path, default=DEFAULT_OUT, help="Output CSV path")
+    ap.add_argument("--count-only", action="store_true", help="Only print total raid_loot row count (for CI skip check)")
     args = ap.parse_args()
 
     url = os.environ.get("SUPABASE_URL", "").strip()
@@ -41,6 +43,19 @@ def main() -> int:
         return 1
 
     client = create_client(url, key)
+
+    if args.count_only:
+        # Lightweight count for CI: skip Magelo pull if no new loot (count unchanged)
+        resp = client.table("raid_loot").select("*", count="exact").limit(0).execute()
+        count = getattr(resp, "count", None)
+        if count is None:
+            count = getattr(resp, "total", None)
+        if count is None:
+            # Client didn't expose count; force CI to run by printing 0 (never equals stored count)
+            count = 0
+        print(count)
+        return 0
+
     all_rows: list[dict] = []
     offset = 0
     while True:

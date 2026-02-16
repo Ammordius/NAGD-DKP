@@ -75,9 +75,9 @@ python assign_loot_to_characters.py --elemental-source-name "Plate Bracer"
 
 ## Continuous integration (CI) in the DKP repo
 
-A **separate** workflow in this repo (`.github/workflows/loot-to-character.yml`) runs the assignment without depending on the Magelo repo’s CI. It triggers: **once daily** at 18:00 UTC, or on **push to main** when raid/loot data changes (`data/raid_loot.csv`, `data/raids.csv`, `data/raid_events.csv`, `data/character_account.csv`), or **manually** via workflow_dispatch. **Steps when Supabase secrets are set** (recommended): Install deps → **fetch** `raid_loot` from Supabase (with `id`) via `fetch_raid_loot_from_supabase.py` → download TAKP character/inventory dumps → run **assign** `assign_loot_to_characters.py` → **push** assignments to Supabase with `update_raid_loot_assignments_supabase.py` (update by id, no duplicates) → commit and push the two CSVs if changed.
+A **separate** workflow in this repo (`.github/workflows/loot-to-character.yml`) runs the assignment without depending on the Magelo repo’s CI. It triggers **once daily** at 18:00 UTC or **manually** via workflow_dispatch (no push trigger). **Steps when Supabase secrets are set**: (1) **Check for new loot** — compare `raid_loot` row count to `.ci/last_raid_loot_count.txt`; if unchanged, skip (no Magelo pull). (2) If count changed or first run: fetch `raid_loot` → download Magelo dumps → assign → push to Supabase by id → record count in `.ci/last_raid_loot_count.txt` (committed). The live DB is the source of truth; CI does not commit the CSVs.
 
-**Repo secrets** (Settings → Secrets and variables → Actions): **`SUPABASE_URL`**, **`SUPABASE_SERVICE_ROLE_KEY`**. If these are set, CI will fetch from and update Supabase; if not, CI only runs the assign step and commits the CSVs (no DB sync).
+**Repo secrets**: **`SUPABASE_URL`**, **`SUPABASE_SERVICE_ROLE_KEY`**. If set, CI only runs the Magelo pull and assignment when new loot has been added; at most once per day (cron).
 
 A copy of **elemental_armor.json** lives in **`data/elemental_armor.json`** so the job does not clone Magelo; update it from the Magelo repo when new elemental armor IDs are added.
 
