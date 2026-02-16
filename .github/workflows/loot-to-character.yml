@@ -122,6 +122,10 @@ jobs:
         if: ${{ env.SUPABASE_URL != '' && env.SUPABASE_SERVICE_ROLE_KEY != '' && steps.check.outputs.new_loot == 'true' }}
         run: python push_character_loot_assignment_counts_supabase.py
 
+      - name: Update character levels/classes from Magelo (one-to-one name match)
+        if: ${{ env.SUPABASE_URL != '' && env.SUPABASE_SERVICE_ROLE_KEY != '' && steps.check.outputs.new_loot == 'true' }}
+        run: python update_character_levels_from_magelo.py --character-file .magelo_dump/TAKP_character.txt
+
       - name: Record raid_loot count
         if: ${{ env.SUPABASE_URL != '' && env.SUPABASE_SERVICE_ROLE_KEY != '' && steps.check.outputs.new_loot == 'true' }}
         run: |
