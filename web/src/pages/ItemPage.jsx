@@ -144,7 +144,7 @@ export default function ItemPage() {
     // Case-insensitive item match so "Earring" and "earring" show the same page
     const escaped = (itemName || '').replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_')
     Promise.all([
-      supabase.from('raid_loot').select('id, raid_id, event_id, item_name, char_id, character_name, cost').ilike('item_name', escaped).limit(500),
+      supabase.from('raid_loot').select('id, raid_id, event_id, item_name, char_id, character_name, cost, assigned_char_id, assigned_character_name').ilike('item_name', escaped).limit(500),
       fetch('/dkp_mob_loot.json').then((r) => (r.ok ? r.json() : null)).catch(() => null),
     ]).then(([lootRes, mobJson]) => {
       if (lootRes.error) {
@@ -232,25 +232,32 @@ export default function ItemPage() {
               <th>Date</th>
               <th>Raid</th>
               <th>Winner</th>
+              <th>On toon</th>
               <th>Cost (DKP)</th>
             </tr>
           </thead>
           <tbody>
-            {historyAll.length === 0 && <tr><td colSpan={4}>No drops recorded</td></tr>}
+            {historyAll.length === 0 && <tr><td colSpan={5}>No drops recorded</td></tr>}
             {[...historyAll].reverse().map((row, i) => (
               <tr key={row.id || i}>
                 <td>{row.displayDate}</td>
                 <td><Link to={`/raids/${row.raid_id}`}>{raids[row.raid_id]?.raid_name || row.raid_id}</Link></td>
                 <td>
                   {(() => {
+                    const charName = row.character_name || row.char_id || '—'
                     const accountId = getAccountId(row.character_name || row.char_id)
-                    const to = accountId ? `/accounts/${accountId}` : `/characters/${encodeURIComponent(row.character_name || row.char_id || '')}`
-                    return (
-                      <Link to={to}>
-                        {row.character_name || row.char_id || '—'}
-                      </Link>
-                    )
+                    if (accountId) {
+                      return (
+                        <><Link to={`/accounts/${accountId}`}>Account</Link> (<Link to={`/characters/${encodeURIComponent(charName)}`}>{charName}</Link>)</>
+                      )
+                    }
+                    return <Link to={`/characters/${encodeURIComponent(charName)}`}>{charName}</Link>
                   })()}
+                </td>
+                <td style={{ color: '#a1a1aa', fontSize: '0.875rem' }}>
+                  {row.assigned_character_name ? (
+                    <Link to={`/characters/${encodeURIComponent(row.assigned_character_name)}`}>{row.assigned_character_name}</Link>
+                  ) : '—'}
                 </td>
                 <td>{row.cost ?? '—'}</td>
               </tr>

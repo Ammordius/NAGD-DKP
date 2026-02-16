@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useCharToAccountMap } from '../lib/useCharToAccountMap'
 
-const LOOT_CACHE_KEY = 'loot_search_cache_v2'
+const LOOT_CACHE_KEY = 'loot_search_cache_v3' // v3: includes assigned_char_id, assigned_character_name
 const CACHE_TTL_MS = 10 * 60 * 1000 // 10 minutes
 
 // Normalize mob name for comparison (strip # and trim, lowercase)
@@ -101,7 +101,7 @@ export default function LootSearch() {
       const maxId = cached.maxLootId ?? 0
       supabase
         .from('raid_loot')
-        .select('id, raid_id, event_id, item_name, character_name, char_id, cost')
+        .select('id, raid_id, event_id, item_name, character_name, char_id, cost, assigned_char_id, assigned_character_name')
         .gt('id', maxId)
         .order('id', { ascending: true })
         .limit(PAGE)
@@ -134,7 +134,7 @@ export default function LootSearch() {
         const to = from + PAGE - 1
         const { data, error } = await supabase
           .from('raid_loot')
-          .select('id, raid_id, event_id, item_name, character_name, char_id, cost')
+          .select('id, raid_id, event_id, item_name, character_name, char_id, cost, assigned_char_id, assigned_character_name')
           .order('id', { ascending: false })
           .range(from, to)
         if (error) {
@@ -247,7 +247,8 @@ export default function LootSearch() {
                 <th>Item</th>
                 <th>Drops from</th>
                 <th>Raid</th>
-                <th>Character</th>
+                <th>Buyer</th>
+                <th>On toon</th>
                 <th>Cost</th>
               </tr>
             </thead>
@@ -262,10 +263,20 @@ export default function LootSearch() {
                   <td><Link to={`/raids/${row.raid_id}`}>{raids[row.raid_id]?.name ?? row.raid_id}</Link></td>
                   <td>
                     {(() => {
+                      const charName = row.character_name || row.char_id || '—'
                       const accountId = getAccountId(row.character_name || row.char_id)
-                      const to = accountId ? `/accounts/${accountId}` : `/characters/${encodeURIComponent(row.character_name || row.char_id || '')}`
-                      return <Link to={to}>{row.character_name || row.char_id || '—'}</Link>
+                      if (accountId) {
+                        return (
+                          <><Link to={`/accounts/${accountId}`}>Account</Link> (<Link to={`/characters/${encodeURIComponent(charName)}`}>{charName}</Link>)</>
+                        )
+                      }
+                      return <Link to={`/characters/${encodeURIComponent(charName)}`}>{charName}</Link>
                     })()}
+                  </td>
+                  <td style={{ color: '#a1a1aa', fontSize: '0.875rem' }}>
+                    {row.assigned_character_name ? (
+                      <Link to={`/characters/${encodeURIComponent(row.assigned_character_name)}`}>{row.assigned_character_name}</Link>
+                    ) : '—'}
                   </td>
                   <td>{row.cost ?? '—'}</td>
                 </tr>

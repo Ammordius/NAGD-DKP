@@ -196,6 +196,7 @@ export default function LootRecipients() {
         byKey[key] = {
           character_key: key,
           character_name: charName || charId,
+          char_id: charRow?.char_id?.trim() || '',
           class_name: charRow?.class_name || '',
           account_id: accountId,
           account_display_name: accountId ? (accounts[accountId] || accountId) : null,
@@ -213,6 +214,8 @@ export default function LootRecipients() {
     }
     list.forEach((r) => {
       r.accountDkpTotal = r.account_id ? (accountDkpTotals[r.account_id] ?? 0) : 0
+      const dkpRow = dkpSummary[r.character_key] || (r.char_id && dkpSummary[r.char_id])
+      r.characterDkpSpentTotal = dkpRow ? dkpRow.spent : 0
     })
     list.sort((a, b) => {
       if (sortBy === 'accountDkpTotal') {
@@ -227,7 +230,7 @@ export default function LootRecipients() {
       return (a.account_display_name || a.character_name || '').localeCompare(b.account_display_name || b.character_name || '')
     })
     return list
-  }, [loot, characters, accounts, accountDkpTotals, classFilter, sortBy, getAccountId])
+  }, [loot, characters, accounts, accountDkpTotals, dkpSummary, classFilter, sortBy, getAccountId])
 
   if (loading) return <div className="container">Loading…</div>
   if (error) return <div className="container"><span className="error">{error}</span> <Link to="/">← Home</Link></div>
@@ -276,17 +279,24 @@ export default function LootRecipients() {
                 <th>Account (Character)</th>
                 <th>Class</th>
                 <th>Loot received (last {months}m)</th>
-                <th style={{ whiteSpace: 'nowrap' }}>DKP spent (toon)</th>
+                <th style={{ whiteSpace: 'nowrap' }}>DKP spent (window)</th>
+                <th style={{ whiteSpace: 'nowrap' }}>Character DKP total (all time)</th>
                 <th style={{ whiteSpace: 'nowrap' }}>Account DKP total</th>
               </tr>
             </thead>
             <tbody>
               {recipients.map((r) => {
-                const to = r.account_id ? `/accounts/${r.account_id}` : `/characters/${encodeURIComponent(r.character_name)}`
-                const label = r.account_display_name ? `${r.account_display_name} (${r.character_name})` : r.character_name
+                const accountTo = r.account_id ? `/accounts/${r.account_id}` : null
+                const characterTo = `/characters/${encodeURIComponent(r.character_name)}`
                 return (
                   <tr key={r.character_key}>
-                    <td><Link to={to}>{label}</Link></td>
+                    <td>
+                      {accountTo ? (
+                        <><Link to={accountTo}>{r.account_display_name || r.account_id}</Link> (<Link to={characterTo}>{r.character_name}</Link>)</>
+                      ) : (
+                        <Link to={characterTo}>{r.character_name}</Link>
+                      )}
+                    </td>
                     <td style={{ color: '#a1a1aa' }}>{r.class_name || '—'}</td>
                     <td style={{ maxWidth: '20rem', fontSize: '0.9rem' }}>
                       {r.lootItems.length === 0 ? '—' : (
@@ -301,6 +311,7 @@ export default function LootRecipients() {
                       )}
                     </td>
                     <td style={{ whiteSpace: 'nowrap' }}>{Number(r.dkpSpentOnToon || 0).toFixed(0)}</td>
+                    <td style={{ whiteSpace: 'nowrap' }}>{Number(r.characterDkpSpentTotal ?? 0).toFixed(0)}</td>
                     <td style={{ whiteSpace: 'nowrap' }}>{Number(r.accountDkpTotal ?? 0).toFixed(0)}</td>
                   </tr>
                 )

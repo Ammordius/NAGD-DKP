@@ -1082,11 +1082,16 @@ export default function Officer({ isOfficer }) {
                           <td colSpan={6} style={{ padding: '0.5rem 1rem', verticalAlign: 'top', backgroundColor: 'rgba(0,0,0,0.2)', borderBottom: '1px solid #27272a' }}>
                             <div className="attendee-list">
                               {attendees.map((a, i) => {
+                                const name = a.name || a.char_id || ''
                                 const accountId = getAccountId(a.name || a.char_id)
-                                const to = accountId ? `/accounts/${accountId}` : `/characters/${encodeURIComponent(a.name || '')}`
-                                return (
-                                  <Link key={a.char_id || a.name || i} to={to}>{a.name}</Link>
-                                )
+                                if (accountId) {
+                                  return (
+                                    <span key={a.char_id || a.name || i}>
+                                      <Link to={`/accounts/${accountId}`}>Account</Link> (<Link to={`/characters/${encodeURIComponent(name)}`}>{name}</Link>)
+                                    </span>
+                                  )
+                                }
+                                return <Link key={a.char_id || a.name || i} to={`/characters/${encodeURIComponent(name)}`}>{name}</Link>
                               })}
                             </div>
                           </td>
@@ -1112,9 +1117,14 @@ export default function Officer({ isOfficer }) {
                       <td><Link to={`/items/${encodeURIComponent(row.item_name || '')}`}>{row.item_name || '—'}</Link></td>
                       <td>
                         {(() => {
+                          const charName = row.character_name || row.char_id || '—'
                           const accountId = getAccountId(row.character_name || row.char_id)
-                          const to = accountId ? `/accounts/${accountId}` : `/characters/${encodeURIComponent(row.character_name || row.char_id || '')}`
-                          return <Link to={to}>{row.character_name || row.char_id || '—'}</Link>
+                          if (accountId) {
+                            return (
+                              <><Link to={`/accounts/${accountId}`}>Account</Link> (<Link to={`/characters/${encodeURIComponent(charName)}`}>{charName}</Link>)</>
+                            )
+                          }
+                          return <Link to={`/characters/${encodeURIComponent(charName)}`}>{charName}</Link>
                         })()}
                       </td>
                       <td>
@@ -1145,11 +1155,16 @@ export default function Officer({ isOfficer }) {
             <h3 style={{ marginTop: '1.25rem' }}>Attendees</h3>
             <div className="attendee-list">
               {attendance.length > 0 ? attendance.map((a) => {
+                const charName = a.character_name || a.char_id || ''
                 const accountId = getAccountId(a.character_name || a.char_id)
-                const to = accountId ? `/accounts/${accountId}` : `/characters/${encodeURIComponent(a.character_name || a.char_id || '')}`
-                return (
-                  <Link key={a.char_id || a.character_name} to={to}>{a.character_name || a.char_id}</Link>
-                )
+                if (accountId) {
+                  return (
+                    <span key={a.char_id || a.character_name}>
+                      <Link to={`/accounts/${accountId}`}>Account</Link> (<Link to={`/characters/${encodeURIComponent(charName)}`}>{charName}</Link>)
+                    </span>
+                  )
+                }
+                return <Link key={a.char_id || a.character_name} to={`/characters/${encodeURIComponent(charName)}`}>{charName}</Link>
               }) : (
                 <span style={{ color: '#71717a' }}>None (add a DKP tic to record attendance)</span>
               )}

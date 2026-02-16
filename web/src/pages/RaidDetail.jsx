@@ -300,13 +300,17 @@ export default function RaidDetail({ isOfficer }) {
                       <td colSpan={isOfficer ? 6 : 5} style={{ padding: '0.5rem 1rem', verticalAlign: 'top', backgroundColor: 'rgba(0,0,0,0.2)', borderBottom: '1px solid #27272a' }}>
                         <div className="attendee-list">
                           {attendees.map((a, i) => {
+                            const name = a.name || a.char_id || ''
                             const accountId = getAccountId(a.name || a.char_id)
-                            const to = accountId ? `/accounts/${accountId}` : `/characters/${encodeURIComponent(a.name || '')}`
-                            return (
-                              <Link key={a.char_id || a.name || i} to={to}>
-                                {a.name}
-                              </Link>
-                            )
+                            if (accountId) {
+                              const label = accountDisplayNames[accountId] || accountId
+                              return (
+                                <span key={a.char_id || a.name || i}>
+                                  <Link to={`/accounts/${accountId}`}>{label}</Link> (<Link to={`/characters/${encodeURIComponent(name)}`}>{name}</Link>)
+                                </span>
+                              )
+                            }
+                            return <Link key={a.char_id || a.name || i} to={`/characters/${encodeURIComponent(name)}`}>{name}</Link>
                           })}
                         </div>
                       </td>
@@ -399,13 +403,15 @@ export default function RaidDetail({ isOfficer }) {
                   <td>
                     {(() => {
                       const charName = row.character_name || row.char_id || '—'
+                      const displayChar = (row.assigned_character_name || '').trim() || charName
                       const accountId = getAccountId(row.character_name || row.char_id)
-                      const to = accountId ? `/accounts/${accountId}` : `/characters/${encodeURIComponent(charName)}`
                       const accountLabel = accountId ? (accountDisplayNames[accountId] || accountId) : null
-                      const assignedName = (row.assigned_character_name || '').trim()
-                      const showAccountOnly = assignedName && assignedName !== charName
-                      const label = accountLabel && !showAccountOnly ? `${accountLabel} (${charName})` : (accountLabel || charName)
-                      return <Link to={to}>{label}</Link>
+                      if (accountId && accountLabel) {
+                        return (
+                          <><Link to={`/accounts/${accountId}`}>{accountLabel}</Link> (<Link to={`/characters/${encodeURIComponent(displayChar)}`}>{displayChar}</Link>)</>
+                        )
+                      }
+                      return <Link to={`/characters/${encodeURIComponent(displayChar)}`}>{displayChar}</Link>
                     })()}
                   </td>
                   <td style={{ color: '#a1a1aa', fontSize: '0.875rem' }}>
@@ -447,13 +453,17 @@ export default function RaidDetail({ isOfficer }) {
       <div className="card">
         <div className="attendee-list">
           {attendance.map((a) => {
+            const name = a.character_name || a.char_id || ''
             const accountId = getAccountId(a.character_name || a.char_id)
-            const to = accountId ? `/accounts/${accountId}` : `/characters/${encodeURIComponent(a.character_name || a.char_id || '')}`
-            return (
-              <Link key={a.char_id || a.character_name} to={to}>
-                {a.character_name || a.char_id}
-              </Link>
-            )
+            if (accountId) {
+              const label = accountDisplayNames[accountId] || accountId
+              return (
+                <span key={a.char_id || a.character_name}>
+                  <Link to={`/accounts/${accountId}`}>{label}</Link> (<Link to={`/characters/${encodeURIComponent(name)}`}>{name}</Link>)
+                </span>
+              )
+            }
+            return <Link key={a.char_id || a.character_name} to={`/characters/${encodeURIComponent(name)}`}>{name}</Link>
           })}
         </div>
       </div>
@@ -465,13 +475,17 @@ export default function RaidDetail({ isOfficer }) {
             <p style={{ color: '#a1a1aa', fontSize: '0.875rem', marginTop: 0 }}>Raiders who attended but missed one or more DKP events.</p>
             <div className="attendee-list">
               {notPresentForAllEvents.map((a) => {
+                const name = a.character_name || a.char_id || ''
                 const accountId = getAccountId(a.character_name || a.char_id)
-                const to = accountId ? `/accounts/${accountId}` : `/characters/${encodeURIComponent(a.character_name || a.char_id || '')}`
-                return (
-                  <Link key={a.char_id || a.character_name} to={to}>
-                    {a.character_name || a.char_id}
-                  </Link>
-                )
+                if (accountId) {
+                  const label = accountDisplayNames[accountId] || accountId
+                  return (
+                    <span key={a.char_id || a.character_name}>
+                      <Link to={`/accounts/${accountId}`}>{label}</Link> (<Link to={`/characters/${encodeURIComponent(name)}`}>{name}</Link>)
+                    </span>
+                  )
+                }
+                return <Link key={a.char_id || a.character_name} to={`/characters/${encodeURIComponent(name)}`}>{name}</Link>
               })}
             </div>
           </div>

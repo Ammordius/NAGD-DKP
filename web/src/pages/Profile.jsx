@@ -256,7 +256,7 @@ export default function Profile({ profile, onProfileUpdate }) {
                             <li key={i} style={{ marginBottom: '0.25rem', fontSize: '0.9rem' }}>
                               <Link to={`/items/${encodeURIComponent(row.item_name || '')}`}>{row.item_name || '—'}</Link>
                               {' '}{MIDDLE_DOT}{' '}
-                              <Link to={`/accounts/${profile.account_id}`}>{row.character_name || row.char_id || '—'}</Link>
+                              <Link to={`/accounts/${profile.account_id}`}>Account</Link> (<Link to={`/characters/${encodeURIComponent(row.assigned_character_name || row.character_name || row.char_id || '')}`}>{row.assigned_character_name || row.character_name || row.char_id || '—'}</Link>)
                               {row.cost != null && row.cost !== '' && <> {MIDDLE_DOT} {row.cost} DKP</>}
                             </li>
                           ))}
