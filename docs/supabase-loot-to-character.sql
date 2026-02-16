@@ -119,5 +119,88 @@ $$;
 
 COMMENT ON FUNCTION update_single_raid_loot_assignment(bigint, text, text) IS 'Update one raid_loot assignment. Allowed: officer, or user whose claimed account owns the loot row (char_id). Use NULL/empty to set Unassigned.';
 
+-- Per-character total DKP spent (by assignment). Updated by trigger on raid_loot so Loot recipients and character page can read one value.
+-- Uses assigned_char_id / assigned_character_name when set; otherwise char_id / character_name so unassigned buyer still counts.
+CREATE TABLE IF NOT EXISTS character_dkp_spent (
+  character_key TEXT PRIMARY KEY,
+  char_id TEXT,
+  character_name TEXT,
+  total_spent NUMERIC NOT NULL DEFAULT 0,
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE OR REPLACE FUNCTION public.refresh_character_dkp_spent()
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  TRUNCATE character_dkp_spent;
+  INSERT INTO character_dkp_spent (character_key, char_id, character_name, total_spent, updated_at)
+  SELECT
+    character_key,
+    MAX(char_id) AS char_id,
+    MAX(character_name) AS character_name,
+    SUM(COALESCE((cost::numeric), 0)) AS total_spent,
+    now()
+  FROM (
+    SELECT
+      (CASE WHEN COALESCE(trim(assigned_char_id), '') <> '' THEN trim(assigned_char_id)
+            WHEN COALESCE(trim(assigned_character_name), '') <> '' THEN trim(assigned_character_name)
+            WHEN COALESCE(trim(char_id::text), '') <> '' THEN trim(char_id::text)
+            ELSE COALESCE(trim(character_name), 'unknown') END) AS character_key,
+      nullif(trim(COALESCE(assigned_char_id::text, char_id::text)), '') AS char_id,
+      nullif(trim(COALESCE(assigned_character_name, character_name)), '') AS character_name,
+      cost
+    FROM raid_loot
+    WHERE COALESCE(trim(assigned_char_id), '') <> ''
+       OR COALESCE(trim(assigned_character_name), '') <> ''
+       OR COALESCE(trim(char_id::text), '') <> ''
+       OR COALESCE(trim(character_name), '') <> ''
+  ) t
+  GROUP BY character_key;
+END;
+$$;
+
+-- Trigger: update character_dkp_spent when loot is inserted, updated, or deleted (or assignment changed).
+CREATE OR REPLACE FUNCTION public.trigger_refresh_character_dkp_spent()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  PERFORM refresh_character_dkp_spent();
+  RETURN NULL;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS refresh_character_dkp_spent_after_loot ON raid_loot;
+CREATE TRIGGER refresh_character_dkp_spent_after_loot
+  AFTER INSERT OR UPDATE OR DELETE ON raid_loot
+  FOR EACH STATEMENT EXECUTE FUNCTION public.trigger_refresh_character_dkp_spent();
+
+-- RPC: return rows for any character whose character_key, char_id, or character_name is in keys (for Loot recipients lookup).
+CREATE OR REPLACE FUNCTION public.get_character_dkp_spent(p_keys text[])
+RETURNS TABLE(character_key text, char_id text, character_name text, total_spent numeric)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT c.character_key, c.char_id, c.character_name, c.total_spent
+  FROM character_dkp_spent c
+  WHERE c.character_key = ANY(p_keys)
+     OR c.char_id = ANY(p_keys)
+     OR c.character_name = ANY(p_keys);
+$$;
+
+COMMENT ON TABLE character_dkp_spent IS 'Total DKP spent per character (from raid_loot cost). Refreshed on raid_loot change. Look up by character_key, char_id, or character_name. After first deploy run: SELECT refresh_character_dkp_spent();';
+COMMENT ON FUNCTION get_character_dkp_spent(text[]) IS 'Returns character_dkp_spent rows where character_key, char_id, or character_name is in the given array.';
+
+-- RLS: allow anon/authenticated read (same as raid_loot).
+ALTER TABLE character_dkp_spent ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Authenticated read character_dkp_spent" ON character_dkp_spent;
+CREATE POLICY "Authenticated read character_dkp_spent" ON character_dkp_spent FOR SELECT TO authenticated USING (true);
+DROP POLICY IF EXISTS "Anon read character_dkp_spent" ON character_dkp_spent;
+CREATE POLICY "Anon read character_dkp_spent" ON character_dkp_spent FOR SELECT TO anon USING (true);
+
 -- RLS: same as raid_loot (authenticated/anon read)
 -- No new policies needed if raid_loot already has read for all.
