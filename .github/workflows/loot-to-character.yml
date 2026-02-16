@@ -43,22 +43,25 @@ jobs:
         run: pip install -r requirements.txt
 
       # When Supabase secrets set: skip Magelo pull and assignment unless raid_loot count changed.
+      # TEMPORARILY DISABLED: always run assignment (remove the next 2 lines and uncomment the block below to re-enable).
       - name: Check for new loot
         id: check
         if: ${{ env.SUPABASE_URL != '' && env.SUPABASE_SERVICE_ROLE_KEY != '' }}
         run: |
-          CURRENT=$(python fetch_raid_loot_from_supabase.py --count-only)
-          LAST=""
-          if [ -f .ci/last_raid_loot_count.txt ]; then
-            LAST=$(cat .ci/last_raid_loot_count.txt)
-          fi
-          if [ "$CURRENT" = "$LAST" ] && [ -n "$CURRENT" ]; then
-            echo "new_loot=false" >> $GITHUB_OUTPUT
-            echo "No new loot (count $CURRENT unchanged), skipping Magelo pull and assignment."
-          else
-            echo "new_loot=true" >> $GITHUB_OUTPUT
-            echo "Loot count changed or first run (current=$CURRENT, last=$LAST), will run assignment."
-          fi
+          echo "new_loot=true" >> $GITHUB_OUTPUT
+          echo "Temporarily disabled: always running assignment."
+          # CURRENT=$(python fetch_raid_loot_from_supabase.py --count-only)
+          # LAST=""
+          # if [ -f .ci/last_raid_loot_count.txt ]; then
+          #   LAST=$(cat .ci/last_raid_loot_count.txt)
+          # fi
+          # if [ "$CURRENT" = "$LAST" ] && [ -n "$CURRENT" ]; then
+          #   echo "new_loot=false" >> $GITHUB_OUTPUT
+          #   echo "No new loot (count $CURRENT unchanged), skipping Magelo pull and assignment."
+          # else
+          #   echo "new_loot=true" >> $GITHUB_OUTPUT
+          #   echo "Loot count changed or first run (current=$CURRENT, last=$LAST), will run assignment."
+          # fi
 
       - name: Set cache date (for 24h Magelo cache)
         if: ${{ env.SUPABASE_URL != '' && env.SUPABASE_SERVICE_ROLE_KEY != '' && steps.check.outputs.new_loot == 'true' }}
