@@ -111,7 +111,7 @@ So the **live DB is the source of truth** for each run. Repo CSVs are not used w
 - **CI**: `.github/workflows/loot-to-character.yml`
 - **Fetch**: `fetch_raid_loot_from_supabase.py` (writes `raid_loot.csv` + `--all-tables`: characters, character_account, raids)
 - **Assign**: `assign_loot_to_characters.py` (reads/writes `raid_loot.csv`, writes `character_loot_assignment_counts.csv`)
-- **Update raid_loot**: `update_raid_loot_assignments_supabase.py` (reads CSV, upserts by `id` into `raid_loot`)
+- **Update raid_loot**: `update_raid_loot_assignments_supabase.py` (reads CSV, calls `update_raid_loot_assignments` RPC to update by `id`; conflicts resolved, not ignored). Requires `docs/supabase-loot-to-character.sql` (defines the RPC).
 - **Push counts**: `push_character_loot_assignment_counts_supabase.py` (replaces `character_loot_assignment_counts` from CSV)
 - **Inspect CSV locally**: `inspect_loot_assignment.py --item "Platinum Cloak" --buyer Ammordius`
 - **Frontend**: `web/src/pages/AccountDetail.jsx` (shows “on toon” when `assigned_character_name` ≠ buyer), `web/src/pages/CharacterPage.jsx` (lists loot where `assigned_character_name` ILIKE character)

@@ -56,6 +56,8 @@ CREATE TABLE IF NOT EXISTS raid_events (
   event_time TEXT
 );
 
+-- raid_loot: CI upserts by id with conflict resolution (UPDATE existing rows), not ignore.
+-- Use update_raid_loot_assignments RPC (see supabase-loot-to-character.sql) for bulk assignment updates.
 CREATE TABLE IF NOT EXISTS raid_loot (
   id BIGSERIAL PRIMARY KEY,
   raid_id TEXT,

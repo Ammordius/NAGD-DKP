@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """
 Update existing raid_loot rows in Supabase with assigned_char_id, assigned_character_name, assigned_via_magelo.
-Reads data/raid_loot.csv (must include an 'id' column from a Supabase export). Uses upsert on id so we only
-UPDATE existing rows and never insert duplicates.
+Reads data/raid_loot.csv (must include an 'id' column from a Supabase export). Calls update_raid_loot_assignments
+RPC so conflicts are resolved (existing rows updated), never ignored. Requires the function from
+docs/supabase-loot-to-character.sql.
 
-Requires: SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY (or SUPABASE_ANON_KEY if RLS allows update).
+Requires: SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY (or SUPABASE_ANON_KEY if RLS allows).
   export SUPABASE_URL=https://xxx.supabase.co
   export SUPABASE_SERVICE_ROLE_KEY=eyJ...
   python update_raid_loot_assignments_supabase.py [--csv path/to/raid_loot.csv] [--batch 200]
@@ -80,9 +81,17 @@ def main() -> int:
     n = 0
     for i in range(0, len(rows), args.batch):
         chunk = rows[i : i + args.batch]
-        resp = client.table("raid_loot").upsert(chunk, on_conflict="id", ignore_duplicates=False)
-        if getattr(resp, "count", None) is not None:
-            n += resp.count
+        # Use RPC so conflicts are resolved (UPDATE), not ignored. Requires update_raid_loot_assignments(jsonb) in DB.
+        resp = client.rpc("update_raid_loot_assignments", {"data": chunk}).execute()
+        count = None
+        if hasattr(resp, "data") and resp.data is not None:
+            try:
+                d = resp.data
+                count = int(d[0] if isinstance(d, list) and d else d)
+            except (TypeError, ValueError, IndexError):
+                pass
+        if count is not None:
+            n += count
         else:
             n += len(chunk)
         print(f"Updated batch {i // args.batch + 1}: {len(chunk)} rows")

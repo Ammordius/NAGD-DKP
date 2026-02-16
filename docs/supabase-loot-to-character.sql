@@ -37,5 +37,38 @@ CREATE TABLE IF NOT EXISTS character_loot_assignment_counts (
 CREATE INDEX IF NOT EXISTS idx_raid_loot_assigned_char ON raid_loot(assigned_char_id)
   WHERE assigned_char_id IS NOT NULL;
 
+-- Bulk update assignments: resolve conflicts by updating existing rows (do not ignore).
+-- CI/update_raid_loot_assignments_supabase.py calls this RPC so updates always apply.
+-- data: jsonb array of { id, assigned_char_id, assigned_character_name, assigned_via_magelo }.
+CREATE OR REPLACE FUNCTION update_raid_loot_assignments(data jsonb)
+RETURNS bigint
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  updated_count bigint;
+BEGIN
+  WITH payload AS (
+    SELECT (e->>'id')::bigint AS id,
+           nullif(trim(e->>'assigned_char_id'), '') AS assigned_char_id,
+           nullif(trim(e->>'assigned_character_name'), '') AS assigned_character_name,
+           (CASE WHEN trim(e->>'assigned_via_magelo') IN ('1', 'true') THEN 1 ELSE 0 END)::smallint AS assigned_via_magelo
+    FROM jsonb_array_elements(data) AS e
+  )
+  UPDATE raid_loot r
+  SET
+    assigned_char_id = p.assigned_char_id,
+    assigned_character_name = p.assigned_character_name,
+    assigned_via_magelo = p.assigned_via_magelo
+  FROM payload p
+  WHERE r.id = p.id;
+  GET DIAGNOSTICS updated_count = ROW_COUNT;
+  RETURN updated_count;
+END;
+$$;
+
+COMMENT ON FUNCTION update_raid_loot_assignments(jsonb) IS 'Bulk update raid_loot assignment columns by id; resolves conflicts by updating, never ignores.';
+
 -- RLS: same as raid_loot (authenticated/anon read)
 -- No new policies needed if raid_loot already has read for all.
