@@ -206,7 +206,8 @@ def load_raid_loot(data_dir: Path) -> list[dict]:
 
 
 def load_magelo_character_file(char_file: Path) -> tuple[dict[str, str], dict[str, str]]:
-    """(name -> char_id, char_id -> name) for all characters in the dump."""
+    """(name -> char_id, char_id -> name) for all characters in the dump.
+    Registers both raw and normalized name so DKP->Magelo mapping works when casing differs."""
     name_to_id = {}
     id_to_name = {}
     if not char_file.exists():
@@ -220,6 +221,7 @@ def load_magelo_character_file(char_file: Path) -> tuple[dict[str, str], dict[st
                 cid = parts[8].strip()
                 if name and cid:
                     name_to_id[name] = cid
+                    name_to_id[normalize_item_name(name)] = cid
                     id_to_name[cid] = name
     return name_to_id, id_to_name
 
