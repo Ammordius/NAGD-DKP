@@ -8,6 +8,7 @@ Requires: SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY (or SUPABASE_ANON_KEY if RL
   export SUPABASE_SERVICE_ROLE_KEY=eyJ...
   python fetch_raid_loot_from_supabase.py [--out data/raid_loot.csv]
   python fetch_raid_loot_from_supabase.py --count-only   # print total row count only (for CI skip check)
+  python fetch_raid_loot_from_supabase.py --all-tables  # also fetch characters, character_account, raids to data/ (for account linking in assign)
 """
 
 from __future__ import annotations
@@ -24,10 +25,46 @@ DEFAULT_OUT = DATA_DIR / "raid_loot.csv"
 PAGE_SIZE = 1000
 
 
+def _fetch_table_to_csv(client, table: str, out_path: Path) -> int:
+    """Fetch all rows from table (paginated) and write CSV. Returns row count."""
+    all_rows: list[dict] = []
+    offset = 0
+    while True:
+        resp = client.table(table).select("*").range(offset, offset + PAGE_SIZE - 1).execute()
+        rows = resp.data or []
+        if not rows:
+            break
+        all_rows.extend(rows)
+        if len(rows) < PAGE_SIZE:
+            break
+        offset += PAGE_SIZE
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    if not all_rows:
+        # Header-only; use known columns per table so assign script can read empty files
+        defaults = {"characters": ["char_id", "name", "race", "class_name", "level", "guild_rank", "claim"],
+                    "character_account": ["char_id", "account_id"],
+                    "raids": ["raid_id", "raid_pool", "raid_name", "date", "date_iso", "attendees", "url"]}
+        fieldnames = defaults.get(table, ["id"])
+        with open(out_path, "w", encoding="utf-8", newline="") as f:
+            w = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
+            w.writeheader()
+        return 0
+    fieldnames = list(all_rows[0].keys())
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(out_path, "w", encoding="utf-8", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
+        w.writeheader()
+        for row in all_rows:
+            out = {k: ("" if v is None else str(v) if isinstance(v, (int, float)) else str(v)) for k, v in row.items()}
+            w.writerow(out)
+    return len(all_rows)
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="Fetch raid_loot from Supabase to CSV (with id).")
     ap.add_argument("--out", type=Path, default=DEFAULT_OUT, help="Output CSV path")
     ap.add_argument("--count-only", action="store_true", help="Only print total raid_loot row count (for CI skip check)")
+    ap.add_argument("--all-tables", action="store_true", help="Also fetch characters, character_account, raids to data/ (for assign script account linking)")
     args = ap.parse_args()
 
     url = os.environ.get("SUPABASE_URL", "").strip()
@@ -101,6 +138,13 @@ def main() -> int:
             w.writerow(out)
 
     print(f"Fetched {len(all_rows)} raid_loot rows to {args.out}")
+
+    if getattr(args, "all_tables", False):
+        for table, filename in [("characters", "characters.csv"), ("character_account", "character_account.csv"), ("raids", "raids.csv")]:
+            path = DATA_DIR / filename
+            n = _fetch_table_to_csv(client, table, path)
+            print(f"Fetched {n} {table} rows to {path}")
+
     return 0
 
 
