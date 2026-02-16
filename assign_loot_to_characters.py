@@ -4,11 +4,11 @@ Assign raid_loot to the character that actually has the item (from Magelo invent
 
 Rules:
 - Only assign rows that do not already have assigned_char_id/assigned_character_name set
-  (we assign each loot row at most once; existing assignments are preserved).
+  (unless --clear-assignments: then recompute all).
 - For each loot row on an account: check all characters on that account for that item.
-- If exactly one toon has it -> assign to that toon.
-- If multiple toons have it and we bought multiple -> assign in raid order (oldest first),
-  each time to the toon who currently has the most items assigned so far (tie-break: stable).
+- Cap per toon per item: use the **number of that item on that toon in Magelo** (so if they have 2x on Magelo we can assign up to 2; if 1x then 1). No lore tag.
+- Among toons that have the item and are under their Magelo cap: assign to the toon with the **most DKP spent**
+  (aggregate cost of loot already assigned to that toon this run). Tie-break: most items assigned, then stable.
 - If no toon has it -> leave on namesake (buyer).
 - Elemental loot: use magelo/elemental_armor.json; the DKP log has the pre-turn-in item
   (e.g. Unadorned Plate Vambraces) but Magelo shows the converted piece. Treat any
@@ -43,20 +43,49 @@ MAGELO_DIR = SCRIPT_DIR.parent / "magelo"
 
 # DKP item names that are "elemental source" (bought then turned in to elemental piece).
 # When we see these in raid_loot we match any toon on the account that has any item_id in elemental_armor.json.
+# Include Plate, Leather, Chain, Breastplate, and Cloak; DKP may log "Helmet" or "Helm".
 ELEMENTAL_SOURCE_ITEM_NAMES = frozenset({
+    # Plate
     "Unadorned Plate Bracer",
     "Unadorned Plate Vambraces",
     "Unadorned Plate Greaves",
     "Unadorned Plate Gauntlets",
     "Unadorned Plate Boots",
     "Unadorned Plate Helm",
+    "Unadorned Plate Helmet",
     "Unadorned Plate Gorget",
     "Unadorned Plate Arms",
     "Unadorned Plate Chest",
     "Unadorned Plate Legs",
     "Unadorned Plate Girdle",
+    # Leather
+    "Unadorned Leather Boots",
+    "Unadorned Leather Tunic",
+    "Unadorned Leather Leggings",
+    "Unadorned Leather Sleeves",
+    "Unadorned Leather Bracer",
+    "Unadorned Leather Gauntlets",
+    "Unadorned Leather Gorget",
+    "Unadorned Leather Helm",
+    "Unadorned Leather Helmet",
+    "Unadorned Leather Arms",
+    "Unadorned Leather Girdle",
+    # Chain
+    "Unadorned Chain Boots",
+    "Unadorned Chain Gauntlets",
+    "Unadorned Chain Leggings",
+    "Unadorned Chain Sleeves",
+    "Unadorned Chain Tunic",
+    "Unadorned Chain Bracer",
+    "Unadorned Chain Gorget",
+    "Unadorned Chain Helm",
+    "Unadorned Chain Helmet",
+    "Unadorned Chain Arms",
+    "Unadorned Chain Girdle",
+    # Other
+    "Unadorned Breastplate",
+    "Unadorned Cloak of Battle",
 })
-
 
 def normalize_item_name(s: str) -> str:
     """Lowercase, strip, collapse spaces for matching."""
@@ -225,6 +254,39 @@ def which_toons_have_item(
     return candidates
 
 
+def item_count_per_toon(
+    item_name: str,
+    account_char_ids: list[str],
+    magelo_inv: dict[str, list[dict]],
+    elemental_item_ids: set[str],
+    elemental_source_names: frozenset[str],
+    dkp_to_magelo_id: Optional[dict[str, str]] = None,
+) -> dict[str, int]:
+    """
+    Return for each DKP char_id on this account the number of this item they have on Magelo.
+    For elemental-source items: 1 if they have any matching elemental piece, else 0.
+    For normal items: count of inventory slots with that item name.
+    """
+    norm_loot = normalize_item_name(item_name)
+    is_elemental_source = norm_loot in {normalize_item_name(n) for n in elemental_source_names}
+    d2m = dkp_to_magelo_id or {}
+    out: dict[str, int] = {}
+    for cid in account_char_ids:
+        magelo_id = d2m.get(cid) or cid
+        items = magelo_inv.get(magelo_id, [])
+        if is_elemental_source:
+            count = 0
+            for it in items:
+                if (it.get("item_id") or "").strip() in elemental_item_ids:
+                    count = 1
+                    break
+            out[cid] = count
+        else:
+            count = sum(1 for it in items if normalize_item_name((it.get("item_name") or "").strip()) == norm_loot)
+            out[cid] = count
+    return out
+
+
 def run(
     data_dir: Path,
     magelo_char_file: Path,
@@ -233,6 +295,7 @@ def run(
     out_raid_loot: Path,
     out_counts: Path,
     elemental_extra_names: Optional[list[str]] = None,
+    clear_assignments: bool = False,
 ) -> None:
     raids = load_raids(data_dir)
     char_to_account, account_to_chars = load_character_account(data_dir)
@@ -286,16 +349,17 @@ def run(
     assigned_character_name: list[Optional[str]] = [None] * len(loot_rows)
     assigned_via_magelo: list[bool] = [False] * len(loot_rows)  # True if we found item on a toon (incl. namesake)
 
-    # Preserve existing assignments from input (e.g. from Supabase); do not re-assign these rows.
+    # Preserve existing assignments from input (e.g. from Supabase) unless --clear-assignments.
     n_preserved = 0
-    for idx, row in enumerate(loot_rows):
-        ac = (row.get("assigned_char_id") or "").strip()
-        an = (row.get("assigned_character_name") or "").strip()
-        if ac or an:
-            assigned_char_id[idx] = ac or None
-            assigned_character_name[idx] = an or None
-            assigned_via_magelo[idx] = (row.get("assigned_via_magelo") or "").strip() == "1"
-            n_preserved += 1
+    if not clear_assignments:
+        for idx, row in enumerate(loot_rows):
+            ac = (row.get("assigned_char_id") or "").strip()
+            an = (row.get("assigned_character_name") or "").strip()
+            if ac or an:
+                assigned_char_id[idx] = ac or None
+                assigned_character_name[idx] = an or None
+                assigned_via_magelo[idx] = (row.get("assigned_via_magelo") or "").strip() == "1"
+                n_preserved += 1
 
     for acc, indices in loot_by_account.items():
         # Sort by raid date then raid_id, event_id, index
@@ -304,20 +368,37 @@ def run(
         account_toons = account_to_chars.get(acc)
         if not account_toons:
             account_toons = [acc] if acc != "_unknown" else []
-        # Running count of items assigned this account (for tie-breaker)
+        # Per-toon DKP spent (cost sum of assignments we make this run) and per-(toon, item) count for cap
+        dkp_spent_per_char: dict[str, float] = defaultdict(float)
         count_per_char: dict[str, int] = defaultdict(int)
+        item_count_per_char: dict[tuple[str, str], int] = defaultdict(int)  # (char_id, norm_item) -> count
 
         for idx in indices_sorted:
-            # Skip rows that already have an assignment (only assign once per row)
-            if assigned_char_id[idx] or assigned_character_name[idx]:
+            # Skip rows that already have an assignment (only assign once per row) unless clear_assignments
+            if not clear_assignments and (assigned_char_id[idx] or assigned_character_name[idx]):
                 cid_existing = assigned_char_id[idx] or ""
                 if cid_existing:
-                    count_per_char[cid_existing] += 1  # count for tie-breaker on not-yet-assigned rows
+                    count_per_char[cid_existing] += 1
+                    cost_val = float(loot_rows[idx].get("cost") or 0) or 0
+                    dkp_spent_per_char[cid_existing] += cost_val
+                    norm_item = normalize_item_name(loot_rows[idx].get("item_name") or "")
+                    if norm_item:
+                        item_count_per_char[(cid_existing, norm_item)] += 1
                 continue
             row = loot_rows[idx]
             cid_buyer = (row.get("char_id") or "").strip()
             name_buyer = (row.get("character_name") or "").strip()
             item_name = (row.get("item_name") or "").strip()
+            norm_item = normalize_item_name(item_name)
+            cost_val = float(row.get("cost") or 0) or 0
+            magelo_count_per_toon = item_count_per_toon(
+                item_name,
+                account_toons,
+                magelo_inv,
+                elemental_ids,
+                elemental_source_norm,
+                dkp_to_magelo_id,
+            )
 
             if not account_toons:
                 assigned_char_id[idx] = cid_buyer or None
@@ -336,20 +417,37 @@ def run(
             if len(candidates) == 0:
                 assigned_char_id[idx] = cid_buyer or None
                 assigned_character_name[idx] = name_buyer or None
-                # assigned_via_magelo stays False (fallback to namesake)
             elif len(candidates) == 1:
-                assigned_via_magelo[idx] = True  # found on a toon (this one)
                 cid = candidates[0]
-                assigned_char_id[idx] = cid
-                assigned_character_name[idx] = dkp_char_id_to_name.get(cid) or magelo_id_to_name.get(dkp_to_magelo_id.get(cid, "")) or cid
-                count_per_char[cid] += 1
+                cap = magelo_count_per_toon.get(cid, 0)
+                if cap > 0 and item_count_per_char[(cid, norm_item)] < cap:
+                    assigned_via_magelo[idx] = True
+                    assigned_char_id[idx] = cid
+                    assigned_character_name[idx] = dkp_char_id_to_name.get(cid) or magelo_id_to_name.get(dkp_to_magelo_id.get(cid, "")) or cid
+                    count_per_char[cid] += 1
+                    dkp_spent_per_char[cid] += cost_val
+                    item_count_per_char[(cid, norm_item)] += 1
+                else:
+                    # Only one toon has the item and they're at cap (or 0 on Magelo); leave on namesake
+                    assigned_char_id[idx] = cid_buyer or None
+                    assigned_character_name[idx] = name_buyer or None
             else:
-                # Multiple: assign to the one with the most items assigned so far
-                assigned_via_magelo[idx] = True  # found on multiple toons
-                best = max(candidates, key=lambda c: (count_per_char[c], c))
-                assigned_char_id[idx] = best
-                assigned_character_name[idx] = dkp_char_id_to_name.get(best) or magelo_id_to_name.get(dkp_to_magelo_id.get(best, "")) or best
-                count_per_char[best] += 1
+                # Multiple toons have the item: filter by Magelo cap, then choose by most DKP spent
+                under_cap = [
+                    c for c in candidates
+                    if magelo_count_per_toon.get(c, 0) > 0 and item_count_per_char[(c, norm_item)] < magelo_count_per_toon.get(c, 0)
+                ]
+                if not under_cap:
+                    assigned_char_id[idx] = cid_buyer or None
+                    assigned_character_name[idx] = name_buyer or None
+                else:
+                    assigned_via_magelo[idx] = True
+                    best = max(under_cap, key=lambda c: (dkp_spent_per_char[c], count_per_char[c], c))
+                    assigned_char_id[idx] = best
+                    assigned_character_name[idx] = dkp_char_id_to_name.get(best) or magelo_id_to_name.get(dkp_to_magelo_id.get(best, "")) or best
+                    count_per_char[best] += 1
+                    dkp_spent_per_char[best] += cost_val
+                    item_count_per_char[(best, norm_item)] += 1
 
     # Resolve assigned_character_name from DKP characters or Magelo
     for idx in range(len(loot_rows)):
@@ -429,6 +527,8 @@ def main() -> int:
                     help="Output assignment counts CSV path")
     ap.add_argument("--elemental-source-name", action="append", dest="elemental_extra",
                     help="Extra DKP item name that is elemental source (can repeat)")
+    ap.add_argument("--clear-assignments", action="store_true",
+                    help="Ignore existing assignments and recompute all (for full redo)")
     args = ap.parse_args()
 
     magelo = args.magelo_dir
@@ -451,6 +551,7 @@ def main() -> int:
         out_raid_loot=args.out_raid_loot,
         out_counts=args.out_counts,
         elemental_extra_names=args.elemental_extra,
+        clear_assignments=args.clear_assignments,
     )
     return 0
 

@@ -387,7 +387,7 @@ export default function RaidDetail({ isOfficer }) {
         {isOfficer && <p style={{ color: '#71717a', fontSize: '0.875rem', marginTop: 0 }}><Link to="/officer">Officer page</Link> to add more loot or tics.</p>}
         <table>
           <thead>
-            <tr><th>Item</th><th>Buyer</th><th>On toon</th><th>Cost</th>{isOfficer && <th style={{ width: '8rem' }}></th>}</tr>
+            <tr><th>Item</th><th>Buyer</th><th>Character</th><th>Cost</th>{isOfficer && <th style={{ width: '8rem' }}></th>}</tr>
           </thead>
           <tbody>
             {loot.length === 0 && <tr><td colSpan={isOfficer ? 5 : 4}>No loot recorded</td></tr>}
@@ -402,7 +402,9 @@ export default function RaidDetail({ isOfficer }) {
                       const accountId = getAccountId(row.character_name || row.char_id)
                       const to = accountId ? `/accounts/${accountId}` : `/characters/${encodeURIComponent(charName)}`
                       const accountLabel = accountId ? (accountDisplayNames[accountId] || accountId) : null
-                      const label = accountLabel ? `${accountLabel} (${charName})` : charName
+                      const assignedName = (row.assigned_character_name || '').trim()
+                      const showAccountOnly = assignedName && assignedName !== charName
+                      const label = accountLabel && !showAccountOnly ? `${accountLabel} (${charName})` : (accountLabel || charName)
                       return <Link to={to}>{label}</Link>
                     })()}
                   </td>

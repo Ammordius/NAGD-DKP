@@ -113,7 +113,8 @@ jobs:
             --inventory-file .magelo_dump/TAKP_character_inventory.txt \
             --elemental-armor-json data/elemental_armor.json \
             --out-raid-loot data/raid_loot.csv \
-            --out-counts data/character_loot_assignment_counts.csv
+            --out-counts data/character_loot_assignment_counts.csv \
+            --clear-assignments
 
       - name: Push assignments to Supabase (update by id, no duplicates)
         if: ${{ env.SUPABASE_URL != '' && env.SUPABASE_SERVICE_ROLE_KEY != '' && steps.check.outputs.new_loot == 'true' }}

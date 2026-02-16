@@ -12,6 +12,7 @@ import Accounts from './pages/Accounts'
 import AccountDetail from './pages/AccountDetail'
 import ItemPage from './pages/ItemPage'
 import CharacterPage from './pages/CharacterPage'
+import LootRecipients from './pages/LootRecipients'
 import Officer from './pages/Officer'
 import Profile from './pages/Profile'
 
@@ -58,6 +59,7 @@ export default function App() {
         <a href="/raids">Raids</a>
         <a href="/dkp">DKP</a>
         <a href="/loot">Loot search</a>
+        <a href="/loot-recipients">Loot recipients</a>
         <a href="/mobs">Mob loot</a>
         <a href="/accounts">Accounts</a>
         {session ? (
@@ -84,6 +86,7 @@ export default function App() {
         <Route path="/dkp" element={<DKP isOfficer={isOfficer} />} />
         <Route path="/officer" element={session ? <Officer isOfficer={isOfficer} /> : <Navigate to="/login?redirect=%2Fofficer" replace />} />
         <Route path="/loot" element={<LootSearch />} />
+        <Route path="/loot-recipients" element={<LootRecipients />} />
         <Route path="/mobs" element={<MobLoot />} />
         <Route path="/accounts" element={<Accounts />} />
         <Route path="/accounts/:accountId" element={<AccountDetail isOfficer={isOfficer} profile={profile} session={session} />} />

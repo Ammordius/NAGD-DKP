@@ -49,6 +49,7 @@ export default function AccountDetail({ isOfficer, profile, session }) {
   const [characters, setCharacters] = useState([])
   const [raids, setRaids] = useState({})
   const [activityByRaid, setActivityByRaid] = useState([])
+  const [dkpByCharacterKey, setDkpByCharacterKey] = useState({ earned: {}, spent: {} })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [refreshKey, setRefreshKey] = useState(0)
@@ -92,6 +93,7 @@ export default function AccountDetail({ isOfficer, profile, session }) {
           setCharacters([])
           setActivityByRaid([])
           setRaids({})
+          setDkpByCharacterKey({ earned: {}, spent: {} })
           setLoading(false)
           return
         }
@@ -109,6 +111,17 @@ export default function AccountDetail({ isOfficer, profile, session }) {
           const chars = (chRes.data || []).map((c) => ({ ...c, displayName: c.name || c.char_id }))
           setCharacters(chars)
           const attDkp = (attDkpRes?.error ? [] : (attDkpRes?.data || []))
+          const earnedByKey = {}
+          attDkp.forEach((row) => {
+            const k = (row.character_key || '').trim()
+            if (k) earnedByKey[k] = (earnedByKey[k] || 0) + parseFloat(row.dkp_earned || 0)
+          })
+          const spentByKey = {}
+          ;(lootRes.data || []).forEach((row) => {
+            const k = (row.assigned_character_name || row.character_name || '').trim()
+            if (k) spentByKey[k] = (spentByKey[k] || 0) + parseFloat(row.cost || 0)
+          })
+          setDkpByCharacterKey({ earned: earnedByKey, spent: spentByKey })
           const raidIds = new Set([
             ...(attRes.data || []).map((r) => r.raid_id),
             ...(lootRes.data || []).map((r) => r.raid_id),
@@ -300,12 +313,21 @@ export default function AccountDetail({ isOfficer, profile, session }) {
               {characters.map((c) => {
                 const name = c.name || c.char_id
                 const mageloUrl = `${MAGELO_BASE}${encodeURIComponent(name)}`
+                const earned = dkpByCharacterKey.earned[c.char_id] ?? dkpByCharacterKey.earned[name] ?? 0
+                const spent = dkpByCharacterKey.spent[name] ?? dkpByCharacterKey.spent[c.char_id] ?? 0
+                const net = Number(earned) - Number(spent)
+                const dkpStr = [earned > 0 && `${Number(earned).toFixed(0)} earned`, spent > 0 && `${Number(spent).toFixed(0)} spent`, `${Number(net).toFixed(0)} net`].filter(Boolean).join(' · ')
                 return (
                   <li key={c.char_id || c.name} style={{ marginBottom: '0.5rem' }}>
                     <Link to={`/characters/${encodeURIComponent(name)}`}>{name}</Link>
                     {(c.class_name || c.level) && (
                       <span style={{ color: '#71717a', fontSize: '0.9rem', marginLeft: '0.5rem' }}>
                         {[c.class_name, c.level].filter(Boolean).join(' ')}
+                      </span>
+                    )}
+                    {(earned > 0 || spent > 0) && (
+                      <span style={{ color: '#a1a1aa', fontSize: '0.9rem', marginLeft: '0.5rem' }}>
+                        {' '}{MIDDLE_DOT}{' '}{dkpStr} DKP
                       </span>
                     )}
                     {' '}{MIDDLE_DOT}{' '}
