@@ -49,15 +49,6 @@ export default function App() {
     )
   }
 
-  if (!session) {
-    return (
-      <Routes>
-        <Route path="/login" element={<Login />} />
-        <Route path="*" element={<Navigate to="/login" replace />} />
-      </Routes>
-    )
-  }
-
   const isOfficer = profile?.role === 'officer'
 
   return (
@@ -69,27 +60,34 @@ export default function App() {
         <a href="/loot">Loot search</a>
         <a href="/mobs">Mob loot</a>
         <a href="/accounts">Accounts</a>
-        <a href="/profile">Profile</a>
-        {isOfficer && <a href="/officer" style={{ color: '#fbbf24' }}>Officer</a>}
-        <span className="role">{profile?.role === 'officer' ? 'Officer' : 'Player'}</span>
-        <button
-          className="btn btn-ghost"
-          onClick={() => supabase.auth.signOut()}
-        >
-          Sign out
-        </button>
+        {session ? (
+          <>
+            <a href="/profile">Profile</a>
+            {isOfficer && <a href="/officer" style={{ color: '#fbbf24' }}>Officer</a>}
+            <span className="role">{profile?.role === 'officer' ? 'Officer' : 'Player'}</span>
+            <button
+              className="btn btn-ghost"
+              onClick={() => supabase.auth.signOut()}
+            >
+              Sign out
+            </button>
+          </>
+        ) : (
+          <a href="/login">Sign in</a>
+        )}
       </nav>
       <Routes>
+        <Route path="/login" element={<Login />} />
         <Route path="/" element={<Dashboard isOfficer={isOfficer} />} />
         <Route path="/raids" element={<Raids isOfficer={isOfficer} />} />
         <Route path="/raids/:raidId" element={<RaidDetail isOfficer={isOfficer} />} />
         <Route path="/dkp" element={<DKP isOfficer={isOfficer} />} />
-        <Route path="/officer" element={<Officer isOfficer={isOfficer} />} />
+        <Route path="/officer" element={session ? <Officer isOfficer={isOfficer} /> : <Navigate to="/login?redirect=%2Fofficer" replace />} />
         <Route path="/loot" element={<LootSearch />} />
         <Route path="/mobs" element={<MobLoot />} />
         <Route path="/accounts" element={<Accounts />} />
-        <Route path="/accounts/:accountId" element={<AccountDetail isOfficer={isOfficer} profile={profile} />} />
-        <Route path="/profile" element={<Profile profile={profile} onProfileUpdate={() => session?.user?.id && fetchProfile(session.user.id)} />} />
+        <Route path="/accounts/:accountId" element={<AccountDetail isOfficer={isOfficer} profile={profile} session={session} />} />
+        <Route path="/profile" element={session ? <Profile profile={profile} onProfileUpdate={() => session?.user?.id && fetchProfile(session.user.id)} /> : <Navigate to="/login?redirect=%2Fprofile" replace />} />
         <Route path="/items/:itemNameEncoded" element={<ItemPage />} />
         <Route path="/characters/:charKey" element={<CharacterPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />

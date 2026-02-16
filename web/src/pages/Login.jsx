@@ -1,9 +1,11 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 
 export default function Login() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const redirectTo = searchParams.get('redirect') || '/'
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -22,7 +24,7 @@ export default function Login() {
       } else {
         const { error: err } = await supabase.auth.signInWithPassword({ email, password })
         if (err) throw err
-        navigate('/', { replace: true })
+        navigate(redirectTo, { replace: true })
       }
     } catch (err) {
       setError(err.message || 'Something went wrong')
