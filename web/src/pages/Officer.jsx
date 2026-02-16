@@ -1114,14 +1114,8 @@ export default function Officer({ isOfficer }) {
                               {attendees.map((a, i) => {
                                 const name = a.name || a.char_id || ''
                                 const accountId = getAccountId(a.name || a.char_id)
-                                if (accountId) {
-                                  return (
-                                    <span key={a.char_id || a.name || i}>
-                                      <Link to={`/accounts/${accountId}`}>Account</Link> (<Link to={`/characters/${encodeURIComponent(name)}`}>{name}</Link>)
-                                    </span>
-                                  )
-                                }
-                                return <Link key={a.char_id || a.name || i} to={`/characters/${encodeURIComponent(name)}`}>{name}</Link>
+                                const to = accountId ? `/accounts/${accountId}` : `/characters/${encodeURIComponent(name)}`
+                                return <Link key={a.char_id || a.name || i} to={to}>{name}</Link>
                               })}
                             </div>
                           </td>
@@ -1149,12 +1143,8 @@ export default function Officer({ isOfficer }) {
                         {(() => {
                           const charName = row.character_name || row.char_id || '—'
                           const accountId = getAccountId(row.character_name || row.char_id)
-                          if (accountId) {
-                            return (
-                              <><Link to={`/accounts/${accountId}`}>Account</Link> (<Link to={`/characters/${encodeURIComponent(charName)}`}>{charName}</Link>)</>
-                            )
-                          }
-                          return <Link to={`/characters/${encodeURIComponent(charName)}`}>{charName}</Link>
+                          const to = accountId ? `/accounts/${accountId}` : `/characters/${encodeURIComponent(charName)}`
+                          return <Link to={to}>{charName}</Link>
                         })()}
                       </td>
                       <td>
@@ -1187,14 +1177,8 @@ export default function Officer({ isOfficer }) {
               {attendance.length > 0 ? attendance.map((a) => {
                 const charName = a.character_name || a.char_id || ''
                 const accountId = getAccountId(a.character_name || a.char_id)
-                if (accountId) {
-                  return (
-                    <span key={a.char_id || a.character_name}>
-                      <Link to={`/accounts/${accountId}`}>Account</Link> (<Link to={`/characters/${encodeURIComponent(charName)}`}>{charName}</Link>)
-                    </span>
-                  )
-                }
-                return <Link key={a.char_id || a.character_name} to={`/characters/${encodeURIComponent(charName)}`}>{charName}</Link>
+                const to = accountId ? `/accounts/${accountId}` : `/characters/${encodeURIComponent(charName)}`
+                return <Link key={a.char_id || a.character_name} to={to}>{charName}</Link>
               }) : (
                 <span style={{ color: '#71717a' }}>None (add a DKP tic to record attendance)</span>
               )}

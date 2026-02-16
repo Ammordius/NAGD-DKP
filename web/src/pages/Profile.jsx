@@ -256,13 +256,11 @@ export default function Profile({ profile, onProfileUpdate }) {
                             <li key={i} style={{ marginBottom: '0.25rem', fontSize: '0.9rem' }}>
                               <Link to={`/items/${encodeURIComponent(row.item_name || '')}`}>{row.item_name || '—'}</Link>
                               {' '}{MIDDLE_DOT}{' '}
-                              <Link to={`/accounts/${profile.account_id}`}>Account</Link> (
                               {(row.assigned_character_name || row.assigned_char_id) ? (
-                                <Link to={`/characters/${encodeURIComponent(row.assigned_character_name || row.assigned_char_id)}`}>{row.assigned_character_name || row.assigned_char_id}</Link>
+                                <Link to={`/accounts/${profile.account_id}`}>{row.assigned_character_name || row.assigned_char_id}</Link>
                               ) : (
                                 <span style={{ color: '#71717a' }}>Unassigned</span>
                               )}
-                              )
                               {row.cost != null && row.cost !== '' && <> {MIDDLE_DOT} {row.cost} DKP</>}
                             </li>
                           ))}

@@ -27,7 +27,6 @@ export default function RaidDetail({ isOfficer }) {
   const [addToTicCharQuery, setAddToTicCharQuery] = useState('')
   const [showCharDropdown, setShowCharDropdown] = useState(false)
   const [addToTicResult, setAddToTicResult] = useState(null)
-  const [accountDisplayNames, setAccountDisplayNames] = useState({})
 
   const loadData = useCallback(() => {
     if (!raidId) return
@@ -59,35 +58,6 @@ export default function RaidDetail({ isOfficer }) {
       supabase.from('characters').select('char_id, name').limit(5000).then(({ data }) => setCharacters(data || []))
     }
   }, [isOfficer, raidId])
-
-  // Resolve account display names for loot (and attendance) so we can show "Account name (character)"
-  useEffect(() => {
-    if (!loot.length && !attendance.length) {
-      setAccountDisplayNames({})
-      return
-    }
-    const accountIds = new Set()
-    loot.forEach((row) => {
-      const aid = getAccountId(row.character_name || row.char_id)
-      if (aid) accountIds.add(aid)
-    })
-    attendance.forEach((a) => {
-      const aid = getAccountId(a.character_name || a.char_id)
-      if (aid) accountIds.add(aid)
-    })
-    if (accountIds.size === 0) {
-      setAccountDisplayNames({})
-      return
-    }
-    supabase.from('accounts').select('account_id, display_name, toon_names').in('account_id', [...accountIds]).then(({ data }) => {
-      const map = {}
-      ;(data || []).forEach((row) => {
-        const name = row.display_name?.trim() || row.toon_names?.split(',')[0]?.trim() || row.account_id
-        if (row.account_id) map[row.account_id] = name
-      })
-      setAccountDisplayNames(map)
-    })
-  }, [loot, attendance, getAccountId])
 
   useEffect(() => {
     if (events.length > 0 && (!addToTicEventId || !events.some((e) => e.event_id === addToTicEventId))) {
@@ -334,15 +304,8 @@ export default function RaidDetail({ isOfficer }) {
                           {attendees.map((a, i) => {
                             const name = a.name || a.char_id || ''
                             const accountId = getAccountId(a.name || a.char_id)
-                            if (accountId) {
-                              const label = accountDisplayNames[accountId] || accountId
-                              return (
-                                <span key={a.char_id || a.name || i}>
-                                  <Link to={`/accounts/${accountId}`}>{label}</Link> (<Link to={`/characters/${encodeURIComponent(name)}`}>{name}</Link>)
-                                </span>
-                              )
-                            }
-                            return <Link key={a.char_id || a.name || i} to={`/characters/${encodeURIComponent(name)}`}>{name}</Link>
+                            const to = accountId ? `/accounts/${accountId}` : `/characters/${encodeURIComponent(name)}`
+                            return <Link key={a.char_id || a.name || i} to={to}>{name}</Link>
                           })}
                         </div>
                       </td>
@@ -438,13 +401,8 @@ export default function RaidDetail({ isOfficer }) {
                       const charName = row.character_name || row.char_id || '—'
                       const displayChar = (row.assigned_character_name || '').trim() || charName
                       const accountId = getAccountId(row.character_name || row.char_id)
-                      const accountLabel = accountId ? (accountDisplayNames[accountId] || accountId) : null
-                      if (accountId && accountLabel) {
-                        return (
-                          <><Link to={`/accounts/${accountId}`}>{accountLabel}</Link> (<Link to={`/characters/${encodeURIComponent(displayChar)}`}>{displayChar}</Link>)</>
-                        )
-                      }
-                      return <Link to={`/characters/${encodeURIComponent(displayChar)}`}>{displayChar}</Link>
+                      const to = accountId ? `/accounts/${accountId}` : `/characters/${encodeURIComponent(displayChar)}`
+                      return <Link to={to}>{displayChar}</Link>
                     })()}
                   </td>
                   <td style={{ color: '#a1a1aa', fontSize: '0.875rem' }}>
@@ -490,15 +448,8 @@ export default function RaidDetail({ isOfficer }) {
           {attendance.map((a) => {
             const name = a.character_name || a.char_id || ''
             const accountId = getAccountId(a.character_name || a.char_id)
-            if (accountId) {
-              const label = accountDisplayNames[accountId] || accountId
-              return (
-                <span key={a.char_id || a.character_name}>
-                  <Link to={`/accounts/${accountId}`}>{label}</Link> (<Link to={`/characters/${encodeURIComponent(name)}`}>{name}</Link>)
-                </span>
-              )
-            }
-            return <Link key={a.char_id || a.character_name} to={`/characters/${encodeURIComponent(name)}`}>{name}</Link>
+            const to = accountId ? `/accounts/${accountId}` : `/characters/${encodeURIComponent(name)}`
+            return <Link key={a.char_id || a.character_name} to={to}>{name}</Link>
           })}
         </div>
       </div>
@@ -512,15 +463,8 @@ export default function RaidDetail({ isOfficer }) {
               {notPresentForAllEvents.map((a) => {
                 const name = a.character_name || a.char_id || ''
                 const accountId = getAccountId(a.character_name || a.char_id)
-                if (accountId) {
-                  const label = accountDisplayNames[accountId] || accountId
-                  return (
-                    <span key={a.char_id || a.character_name}>
-                      <Link to={`/accounts/${accountId}`}>{label}</Link> (<Link to={`/characters/${encodeURIComponent(name)}`}>{name}</Link>)
-                    </span>
-                  )
-                }
-                return <Link key={a.char_id || a.character_name} to={`/characters/${encodeURIComponent(name)}`}>{name}</Link>
+                const to = accountId ? `/accounts/${accountId}` : `/characters/${encodeURIComponent(name)}`
+                return <Link key={a.char_id || a.character_name} to={to}>{name}</Link>
               })}
             </div>
           </div>

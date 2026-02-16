@@ -267,12 +267,8 @@ export default function LootSearch() {
                     {(() => {
                       const charName = row.character_name || row.char_id || '—'
                       const accountId = getAccountId(row.character_name || row.char_id)
-                      if (accountId) {
-                        return (
-                          <><Link to={`/accounts/${accountId}`}>Account</Link> (<Link to={`/characters/${encodeURIComponent(charName)}`}>{charName}</Link>)</>
-                        )
-                      }
-                      return <Link to={`/characters/${encodeURIComponent(charName)}`}>{charName}</Link>
+                      const to = accountId ? `/accounts/${accountId}` : `/characters/${encodeURIComponent(charName)}`
+                      return <Link to={to}>{charName}</Link>
                     })()}
                   </td>
                   <td style={{ color: '#a1a1aa', fontSize: '0.875rem' }}>
