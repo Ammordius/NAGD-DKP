@@ -25,6 +25,14 @@ FROM raid_loot
 WHERE assigned_char_id IS NOT NULL AND trim(assigned_char_id) <> ''
 GROUP BY assigned_char_id, assigned_character_name;
 
+-- Table: same shape as the view, populated by CI from character_loot_assignment_counts.csv (so Table Editor shows data).
+-- Run this if the table is missing; then CI or push_character_loot_assignment_counts_supabase.py will fill it.
+CREATE TABLE IF NOT EXISTS character_loot_assignment_counts (
+  char_id TEXT PRIMARY KEY,
+  character_name TEXT,
+  items_assigned BIGINT
+);
+
 -- Index for lookups by assigned character
 CREATE INDEX IF NOT EXISTS idx_raid_loot_assigned_char ON raid_loot(assigned_char_id)
   WHERE assigned_char_id IS NOT NULL;

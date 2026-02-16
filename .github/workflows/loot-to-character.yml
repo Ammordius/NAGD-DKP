@@ -119,6 +119,10 @@ jobs:
         if: ${{ env.SUPABASE_URL != '' && env.SUPABASE_SERVICE_ROLE_KEY != '' && steps.check.outputs.new_loot == 'true' }}
         run: python update_raid_loot_assignments_supabase.py --csv data/raid_loot.csv
 
+      - name: Push character_loot_assignment_counts to Supabase
+        if: ${{ env.SUPABASE_URL != '' && env.SUPABASE_SERVICE_ROLE_KEY != '' && steps.check.outputs.new_loot == 'true' }}
+        run: python push_character_loot_assignment_counts_supabase.py
+
       - name: Record raid_loot count
         if: ${{ env.SUPABASE_URL != '' && env.SUPABASE_SERVICE_ROLE_KEY != '' && steps.check.outputs.new_loot == 'true' }}
         run: |

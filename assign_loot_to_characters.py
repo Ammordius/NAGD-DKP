@@ -3,6 +3,8 @@
 Assign raid_loot to the character that actually has the item (from Magelo inventory).
 
 Rules:
+- Only assign rows that do not already have assigned_char_id/assigned_character_name set
+  (we assign each loot row at most once; existing assignments are preserved).
 - For each loot row on an account: check all characters on that account for that item.
 - If exactly one toon has it -> assign to that toon.
 - If multiple toons have it and we bought multiple -> assign in raid order (oldest first),
@@ -278,10 +280,20 @@ def run(
             else:
                 loot_by_account["_unknown"].append(i)
 
-    # Per-account assignment: process in raid order, maintain items_assigned per char
+    # Per-account assignment: process in raid order, maintain items_assigned per char.
+    # Only assign rows that don't already have an assignment (we can't assign loot more than once).
     assigned_char_id: list[Optional[str]] = [None] * len(loot_rows)
     assigned_character_name: list[Optional[str]] = [None] * len(loot_rows)
     assigned_via_magelo: list[bool] = [False] * len(loot_rows)  # True if we found item on a toon (incl. namesake)
+
+    # Preserve existing assignments from input (e.g. from Supabase); do not re-assign these rows.
+    for idx, row in enumerate(loot_rows):
+        ac = (row.get("assigned_char_id") or "").strip()
+        an = (row.get("assigned_character_name") or "").strip()
+        if ac or an:
+            assigned_char_id[idx] = ac or None
+            assigned_character_name[idx] = an or None
+            assigned_via_magelo[idx] = (row.get("assigned_via_magelo") or "").strip() == "1"
 
     for acc, indices in loot_by_account.items():
         # Sort by raid date then raid_id, event_id, index
@@ -294,6 +306,12 @@ def run(
         count_per_char: dict[str, int] = defaultdict(int)
 
         for idx in indices_sorted:
+            # Skip rows that already have an assignment (only assign once per row)
+            if assigned_char_id[idx] or assigned_character_name[idx]:
+                cid_existing = assigned_char_id[idx] or ""
+                if cid_existing:
+                    count_per_char[cid_existing] += 1  # count for tie-breaker on not-yet-assigned rows
+                continue
             row = loot_rows[idx]
             cid_buyer = (row.get("char_id") or "").strip()
             name_buyer = (row.get("character_name") or "").strip()
