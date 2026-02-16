@@ -2,6 +2,8 @@
 
 This feature links each raid loot row to the **character that actually has the item** (from Magelo), not just the namesake buyer. It uses the instrumented Magelo dump (TAKP character + inventory files) and the DKP schema.
 
+**Note:** Stats per character (e.g. which toon received which item) are produced automatically from Magelo pulls and from assumptions about assignment when multiple toons could have the item. They are not guaranteed to be accurate and should be treated as best-effort guidance rather than a definitive record.
+
 ## Rules
 
 1. **Unique match**: If exactly one character on the account has that item on Magelo → assign to that character.

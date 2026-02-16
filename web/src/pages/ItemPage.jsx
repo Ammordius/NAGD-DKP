@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useCharToAccountMap } from '../lib/useCharToAccountMap'
+import AssignedLootDisclaimer from '../components/AssignedLootDisclaimer'
 
 const TAKP_ITEM_BASE = 'https://www.takproject.net/allaclone/item.php?id='
 
@@ -225,6 +226,7 @@ export default function ItemPage() {
       {historyByDate.length > 0 && <PriceChart data={historyByDate} />}
 
       <h2>Drop history</h2>
+      <AssignedLootDisclaimer compact />
       <div className="card">
         <table>
           <thead>

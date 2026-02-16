@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import AssignedLootDisclaimer from '../components/AssignedLootDisclaimer'
 
 const MAGELO_BASE = 'https://www.takproject.net/magelo/character.php?char='
 const MIDDLE_DOT = '\u00B7'
@@ -352,11 +353,14 @@ export default function AccountDetail({ isOfficer, profile, session }) {
       {tab === 'loot' && (
         <div className="card">
           <h2 style={{ marginTop: 0 }}>Loot assignments</h2>
-          <p style={{ color: '#a1a1aa', fontSize: '0.875rem', marginBottom: '1rem' }}>
+          <p style={{ color: '#a1a1aa', fontSize: '0.875rem', marginBottom: '0.25rem' }}>
             {canEditLoot
               ? 'Assign each item to the character that has it, or leave Unassigned. Changes save immediately.'
               : 'Items won by characters on this account. Assignments are set by the account owner or officers.'}
           </p>
+          <div style={{ marginBottom: '1rem' }}>
+            <AssignedLootDisclaimer />
+          </div>
           {lootAssignError && <p style={{ color: '#f87171', fontSize: '0.875rem', marginBottom: '0.5rem' }}>{lootAssignError}</p>}
           {activityByRaid.length === 0 ? (
             <p style={{ color: '#71717a' }}>No loot recorded.</p>

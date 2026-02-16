@@ -1,4 +1,5 @@
 {
+  "_disclaimer": "Per-character loot assignment is derived automatically from Magelo exports and from assumptions about which character received each item. These assignments are indicative only and may be inaccurate; treat stats per character accordingly.",
   "slot_order": [
     "head",
     "chest",

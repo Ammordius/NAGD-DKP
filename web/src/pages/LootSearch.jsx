@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useCharToAccountMap } from '../lib/useCharToAccountMap'
+import AssignedLootDisclaimer from '../components/AssignedLootDisclaimer'
 
 const LOOT_CACHE_KEY = 'loot_search_cache_v3' // v3: includes assigned_char_id, assigned_character_name
 const CACHE_TTL_MS = 10 * 60 * 1000 // 10 minutes
@@ -235,9 +236,10 @@ export default function LootSearch() {
           </select>
         </label>
       </div>
-      <p style={{ color: '#71717a', fontSize: '0.875rem', marginBottom: '1rem' }}>
+      <p style={{ color: '#71717a', fontSize: '0.875rem', marginBottom: '0.25rem' }}>
         {filteredLoot.length} row{filteredLoot.length !== 1 ? 's' : ''}
       </p>
+      <AssignedLootDisclaimer compact />
       <div className="card">
         <div style={{ overflowX: 'auto' }}>
           <table>

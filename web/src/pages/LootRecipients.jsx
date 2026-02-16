@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useCharToAccountMap } from '../lib/useCharToAccountMap'
+import AssignedLootDisclaimer from '../components/AssignedLootDisclaimer'
 
 const MONTHS_OPTIONS = [1, 3, 6]
 const PAGE_SIZE = 500
@@ -286,6 +287,7 @@ export default function LootRecipients() {
         <p style={{ color: '#a1a1aa', fontSize: '0.875rem', marginTop: 0 }}>
           Showing <strong>{recipients.length}</strong> character{recipients.length !== 1 ? 's' : ''} {classFilter ? `(${classFilter})` : ''}. Sorted by {sortBy === 'accountDkpTotal' ? 'account DKP total' : 'DKP spent on character'} (desc).
         </p>
+        <AssignedLootDisclaimer />
         <div style={{ overflowX: 'auto' }}>
           <table>
             <thead>

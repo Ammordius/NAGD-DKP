@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo, useCallback, Fragment } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useCharToAccountMap } from '../lib/useCharToAccountMap'
+import AssignedLootDisclaimer from '../components/AssignedLootDisclaimer'
 
 export default function RaidDetail({ isOfficer }) {
   const { raidId } = useParams()
@@ -387,6 +388,7 @@ export default function RaidDetail({ isOfficer }) {
       )}
 
       <h2>Loot</h2>
+      <AssignedLootDisclaimer compact />
       <div className="card">
         {isOfficer && <p style={{ color: '#71717a', fontSize: '0.875rem', marginTop: 0 }}><Link to="/officer">Officer page</Link> to add more loot or tics.</p>}
         <table>

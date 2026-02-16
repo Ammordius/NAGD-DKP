@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import AssignedLootDisclaimer from '../components/AssignedLootDisclaimer'
 
 const MAGELO_BASE = 'https://www.takproject.net/magelo/character.php?char='
 
@@ -116,6 +117,7 @@ export default function CharacterPage() {
           <p style={{ color: '#a1a1aa', fontSize: '0.875rem', marginBottom: '0.25rem' }}>
             Items assigned to this toon from DKP (from Magelo). <a href={mageloUrl} target="_blank" rel="noopener noreferrer">View on Magelo</a> to see gear.
           </p>
+          <AssignedLootDisclaimer />
           <p style={{ fontSize: '0.9rem', marginBottom: '0.75rem' }}>
             <strong>Total DKP spent on this toon:</strong>{' '}
             {lootOnCharacter.reduce((sum, r) => sum + (parseInt(String(r.cost || 0), 10) || 0), 0)} DKP
