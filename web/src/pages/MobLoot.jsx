@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { createCache } from '../lib/cache'
 
-const LAST3_CACHE_KEY = 'mob_loot_last3_v1'
+const LAST3_CACHE_KEY = 'mob_loot_last3_v2'
 const CACHE_TTL = 10 * 60 * 1000
 
 /** Infer canonical zone from raid title (e.g. "Potime", "Time Day 1" -> "Plane of Time"). */
@@ -121,7 +121,7 @@ export default function MobLoot() {
       let from = 0
       while (true) {
         const to = from + PAGE - 1
-        const { data: chunk } = await supabase.from('raid_loot').select('raid_id, item_name, cost').range(from, to)
+        const { data: chunk } = await supabase.from('raid_loot').select('id, raid_id, item_name, cost').order('id', { ascending: false }).range(from, to)
         if (cancelled) return
         if (!chunk?.length) break
         allLoot.push(...chunk)
@@ -130,20 +130,33 @@ export default function MobLoot() {
       }
       if (cancelled || allLoot.length === 0) return
       const raidIds = [...new Set(allLoot.map((r) => r.raid_id).filter(Boolean))]
-      const { data: raidRows } = await supabase.from('raids').select('raid_id, date_iso').in('raid_id', raidIds)
-      if (cancelled) return
       const dateByRaid = {}
-      ;(raidRows || []).forEach((row) => { dateByRaid[row.raid_id] = (row.date_iso || '').slice(0, 10) })
+      const CHUNK = 500
+      for (let i = 0; i < raidIds.length; i += CHUNK) {
+        const { data: raidRows } = await supabase.from('raids').select('raid_id, date_iso, date').in('raid_id', raidIds.slice(i, i + CHUNK))
+        if (cancelled) return
+        ;(raidRows || []).forEach((row) => {
+          const iso = (row.date_iso || '').trim().slice(0, 10)
+          const isIso = /^\d{4}-\d{2}-\d{2}/.test(iso)
+          dateByRaid[row.raid_id] = isIso ? iso : (row.date || '').trim() || ''
+        })
+      }
       const byItem = {}
       allLoot.forEach((row) => {
         const name = (row.item_name || '').trim().toLowerCase()
         if (!name) return
         if (!byItem[name]) byItem[name] = []
-        byItem[name].push({ cost: row.cost, date: dateByRaid[row.raid_id] || '' })
+        byItem[name].push({ id: row.id, cost: row.cost, date: dateByRaid[row.raid_id] || '' })
       })
       const last3Map = {}
       Object.entries(byItem).forEach(([key, arr]) => {
-        arr.sort((a, b) => (b.date || '').localeCompare(a.date || ''))
+        arr.sort((a, b) => {
+          const da = /^\d{4}-\d{2}-\d{2}/.test(String(a.date || '').trim()) ? String(a.date).slice(0, 10) : '9999-99-99'
+          const db = /^\d{4}-\d{2}-\d{2}/.test(String(b.date || '').trim()) ? String(b.date).slice(0, 10) : '9999-99-99'
+          const cmp = db.localeCompare(da)
+          if (cmp !== 0) return cmp
+          return (b.id ?? 0) - (a.id ?? 0)
+        })
         const recent = arr.slice(0, 3)
         const costs = recent.map((r) => Number(r.cost))
         const avg = costs.length ? (costs.reduce((s, c) => s + c, 0) / costs.length).toFixed(1) : null
