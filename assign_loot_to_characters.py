@@ -9,10 +9,11 @@ Rules:
 - Cap per toon per item: use the **number of that item on that toon in Magelo** (so if they have 2x on Magelo we can assign up to 2; if 1x then 1). No lore tag.
 - Among toons that have the item and are under their Magelo cap: assign to the toon with the **most DKP spent**
   (aggregate cost of loot already assigned to that toon this run). Tie-break: most items assigned, then stable.
-- If no toon has it -> leave on namesake (buyer).
-- Elemental loot: use magelo/elemental_armor.json; the DKP log has the pre-turn-in item
-  (e.g. Unadorned Plate Vambraces) but Magelo shows the converted piece. Treat any
-  elemental armor piece on a toon as a match for that account's elemental-source purchases.
+- If no toon has it -> leave unassigned (do not default to buyer/namesake).
+- Elemental loot: use magelo/elemental_armor.json (item_ids that are elemental armor).
+  A loot row is treated as elemental when its item name matches a name seen in Magelo
+  inventory for an item_id in that JSON. Then we match any toon on the account that has
+  any elemental armor (by item_id).
 
 Inputs:
 - DKP data: data/raid_loot.csv, data/raids.csv, data/character_account.csv, data/characters.csv, data/accounts.csv
@@ -40,52 +41,6 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 DATA_DIR = SCRIPT_DIR / "data"
 # Magelo repo may be sibling of dkp
 MAGELO_DIR = SCRIPT_DIR.parent / "magelo"
-
-# DKP item names that are "elemental source" (bought then turned in to elemental piece).
-# When we see these in raid_loot we match any toon on the account that has any item_id in elemental_armor.json.
-# Include Plate, Leather, Chain, Breastplate, and Cloak; DKP may log "Helmet" or "Helm".
-ELEMENTAL_SOURCE_ITEM_NAMES = frozenset({
-    # Plate
-    "Unadorned Plate Bracer",
-    "Unadorned Plate Vambraces",
-    "Unadorned Plate Greaves",
-    "Unadorned Plate Gauntlets",
-    "Unadorned Plate Boots",
-    "Unadorned Plate Helm",
-    "Unadorned Plate Helmet",
-    "Unadorned Plate Gorget",
-    "Unadorned Plate Arms",
-    "Unadorned Plate Chest",
-    "Unadorned Plate Legs",
-    "Unadorned Plate Girdle",
-    # Leather
-    "Unadorned Leather Boots",
-    "Unadorned Leather Tunic",
-    "Unadorned Leather Leggings",
-    "Unadorned Leather Sleeves",
-    "Unadorned Leather Bracer",
-    "Unadorned Leather Gauntlets",
-    "Unadorned Leather Gorget",
-    "Unadorned Leather Helm",
-    "Unadorned Leather Helmet",
-    "Unadorned Leather Arms",
-    "Unadorned Leather Girdle",
-    # Chain
-    "Unadorned Chain Boots",
-    "Unadorned Chain Gauntlets",
-    "Unadorned Chain Leggings",
-    "Unadorned Chain Sleeves",
-    "Unadorned Chain Tunic",
-    "Unadorned Chain Bracer",
-    "Unadorned Chain Gorget",
-    "Unadorned Chain Helm",
-    "Unadorned Chain Helmet",
-    "Unadorned Chain Arms",
-    "Unadorned Chain Girdle",
-    # Other
-    "Unadorned Breastplate",
-    "Unadorned Cloak of Battle",
-})
 
 def normalize_item_name(s: str) -> str:
     """Lowercase, strip, collapse spaces for matching."""
@@ -196,11 +151,35 @@ def load_magelo_inventory(inv_file: Path) -> dict[str, list[dict]]:
 
 
 def load_elemental_armor(json_path: Path) -> set[str]:
-    """Set of item_id (str) that are elemental armor."""
+    """Set of item_id (str) that are elemental armor (from magelo/elemental_armor.json)."""
     if not json_path.exists():
         return set()
     data = json.loads(json_path.read_text(encoding="utf-8"))
     return set(str(k) for k in data) if isinstance(data, dict) else set()
+
+
+def build_elemental_item_names(
+    magelo_inv: dict[str, list[dict]],
+    elemental_item_ids: set[str],
+    extra_names: Optional[list[str]] = None,
+) -> frozenset[str]:
+    """
+    Set of normalized item names that count as elemental loot.
+    Derived from Magelo inventory: any item whose item_id is in elemental_armor.json.
+    Optional extra_names (e.g. from CLI) are added for names that may not appear in the dump.
+    """
+    names: set[str] = set()
+    for _cid, items in magelo_inv.items():
+        for it in items:
+            if (it.get("item_id") or "").strip() in elemental_item_ids:
+                name = (it.get("item_name") or "").strip()
+                if name:
+                    names.add(normalize_item_name(name))
+    if extra_names:
+        for n in extra_names:
+            if n and n.strip():
+                names.add(normalize_item_name(n.strip()))
+    return frozenset(names)
 
 
 def resolve_buyer_account(
@@ -305,11 +284,10 @@ def run(
     magelo_inv = load_magelo_inventory(magelo_inv_file)
     elemental_ids = load_elemental_armor(elemental_json)
 
-    # Expand elemental source set with any extra names from CLI
-    elemental_source = set(ELEMENTAL_SOURCE_ITEM_NAMES)
-    if elemental_extra_names:
-        elemental_source.update(elem.strip() for elem in elemental_extra_names if elem.strip())
-    elemental_source_norm = frozenset(normalize_item_name(n) for n in elemental_source)
+    # Elemental loot: names derived from Magelo inventory (item_id in elemental_armor.json)
+    elemental_source_norm = build_elemental_item_names(
+        magelo_inv, elemental_ids, elemental_extra_names
+    )
 
     # DKP roster and Magelo export often use different char_id schemes. Map DKP char_id -> Magelo id by name.
     dkp_to_magelo_id: dict[str, str] = {}
@@ -401,8 +379,7 @@ def run(
             )
 
             if not account_toons:
-                assigned_char_id[idx] = cid_buyer or None
-                assigned_character_name[idx] = name_buyer or None
+                # Single-toon "account": leave unassigned so user can assign in UI
                 continue
 
             candidates = which_toons_have_item(
@@ -415,8 +392,8 @@ def run(
             )
 
             if len(candidates) == 0:
-                assigned_char_id[idx] = cid_buyer or None
-                assigned_character_name[idx] = name_buyer or None
+                # No toon has item on Magelo: leave unassigned
+                continue
             elif len(candidates) == 1:
                 cid = candidates[0]
                 cap = magelo_count_per_toon.get(cid, 0)
@@ -428,9 +405,8 @@ def run(
                     dkp_spent_per_char[cid] += cost_val
                     item_count_per_char[(cid, norm_item)] += 1
                 else:
-                    # Only one toon has the item and they're at cap (or 0 on Magelo); leave on namesake
-                    assigned_char_id[idx] = cid_buyer or None
-                    assigned_character_name[idx] = name_buyer or None
+                    # Only one toon has the item and they're at cap (or 0 on Magelo); leave unassigned
+                    continue
             else:
                 # Multiple toons have the item: filter by Magelo cap, then choose by most DKP spent
                 under_cap = [
@@ -438,8 +414,8 @@ def run(
                     if magelo_count_per_toon.get(c, 0) > 0 and item_count_per_char[(c, norm_item)] < magelo_count_per_toon.get(c, 0)
                 ]
                 if not under_cap:
-                    assigned_char_id[idx] = cid_buyer or None
-                    assigned_character_name[idx] = name_buyer or None
+                    # Multiple toons have item but all at cap; leave unassigned
+                    continue
                 else:
                     assigned_via_magelo[idx] = True
                     best = max(under_cap, key=lambda c: (dkp_spent_per_char[c], count_per_char[c], c))
@@ -526,7 +502,7 @@ def main() -> int:
     ap.add_argument("--out-counts", type=Path, default=DATA_DIR / "character_loot_assignment_counts.csv",
                     help="Output assignment counts CSV path")
     ap.add_argument("--elemental-source-name", action="append", dest="elemental_extra",
-                    help="Extra DKP item name that is elemental source (can repeat)")
+                    help="Extra item name to treat as elemental (if not seen in Magelo dump; can repeat)")
     ap.add_argument("--clear-assignments", action="store_true",
                     help="Ignore existing assignments and recompute all (for full redo)")
     args = ap.parse_args()

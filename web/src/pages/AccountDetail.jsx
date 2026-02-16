@@ -62,6 +62,9 @@ export default function AccountDetail({ isOfficer, profile, session }) {
   const [myAccountId, setMyAccountId] = useState(profile?.account_id ?? null)
   const isMyAccount = myAccountId === accountId
   const canAddChar = isOfficer || isMyAccount
+  const canEditLoot = isOfficer || isMyAccount
+  const [savingLootId, setSavingLootId] = useState(null)
+  const [lootAssignError, setLootAssignError] = useState('')
 
   useEffect(() => {
     if (!accountId || !profile) return
@@ -100,7 +103,7 @@ export default function AccountDetail({ isOfficer, profile, session }) {
         Promise.all([
           supabase.from('characters').select('char_id, name, class_name, level').in('char_id', charIds),
           fetchAll('raid_attendance', 'raid_id, char_id, character_name', (q) => q.in('char_id', charIds)),
-          fetchAll('raid_loot', 'raid_id, char_id, character_name, item_name, cost, assigned_char_id, assigned_character_name', (q) => q.in('char_id', charIds)),
+          fetchAll('raid_loot', 'id, raid_id, char_id, character_name, item_name, cost, assigned_char_id, assigned_character_name', (q) => q.in('char_id', charIds)),
           supabase.from('characters').select('char_id, name').in('char_id', charIds).then((cr) => {
             const ch = cr.data || []
             const characterKeys = [...new Set([...charIds, ...ch.map((c) => c.name).filter(Boolean)])]
@@ -118,7 +121,7 @@ export default function AccountDetail({ isOfficer, profile, session }) {
           })
           const spentByKey = {}
           ;(lootRes.data || []).forEach((row) => {
-            const k = (row.assigned_character_name || row.character_name || '').trim()
+            const k = (row.assigned_character_name || row.assigned_char_id || '').trim()
             if (k) spentByKey[k] = (spentByKey[k] || 0) + parseFloat(row.cost || 0)
           })
           setDkpByCharacterKey({ earned: earnedByKey, spent: spentByKey })
@@ -288,6 +291,13 @@ export default function AccountDetail({ isOfficer, profile, session }) {
         >
           Characters
         </button>
+        <button
+          type="button"
+          className={tab === 'loot' ? 'btn' : 'btn btn-ghost'}
+          onClick={() => setTab('loot')}
+        >
+          Loot
+        </button>
       </div>
 
       {tab === 'characters' && (
@@ -335,6 +345,95 @@ export default function AccountDetail({ isOfficer, profile, session }) {
                 )
               })}
             </ul>
+          )}
+        </div>
+      )}
+
+      {tab === 'loot' && (
+        <div className="card">
+          <h2 style={{ marginTop: 0 }}>Loot assignments</h2>
+          <p style={{ color: '#a1a1aa', fontSize: '0.875rem', marginBottom: '1rem' }}>
+            {canEditLoot
+              ? 'Assign each item to the character that has it, or leave Unassigned. Changes save immediately.'
+              : 'Items won by characters on this account. Assignments are set by the account owner or officers.'}
+          </p>
+          {lootAssignError && <p style={{ color: '#f87171', fontSize: '0.875rem', marginBottom: '0.5rem' }}>{lootAssignError}</p>}
+          {activityByRaid.length === 0 ? (
+            <p style={{ color: '#71717a' }}>No loot recorded.</p>
+          ) : (
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ borderBottom: '1px solid #27272a', textAlign: 'left' }}>
+                  <th style={{ padding: '0.5rem 0.75rem' }}>Raid</th>
+                  <th style={{ padding: '0.5rem 0.75rem' }}>Item</th>
+                  <th style={{ padding: '0.5rem 0.75rem' }}>Buyer</th>
+                  <th style={{ padding: '0.5rem 0.75rem' }}>Assigned to</th>
+                  <th style={{ padding: '0.5rem 0.75rem' }}>Cost</th>
+                </tr>
+              </thead>
+              <tbody>
+                {activityByRaid.flatMap((act) => (act.items || []).map((row) => ({ ...row, _raid_name: act.raid_name, _raid_id: act.raid_id, _date: act.date }))).map((row) => {
+                  const hasAssignment = (row.assigned_character_name || row.assigned_char_id || '').trim()
+                  const currentCharId = (row.assigned_char_id || '').trim() || null
+                  const currentCharName = (row.assigned_character_name || '').trim() || null
+                  const isSaving = savingLootId === row.id
+                  return (
+                    <tr key={row.id} style={{ borderBottom: '1px solid #27272a' }}>
+                      <td style={{ padding: '0.5rem 0.75rem', fontSize: '0.9rem' }}>
+                        <Link to={`/raids/${row._raid_id}`}>{row._raid_name || row._raid_id}</Link>
+                        {row._date && <span style={{ color: '#71717a', marginLeft: '0.25rem' }}>{row._date}</span>}
+                      </td>
+                      <td style={{ padding: '0.5rem 0.75rem' }}>
+                        <Link to={`/items/${encodeURIComponent(row.item_name || '')}`}>{row.item_name || '—'}</Link>
+                      </td>
+                      <td style={{ padding: '0.5rem 0.75rem', color: '#a1a1aa' }}>{row.character_name || row.char_id || '—'}</td>
+                      <td style={{ padding: '0.5rem 0.75rem' }}>
+                        {canEditLoot ? (
+                          <select
+                            value={(currentCharId || currentCharName || '').trim() || ''}
+                            disabled={isSaving}
+                            onChange={(e) => {
+                              const val = e.target.value
+                              setLootAssignError('')
+                              setSavingLootId(row.id)
+                              if (val === '') {
+                                supabase.rpc('update_single_raid_loot_assignment', { p_loot_id: row.id, p_assigned_char_id: null, p_assigned_character_name: null })
+                                  .then(({ error }) => {
+                                    setSavingLootId(null)
+                                    if (error) setLootAssignError(error.message)
+                                    else setRefreshKey((k) => k + 1)
+                                  })
+                              } else {
+                                const c = characters.find((ch) => (ch.char_id || ch.name) === val)
+                                const cid = c?.char_id || val
+                                const cname = c?.name || c?.displayName || val
+                                supabase.rpc('update_single_raid_loot_assignment', { p_loot_id: row.id, p_assigned_char_id: cid, p_assigned_character_name: cname })
+                                  .then(({ error }) => {
+                                    setSavingLootId(null)
+                                    if (error) setLootAssignError(error.message)
+                                    else setRefreshKey((k) => k + 1)
+                                  })
+                              }
+                            }}
+                            style={{ minWidth: '10rem', padding: '0.25rem 0.5rem', background: '#18181b', color: '#e4e4e7', border: '1px solid #27272a', borderRadius: '4px' }}
+                          >
+                            <option value="">Unassigned</option>
+                            {characters.map((c) => {
+                              const id = c.char_id || c.name
+                              const label = c.name || c.char_id
+                              return <option key={id} value={id}>{label}</option>
+                            })}
+                          </select>
+                        ) : (
+                          <span style={hasAssignment ? {} : { color: '#71717a' }}>{hasAssignment ? (row.assigned_character_name || row.assigned_char_id) : 'Unassigned'}</span>
+                        )}
+                      </td>
+                      <td style={{ padding: '0.5rem 0.75rem', color: '#a1a1aa' }}>{row.cost != null && row.cost !== '' ? row.cost : '—'}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
           )}
         </div>
       )}
@@ -464,12 +563,17 @@ export default function AccountDetail({ isOfficer, profile, session }) {
                           {act.items.length > 0 && (
                             <ul style={{ margin: '0.25rem 0 0 1.25rem', paddingLeft: 0, listStyle: 'none' }}>
                               {act.items.map((row, i) => {
-                                const charName = row.assigned_character_name || row.character_name || row.char_id || '—'
+                                const hasAssignment = (row.assigned_character_name || row.assigned_char_id || '').trim()
+                                const charName = hasAssignment ? (row.assigned_character_name || row.assigned_char_id) : 'Unassigned'
                                 return (
                                   <li key={i} style={{ marginBottom: '0.25rem', fontSize: '0.9rem' }}>
                                     <Link to={`/items/${encodeURIComponent(row.item_name || '')}`}>{row.item_name || '—'}</Link>
                                     {' '}{MIDDLE_DOT}{' '}
-                                    <Link to={`/characters/${encodeURIComponent(charName)}`}>{charName}</Link>
+                                    {hasAssignment ? (
+                                      <Link to={`/characters/${encodeURIComponent(charName)}`}>{charName}</Link>
+                                    ) : (
+                                      <span style={{ color: '#71717a' }}>{charName}</span>
+                                    )}
                                     {row.cost != null && row.cost !== '' && <> {MIDDLE_DOT} {row.cost} DKP</>}
                                   </li>
                                 )

@@ -415,9 +415,11 @@ export default function RaidDetail({ isOfficer }) {
                     })()}
                   </td>
                   <td style={{ color: '#a1a1aa', fontSize: '0.875rem' }}>
-                    {row.assigned_character_name ? (
-                      <Link to={`/characters/${encodeURIComponent(row.assigned_character_name)}`}>{row.assigned_character_name}</Link>
-                    ) : '—'}
+                    {(row.assigned_character_name || row.assigned_char_id) ? (
+                      <Link to={`/characters/${encodeURIComponent(row.assigned_character_name || row.assigned_char_id)}`}>{row.assigned_character_name || row.assigned_char_id}</Link>
+                    ) : (
+                      <span style={{ color: '#71717a' }}>Unassigned</span>
+                    )}
                   </td>
                   <td>
                     {isEditingCost ? (

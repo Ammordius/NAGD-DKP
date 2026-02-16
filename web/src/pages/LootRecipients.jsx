@@ -185,23 +185,37 @@ export default function LootRecipients() {
 
   const recipients = useMemo(() => {
     const byKey = {}
+    const UNASSIGNED_KEY = '\u200bUnassigned' // zero-width then "Unassigned" so it sorts
     loot.forEach((row) => {
-      const charName = (row.assigned_character_name || row.character_name || '').trim()
-      const charId = (row.assigned_char_id || row.char_id || '').trim()
-      const key = charName || charId
-      if (!key) return
+      const hasAssignment = (row.assigned_character_name || row.assigned_char_id || '').trim()
+      const charName = (row.assigned_character_name || '').trim()
+      const charId = (row.assigned_char_id || '').trim()
+      const key = hasAssignment ? (charName || charId) : UNASSIGNED_KEY
       if (!byKey[key]) {
-        const accountId = getAccountId(charName || charId)
-        const charRow = characters.find((c) => (c.name || '').trim() === key || (c.char_id || '').trim() === key || (c.name || '').trim() === charId || (c.char_id || '').trim() === charId)
-        byKey[key] = {
-          character_key: key,
-          character_name: charName || charId,
-          char_id: charRow?.char_id?.trim() || '',
-          class_name: charRow?.class_name || '',
-          account_id: accountId,
-          account_display_name: accountId ? (accounts[accountId] || accountId) : null,
-          lootItems: [],
-          dkpSpentOnToon: 0,
+        if (key === UNASSIGNED_KEY) {
+          byKey[key] = {
+            character_key: 'Unassigned',
+            character_name: 'Unassigned',
+            char_id: '',
+            class_name: '',
+            account_id: null,
+            account_display_name: null,
+            lootItems: [],
+            dkpSpentOnToon: 0,
+          }
+        } else {
+          const accountId = getAccountId(charName || charId)
+          const charRow = characters.find((c) => (c.name || '').trim() === key || (c.char_id || '').trim() === key || (c.name || '').trim() === charId || (c.char_id || '').trim() === charId)
+          byKey[key] = {
+            character_key: key,
+            character_name: charName || charId,
+            char_id: charRow?.char_id?.trim() || '',
+            class_name: charRow?.class_name || '',
+            account_id: accountId,
+            account_display_name: accountId ? (accounts[accountId] || accountId) : null,
+            lootItems: [],
+            dkpSpentOnToon: 0,
+          }
         }
       }
       const cost = parseFloat(row.cost || 0) || 0
@@ -286,12 +300,15 @@ export default function LootRecipients() {
             </thead>
             <tbody>
               {recipients.map((r) => {
+                const isUnassigned = r.character_key === 'Unassigned'
                 const accountTo = r.account_id ? `/accounts/${r.account_id}` : null
                 const characterTo = `/characters/${encodeURIComponent(r.character_name)}`
                 return (
                   <tr key={r.character_key}>
                     <td>
-                      {accountTo ? (
+                      {isUnassigned ? (
+                        <span style={{ color: '#71717a' }}>{r.character_name}</span>
+                      ) : accountTo ? (
                         <><Link to={accountTo}>{r.account_display_name || r.account_id}</Link> (<Link to={characterTo}>{r.character_name}</Link>)</>
                       ) : (
                         <Link to={characterTo}>{r.character_name}</Link>

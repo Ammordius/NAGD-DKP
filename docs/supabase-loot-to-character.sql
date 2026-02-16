@@ -5,10 +5,10 @@
 -- and data/character_loot_assignment_counts.csv (char_id, character_name, items_assigned).
 -- Import raid_loot with the new columns; the view below can be fed from that or computed in DB.
 
--- Add assigned character to raid_loot (nullable: NULL = use namesake buyer)
+-- Add assigned character to raid_loot (nullable: NULL/empty = unassigned; do not default to buyer)
 ALTER TABLE raid_loot ADD COLUMN IF NOT EXISTS assigned_char_id TEXT;
 ALTER TABLE raid_loot ADD COLUMN IF NOT EXISTS assigned_character_name TEXT;
--- 1 = we found the item on a toon (Magelo); 0 = fallback to namesake (optional, for analytics)
+-- 1 = we found the item on a toon (Magelo); 0 = manual edit in UI (optional, for analytics)
 ALTER TABLE raid_loot ADD COLUMN IF NOT EXISTS assigned_via_magelo SMALLINT DEFAULT NULL;
 
 -- Optional: FK to characters for assigned_char_id (allow NULL)
@@ -69,6 +69,55 @@ END;
 $$;
 
 COMMENT ON FUNCTION update_raid_loot_assignments(jsonb) IS 'Bulk update raid_loot assignment columns by id; resolves conflicts by updating, never ignores.';
+
+-- Single-row assignment update: officers or the account that owns the loot row (buyer char_id on that account).
+-- p_assigned_char_id / p_assigned_character_name may be NULL or '' to set Unassigned.
+CREATE OR REPLACE FUNCTION update_single_raid_loot_assignment(
+  p_loot_id bigint,
+  p_assigned_char_id text DEFAULT NULL,
+  p_assigned_character_name text DEFAULT NULL
+)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_char_id text;
+  v_my_account_id text;
+  v_allowed boolean := false;
+BEGIN
+  SELECT rl.char_id INTO v_char_id FROM raid_loot rl WHERE rl.id = p_loot_id;
+  IF v_char_id IS NULL THEN
+    RAISE EXCEPTION 'Loot row not found';
+  END IF;
+
+  IF public.is_officer() THEN
+    v_allowed := true;
+  ELSE
+    SELECT account_id INTO v_my_account_id FROM public.profiles WHERE id = auth.uid();
+    IF v_my_account_id IS NOT NULL THEN
+      SELECT EXISTS (
+        SELECT 1 FROM character_account ca
+        WHERE ca.char_id = v_char_id AND ca.account_id = v_my_account_id
+      ) INTO v_allowed;
+    END IF;
+  END IF;
+
+  IF NOT v_allowed THEN
+    RAISE EXCEPTION 'Not allowed to update this loot assignment';
+  END IF;
+
+  UPDATE raid_loot
+  SET
+    assigned_char_id = nullif(trim(p_assigned_char_id), ''),
+    assigned_character_name = nullif(trim(p_assigned_character_name), ''),
+    assigned_via_magelo = 0
+  WHERE id = p_loot_id;
+END;
+$$;
+
+COMMENT ON FUNCTION update_single_raid_loot_assignment(bigint, text, text) IS 'Update one raid_loot assignment. Allowed: officer, or user whose claimed account owns the loot row (char_id). Use NULL/empty to set Unassigned.';
 
 -- RLS: same as raid_loot (authenticated/anon read)
 -- No new policies needed if raid_loot already has read for all.

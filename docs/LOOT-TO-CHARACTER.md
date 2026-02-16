@@ -6,8 +6,8 @@ This feature links each raid loot row to the **character that actually has the i
 
 1. **Unique match**: If exactly one character on the account has that item on Magelo → assign to that character.
 2. **Multiple matches**: If several toons have the item and the account bought multiple (e.g. same item in different raids), we assign in **raid order (oldest first)**. For each assignment we give the piece to the toon who currently has the **most items already assigned** (so the “most geared” toon gets credit first).
-3. **No match**: If we can’t determine which toon has it → leave it on the **namesake** (buyer).
-4. **Elemental loot**: DKP logs the pre–quest item (e.g. *Unadorned Plate Vambraces*). After the quest turn-in, Magelo shows the converted piece (e.g. *Elemental …*). We use `magelo/elemental_armor.json` so that any **elemental armor** piece on a toon counts as a match for that account’s elemental-source purchases.
+3. **No match**: If we can’t determine which toon has it → leave **unassigned** (do not default to buyer/namesake). The UI shows “Unassigned” and the account owner or an officer can set the assignment on the account page **Loot** tab.
+4. **Elemental loot**: Source of truth is `magelo/elemental_armor.json` (item_ids that are elemental armor). A loot row is treated as elemental when its item name matches a name seen in Magelo inventory for an item whose id is in that JSON. Then we match any toon on the account that has any elemental armor (by item_id). No separate “Unadorned” list—elemental is defined only by `elemental_armor.json` and the names that appear in the dump for those ids.
 
 ## Inputs
 
@@ -17,16 +17,17 @@ This feature links each raid loot row to the **character that actually has the i
 
 ## Outputs
 
-- **data/raid_loot.csv**: Same rows plus `assigned_char_id`, `assigned_character_name` (empty = use namesake), and `assigned_via_magelo`. If the input CSV had an `id` column (e.g. from a Supabase export), it is preserved so you can update Supabase by id without duplicates.
+- **data/raid_loot.csv**: Same rows plus `assigned_char_id`, `assigned_character_name` (empty = unassigned), and `assigned_via_magelo`. If the input CSV had an `id` column (e.g. from a Supabase export), it is preserved so you can update Supabase by id without duplicates.
 - **data/character_loot_assignment_counts.csv**: `char_id`, `character_name`, `items_assigned` (for reporting / tie-breaker).
 
 ## Schema (Supabase)
 
 Run `docs/supabase-loot-to-character.sql` after the main schema:
 
-- `raid_loot.assigned_char_id`, `raid_loot.assigned_character_name` (nullable).
+- `raid_loot.assigned_char_id`, `raid_loot.assigned_character_name` (nullable; empty = unassigned).
 - `raid_loot.assigned_via_magelo` (optional, 0/1 for analytics).
 - View: `character_loot_assignment_count` (char_id, character_name, items_assigned).
+- RPC **`update_single_raid_loot_assignment(p_loot_id, p_assigned_char_id, p_assigned_character_name)`**: allowed for officers or the user whose claimed account owns the loot row (by `char_id`). Used by the Account page **Loot** tab to change or clear assignments.
 
 ## Deploy (site + DB)
 
@@ -34,14 +35,16 @@ To ship loot-to-character on the live site:
 
 1. **Database**: In Supabase SQL Editor, run **`docs/supabase-loot-to-character.sql`** (adds columns and view).
 2. **Data (no duplicates)**: Do **not** re-import the full `raid_loot` CSV—that would insert duplicate rows. Instead: **Export** `raid_loot` from Supabase (Table Editor → raid_loot → Export as CSV, or SQL: `SELECT * FROM raid_loot`) so the CSV includes the **`id`** column. Save that CSV as **`data/raid_loot.csv`** (or pass it to the script). Run **`python assign_loot_to_characters.py`** (it preserves `id` in its output). Then set `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` and run **`python update_raid_loot_assignments_supabase.py`** to **update** existing `raid_loot` rows by `id` (no new rows inserted).
-3. **Frontend**: Deploy the web app (the app already selects and shows `assigned_character_name` on Loot search, Item page, Raid detail, Account activity, and Character page “Loot on this character”). No env vars needed.
+3. **Frontend**: Deploy the web app. The app shows `assigned_character_name` (or “Unassigned”) on Loot search, Item page, Raid detail, Account activity, Profile, and Character page. On the **Account** page, the **Loot** tab lets claimed-account owners and officers edit assignments per row. No env vars needed.
 4. **CI**: The workflow (`.github/workflows/loot-to-character.yml`) keeps `data/raid_loot.csv` updated in the repo. To sync assignments into Supabase without duplicates, periodically: export `raid_loot` (with `id`) → run the assign script → run `update_raid_loot_assignments_supabase.py`, or add that flow to CI with Supabase credentials in secrets.
 
 ## Troubleshooting
 
-**650 characters / rows seems low?** The number is **distinct characters** that have at least one loot row assigned to them. There are ~14.8k raid_loot rows; many are assigned to the same toons (or left on namesake). So 650 unique toons with ≥1 assigned item is expected.
+**650 characters / rows seems low?** The number is **distinct characters** that have at least one loot row assigned to them. There are ~14.8k raid_loot rows; many are assigned to the same toons, and some rows are left unassigned when Magelo can’t determine which toon has the item. So 650 unique toons with ≥1 assigned item is expected.
 
-**A toon (e.g. badammo) shows no loot on their character page.** The character page lists rows where `raid_loot.assigned_char_id` or `assigned_character_name` matches that toon. If an item was assigned to the **buyer** (namesake) instead—e.g. we didn’t find it on Magelo for that toon, or the row was assigned before we fixed matching—that row won’t appear on the other toon’s page. In Supabase: open **raid_loot**, filter by `item_name` (e.g. “Platinum Cloak of War”) and check `assigned_character_name`. If it’s the buyer, the script didn’t assign it to the other toon (name/account/Magelo mismatch, or the row was preserved from an earlier run). To force reassignment for that row: set `assigned_char_id` and `assigned_character_name` to empty for that row in **raid_loot**, then re-run the workflow; the script will assign it again (and will only assign rows that don’t already have an assignment).
+**Elemental DKP purchases don’t assign to the toon with the elemental piece.** Elemental is defined by `magelo/elemental_armor.json` (item_ids). The script builds the set of “elemental item names” from the Magelo inventory: any item in the dump whose `item_id` is in that JSON. If the DKP log uses a name that never appears in the dump (e.g. a spelling variant), add it with `--elemental-source-name "Item Name"`. Matching: any toon on the account with any elemental armor (by item_id) can receive the assignment.
+
+**A toon (e.g. badammo) shows no loot on their character page.** The character page lists rows where `raid_loot.assigned_char_id` or `assigned_character_name` matches that toon. If an item is **unassigned** (no Magelo match) or was assigned to another toon, it won’t appear on this character’s page. The account owner or an officer can set the assignment on the account page **Loot** tab. To let the script re-assign: clear `assigned_char_id` and `assigned_character_name` for that row in **raid_loot**, then re-run the workflow.
 
 **CI log: “Preserved N existing; assigned M new.”** So you can see how many rows were left as-is vs newly assigned.
 
@@ -75,10 +78,10 @@ python assign_loot_to_characters.py \
   --out-counts data/character_loot_assignment_counts.csv
 ```
 
-To add more DKP item names that are “elemental source” (bought then turned in):
+To treat an item name as elemental when it doesn’t appear in the Magelo dump (e.g. spelling variant):
 
 ```bash
-python assign_loot_to_characters.py --elemental-source-name "Plate Bracer"
+python assign_loot_to_characters.py --elemental-source-name "Elemental Plate Vambraces"
 ```
 
 ## Continuous integration (CI) in the DKP repo
