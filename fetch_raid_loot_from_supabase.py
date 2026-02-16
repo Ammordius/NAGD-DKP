@@ -131,6 +131,12 @@ def main() -> int:
             for k, v in row.items():
                 if v is None:
                     out[k] = ""
+                elif k == "id" and isinstance(v, (int, float)):
+                    # Write id as integer string so update script never sees "123.0"
+                    try:
+                        out[k] = str(int(v))
+                    except (ValueError, OverflowError):
+                        out[k] = str(v)
                 elif isinstance(v, (int, float)):
                     out[k] = str(v)
                 else:

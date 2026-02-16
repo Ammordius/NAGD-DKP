@@ -54,12 +54,19 @@ def main() -> int:
             return 1
         for row in r:
             id_val = (row.get("id") or "").strip()
-            if not id_val or not id_val.isdigit():
+            if not id_val:
+                continue
+            # Accept integer id as "123" or "123.0" (Supabase/JSON may return numbers as float)
+            try:
+                row_id = int(float(id_val))
+            except (ValueError, OverflowError):
+                continue
+            if row_id <= 0:
                 continue
             raw = (row.get("assigned_via_magelo") or "").strip()
             via_magelo = 1 if raw == "1" else 0
             rows.append({
-                "id": int(id_val),
+                "id": row_id,
                 "assigned_char_id": (row.get("assigned_char_id") or "").strip() or None,
                 "assigned_character_name": (row.get("assigned_character_name") or "").strip() or None,
                 "assigned_via_magelo": via_magelo,

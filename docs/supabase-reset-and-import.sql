@@ -53,11 +53,14 @@ ON CONFLICT (character_name) DO UPDATE SET
 --   3. character_account<- data/character_account.csv
 --   4. raids            <- data/raids.csv
 --   5. raid_events      <- data/raid_events.csv
---   6. raid_loot        <- data/raid_loot.csv
+--   6. raid_loot        <- data/raid_loot.csv  (no id column needed; Supabase will assign ids on insert. Must include assigned_char_id, assigned_character_name, assigned_via_magelo if you use loot-to-character.)
 --   7. raid_attendance  <- data/raid_attendance.csv
 --   8. raid_event_attendance <- data/raid_event_attendance.csv
 --   9. raid_classifications  <- data/raid_classifications_import.csv (or data/raid_classifications.csv)
 --   10. dkp_adjustments  <- already filled by INSERT above; or use data/dkp_adjustments.csv
+--
+-- Loot-to-character: To sync character_loot_assignment_counts, either import data/character_loot_assignment_counts.csv
+-- into that table (truncate it first if it exists), or run: python push_character_loot_assignment_counts_supabase.py
 --
 -- Then refresh the DKP cache (fast leaderboard): run in SQL Editor:
 --   SELECT refresh_dkp_summary();
