@@ -42,15 +42,17 @@ def parse_date_to_iso(date_str: str) -> str:
     """Parse 'Wed Sep 30, 2020 12:50 am' -> '2020-09-30' or empty."""
     if not date_str or not date_str.strip():
         return ""
+    s = date_str.strip()
     try:
-        # Try common format
-        for fmt in (
-            "%a %b %d, %Y %I:%M %p",
-            "%a %b %d, %Y",
-            "%Y-%m-%d",
+        # With time: need full "Wed Sep 30, 2020 12:50 am" ([:24] was cutting off the 'm' in am/pm)
+        for fmt, max_len in (
+            ("%a %b %d, %Y %I:%M %p", 30),
+            ("%a %b %d, %Y", 17),
+            ("%Y-%m-%d", 10),
         ):
             try:
-                dt = datetime.strptime(date_str.strip()[:24], fmt)
+                part = s[:max_len] if len(s) > max_len else s
+                dt = datetime.strptime(part, fmt)
                 return dt.strftime("%Y-%m-%d")
             except ValueError:
                 continue
@@ -131,9 +133,14 @@ def parse_raid_html(html: str, raid_id: str) -> dict:
                         dkp_value = nums[0]
                 if "Event Attendees" in str(td) or (i == 3 and text.isdigit()):
                     attendee_count = text
-                span = td.find("span", title=re.compile(r"Site Time"))
-                if span:
-                    event_time = span.get_text(strip=True)
+                # Event time: site uses title="Site Time: 9:00 pm" or onmouseover="... overlib('Site Time: 9:00 pm', ...)"
+                for span in td.find_all("span"):
+                    title = span.get("title") or ""
+                    onmouseover = span.get("onmouseover") or ""
+                    m = re.search(r"Site Time:\s*([^']+)", title or onmouseover)
+                    if m:
+                        event_time = m.group(1).strip()
+                        break
         event_order = len(events) + 1
         events.append({
             "raid_id": raid_id,
