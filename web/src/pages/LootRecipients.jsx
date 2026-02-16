@@ -115,6 +115,13 @@ export default function LootRecipients() {
           const nameByCharId = {}
           ;(charsForAccounts.data || []).forEach((c) => { nameByCharId[c.char_id] = (c.name || '').trim() })
           const allKeysForDkp = new Set(keys)
+          // Include every resolved loot-recipient by both id and name so dkp_summary fetch matches backend keys
+          chars.forEach((c) => {
+            const id = (c.char_id != null && c.char_id !== '') ? String(c.char_id).trim() : null
+            const name = (c.name || '').trim()
+            if (id) allKeysForDkp.add(id)
+            if (name) allKeysForDkp.add(name)
+          })
           accountCharsList.forEach((r) => {
             if (r.char_id) allKeysForDkp.add(r.char_id)
             const n = nameByCharId[r.char_id]
@@ -134,7 +141,10 @@ export default function LootRecipients() {
           const dkpMap = {}
           dkpResults.forEach((res) => {
             (res.data || []).forEach((row) => {
-              dkpMap[row.character_key] = { earned: parseFloat(row.earned || 0) || 0, spent: parseFloat(row.spent || 0) || 0 }
+              const key = row.character_key != null ? String(row.character_key).trim() : ''
+              if (!key) return
+              const entry = { earned: parseFloat(row.earned || 0) || 0, spent: parseFloat(row.spent || 0) || 0 }
+              dkpMap[key] = entry
             })
           })
           setDkpSummary(dkpMap)
@@ -229,11 +239,12 @@ export default function LootRecipients() {
     }
     list.forEach((r) => {
       r.accountDkpTotal = r.account_id ? (accountDkpTotals[r.account_id] ?? 0) : 0
-      // dkp_summary.character_key can be either char_id or character name depending on how rows were imported; try all.
-      const charRow = characters.find((c) => (c.name || '').trim() === (r.character_name || r.character_key) || (c.char_id || '').trim() === (r.char_id || '').trim())
-      const dkpRow = dkpSummary[r.character_key] ||
-        (r.char_id && dkpSummary[r.char_id]) ||
-        (charRow && (dkpSummary[(charRow.name || '').trim()] || dkpSummary[(charRow.char_id || '').trim()]))
+      // dkp_summary.character_key can be either char_id or character name; try all (keys normalized to string in dkpMap).
+      const toKey = (v) => (v != null && v !== '') ? String(v).trim() : ''
+      const charRow = characters.find((c) => toKey(c.name) === toKey(r.character_name || r.character_key) || toKey(c.char_id) === toKey(r.char_id))
+      const dkpRow = dkpSummary[toKey(r.character_key)] ||
+        dkpSummary[toKey(r.char_id)] ||
+        (charRow && (dkpSummary[toKey(charRow.name)] || dkpSummary[toKey(charRow.char_id)]))
       r.characterDkpSpentTotal = dkpRow ? dkpRow.spent : 0
     })
     list.sort((a, b) => {
