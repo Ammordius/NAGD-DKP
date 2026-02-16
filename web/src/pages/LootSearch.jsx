@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useCharToAccountMap } from '../lib/useCharToAccountMap'
 
-const LOOT_CACHE_KEY = 'loot_search_cache_v1'
+const LOOT_CACHE_KEY = 'loot_search_cache_v2'
 const CACHE_TTL_MS = 10 * 60 * 1000 // 10 minutes
 
 // Normalize mob name for comparison (strip # and trim, lowercase)
@@ -129,11 +129,6 @@ export default function LootSearch() {
 
     const run = async () => {
       if (cached) return // already showing cache; incremental update above
-      const raidRes = await supabase.from('raids').select('raid_id, raid_name, date_iso, date').limit(50000)
-      const raidMap = {}
-      ;(raidRes.data || []).forEach((row) => { raidMap[row.raid_id] = { name: row.raid_name || row.raid_id, date_iso: row.date_iso || '', date: row.date || '' } })
-      setRaids(raidMap)
-
       const allLoot = []
       for (let from = 0; from < MAX_LOOT_PAGES * PAGE; from += PAGE) {
         const to = from + PAGE - 1
@@ -150,7 +145,16 @@ export default function LootSearch() {
         allLoot.push(...(data || []))
         if (!data || data.length < PAGE) break
       }
+      const raidIds = [...new Set(allLoot.map((r) => r.raid_id).filter(Boolean))]
+      const raidMap = {}
+      const CHUNK = 500
+      for (let i = 0; i < raidIds.length; i += CHUNK) {
+        const chunk = raidIds.slice(i, i + CHUNK)
+        const { data: raidRows } = await supabase.from('raids').select('raid_id, raid_name, date_iso, date').in('raid_id', chunk)
+        ;(raidRows || []).forEach((row) => { raidMap[row.raid_id] = { name: row.raid_name || row.raid_id, date_iso: row.date_iso || '', date: row.date || '' } })
+      }
       setLoot(allLoot)
+      setRaids(raidMap)
       setLoading(false)
       saveCache(allLoot, raidMap, Math.max(...allLoot.map((r) => r.id).filter(Number.isFinite)))
     }
