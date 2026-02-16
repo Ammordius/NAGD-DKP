@@ -214,16 +214,15 @@ export default function LootRecipients() {
     list.forEach((r) => {
       r.accountDkpTotal = r.account_id ? (accountDkpTotals[r.account_id] ?? 0) : 0
     })
-    const desc = sortBy === 'accountDkpTotal'
     list.sort((a, b) => {
       if (sortBy === 'accountDkpTotal') {
         const va = a.accountDkpTotal ?? 0
         const vb = b.accountDkpTotal ?? 0
-        if (va !== vb) return desc ? vb - va : va - vb
+        if (va !== vb) return vb - va
       } else {
         const va = a.dkpSpentOnToon ?? 0
         const vb = b.dkpSpentOnToon ?? 0
-        if (va !== vb) return desc ? vb - va : va - vb
+        if (va !== vb) return vb - va
       }
       return (a.account_display_name || a.character_name || '').localeCompare(b.account_display_name || b.character_name || '')
     })
