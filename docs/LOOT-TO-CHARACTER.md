@@ -8,6 +8,7 @@ This feature links each raid loot row to the **character that actually has the i
 2. **Multiple matches**: If several toons have the item and the account bought multiple (e.g. same item in different raids), we assign in **raid order (oldest first)**. For each assignment we give the piece to the toon who currently has the **most items already assigned** (so the “most geared” toon gets credit first).
 3. **No match**: If we can’t determine which toon has it → leave **unassigned** (do not default to buyer/namesake). The UI shows “Unassigned” and the account owner or an officer can set the assignment on the account page **Loot** tab.
 4. **Elemental loot**: Source of truth is `magelo/elemental_armor.json` (item_ids that are elemental armor). A loot row is treated as elemental when its item name matches a name seen in Magelo inventory for an item whose id is in that JSON. Then we match any toon on the account that has any elemental armor (by item_id). No separate “Unadorned” list—elemental is defined only by `elemental_armor.json` and the names that appear in the dump for those ids.
+5. **Manual assignments**: Rows set in the Account **Loot** tab (or via `update_single_raid_loot_assignment`) have `assigned_via_magelo = 0`. The assign script and the Supabase update script **never overwrite** these: they are preserved in the script output and excluded from the push to Supabase so Magelo-based runs do not change them.
 
 ## Inputs
 

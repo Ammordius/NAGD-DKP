@@ -5,6 +5,9 @@ Reads data/raid_loot.csv (must include an 'id' column from a Supabase export). C
 RPC so conflicts are resolved (existing rows updated), never ignored. Requires the function from
 docs/supabase-loot-to-character.sql.
 
+Rows that were manually assigned in the Loot tab (assigned_via_magelo=0 with an assignment) are never
+included in the payload, so they are never overwritten by this script.
+
 Requires: SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY (or SUPABASE_ANON_KEY if RLS allows).
   export SUPABASE_URL=https://xxx.supabase.co
   export SUPABASE_SERVICE_ROLE_KEY=eyJ...
@@ -50,6 +53,7 @@ def main() -> int:
 
     print(f"Reading CSV {args.csv}...", flush=True)
     rows = []
+    skipped_manual = 0
     with open(args.csv, "r", encoding="utf-8") as f:
         r = csv.DictReader(f)
         if "id" not in (r.fieldnames or []):
@@ -68,15 +72,23 @@ def main() -> int:
                 continue
             raw = (row.get("assigned_via_magelo") or "").strip()
             via_magelo = 1 if raw == "1" else 0
+            ac = (row.get("assigned_char_id") or "").strip()
+            an = (row.get("assigned_character_name") or "").strip()
+            # Do not push rows that were manually set in the Loot tab; leave them unchanged in Supabase
+            if via_magelo == 0 and (ac or an):
+                skipped_manual += 1
+                continue
             rows.append({
                 "id": row_id,
-                "assigned_char_id": (row.get("assigned_char_id") or "").strip() or None,
-                "assigned_character_name": (row.get("assigned_character_name") or "").strip() or None,
+                "assigned_char_id": ac or None,
+                "assigned_character_name": an or None,
                 "assigned_via_magelo": via_magelo,
             })
 
+    if skipped_manual:
+        print(f"Skipped {skipped_manual} manually-assigned rows (not overwritten).", flush=True)
     if not rows:
-        print("No rows with valid id found in CSV.")
+        print("No rows to update (all manual or no valid id in CSV).")
         return 0
 
     num_batches = (len(rows) + args.batch - 1) // args.batch

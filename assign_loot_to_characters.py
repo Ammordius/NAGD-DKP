@@ -4,7 +4,8 @@ Assign raid_loot to the character that actually has the item (from Magelo invent
 
 Rules:
 - Only assign rows that do not already have assigned_char_id/assigned_character_name set
-  (unless --clear-assignments: then recompute all).
+  (unless --clear-assignments: then recompute all). Rows with assigned_via_magelo=0 (set in the
+  Loot tab) are always preserved, even with --clear-assignments.
 - For each loot row on an account: check all characters on that account for that item.
 - Cap per toon per item: use the **number of that item on that toon in Magelo** (so if they have 2x on Magelo we can assign up to 2; if 1x then 1). No lore tag.
 - Among toons that have the item and are under their Magelo cap: assign to the toon with the **most DKP spent**
@@ -327,17 +328,28 @@ def run(
     assigned_character_name: list[Optional[str]] = [None] * len(loot_rows)
     assigned_via_magelo: list[bool] = [False] * len(loot_rows)  # True if we found item on a toon (incl. namesake)
 
-    # Preserve existing assignments from input (e.g. from Supabase) unless --clear-assignments.
+    # Manual (Loot tab) rows: assigned_via_magelo=0. Always preserve these, even with --clear-assignments.
+    # Other rows: preserve existing assignment unless --clear-assignments.
+    manual_only_indices: set[int] = set()  # manual rows: always skip in assignment loop
     n_preserved = 0
-    if not clear_assignments:
-        for idx, row in enumerate(loot_rows):
-            ac = (row.get("assigned_char_id") or "").strip()
-            an = (row.get("assigned_character_name") or "").strip()
-            if ac or an:
-                assigned_char_id[idx] = ac or None
-                assigned_character_name[idx] = an or None
-                assigned_via_magelo[idx] = (row.get("assigned_via_magelo") or "").strip() == "1"
-                n_preserved += 1
+    for idx, row in enumerate(loot_rows):
+        ac = (row.get("assigned_char_id") or "").strip()
+        an = (row.get("assigned_character_name") or "").strip()
+        via_magelo_raw = (row.get("assigned_via_magelo") or "").strip()
+        is_manual = via_magelo_raw == "0"
+        if is_manual:
+            # Always preserve manual (even with --clear-assignments); never overwrite
+            assigned_char_id[idx] = ac or None
+            assigned_character_name[idx] = an or None
+            assigned_via_magelo[idx] = False
+            manual_only_indices.add(idx)
+            n_preserved += 1
+        elif (ac or an) and not clear_assignments:
+            # Preserve non-manual existing assignment unless we are clearing
+            assigned_char_id[idx] = ac or None
+            assigned_character_name[idx] = an or None
+            assigned_via_magelo[idx] = via_magelo_raw == "1"
+            n_preserved += 1
 
     for acc, indices in loot_by_account.items():
         # Sort by raid date then raid_id, event_id, index
@@ -352,7 +364,9 @@ def run(
         item_count_per_char: dict[tuple[str, str], int] = defaultdict(int)  # (char_id, norm_item) -> count
 
         for idx in indices_sorted:
-            # Skip rows that already have an assignment (only assign once per row) unless clear_assignments
+            # Skip rows that already have an assignment or were manually set (Loot tab); do not overwrite
+            if idx in manual_only_indices:
+                continue
             if not clear_assignments and (assigned_char_id[idx] or assigned_character_name[idx]):
                 cid_existing = assigned_char_id[idx] or ""
                 if cid_existing:
@@ -504,7 +518,7 @@ def main() -> int:
     ap.add_argument("--elemental-source-name", action="append", dest="elemental_extra",
                     help="Extra item name to treat as elemental (if not seen in Magelo dump; can repeat)")
     ap.add_argument("--clear-assignments", action="store_true",
-                    help="Ignore existing assignments and recompute all (for full redo)")
+                    help="Recompute all assignments from Magelo (manual Loot-tab rows, assigned_via_magelo=0, are always preserved)")
     args = ap.parse_args()
 
     magelo = args.magelo_dir
