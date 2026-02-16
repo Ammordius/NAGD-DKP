@@ -287,6 +287,7 @@ def run(
     assigned_via_magelo: list[bool] = [False] * len(loot_rows)  # True if we found item on a toon (incl. namesake)
 
     # Preserve existing assignments from input (e.g. from Supabase); do not re-assign these rows.
+    n_preserved = 0
     for idx, row in enumerate(loot_rows):
         ac = (row.get("assigned_char_id") or "").strip()
         an = (row.get("assigned_character_name") or "").strip()
@@ -294,6 +295,7 @@ def run(
             assigned_char_id[idx] = ac or None
             assigned_character_name[idx] = an or None
             assigned_via_magelo[idx] = (row.get("assigned_via_magelo") or "").strip() == "1"
+            n_preserved += 1
 
     for acc, indices in loot_by_account.items():
         # Sort by raid date then raid_id, event_id, index
@@ -404,7 +406,9 @@ def run(
         w.writeheader()
         w.writerows(counts_rows)
 
+    n_new = len(loot_rows) - n_preserved
     print(f"Wrote {out_raid_loot} with assigned_char_id, assigned_character_name")
+    print(f"Preserved {n_preserved} existing assignments; assigned {n_new} new.")
     print(f"Wrote {out_counts} ({len(counts_rows)} characters with assigned loot)")
 
 

@@ -37,6 +37,14 @@ To ship loot-to-character on the live site:
 3. **Frontend**: Deploy the web app (the app already selects and shows `assigned_character_name` on Loot search, Item page, Raid detail, Account activity, and Character page “Loot on this character”). No env vars needed.
 4. **CI**: The workflow (`.github/workflows/loot-to-character.yml`) keeps `data/raid_loot.csv` updated in the repo. To sync assignments into Supabase without duplicates, periodically: export `raid_loot` (with `id`) → run the assign script → run `update_raid_loot_assignments_supabase.py`, or add that flow to CI with Supabase credentials in secrets.
 
+## Troubleshooting
+
+**650 characters / rows seems low?** The number is **distinct characters** that have at least one loot row assigned to them. There are ~14.8k raid_loot rows; many are assigned to the same toons (or left on namesake). So 650 unique toons with ≥1 assigned item is expected.
+
+**A toon (e.g. badammo) shows no loot on their character page.** The character page lists rows where `raid_loot.assigned_char_id` or `assigned_character_name` matches that toon. If an item was assigned to the **buyer** (namesake) instead—e.g. we didn’t find it on Magelo for that toon, or the row was assigned before we fixed matching—that row won’t appear on the other toon’s page. In Supabase: open **raid_loot**, filter by `item_name` (e.g. “Platinum Cloak of War”) and check `assigned_character_name`. If it’s the buyer, the script didn’t assign it to the other toon (name/account/Magelo mismatch, or the row was preserved from an earlier run). To force reassignment for that row: set `assigned_char_id` and `assigned_character_name` to empty for that row in **raid_loot**, then re-run the workflow; the script will assign it again (and will only assign rows that don’t already have an assignment).
+
+**CI log: “Preserved N existing; assigned M new.”** So you can see how many rows were left as-is vs newly assigned.
+
 ## Applying assignments to Supabase (no duplicates)
 
 After running `assign_loot_to_characters.py`, the output CSV has `id` only if the **input** CSV had `id` (e.g. from a Supabase export). To push assignments into Supabase without inserting duplicate rows:
