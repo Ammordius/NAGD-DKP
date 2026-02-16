@@ -112,6 +112,7 @@ jobs:
             --character-file .magelo_dump/TAKP_character.txt \
             --inventory-file .magelo_dump/TAKP_character_inventory.txt \
             --elemental-armor-json data/elemental_armor.json \
+            --dkp-elemental-json dkp_elemental_to_magelo.json \
             --out-raid-loot data/raid_loot.csv \
             --out-counts data/character_loot_assignment_counts.csv \
             --clear-assignments

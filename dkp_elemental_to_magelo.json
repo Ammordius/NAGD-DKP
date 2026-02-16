@@ -1,0 +1,1248 @@
+{
+  "slot_order": [
+    "head",
+    "chest",
+    "arms",
+    "legs",
+    "wrists",
+    "feet",
+    "hands"
+  ],
+  "dkp_purchases": {
+    "16362": {
+      "name": "Elemental Chain Coif Pattern",
+      "slot": "head",
+      "armor_type": "chain",
+      "magelo_item_ids_by_class": {
+        "rog": "9806",
+        "shm": "9830",
+        "rng": "9821"
+      }
+    },
+    "16363": {
+      "name": "Timeless Chain Tunic Pattern",
+      "slot": "chest",
+      "armor_type": "chain",
+      "magelo_item_ids_by_class": {
+        "rog": "32130",
+        "shm": "32138",
+        "rng": "32604"
+      }
+    },
+    "16364": {
+      "name": "Elemental Chain Sleeve Pattern",
+      "slot": "arms",
+      "armor_type": "chain",
+      "magelo_item_ids_by_class": {
+        "rog": "11432",
+        "shm": "11529",
+        "rng": "11447"
+      }
+    },
+    "16365": {
+      "name": "Elemental Chain Bracelet Pattern",
+      "slot": "wrists",
+      "armor_type": "chain",
+      "magelo_item_ids_by_class": {
+        "rog": "11141",
+        "shm": "11278",
+        "rng": "11193"
+      }
+    },
+    "16366": {
+      "name": "Elemental Chain Glove Pattern",
+      "slot": "hands",
+      "armor_type": "chain",
+      "magelo_item_ids_by_class": {
+        "rog": "12598",
+        "shm": "13579",
+        "rng": "12816"
+      }
+    },
+    "16367": {
+      "name": "Elemental Chain Pant Pattern",
+      "slot": "legs",
+      "armor_type": "chain",
+      "magelo_item_ids_by_class": {
+        "rog": "16717",
+        "shm": "16803",
+        "rng": "16777"
+      }
+    },
+    "16368": {
+      "name": "Elemental Chain Boot Pattern",
+      "slot": "feet",
+      "armor_type": "chain",
+      "magelo_item_ids_by_class": {
+        "rog": "19443",
+        "shm": "20078",
+        "rng": "19838"
+      }
+    },
+    "16369": {
+      "name": "Elemental Bracer Mold",
+      "slot": "wrists",
+      "armor_type": "plate",
+      "magelo_item_ids_by_class": {
+        "war": "11138",
+        "clr": "11199",
+        "shd": "11173",
+        "brd": "11178",
+        "pal": "11163"
+      }
+    },
+    "16370": {
+      "name": "Elemental Boot Mold",
+      "slot": "feet",
+      "armor_type": "plate",
+      "magelo_item_ids_by_class": {
+        "war": "19440",
+        "clr": "20074",
+        "shd": "19546",
+        "brd": "19549",
+        "pal": "19449"
+      }
+    },
+    "16371": {
+      "name": "Elemental Helm Mold",
+      "slot": "head",
+      "armor_type": "plate",
+      "magelo_item_ids_by_class": {
+        "war": "9629",
+        "clr": "9827",
+        "shd": "9815",
+        "brd": "9818",
+        "pal": "9812"
+      }
+    },
+    "16372": {
+      "name": "Elemental Vambrace Mold",
+      "slot": "arms",
+      "armor_type": "plate",
+      "magelo_item_ids_by_class": {
+        "war": "11429",
+        "clr": "32012",
+        "shd": "11441",
+        "brd": "11444",
+        "pal": "11438"
+      }
+    },
+    "16373": {
+      "name": "Elemental Greaves Mold",
+      "slot": "legs",
+      "armor_type": "plate",
+      "magelo_item_ids_by_class": {
+        "war": "16693",
+        "clr": "16797",
+        "shd": "16763",
+        "brd": "16771",
+        "pal": "16757"
+      }
+    },
+    "16374": {
+      "name": "Elemental Gauntlet Mold",
+      "slot": "hands",
+      "armor_type": "plate",
+      "magelo_item_ids_by_class": {
+        "war": "12595",
+        "clr": "13563",
+        "shd": "12637",
+        "brd": "12664",
+        "pal": "12627"
+      }
+    },
+    "16375": {
+      "name": "Timeless Breastplate Mold",
+      "slot": "chest",
+      "armor_type": "plate",
+      "magelo_item_ids_by_class": {
+        "war": "32129",
+        "clr": "32603",
+        "shd": "32602",
+        "brd": "32134",
+        "pal": "32132"
+      }
+    },
+    "16376": {
+      "name": "Elemental Leather Helm Pattern",
+      "slot": "head",
+      "armor_type": "leather",
+      "magelo_item_ids_by_class": {
+        "mnk": "9809",
+        "dru": "9833",
+        "bst": "9824"
+      }
+    },
+    "16377": {
+      "name": "Timeless Leather Tunic Pattern",
+      "slot": "chest",
+      "armor_type": "leather",
+      "magelo_item_ids_by_class": {
+        "mnk": "32131",
+        "dru": "32139",
+        "bst": "32136"
+      }
+    },
+    "16378": {
+      "name": "Elemental Leather Sleeve Pattern",
+      "slot": "arms",
+      "armor_type": "leather",
+      "magelo_item_ids_by_class": {
+        "mnk": "11435",
+        "dru": "11575",
+        "bst": "11450"
+      }
+    },
+    "16379": {
+      "name": "Elemental Leather Wrist Pattern",
+      "slot": "wrists",
+      "armor_type": "leather",
+      "magelo_item_ids_by_class": {
+        "mnk": "11146",
+        "dru": "11281",
+        "bst": "11196"
+      }
+    },
+    "16380": {
+      "name": "Elemental Leather Glove Pattern",
+      "slot": "hands",
+      "armor_type": "leather",
+      "magelo_item_ids_by_class": {
+        "mnk": "12624",
+        "dru": "13603",
+        "bst": "13553"
+      }
+    },
+    "16381": {
+      "name": "Elemental Leather Pant Pattern",
+      "slot": "legs",
+      "armor_type": "leather",
+      "magelo_item_ids_by_class": {
+        "mnk": "16727",
+        "dru": "16811",
+        "bst": "16787"
+      }
+    },
+    "16382": {
+      "name": "Elemental Leather Boot Pattern",
+      "slot": "feet",
+      "armor_type": "leather",
+      "magelo_item_ids_by_class": {
+        "mnk": "19446",
+        "dru": "20422",
+        "bst": "20032"
+      }
+    },
+    "16383": {
+      "name": "Elemental Silk Turban Pattern",
+      "slot": "head",
+      "armor_type": "silk",
+      "magelo_item_ids_by_class": {
+        "wiz": "9950",
+        "mag": "9944",
+        "nec": "9947",
+        "enc": "9836"
+      }
+    },
+    "16384": {
+      "name": "Timeless Silk Robe Pattern",
+      "slot": "chest",
+      "armor_type": "silk",
+      "magelo_item_ids_by_class": {
+        "wiz": "32143",
+        "mag": "32141",
+        "nec": "32142",
+        "enc": "32140"
+      }
+    },
+    "16385": {
+      "name": "Elemental Silk Sleeve Pattern",
+      "slot": "arms",
+      "armor_type": "silk",
+      "magelo_item_ids_by_class": {
+        "wiz": "11876",
+        "mag": "11598",
+        "nec": "11618",
+        "enc": "11578"
+      }
+    },
+    "16386": {
+      "name": "Elemental Silk Bracelet Pattern",
+      "slot": "wrists",
+      "armor_type": "silk",
+      "magelo_item_ids_by_class": {
+        "wiz": "11309",
+        "mag": "11303",
+        "nec": "11306",
+        "enc": "11298"
+      }
+    },
+    "16387": {
+      "name": "Elemental Silk Glove Pattern",
+      "slot": "hands",
+      "armor_type": "silk",
+      "magelo_item_ids_by_class": {
+        "wiz": "13627",
+        "mag": "13619",
+        "nec": "13623",
+        "enc": "13614"
+      }
+    },
+    "16388": {
+      "name": "Elemental Silk Pant Pattern",
+      "slot": "legs",
+      "armor_type": "silk",
+      "magelo_item_ids_by_class": {
+        "wiz": "19027",
+        "mag": "19021",
+        "nec": "19024",
+        "enc": "16931"
+      }
+    },
+    "16389": {
+      "name": "Elemental Silk Boot Pattern",
+      "slot": "feet",
+      "armor_type": "silk",
+      "magelo_item_ids_by_class": {
+        "wiz": "20434",
+        "mag": "20428",
+        "nec": "20431",
+        "enc": "20425"
+      }
+    }
+  },
+  "by_class": {
+    "war": {
+      "armor_type": "plate",
+      "set_name": "Raex's Armor of Destruction",
+      "slots": {
+        "head": "9629",
+        "chest": "32129",
+        "arms": "11429",
+        "legs": "16693",
+        "wrists": "11138",
+        "feet": "19440",
+        "hands": "12595"
+      }
+    },
+    "rog": {
+      "armor_type": "chain",
+      "set_name": "Bidilis' Armor of the Elusive",
+      "slots": {
+        "head": "9806",
+        "chest": "32130",
+        "arms": "11432",
+        "legs": "16717",
+        "wrists": "11141",
+        "feet": "19443",
+        "hands": "12598"
+      }
+    },
+    "mnk": {
+      "armor_type": "leather",
+      "set_name": "Ton Po's Armor of Composure",
+      "slots": {
+        "head": "9809",
+        "chest": "32131",
+        "arms": "11435",
+        "legs": "16727",
+        "wrists": "11146",
+        "feet": "19446",
+        "hands": "12624"
+      }
+    },
+    "clr": {
+      "armor_type": "plate",
+      "set_name": "Ultor's Armor of Faith",
+      "slots": {
+        "head": "9827",
+        "chest": "32603",
+        "arms": "32012",
+        "legs": "16797",
+        "wrists": "11199",
+        "feet": "20074",
+        "hands": "13563"
+      }
+    },
+    "shm": {
+      "armor_type": "chain",
+      "set_name": "Rosrak's Armor of the Primal",
+      "slots": {
+        "head": "9830",
+        "chest": "32138",
+        "arms": "11529",
+        "legs": "16803",
+        "wrists": "11278",
+        "feet": "20078",
+        "hands": "13579"
+      }
+    },
+    "dru": {
+      "armor_type": "leather",
+      "set_name": "Kerasha's Sylvan Armor",
+      "slots": {
+        "head": "9833",
+        "chest": "32139",
+        "arms": "11575",
+        "legs": "16811",
+        "wrists": "11281",
+        "feet": "20422",
+        "hands": "13603"
+      }
+    },
+    "shd": {
+      "armor_type": "plate",
+      "set_name": "Grimror's Armor of the Plagues",
+      "slots": {
+        "head": "9815",
+        "chest": "32602",
+        "arms": "11441",
+        "legs": "16763",
+        "wrists": "11173",
+        "feet": "19546",
+        "hands": "12637"
+      }
+    },
+    "brd": {
+      "armor_type": "plate",
+      "set_name": "Rizlona's Fiery Armor",
+      "slots": {
+        "head": "9818",
+        "chest": "32134",
+        "arms": "11444",
+        "legs": "16771",
+        "wrists": "11178",
+        "feet": "19549",
+        "hands": "12664"
+      }
+    },
+    "pal": {
+      "armor_type": "plate",
+      "set_name": "Trydan's Armor of Nobility",
+      "slots": {
+        "head": "9812",
+        "chest": "32132",
+        "arms": "11438",
+        "legs": "16757",
+        "wrists": "11163",
+        "feet": "19449",
+        "hands": "12627"
+      }
+    },
+    "rng": {
+      "armor_type": "chain",
+      "set_name": "Askr's Thunderous Armor",
+      "slots": {
+        "head": "9821",
+        "chest": "32604",
+        "arms": "11447",
+        "legs": "16777",
+        "wrists": "11193",
+        "feet": "19838",
+        "hands": "12816"
+      }
+    },
+    "bst": {
+      "armor_type": "leather",
+      "set_name": "Dumul's Armor of the Brute",
+      "slots": {
+        "head": "9824",
+        "chest": "32136",
+        "arms": "11450",
+        "legs": "16787",
+        "wrists": "11196",
+        "feet": "20032",
+        "hands": "13553"
+      }
+    },
+    "wiz": {
+      "armor_type": "silk",
+      "set_name": "Maelins Armor of Lore",
+      "slots": {
+        "head": "9950",
+        "chest": "32143",
+        "arms": "11876",
+        "legs": "19027",
+        "wrists": "11309",
+        "feet": "20434",
+        "hands": "13627"
+      }
+    },
+    "mag": {
+      "armor_type": "silk",
+      "set_name": "Magi`Kot's Armor of Convergence",
+      "slots": {
+        "head": "9944",
+        "chest": "32141",
+        "arms": "11598",
+        "legs": "19021",
+        "wrists": "11303",
+        "feet": "20428",
+        "hands": "13619"
+      }
+    },
+    "nec": {
+      "armor_type": "silk",
+      "set_name": "Miragul's Armor of Risen Souls",
+      "slots": {
+        "head": "9947",
+        "chest": "32142",
+        "arms": "11618",
+        "legs": "19024",
+        "wrists": "11306",
+        "feet": "20431",
+        "hands": "13623"
+      }
+    },
+    "enc": {
+      "armor_type": "silk",
+      "set_name": "Romar's Armor of Visions",
+      "slots": {
+        "head": "9836",
+        "chest": "32140",
+        "arms": "11578",
+        "legs": "16931",
+        "wrists": "11298",
+        "feet": "20425",
+        "hands": "13614"
+      }
+    }
+  },
+  "magelo_item_to_dkp": {
+    "9629": {
+      "class": "war",
+      "slot": "head",
+      "armor_type": "plate",
+      "set_name": "Raex's Armor of Destruction",
+      "dkp_purchase_id": "16371"
+    },
+    "32129": {
+      "class": "war",
+      "slot": "chest",
+      "armor_type": "plate",
+      "set_name": "Raex's Armor of Destruction",
+      "dkp_purchase_id": "16375"
+    },
+    "11429": {
+      "class": "war",
+      "slot": "arms",
+      "armor_type": "plate",
+      "set_name": "Raex's Armor of Destruction",
+      "dkp_purchase_id": "16372"
+    },
+    "16693": {
+      "class": "war",
+      "slot": "legs",
+      "armor_type": "plate",
+      "set_name": "Raex's Armor of Destruction",
+      "dkp_purchase_id": "16373"
+    },
+    "11138": {
+      "class": "war",
+      "slot": "wrists",
+      "armor_type": "plate",
+      "set_name": "Raex's Armor of Destruction",
+      "dkp_purchase_id": "16369"
+    },
+    "19440": {
+      "class": "war",
+      "slot": "feet",
+      "armor_type": "plate",
+      "set_name": "Raex's Armor of Destruction",
+      "dkp_purchase_id": "16370"
+    },
+    "12595": {
+      "class": "war",
+      "slot": "hands",
+      "armor_type": "plate",
+      "set_name": "Raex's Armor of Destruction",
+      "dkp_purchase_id": "16374"
+    },
+    "9806": {
+      "class": "rog",
+      "slot": "head",
+      "armor_type": "chain",
+      "set_name": "Bidilis' Armor of the Elusive",
+      "dkp_purchase_id": "16362"
+    },
+    "32130": {
+      "class": "rog",
+      "slot": "chest",
+      "armor_type": "chain",
+      "set_name": "Bidilis' Armor of the Elusive",
+      "dkp_purchase_id": "16363"
+    },
+    "11432": {
+      "class": "rog",
+      "slot": "arms",
+      "armor_type": "chain",
+      "set_name": "Bidilis' Armor of the Elusive",
+      "dkp_purchase_id": "16364"
+    },
+    "16717": {
+      "class": "rog",
+      "slot": "legs",
+      "armor_type": "chain",
+      "set_name": "Bidilis' Armor of the Elusive",
+      "dkp_purchase_id": "16367"
+    },
+    "11141": {
+      "class": "rog",
+      "slot": "wrists",
+      "armor_type": "chain",
+      "set_name": "Bidilis' Armor of the Elusive",
+      "dkp_purchase_id": "16365"
+    },
+    "19443": {
+      "class": "rog",
+      "slot": "feet",
+      "armor_type": "chain",
+      "set_name": "Bidilis' Armor of the Elusive",
+      "dkp_purchase_id": "16368"
+    },
+    "12598": {
+      "class": "rog",
+      "slot": "hands",
+      "armor_type": "chain",
+      "set_name": "Bidilis' Armor of the Elusive",
+      "dkp_purchase_id": "16366"
+    },
+    "9809": {
+      "class": "mnk",
+      "slot": "head",
+      "armor_type": "leather",
+      "set_name": "Ton Po's Armor of Composure",
+      "dkp_purchase_id": "16376"
+    },
+    "32131": {
+      "class": "mnk",
+      "slot": "chest",
+      "armor_type": "leather",
+      "set_name": "Ton Po's Armor of Composure",
+      "dkp_purchase_id": "16377"
+    },
+    "11435": {
+      "class": "mnk",
+      "slot": "arms",
+      "armor_type": "leather",
+      "set_name": "Ton Po's Armor of Composure",
+      "dkp_purchase_id": "16378"
+    },
+    "16727": {
+      "class": "mnk",
+      "slot": "legs",
+      "armor_type": "leather",
+      "set_name": "Ton Po's Armor of Composure",
+      "dkp_purchase_id": "16381"
+    },
+    "11146": {
+      "class": "mnk",
+      "slot": "wrists",
+      "armor_type": "leather",
+      "set_name": "Ton Po's Armor of Composure",
+      "dkp_purchase_id": "16379"
+    },
+    "19446": {
+      "class": "mnk",
+      "slot": "feet",
+      "armor_type": "leather",
+      "set_name": "Ton Po's Armor of Composure",
+      "dkp_purchase_id": "16382"
+    },
+    "12624": {
+      "class": "mnk",
+      "slot": "hands",
+      "armor_type": "leather",
+      "set_name": "Ton Po's Armor of Composure",
+      "dkp_purchase_id": "16380"
+    },
+    "9827": {
+      "class": "clr",
+      "slot": "head",
+      "armor_type": "plate",
+      "set_name": "Ultor's Armor of Faith",
+      "dkp_purchase_id": "16371"
+    },
+    "32603": {
+      "class": "clr",
+      "slot": "chest",
+      "armor_type": "plate",
+      "set_name": "Ultor's Armor of Faith",
+      "dkp_purchase_id": "16375"
+    },
+    "32012": {
+      "class": "clr",
+      "slot": "arms",
+      "armor_type": "plate",
+      "set_name": "Ultor's Armor of Faith",
+      "dkp_purchase_id": "16372"
+    },
+    "16797": {
+      "class": "clr",
+      "slot": "legs",
+      "armor_type": "plate",
+      "set_name": "Ultor's Armor of Faith",
+      "dkp_purchase_id": "16373"
+    },
+    "11199": {
+      "class": "clr",
+      "slot": "wrists",
+      "armor_type": "plate",
+      "set_name": "Ultor's Armor of Faith",
+      "dkp_purchase_id": "16369"
+    },
+    "20074": {
+      "class": "clr",
+      "slot": "feet",
+      "armor_type": "plate",
+      "set_name": "Ultor's Armor of Faith",
+      "dkp_purchase_id": "16370"
+    },
+    "13563": {
+      "class": "clr",
+      "slot": "hands",
+      "armor_type": "plate",
+      "set_name": "Ultor's Armor of Faith",
+      "dkp_purchase_id": "16374"
+    },
+    "9830": {
+      "class": "shm",
+      "slot": "head",
+      "armor_type": "chain",
+      "set_name": "Rosrak's Armor of the Primal",
+      "dkp_purchase_id": "16362"
+    },
+    "32138": {
+      "class": "shm",
+      "slot": "chest",
+      "armor_type": "chain",
+      "set_name": "Rosrak's Armor of the Primal",
+      "dkp_purchase_id": "16363"
+    },
+    "11529": {
+      "class": "shm",
+      "slot": "arms",
+      "armor_type": "chain",
+      "set_name": "Rosrak's Armor of the Primal",
+      "dkp_purchase_id": "16364"
+    },
+    "16803": {
+      "class": "shm",
+      "slot": "legs",
+      "armor_type": "chain",
+      "set_name": "Rosrak's Armor of the Primal",
+      "dkp_purchase_id": "16367"
+    },
+    "11278": {
+      "class": "shm",
+      "slot": "wrists",
+      "armor_type": "chain",
+      "set_name": "Rosrak's Armor of the Primal",
+      "dkp_purchase_id": "16365"
+    },
+    "20078": {
+      "class": "shm",
+      "slot": "feet",
+      "armor_type": "chain",
+      "set_name": "Rosrak's Armor of the Primal",
+      "dkp_purchase_id": "16368"
+    },
+    "13579": {
+      "class": "shm",
+      "slot": "hands",
+      "armor_type": "chain",
+      "set_name": "Rosrak's Armor of the Primal",
+      "dkp_purchase_id": "16366"
+    },
+    "9833": {
+      "class": "dru",
+      "slot": "head",
+      "armor_type": "leather",
+      "set_name": "Kerasha's Sylvan Armor",
+      "dkp_purchase_id": "16376"
+    },
+    "32139": {
+      "class": "dru",
+      "slot": "chest",
+      "armor_type": "leather",
+      "set_name": "Kerasha's Sylvan Armor",
+      "dkp_purchase_id": "16377"
+    },
+    "11575": {
+      "class": "dru",
+      "slot": "arms",
+      "armor_type": "leather",
+      "set_name": "Kerasha's Sylvan Armor",
+      "dkp_purchase_id": "16378"
+    },
+    "16811": {
+      "class": "dru",
+      "slot": "legs",
+      "armor_type": "leather",
+      "set_name": "Kerasha's Sylvan Armor",
+      "dkp_purchase_id": "16381"
+    },
+    "11281": {
+      "class": "dru",
+      "slot": "wrists",
+      "armor_type": "leather",
+      "set_name": "Kerasha's Sylvan Armor",
+      "dkp_purchase_id": "16379"
+    },
+    "20422": {
+      "class": "dru",
+      "slot": "feet",
+      "armor_type": "leather",
+      "set_name": "Kerasha's Sylvan Armor",
+      "dkp_purchase_id": "16382"
+    },
+    "13603": {
+      "class": "dru",
+      "slot": "hands",
+      "armor_type": "leather",
+      "set_name": "Kerasha's Sylvan Armor",
+      "dkp_purchase_id": "16380"
+    },
+    "9815": {
+      "class": "shd",
+      "slot": "head",
+      "armor_type": "plate",
+      "set_name": "Grimror's Armor of the Plagues",
+      "dkp_purchase_id": "16371"
+    },
+    "32602": {
+      "class": "shd",
+      "slot": "chest",
+      "armor_type": "plate",
+      "set_name": "Grimror's Armor of the Plagues",
+      "dkp_purchase_id": "16375"
+    },
+    "11441": {
+      "class": "shd",
+      "slot": "arms",
+      "armor_type": "plate",
+      "set_name": "Grimror's Armor of the Plagues",
+      "dkp_purchase_id": "16372"
+    },
+    "16763": {
+      "class": "shd",
+      "slot": "legs",
+      "armor_type": "plate",
+      "set_name": "Grimror's Armor of the Plagues",
+      "dkp_purchase_id": "16373"
+    },
+    "11173": {
+      "class": "shd",
+      "slot": "wrists",
+      "armor_type": "plate",
+      "set_name": "Grimror's Armor of the Plagues",
+      "dkp_purchase_id": "16369"
+    },
+    "19546": {
+      "class": "shd",
+      "slot": "feet",
+      "armor_type": "plate",
+      "set_name": "Grimror's Armor of the Plagues",
+      "dkp_purchase_id": "16370"
+    },
+    "12637": {
+      "class": "shd",
+      "slot": "hands",
+      "armor_type": "plate",
+      "set_name": "Grimror's Armor of the Plagues",
+      "dkp_purchase_id": "16374"
+    },
+    "9818": {
+      "class": "brd",
+      "slot": "head",
+      "armor_type": "plate",
+      "set_name": "Rizlona's Fiery Armor",
+      "dkp_purchase_id": "16371"
+    },
+    "32134": {
+      "class": "brd",
+      "slot": "chest",
+      "armor_type": "plate",
+      "set_name": "Rizlona's Fiery Armor",
+      "dkp_purchase_id": "16375"
+    },
+    "11444": {
+      "class": "brd",
+      "slot": "arms",
+      "armor_type": "plate",
+      "set_name": "Rizlona's Fiery Armor",
+      "dkp_purchase_id": "16372"
+    },
+    "16771": {
+      "class": "brd",
+      "slot": "legs",
+      "armor_type": "plate",
+      "set_name": "Rizlona's Fiery Armor",
+      "dkp_purchase_id": "16373"
+    },
+    "11178": {
+      "class": "brd",
+      "slot": "wrists",
+      "armor_type": "plate",
+      "set_name": "Rizlona's Fiery Armor",
+      "dkp_purchase_id": "16369"
+    },
+    "19549": {
+      "class": "brd",
+      "slot": "feet",
+      "armor_type": "plate",
+      "set_name": "Rizlona's Fiery Armor",
+      "dkp_purchase_id": "16370"
+    },
+    "12664": {
+      "class": "brd",
+      "slot": "hands",
+      "armor_type": "plate",
+      "set_name": "Rizlona's Fiery Armor",
+      "dkp_purchase_id": "16374"
+    },
+    "9812": {
+      "class": "pal",
+      "slot": "head",
+      "armor_type": "plate",
+      "set_name": "Trydan's Armor of Nobility",
+      "dkp_purchase_id": "16371"
+    },
+    "32132": {
+      "class": "pal",
+      "slot": "chest",
+      "armor_type": "plate",
+      "set_name": "Trydan's Armor of Nobility",
+      "dkp_purchase_id": "16375"
+    },
+    "11438": {
+      "class": "pal",
+      "slot": "arms",
+      "armor_type": "plate",
+      "set_name": "Trydan's Armor of Nobility",
+      "dkp_purchase_id": "16372"
+    },
+    "16757": {
+      "class": "pal",
+      "slot": "legs",
+      "armor_type": "plate",
+      "set_name": "Trydan's Armor of Nobility",
+      "dkp_purchase_id": "16373"
+    },
+    "11163": {
+      "class": "pal",
+      "slot": "wrists",
+      "armor_type": "plate",
+      "set_name": "Trydan's Armor of Nobility",
+      "dkp_purchase_id": "16369"
+    },
+    "19449": {
+      "class": "pal",
+      "slot": "feet",
+      "armor_type": "plate",
+      "set_name": "Trydan's Armor of Nobility",
+      "dkp_purchase_id": "16370"
+    },
+    "12627": {
+      "class": "pal",
+      "slot": "hands",
+      "armor_type": "plate",
+      "set_name": "Trydan's Armor of Nobility",
+      "dkp_purchase_id": "16374"
+    },
+    "9821": {
+      "class": "rng",
+      "slot": "head",
+      "armor_type": "chain",
+      "set_name": "Askr's Thunderous Armor",
+      "dkp_purchase_id": "16362"
+    },
+    "32604": {
+      "class": "rng",
+      "slot": "chest",
+      "armor_type": "chain",
+      "set_name": "Askr's Thunderous Armor",
+      "dkp_purchase_id": "16363"
+    },
+    "11447": {
+      "class": "rng",
+      "slot": "arms",
+      "armor_type": "chain",
+      "set_name": "Askr's Thunderous Armor",
+      "dkp_purchase_id": "16364"
+    },
+    "16777": {
+      "class": "rng",
+      "slot": "legs",
+      "armor_type": "chain",
+      "set_name": "Askr's Thunderous Armor",
+      "dkp_purchase_id": "16367"
+    },
+    "11193": {
+      "class": "rng",
+      "slot": "wrists",
+      "armor_type": "chain",
+      "set_name": "Askr's Thunderous Armor",
+      "dkp_purchase_id": "16365"
+    },
+    "19838": {
+      "class": "rng",
+      "slot": "feet",
+      "armor_type": "chain",
+      "set_name": "Askr's Thunderous Armor",
+      "dkp_purchase_id": "16368"
+    },
+    "12816": {
+      "class": "rng",
+      "slot": "hands",
+      "armor_type": "chain",
+      "set_name": "Askr's Thunderous Armor",
+      "dkp_purchase_id": "16366"
+    },
+    "9824": {
+      "class": "bst",
+      "slot": "head",
+      "armor_type": "leather",
+      "set_name": "Dumul's Armor of the Brute",
+      "dkp_purchase_id": "16376"
+    },
+    "32136": {
+      "class": "bst",
+      "slot": "chest",
+      "armor_type": "leather",
+      "set_name": "Dumul's Armor of the Brute",
+      "dkp_purchase_id": "16377"
+    },
+    "11450": {
+      "class": "bst",
+      "slot": "arms",
+      "armor_type": "leather",
+      "set_name": "Dumul's Armor of the Brute",
+      "dkp_purchase_id": "16378"
+    },
+    "16787": {
+      "class": "bst",
+      "slot": "legs",
+      "armor_type": "leather",
+      "set_name": "Dumul's Armor of the Brute",
+      "dkp_purchase_id": "16381"
+    },
+    "11196": {
+      "class": "bst",
+      "slot": "wrists",
+      "armor_type": "leather",
+      "set_name": "Dumul's Armor of the Brute",
+      "dkp_purchase_id": "16379"
+    },
+    "20032": {
+      "class": "bst",
+      "slot": "feet",
+      "armor_type": "leather",
+      "set_name": "Dumul's Armor of the Brute",
+      "dkp_purchase_id": "16382"
+    },
+    "13553": {
+      "class": "bst",
+      "slot": "hands",
+      "armor_type": "leather",
+      "set_name": "Dumul's Armor of the Brute",
+      "dkp_purchase_id": "16380"
+    },
+    "9950": {
+      "class": "wiz",
+      "slot": "head",
+      "armor_type": "silk",
+      "set_name": "Maelins Armor of Lore",
+      "dkp_purchase_id": "16383"
+    },
+    "32143": {
+      "class": "wiz",
+      "slot": "chest",
+      "armor_type": "silk",
+      "set_name": "Maelins Armor of Lore",
+      "dkp_purchase_id": "16384"
+    },
+    "11876": {
+      "class": "wiz",
+      "slot": "arms",
+      "armor_type": "silk",
+      "set_name": "Maelins Armor of Lore",
+      "dkp_purchase_id": "16385"
+    },
+    "19027": {
+      "class": "wiz",
+      "slot": "legs",
+      "armor_type": "silk",
+      "set_name": "Maelins Armor of Lore",
+      "dkp_purchase_id": "16388"
+    },
+    "11309": {
+      "class": "wiz",
+      "slot": "wrists",
+      "armor_type": "silk",
+      "set_name": "Maelins Armor of Lore",
+      "dkp_purchase_id": "16386"
+    },
+    "20434": {
+      "class": "wiz",
+      "slot": "feet",
+      "armor_type": "silk",
+      "set_name": "Maelins Armor of Lore",
+      "dkp_purchase_id": "16389"
+    },
+    "13627": {
+      "class": "wiz",
+      "slot": "hands",
+      "armor_type": "silk",
+      "set_name": "Maelins Armor of Lore",
+      "dkp_purchase_id": "16387"
+    },
+    "9944": {
+      "class": "mag",
+      "slot": "head",
+      "armor_type": "silk",
+      "set_name": "Magi`Kot's Armor of Convergence",
+      "dkp_purchase_id": "16383"
+    },
+    "32141": {
+      "class": "mag",
+      "slot": "chest",
+      "armor_type": "silk",
+      "set_name": "Magi`Kot's Armor of Convergence",
+      "dkp_purchase_id": "16384"
+    },
+    "11598": {
+      "class": "mag",
+      "slot": "arms",
+      "armor_type": "silk",
+      "set_name": "Magi`Kot's Armor of Convergence",
+      "dkp_purchase_id": "16385"
+    },
+    "19021": {
+      "class": "mag",
+      "slot": "legs",
+      "armor_type": "silk",
+      "set_name": "Magi`Kot's Armor of Convergence",
+      "dkp_purchase_id": "16388"
+    },
+    "11303": {
+      "class": "mag",
+      "slot": "wrists",
+      "armor_type": "silk",
+      "set_name": "Magi`Kot's Armor of Convergence",
+      "dkp_purchase_id": "16386"
+    },
+    "20428": {
+      "class": "mag",
+      "slot": "feet",
+      "armor_type": "silk",
+      "set_name": "Magi`Kot's Armor of Convergence",
+      "dkp_purchase_id": "16389"
+    },
+    "13619": {
+      "class": "mag",
+      "slot": "hands",
+      "armor_type": "silk",
+      "set_name": "Magi`Kot's Armor of Convergence",
+      "dkp_purchase_id": "16387"
+    },
+    "9947": {
+      "class": "nec",
+      "slot": "head",
+      "armor_type": "silk",
+      "set_name": "Miragul's Armor of Risen Souls",
+      "dkp_purchase_id": "16383"
+    },
+    "32142": {
+      "class": "nec",
+      "slot": "chest",
+      "armor_type": "silk",
+      "set_name": "Miragul's Armor of Risen Souls",
+      "dkp_purchase_id": "16384"
+    },
+    "11618": {
+      "class": "nec",
+      "slot": "arms",
+      "armor_type": "silk",
+      "set_name": "Miragul's Armor of Risen Souls",
+      "dkp_purchase_id": "16385"
+    },
+    "19024": {
+      "class": "nec",
+      "slot": "legs",
+      "armor_type": "silk",
+      "set_name": "Miragul's Armor of Risen Souls",
+      "dkp_purchase_id": "16388"
+    },
+    "11306": {
+      "class": "nec",
+      "slot": "wrists",
+      "armor_type": "silk",
+      "set_name": "Miragul's Armor of Risen Souls",
+      "dkp_purchase_id": "16386"
+    },
+    "20431": {
+      "class": "nec",
+      "slot": "feet",
+      "armor_type": "silk",
+      "set_name": "Miragul's Armor of Risen Souls",
+      "dkp_purchase_id": "16389"
+    },
+    "13623": {
+      "class": "nec",
+      "slot": "hands",
+      "armor_type": "silk",
+      "set_name": "Miragul's Armor of Risen Souls",
+      "dkp_purchase_id": "16387"
+    },
+    "9836": {
+      "class": "enc",
+      "slot": "head",
+      "armor_type": "silk",
+      "set_name": "Romar's Armor of Visions",
+      "dkp_purchase_id": "16383"
+    },
+    "32140": {
+      "class": "enc",
+      "slot": "chest",
+      "armor_type": "silk",
+      "set_name": "Romar's Armor of Visions",
+      "dkp_purchase_id": "16384"
+    },
+    "11578": {
+      "class": "enc",
+      "slot": "arms",
+      "armor_type": "silk",
+      "set_name": "Romar's Armor of Visions",
+      "dkp_purchase_id": "16385"
+    },
+    "16931": {
+      "class": "enc",
+      "slot": "legs",
+      "armor_type": "silk",
+      "set_name": "Romar's Armor of Visions",
+      "dkp_purchase_id": "16388"
+    },
+    "11298": {
+      "class": "enc",
+      "slot": "wrists",
+      "armor_type": "silk",
+      "set_name": "Romar's Armor of Visions",
+      "dkp_purchase_id": "16386"
+    },
+    "20425": {
+      "class": "enc",
+      "slot": "feet",
+      "armor_type": "silk",
+      "set_name": "Romar's Armor of Visions",
+      "dkp_purchase_id": "16389"
+    },
+    "13614": {
+      "class": "enc",
+      "slot": "hands",
+      "armor_type": "silk",
+      "set_name": "Romar's Armor of Visions",
+      "dkp_purchase_id": "16387"
+    }
+  }
+}

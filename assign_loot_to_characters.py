@@ -11,10 +11,13 @@ Rules:
 - Among toons that have the item and are under their Magelo cap: assign to the toon with the **most DKP spent**
   (aggregate cost of loot already assigned to that toon this run). Tie-break: most items assigned, then stable.
 - If no toon has it -> leave unassigned (do not default to buyer/namesake).
-- Elemental loot: use magelo/elemental_armor.json (item_ids that are elemental armor).
-  A loot row is treated as elemental when its item name matches a name seen in Magelo
-  inventory for an item_id in that JSON. Then we match any toon on the account that has
-  any elemental armor (by item_id).
+- Elemental loot: use magelo/elemental_armor.json. Treated as elemental when item name
+  matches that list. Assignment is class- and slot-specific: e.g. Elemental Silk Boot Pattern
+  only matches toons who can wear silk and have silk elemental in the feet slot; Elemental Boot
+  Mold only matches toons who have elemental in the feet slot for their class (plate/chain/leather/silk).
+  Wrists->wrists, feet->feet, etc. Class armor: chain (rog/shm/rng), plate (brd/clr/war/pal/shd),
+  leather (mnk/bst/dru), silk (nec/mag/wiz/enc).
+- Rows with manual_assignment=1 (or manual=1) are never reassigned, even with --clear-assignments.
 
 Inputs:
 - DKP data: data/raid_loot.csv, data/raids.csv, data/character_account.csv, data/characters.csv, data/accounts.csv
@@ -43,11 +46,84 @@ DATA_DIR = SCRIPT_DIR / "data"
 # Magelo repo may be sibling of dkp
 MAGELO_DIR = SCRIPT_DIR.parent / "magelo"
 
+# Elemental armor item_id -> armor type (class-specific). Only these IDs are filtered by class.
+# chain: rog, shm, rng | plate: brd, clr, war, pal, shd | leather: mnk, bst, dru | silk: nec, mag, wiz, enc
+ELEMENTAL_ARMOR_TYPE: dict[str, str] = {}
+for i in range(16362, 16369):
+    ELEMENTAL_ARMOR_TYPE[str(i)] = "chain"
+for i in range(16369, 16376):
+    ELEMENTAL_ARMOR_TYPE[str(i)] = "plate"
+for i in range(16376, 16383):
+    ELEMENTAL_ARMOR_TYPE[str(i)] = "leather"
+for i in range(16383, 16390):
+    ELEMENTAL_ARMOR_TYPE[str(i)] = "silk"
+ELEMENTAL_ARMOR_TYPE["16693"] = "silk"
+
+# Class (short name) -> armor type that class can use for elemental
+CLASS_ARMOR_TYPE: dict[str, str] = {
+    "rog": "chain", "shm": "chain", "rng": "chain",
+    "brd": "plate", "clr": "plate", "war": "plate", "pal": "plate", "shd": "plate",
+    "mnk": "leather", "bst": "leather", "dru": "leather",
+    "nec": "silk", "mag": "silk", "wiz": "silk", "enc": "silk",
+}
+
+# Fallback: loot name slot keywords -> EQ slot_id(s) when dkp_elemental_to_magelo.json not used
+ELEMENTAL_SLOT_KEYWORDS: dict[str, list[int]] = {
+    "head": [2], "helm": [2], "turban": [2], "coif": [2],
+    "neck": [5], "gorget": [5],
+    "arms": [7], "sleeve": [7], "arm": [7],
+    "back": [8], "cloak": [8],
+    "bracer": [9, 10], "wrist": [9, 10], "bracelet": [9, 10],
+    "hands": [12], "hand": [12], "glove": [12], "gauntlet": [12],
+    "chest": [17], "tunic": [17], "breast": [17], "breastplate": [17],
+    "legs": [18], "leg": [18], "greave": [18], "pant": [18],
+    "feet": [19], "boot": [19],
+    "waist": [20], "girdle": [20],
+}
+
 def normalize_item_name(s: str) -> str:
     """Lowercase, strip, collapse spaces for matching."""
     if not s:
         return ""
     return " ".join(re.split(r"\s+", s.strip().lower()))
+
+
+def parse_elemental_loot_slot_and_armor(item_name: str) -> tuple[Optional[str], Optional[list[int]]]:
+    """
+    Parse an elemental loot item name to (armor_type, slot_ids).
+    - armor_type: 'silk'|'chain'|'plate'|'leather', or None for molds (match toon's class).
+    - slot_ids: EQ slot_id list (e.g. [19] for feet, [9,10] for bracer), or None if not determined.
+    Returns (None, None) if the name doesn't look like elemental slot-specific loot.
+    """
+    norm = normalize_item_name(item_name)
+    if "elemental" not in norm:
+        return (None, None)
+    armor_type: Optional[str] = None
+    for at in ("silk", "chain", "plate", "leather"):
+        if at in norm:
+            armor_type = at
+            break
+    slot_ids: Optional[list[int]] = None
+    for keyword, sids in ELEMENTAL_SLOT_KEYWORDS.items():
+        if keyword in norm:
+            slot_ids = sids
+            break
+    return (armor_type, slot_ids)
+
+
+def class_to_short(cls: str) -> str:
+    """Map class name (e.g. from characters.csv) to short form for CLASS_ARMOR_TYPE."""
+    if not cls:
+        return ""
+    c = cls.strip().lower().replace(" ", "")
+    # map full names / variants to 3-letter
+    m = {
+        "rogue": "rog", "shaman": "shm", "ranger": "rng",
+        "bard": "brd", "cleric": "clr", "warrior": "war", "paladin": "pal", "shadowknight": "shd",
+        "monk": "mnk", "beastlord": "bst", "druid": "dru",
+        "necromancer": "nec", "magician": "mag", "wizard": "wiz", "enchanter": "enc",
+    }
+    return m.get(c, c[:3] if len(c) >= 3 else c)
 
 
 def load_raids(data_dir: Path) -> dict[str, str]:
@@ -98,6 +174,22 @@ def load_characters(data_dir: Path) -> tuple[dict[str, str], dict[str, str]]:
     return name_to_cid, cid_to_name
 
 
+def load_character_classes(data_dir: Path) -> dict[str, str]:
+    """char_id -> class short (e.g. 'war', 'mag') for elemental class filtering."""
+    path = data_dir / "characters.csv"
+    out: dict[str, str] = {}
+    if not path.exists():
+        return out
+    cls_col = "class_name"  # characters.csv uses class_name
+    with open(path, "r", encoding="utf-8") as f:
+        for row in csv.DictReader(f):
+            cid = (row.get("char_id") or "").strip()
+            cls = (row.get(cls_col) or row.get("class") or "").strip()
+            if cid and cls:
+                out[cid] = class_to_short(cls)
+    return out
+
+
 def load_raid_loot(data_dir: Path) -> list[dict]:
     """List of loot rows (with keys raid_id, event_id, item_name, char_id, character_name, cost)."""
     path = data_dir / "raid_loot.csv"
@@ -133,7 +225,7 @@ def load_magelo_character_file(char_file: Path) -> tuple[dict[str, str], dict[st
 
 
 def load_magelo_inventory(inv_file: Path) -> dict[str, list[dict]]:
-    """char_id -> [ {item_id, item_name}, ... ] (all slots)."""
+    """char_id -> [ {item_id, item_name, slot_id}, ... ] (all slots). slot_id is EQ equipment slot (e.g. 19=feet)."""
     inv: dict[str, list[dict]] = defaultdict(list)
     if not inv_file.exists():
         return dict(inv)
@@ -144,10 +236,11 @@ def load_magelo_inventory(inv_file: Path) -> dict[str, list[dict]]:
             if len(parts) < 4:
                 continue
             cid = parts[0].strip()
+            slot_id = (parts[1] if len(parts) > 1 else "").strip()
             item_id = parts[2].strip()
             item_name = (parts[3] if len(parts) > 3 else "").strip()
             if cid:
-                inv[cid].append({"item_id": item_id, "item_name": item_name})
+                inv[cid].append({"item_id": item_id, "item_name": item_name, "slot_id": slot_id})
     return dict(inv)
 
 
@@ -159,6 +252,36 @@ def load_elemental_armor(json_path: Path) -> set[str]:
     return set(str(k) for k in data) if isinstance(data, dict) else set()
 
 
+def load_dkp_elemental_map(json_path: Path) -> tuple[dict[str, dict], frozenset[str]]:
+    """
+    Load dkp_elemental_to_magelo.json. Returns:
+    - name_to_lookup: normalized loot name -> { "magelo_item_ids_by_class": { "brd": "19549", ... } }
+    - elemental_names: frozenset of normalized names that are elemental (for elemental_source_names).
+    Matching is by item ID only: toon has the Magelo item_id for their class.
+    """
+    out_map: dict[str, dict] = {}
+    names_set: set[str] = set()
+    if not json_path.exists():
+        return (out_map, frozenset())
+    data = json.loads(json_path.read_text(encoding="utf-8"))
+    purchases = data.get("dkp_purchases") or {}
+    for _id, entry in purchases.items():
+        if not isinstance(entry, dict):
+            continue
+        name = (entry.get("name") or "").strip()
+        if not name:
+            continue
+        norm = normalize_item_name(name)
+        names_set.add(norm)
+        magelo_by_class = entry.get("magelo_item_ids_by_class")
+        if isinstance(magelo_by_class, dict):
+            magelo_by_class = {str(k).lower(): str(v) for k, v in magelo_by_class.items()}
+        else:
+            magelo_by_class = {}
+        out_map[norm] = {"magelo_item_ids_by_class": magelo_by_class}
+    return (out_map, frozenset(names_set))
+
+
 def build_elemental_item_names(
     magelo_inv: dict[str, list[dict]],
     elemental_item_ids: set[str],
@@ -167,6 +290,7 @@ def build_elemental_item_names(
     """
     Set of normalized item names that count as elemental loot.
     Derived from Magelo inventory: any item whose item_id is in elemental_armor.json.
+    The list can include both armor piece IDs and mold/pattern IDs (Elemental Boot Mold, etc.).
     Optional extra_names (e.g. from CLI) are added for names that may not appear in the dump.
     """
     names: set[str] = set()
@@ -207,24 +331,62 @@ def which_toons_have_item(
     elemental_item_ids: set[str],
     elemental_source_names: frozenset[str],
     dkp_to_magelo_id: Optional[dict[str, str]] = None,
+    elemental_id_to_armor: Optional[dict[str, str]] = None,
+    char_id_to_class: Optional[dict[str, str]] = None,
+    required_armor_type: Optional[str] = None,
+    required_slot_ids: Optional[list[int]] = None,
+    elemental_lookup: Optional[dict] = None,
 ) -> list[str]:
     """
     Return list of DKP char_ids on this account that have this item (by name or by elemental match).
-    Uses dkp_to_magelo_id to look up Magelo inventory when DKP and Magelo use different char_id schemes.
+    When elemental_lookup is set (from dkp_elemental_to_magelo.json): toon must have the exact
+    magelo item_id for their class (item ID is all we need). Otherwise use required_armor_type +
+    required_slot_ids (and elemental_item_ids / armor type).
     """
     norm_loot = normalize_item_name(item_name)
-    is_elemental_source = norm_loot in {normalize_item_name(n) for n in elemental_source_names}
+    is_elemental_source = norm_loot in elemental_source_names
     d2m = dkp_to_magelo_id or {}
+    id_to_armor = elemental_id_to_armor or {}
+    cid_to_cls = char_id_to_class or {}
+    use_json_match = elemental_lookup is not None and is_elemental_source
+    magelo_by_class = (elemental_lookup or {}).get("magelo_item_ids_by_class") or {}
+    slot_filter = required_slot_ids is not None and len(required_slot_ids) > 0
+    req_slots = required_slot_ids or []
 
     candidates = []
     for cid in account_char_ids:
-        magelo_id = d2m.get(cid) or cid  # use Magelo id for inventory lookup if we have a mapping
+        magelo_id = d2m.get(cid) or cid
         items = magelo_inv.get(magelo_id, [])
+        class_short = (cid_to_cls.get(cid) or "").lower()
+        allowed_armor = CLASS_ARMOR_TYPE.get(class_short) if cid_to_cls else None
         for it in items:
             inv_item_id = (it.get("item_id") or "").strip()
             inv_item_name = (it.get("item_name") or "").strip()
             if is_elemental_source:
-                if inv_item_id in elemental_item_ids:
+                if use_json_match:
+                    # Match by exact magelo item_id for this toon's class (item ID is all we need)
+                    expected_id = magelo_by_class.get(class_short)
+                    if expected_id and inv_item_id == expected_id:
+                        candidates.append(cid)
+                        break
+                    continue
+                else:
+                    if inv_item_id not in elemental_item_ids:
+                        continue
+                    item_armor = id_to_armor.get(inv_item_id)
+                    if slot_filter:
+                        try:
+                            inv_slot = int((it.get("slot_id") or "").strip() or 0)
+                        except (ValueError, TypeError):
+                            inv_slot = 0
+                        if inv_slot not in req_slots:
+                            continue
+                    if required_armor_type is not None:
+                        if item_armor != required_armor_type:
+                            continue
+                    else:
+                        if item_armor is not None and allowed_armor is not None and item_armor != allowed_armor:
+                            continue
                     candidates.append(cid)
                     break
             else:
@@ -241,25 +403,58 @@ def item_count_per_toon(
     elemental_item_ids: set[str],
     elemental_source_names: frozenset[str],
     dkp_to_magelo_id: Optional[dict[str, str]] = None,
+    elemental_id_to_armor: Optional[dict[str, str]] = None,
+    char_id_to_class: Optional[dict[str, str]] = None,
+    required_armor_type: Optional[str] = None,
+    required_slot_ids: Optional[list[int]] = None,
+    elemental_lookup: Optional[dict] = None,
 ) -> dict[str, int]:
     """
     Return for each DKP char_id on this account the number of this item they have on Magelo.
-    For elemental-source items: 1 if they have any matching elemental piece, else 0.
-    For normal items: count of inventory slots with that item name.
+    When elemental_lookup is set: count how many times they have the magelo item_id for their class (e.g. 2 bracers = 2).
     """
     norm_loot = normalize_item_name(item_name)
-    is_elemental_source = norm_loot in {normalize_item_name(n) for n in elemental_source_names}
+    is_elemental_source = norm_loot in elemental_source_names
     d2m = dkp_to_magelo_id or {}
+    id_to_armor = elemental_id_to_armor or {}
+    cid_to_cls = char_id_to_class or {}
+    use_json_match = elemental_lookup is not None and is_elemental_source
+    magelo_by_class = (elemental_lookup or {}).get("magelo_item_ids_by_class") or {}
+    slot_filter = required_slot_ids is not None and len(required_slot_ids) > 0
+    req_slots = required_slot_ids or []
     out: dict[str, int] = {}
     for cid in account_char_ids:
         magelo_id = d2m.get(cid) or cid
         items = magelo_inv.get(magelo_id, [])
         if is_elemental_source:
+            class_short = (cid_to_cls.get(cid) or "").lower()
+            allowed_armor = CLASS_ARMOR_TYPE.get(class_short) if cid_to_cls else None
             count = 0
             for it in items:
-                if (it.get("item_id") or "").strip() in elemental_item_ids:
-                    count = 1
-                    break
+                inv_item_id = (it.get("item_id") or "").strip()
+                if use_json_match:
+                    expected_id = magelo_by_class.get(class_short)
+                    if expected_id and inv_item_id == expected_id:
+                        count += 1
+                    continue
+                if inv_item_id not in elemental_item_ids:
+                    continue
+                if slot_filter:
+                    try:
+                        inv_slot = int((it.get("slot_id") or "").strip() or 0)
+                    except (ValueError, TypeError):
+                        inv_slot = 0
+                    if inv_slot not in req_slots:
+                        continue
+                item_armor = id_to_armor.get(inv_item_id)
+                if required_armor_type is not None:
+                    if item_armor != required_armor_type:
+                        continue
+                else:
+                    if item_armor is not None and allowed_armor is not None and item_armor != allowed_armor:
+                        continue
+                count = 1
+                break
             out[cid] = count
         else:
             count = sum(1 for it in items if normalize_item_name((it.get("item_name") or "").strip()) == norm_loot)
@@ -276,19 +471,27 @@ def run(
     out_counts: Path,
     elemental_extra_names: Optional[list[str]] = None,
     clear_assignments: bool = False,
+    dkp_elemental_json: Optional[Path] = None,
 ) -> None:
     raids = load_raids(data_dir)
     char_to_account, account_to_chars = load_character_account(data_dir)
     name_to_char, dkp_char_id_to_name = load_characters(data_dir)
+    char_id_to_class = load_character_classes(data_dir)
     loot_rows = load_raid_loot(data_dir)
     magelo_names_to_id, magelo_id_to_name = load_magelo_character_file(magelo_char_file)
     magelo_inv = load_magelo_inventory(magelo_inv_file)
     elemental_ids = load_elemental_armor(elemental_json)
 
-    # Elemental loot: names derived from Magelo inventory (item_id in elemental_armor.json)
+    # Elemental loot: when dkp_elemental_to_magelo.json is present, use it (item IDs only). Else names from Magelo.
+    dkp_elemental_map: dict[str, dict] = {}
+    elemental_names_from_json: frozenset[str] = frozenset()
+    if dkp_elemental_json and dkp_elemental_json.exists():
+        dkp_elemental_map, elemental_names_from_json = load_dkp_elemental_map(dkp_elemental_json)
     elemental_source_norm = build_elemental_item_names(
         magelo_inv, elemental_ids, elemental_extra_names
     )
+    if elemental_names_from_json:
+        elemental_source_norm = elemental_source_norm | elemental_names_from_json
 
     # DKP roster and Magelo export often use different char_id schemes. Map DKP char_id -> Magelo id by name.
     dkp_to_magelo_id: dict[str, str] = {}
@@ -328,24 +531,32 @@ def run(
     assigned_character_name: list[Optional[str]] = [None] * len(loot_rows)
     assigned_via_magelo: list[bool] = [False] * len(loot_rows)  # True if we found item on a toon (incl. namesake)
 
-    # Manual (Loot tab) rows: assigned_via_magelo=0. Always preserve these, even with --clear-assignments.
-    # Other rows: preserve existing assignment unless --clear-assignments.
-    manual_only_indices: set[int] = set()  # manual rows: always skip in assignment loop
+    # Rows explicitly marked manual_assignment=1 (or manual=1): never reassign, even with --clear-assignments.
+    # Other rows with assigned_via_magelo=0: preserve when not --clear-assignments (script left on namesake or legacy).
+    manual_only_indices: set[int] = set()
     n_preserved = 0
     for idx, row in enumerate(loot_rows):
         ac = (row.get("assigned_char_id") or "").strip()
         an = (row.get("assigned_character_name") or "").strip()
         via_magelo_raw = (row.get("assigned_via_magelo") or "").strip()
-        is_manual = via_magelo_raw == "0"
-        if is_manual:
-            # Always preserve manual (even with --clear-assignments); never overwrite
+        manual_col = (row.get("manual_assignment") or row.get("manual") or "").strip().lower()
+        is_explicit_manual = manual_col in ("1", "true", "yes")
+        is_legacy_manual = via_magelo_raw == "0"
+        if is_explicit_manual:
+            # User honestly set this in UI; never overwrite
             assigned_char_id[idx] = ac or None
             assigned_character_name[idx] = an or None
             assigned_via_magelo[idx] = False
             manual_only_indices.add(idx)
             n_preserved += 1
+        elif is_legacy_manual and not clear_assignments:
+            # Preserve when not doing a full recompute
+            assigned_char_id[idx] = ac or None
+            assigned_character_name[idx] = an or None
+            assigned_via_magelo[idx] = via_magelo_raw == "1"
+            manual_only_indices.add(idx)
+            n_preserved += 1
         elif (ac or an) and not clear_assignments:
-            # Preserve non-manual existing assignment unless we are clearing
             assigned_char_id[idx] = ac or None
             assigned_character_name[idx] = an or None
             assigned_via_magelo[idx] = via_magelo_raw == "1"
@@ -383,6 +594,12 @@ def run(
             item_name = (row.get("item_name") or "").strip()
             norm_item = normalize_item_name(item_name)
             cost_val = float(row.get("cost") or 0) or 0
+            # Elemental: use dkp_elemental_to_magelo.json (item ID per class) when available; else fallback slot/armor parse
+            elemental_lookup = dkp_elemental_map.get(norm_item) if dkp_elemental_map else None
+            if elemental_lookup is None and norm_item in elemental_source_norm:
+                req_armor, req_slots = parse_elemental_loot_slot_and_armor(item_name)
+            else:
+                req_armor, req_slots = None, None
             magelo_count_per_toon = item_count_per_toon(
                 item_name,
                 account_toons,
@@ -390,6 +607,11 @@ def run(
                 elemental_ids,
                 elemental_source_norm,
                 dkp_to_magelo_id,
+                elemental_id_to_armor=ELEMENTAL_ARMOR_TYPE,
+                char_id_to_class=char_id_to_class,
+                required_armor_type=req_armor,
+                required_slot_ids=req_slots,
+                elemental_lookup=elemental_lookup,
             )
 
             if not account_toons:
@@ -403,6 +625,11 @@ def run(
                 elemental_ids,
                 elemental_source_norm,
                 dkp_to_magelo_id,
+                elemental_id_to_armor=ELEMENTAL_ARMOR_TYPE,
+                char_id_to_class=char_id_to_class,
+                required_armor_type=req_armor,
+                required_slot_ids=req_slots,
+                elemental_lookup=elemental_lookup,
             )
 
             if len(candidates) == 0:
@@ -454,11 +681,14 @@ def run(
             if not assigned_character_name[idx]:
                 assigned_character_name[idx] = cid
 
-    # Write updated raid_loot.csv (include id if present so we can UPDATE Supabase by id, not insert duplicates)
+    # Write updated raid_loot.csv (include id, manual_assignment if present)
     fieldnames = ["raid_id", "event_id", "item_name", "char_id", "character_name", "cost",
                   "assigned_char_id", "assigned_character_name", "assigned_via_magelo"]
     if loot_rows and "id" in loot_rows[0]:
         fieldnames = ["id"] + [f for f in fieldnames if f != "id"]
+    for opt in ("manual_assignment", "manual"):
+        if loot_rows and opt in loot_rows[0] and opt not in fieldnames:
+            fieldnames.append(opt)
     with open(out_raid_loot, "w", encoding="utf-8", newline="") as f:
         w = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
         w.writeheader()
@@ -511,6 +741,8 @@ def main() -> int:
                     help="Override: path to TAKP_character_inventory.txt")
     ap.add_argument("--elemental-armor-json", type=Path, default=None,
                     help="Override: path to elemental_armor.json")
+    ap.add_argument("--dkp-elemental-json", type=Path, default=SCRIPT_DIR / "dkp_elemental_to_magelo.json",
+                    help="Map DKP elemental loot names to Magelo item IDs by class (item ID match only)")
     ap.add_argument("--out-raid-loot", type=Path, default=DATA_DIR / "raid_loot.csv",
                     help="Output raid_loot CSV path")
     ap.add_argument("--out-counts", type=Path, default=DATA_DIR / "character_loot_assignment_counts.csv",
@@ -542,6 +774,7 @@ def main() -> int:
         out_counts=args.out_counts,
         elemental_extra_names=args.elemental_extra,
         clear_assignments=args.clear_assignments,
+        dkp_elemental_json=args.dkp_elemental_json,
     )
     return 0
 
