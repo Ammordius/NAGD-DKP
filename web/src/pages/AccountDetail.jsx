@@ -98,7 +98,7 @@ export default function AccountDetail({ isOfficer, profile, session }) {
         Promise.all([
           supabase.from('characters').select('char_id, name, class_name, level').in('char_id', charIds),
           fetchAll('raid_attendance', 'raid_id, char_id, character_name', (q) => q.in('char_id', charIds)),
-          fetchAll('raid_loot', 'raid_id, char_id, character_name, item_name, cost', (q) => q.in('char_id', charIds)),
+          fetchAll('raid_loot', 'raid_id, char_id, character_name, item_name, cost, assigned_char_id, assigned_character_name', (q) => q.in('char_id', charIds)),
           supabase.from('characters').select('char_id, name').in('char_id', charIds).then((cr) => {
             const ch = cr.data || []
             const characterKeys = [...new Set([...charIds, ...ch.map((c) => c.name).filter(Boolean)])]
@@ -444,14 +444,17 @@ export default function AccountDetail({ isOfficer, profile, session }) {
                           </p>
                           {act.items.length > 0 && (
                             <ul style={{ margin: '0.25rem 0 0 1.25rem', paddingLeft: 0, listStyle: 'none' }}>
-                              {act.items.map((row, i) => (
-                                <li key={i} style={{ marginBottom: '0.25rem', fontSize: '0.9rem' }}>
-                                  <Link to={`/items/${encodeURIComponent(row.item_name || '')}`}>{row.item_name || '—'}</Link>
-                                  {' '}{MIDDLE_DOT}{' '}
-                                  <Link to={`/accounts/${accountId}`}>{row.character_name || row.char_id || '—'}</Link>
-                                  {row.cost != null && row.cost !== '' && <> {MIDDLE_DOT} {row.cost} DKP</>}
-                                </li>
-                              ))}
+                              {act.items.map((row, i) => {
+                                const charName = row.assigned_character_name || row.character_name || row.char_id || '—'
+                                return (
+                                  <li key={i} style={{ marginBottom: '0.25rem', fontSize: '0.9rem' }}>
+                                    <Link to={`/items/${encodeURIComponent(row.item_name || '')}`}>{row.item_name || '—'}</Link>
+                                    {' '}{MIDDLE_DOT}{' '}
+                                    <Link to={`/characters/${encodeURIComponent(charName)}`}>{charName}</Link>
+                                    {row.cost != null && row.cost !== '' && <> {MIDDLE_DOT} {row.cost} DKP</>}
+                                  </li>
+                                )
+                              })}
                             </ul>
                           )}
                         </li>

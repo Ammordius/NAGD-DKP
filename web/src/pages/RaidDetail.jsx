@@ -24,6 +24,7 @@ export default function RaidDetail({ isOfficer }) {
   const [addToTicCharQuery, setAddToTicCharQuery] = useState('')
   const [showCharDropdown, setShowCharDropdown] = useState(false)
   const [addToTicResult, setAddToTicResult] = useState(null)
+  const [accountDisplayNames, setAccountDisplayNames] = useState({})
 
   const loadData = useCallback(() => {
     if (!raidId) return
@@ -55,6 +56,35 @@ export default function RaidDetail({ isOfficer }) {
       supabase.from('characters').select('char_id, name').limit(5000).then(({ data }) => setCharacters(data || []))
     }
   }, [isOfficer, raidId])
+
+  // Resolve account display names for loot (and attendance) so we can show "Account name (character)"
+  useEffect(() => {
+    if (!loot.length && !attendance.length) {
+      setAccountDisplayNames({})
+      return
+    }
+    const accountIds = new Set()
+    loot.forEach((row) => {
+      const aid = getAccountId(row.character_name || row.char_id)
+      if (aid) accountIds.add(aid)
+    })
+    attendance.forEach((a) => {
+      const aid = getAccountId(a.character_name || a.char_id)
+      if (aid) accountIds.add(aid)
+    })
+    if (accountIds.size === 0) {
+      setAccountDisplayNames({})
+      return
+    }
+    supabase.from('accounts').select('account_id, display_name, toon_names').in('account_id', [...accountIds]).then(({ data }) => {
+      const map = {}
+      ;(data || []).forEach((row) => {
+        const name = row.display_name?.trim() || row.toon_names?.split(',')[0]?.trim() || row.account_id
+        if (row.account_id) map[row.account_id] = name
+      })
+      setAccountDisplayNames(map)
+    })
+  }, [loot, attendance, getAccountId])
 
   useEffect(() => {
     if (events.length > 0 && (!addToTicEventId || !events.some((e) => e.event_id === addToTicEventId))) {
@@ -357,10 +387,10 @@ export default function RaidDetail({ isOfficer }) {
         {isOfficer && <p style={{ color: '#71717a', fontSize: '0.875rem', marginTop: 0 }}><Link to="/officer">Officer page</Link> to add more loot or tics.</p>}
         <table>
           <thead>
-            <tr><th>Item</th><th>Character</th><th>Cost</th>{isOfficer && <th style={{ width: '8rem' }}></th>}</tr>
+            <tr><th>Item</th><th>Buyer</th><th>On toon</th><th>Cost</th>{isOfficer && <th style={{ width: '8rem' }}></th>}</tr>
           </thead>
           <tbody>
-            {loot.length === 0 && <tr><td colSpan={isOfficer ? 4 : 3}>No loot recorded</td></tr>}
+            {loot.length === 0 && <tr><td colSpan={isOfficer ? 5 : 4}>No loot recorded</td></tr>}
             {loot.map((row, i) => {
               const isEditingCost = isOfficer && editingLootId === row.id
               return (
@@ -368,10 +398,18 @@ export default function RaidDetail({ isOfficer }) {
                   <td><Link to={`/items/${encodeURIComponent(row.item_name || '')}`}>{row.item_name || '—'}</Link></td>
                   <td>
                     {(() => {
+                      const charName = row.character_name || row.char_id || '—'
                       const accountId = getAccountId(row.character_name || row.char_id)
-                      const to = accountId ? `/accounts/${accountId}` : `/characters/${encodeURIComponent(row.character_name || row.char_id || '')}`
-                      return <Link to={to}>{row.character_name || row.char_id || '—'}</Link>
+                      const to = accountId ? `/accounts/${accountId}` : `/characters/${encodeURIComponent(charName)}`
+                      const accountLabel = accountId ? (accountDisplayNames[accountId] || accountId) : null
+                      const label = accountLabel ? `${accountLabel} (${charName})` : charName
+                      return <Link to={to}>{label}</Link>
                     })()}
+                  </td>
+                  <td style={{ color: '#a1a1aa', fontSize: '0.875rem' }}>
+                    {row.assigned_character_name ? (
+                      <Link to={`/characters/${encodeURIComponent(row.assigned_character_name)}`}>{row.assigned_character_name}</Link>
+                    ) : '—'}
                   </td>
                   <td>
                     {isEditingCost ? (
