@@ -313,10 +313,7 @@ export default function AccountDetail({ isOfficer, profile, session }) {
               {characters.map((c) => {
                 const name = c.name || c.char_id
                 const mageloUrl = `${MAGELO_BASE}${encodeURIComponent(name)}`
-                const earned = dkpByCharacterKey.earned[c.char_id] ?? dkpByCharacterKey.earned[name] ?? 0
                 const spent = dkpByCharacterKey.spent[name] ?? dkpByCharacterKey.spent[c.char_id] ?? 0
-                const net = Number(earned) - Number(spent)
-                const dkpStr = [earned > 0 && `${Number(earned).toFixed(0)} earned`, spent > 0 && `${Number(spent).toFixed(0)} spent`, `${Number(net).toFixed(0)} net`].filter(Boolean).join(' · ')
                 return (
                   <li key={c.char_id || c.name} style={{ marginBottom: '0.5rem' }}>
                     <Link to={`/characters/${encodeURIComponent(name)}`}>{name}</Link>
@@ -325,9 +322,9 @@ export default function AccountDetail({ isOfficer, profile, session }) {
                         {[c.class_name, c.level].filter(Boolean).join(' ')}
                       </span>
                     )}
-                    {(earned > 0 || spent > 0) && (
+                    {spent > 0 && (
                       <span style={{ color: '#a1a1aa', fontSize: '0.9rem', marginLeft: '0.5rem' }}>
-                        {' '}{MIDDLE_DOT}{' '}{dkpStr} DKP
+                        {' '}{MIDDLE_DOT}{' '}{Number(spent).toFixed(0)} spent
                       </span>
                     )}
                     {' '}{MIDDLE_DOT}{' '}
