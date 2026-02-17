@@ -4,9 +4,16 @@ import { supabase } from '../lib/supabase'
 import { useCharToAccountMap } from '../lib/useCharToAccountMap'
 import AssignedLootDisclaimer from '../components/AssignedLootDisclaimer'
 
-const MONTHS_OPTIONS = [1, 3, 6]
+const MONTHS_OPTIONS = [
+  { value: 1, label: 'Last 1 month' },
+  { value: 3, label: 'Last 3 months' },
+  { value: 6, label: 'Last 6 months' },
+  { value: 12, label: 'Last 1 year' },
+  { value: 0, label: 'All time' },
+]
 const PAGE_SIZE = 500
 const CHUNK = 200
+const LOOT_COLLAPSE_THRESHOLD = 5
 
 export default function LootRecipients() {
   const { getAccountId } = useCharToAccountMap()
@@ -22,12 +29,19 @@ export default function LootRecipients() {
   const [characterDkpSpent, setCharacterDkpSpent] = useState({}) // key (id or name) -> total_spent on that character (from backend table)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [expandedLootRows, setExpandedLootRows] = useState(() => new Set()) // character_key -> show full loot list
 
   useEffect(() => {
     setLoading(true)
     setError('')
     const cutoff = new Date()
-    cutoff.setMonth(cutoff.getMonth() - months)
+    if (months > 0) {
+      cutoff.setMonth(cutoff.getMonth() - months)
+    } else {
+      cutoff.setFullYear(1970)
+      cutoff.setMonth(0)
+      cutoff.setDate(1)
+    }
     const cutoffIso = cutoff.toISOString().slice(0, 10)
 
     supabase.from('raids').select('raid_id, date_iso').gte('date_iso', cutoffIso).then((rRes) => {
@@ -219,33 +233,21 @@ export default function LootRecipients() {
       const charName = (row.assigned_character_name || '').trim()
       const charId = (row.assigned_char_id || '').trim()
       const key = hasAssignment ? (charName || charId) : UNASSIGNED_KEY
+      // Skip unassigned: do not add to list (Unassigned is not a character)
+      if (key === UNASSIGNED_KEY) return
       if (!byKey[key]) {
-        if (key === UNASSIGNED_KEY) {
-          byKey[key] = {
-            character_key: 'Unassigned',
-            character_name: 'Unassigned',
-            char_id: '',
-            class_name: '',
-            account_id: null,
-            account_display_name: null,
-            lootItems: [],
-            dkpSpentOnToon: 0,
-            lastLootDate: null,
-          }
-        } else {
-          const accountId = getAccountId(charName || charId)
-          const charRow = characters.find((c) => (c.name || '').trim() === key || (c.char_id || '').trim() === key || (c.name || '').trim() === charId || (c.char_id || '').trim() === charId)
-          byKey[key] = {
-            character_key: key,
-            character_name: charName || charId,
-            char_id: charRow?.char_id?.trim() || '',
-            class_name: charRow?.class_name || '',
-            account_id: accountId,
-            account_display_name: accountId ? (accounts[accountId] || accountId) : null,
-            lootItems: [],
-            dkpSpentOnToon: 0,
-            lastLootDate: null,
-          }
+        const accountId = getAccountId(charName || charId)
+        const charRow = characters.find((c) => (c.name || '').trim() === key || (c.char_id || '').trim() === key || (c.name || '').trim() === charId || (c.char_id || '').trim() === charId)
+        byKey[key] = {
+          character_key: key,
+          character_name: charName || charId,
+          char_id: charRow?.char_id?.trim() || '',
+          class_name: charRow?.class_name || '',
+          account_id: accountId,
+          account_display_name: accountId ? (accounts[accountId] || accountId) : null,
+          lootItems: [],
+          dkpSpentOnToon: 0,
+          lastLootDate: null,
         }
       }
       const cost = parseFloat(row.cost || 0) || 0
@@ -297,14 +299,14 @@ export default function LootRecipients() {
       <p><Link to="/">← Home</Link></p>
       <h1>Loot recipients</h1>
       <p style={{ color: '#a1a1aa', marginBottom: '1rem' }}>
-        Characters who received loot in the last {months} month{months !== 1 ? 's' : ''}. Loot and DKP spent are for this window. Account DKP total is current.
+        Characters who received loot {months === 0 ? ' (all time)' : `in the last ${months} month${months !== 1 ? 's' : ''}`}. Loot and DKP spent are for this window. Account DKP total is current.
       </p>
       <div className="card" style={{ marginBottom: '1rem', display: 'flex', flexWrap: 'wrap', gap: '1rem', alignItems: 'center' }}>
         <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           <span>Window:</span>
           <select value={months} onChange={(e) => setMonths(Number(e.target.value))} style={{ padding: '0.35rem 0.5rem' }}>
-            {MONTHS_OPTIONS.map((m) => (
-              <option key={m} value={m}>Last {m} month{m !== 1 ? 's' : ''}</option>
+            {MONTHS_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
             ))}
           </select>
         </label>
@@ -337,7 +339,7 @@ export default function LootRecipients() {
               <tr>
                 <th>Account (Character)</th>
                 <th>Class</th>
-                <th>Loot received (last {months}m)</th>
+                <th>Loot received ({months === 0 ? 'all time' : `last ${months}m`})</th>
                 <th style={{ whiteSpace: 'nowrap' }}>DKP spent (window)</th>
                 <th style={{ whiteSpace: 'nowrap' }}>Character DKP spent (all time)</th>
                 <th style={{ whiteSpace: 'nowrap' }}>Account DKP total</th>
@@ -345,15 +347,22 @@ export default function LootRecipients() {
             </thead>
             <tbody>
               {recipients.map((r) => {
-                const isUnassigned = r.character_key === 'Unassigned'
                 const accountTo = r.account_id ? `/accounts/${r.account_id}` : null
                 const characterTo = `/characters/${encodeURIComponent(r.character_name)}`
+                const lootCount = r.lootItems.length
+                const showCollapsed = lootCount > LOOT_COLLAPSE_THRESHOLD && !expandedLootRows.has(r.character_key)
+                const toggleLoot = () => {
+                  setExpandedLootRows((prev) => {
+                    const next = new Set(prev)
+                    if (next.has(r.character_key)) next.delete(r.character_key)
+                    else next.add(r.character_key)
+                    return next
+                  })
+                }
                 return (
                   <tr key={r.character_key}>
                     <td>
-                      {isUnassigned ? (
-                        <span style={{ color: '#71717a' }}>{r.character_name}</span>
-                      ) : accountTo ? (
+                      {accountTo ? (
                         <><Link to={accountTo}>{r.account_display_name || r.account_id}</Link> (<Link to={characterTo}>{r.character_name}</Link>)</>
                       ) : (
                         <Link to={characterTo}>{r.character_name}</Link>
@@ -361,15 +370,26 @@ export default function LootRecipients() {
                     </td>
                     <td style={{ color: '#a1a1aa' }}>{r.class_name || '—'}</td>
                     <td style={{ maxWidth: '20rem', fontSize: '0.9rem' }}>
-                      {r.lootItems.length === 0 ? '—' : (
-                        <ul style={{ margin: 0, paddingLeft: '1.25rem', listStyle: 'disc' }}>
-                          {r.lootItems.map((it, i) => (
-                            <li key={i}>
-                              <Link to={`/items/${encodeURIComponent(it.item_name)}`}>{it.item_name}</Link>
-                              {it.cost != null && it.cost !== '' && <span style={{ color: '#71717a' }}> ({it.cost} DKP)</span>}
-                            </li>
-                          ))}
-                        </ul>
+                      {lootCount === 0 ? '—' : showCollapsed ? (
+                        <button type="button" onClick={toggleLoot} style={{ background: 'none', border: 'none', color: 'var(--link-color, #3b82f6)', cursor: 'pointer', padding: 0, textDecoration: 'underline', fontSize: 'inherit' }}>
+                          {lootCount} items (click to expand)
+                        </button>
+                      ) : (
+                        <>
+                          {lootCount > LOOT_COLLAPSE_THRESHOLD && (
+                            <button type="button" onClick={toggleLoot} style={{ background: 'none', border: 'none', color: 'var(--link-color, #3b82f6)', cursor: 'pointer', padding: 0, marginBottom: '0.25rem', textDecoration: 'underline', fontSize: '0.85rem' }}>
+                              Collapse
+                            </button>
+                          )}
+                          <ul style={{ margin: 0, paddingLeft: '1.25rem', listStyle: 'disc' }}>
+                            {r.lootItems.map((it, i) => (
+                              <li key={i}>
+                                <Link to={`/items/${encodeURIComponent(it.item_name)}`}>{it.item_name}</Link>
+                                {it.cost != null && it.cost !== '' && <span style={{ color: '#71717a' }}> ({it.cost} DKP)</span>}
+                              </li>
+                            ))}
+                          </ul>
+                        </>
                       )}
                     </td>
                     <td style={{ whiteSpace: 'nowrap' }}>{Number(r.dkpSpentOnToon || 0).toFixed(0)}</td>
