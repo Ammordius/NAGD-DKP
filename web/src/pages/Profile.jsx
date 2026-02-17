@@ -134,7 +134,7 @@ export default function Profile({ profile, onProfileUpdate }) {
           </>
         ) : (
           <p style={{ color: '#71717a' }}>
-            You have not claimed an account. Go to an account page and click “Claim this account” to link it to your profile.
+            You have not claimed an account. Go to an account page and click "Claim this account" to link it to your profile.
           </p>
         )}
       </div>

@@ -115,6 +115,12 @@ export default function Officer({ isOfficer }) {
   const [error, setError] = useState('')
   const [mutating, setMutating] = useState(false)
 
+  // Create new DKP account (officer-only)
+  const [newAccountDisplayName, setNewAccountDisplayName] = useState('')
+  const [newAccountLoading, setNewAccountLoading] = useState(false)
+  const [newAccountResult, setNewAccountResult] = useState(null)
+  const [newAccountError, setNewAccountError] = useState('')
+
   // Add raid
   const [raidPaste, setRaidPaste] = useState('')
   const [addRaidResult, setAddRaidResult] = useState(null)
@@ -403,6 +409,22 @@ export default function Officer({ isOfficer }) {
     if (count != null) await supabase.from('raids').update({ attendees: String(count) }).eq('raid_id', selectedRaidId)
     loadSelectedRaid()
     setMutating(false)
+  }
+
+  const handleCreateAccount = async () => {
+    setNewAccountError('')
+    setNewAccountResult(null)
+    setNewAccountLoading(true)
+    const { data: accountId, error: rpcErr } = await supabase.rpc('create_account', {
+      p_display_name: newAccountDisplayName.trim() || null,
+    })
+    setNewAccountLoading(false)
+    if (rpcErr) {
+      setNewAccountError(rpcErr.message)
+      return
+    }
+    setNewAccountResult(accountId)
+    setNewAccountDisplayName('')
   }
 
   const handleAddRaid = async () => {
@@ -884,6 +906,33 @@ export default function Officer({ isOfficer }) {
           <span style={{ marginLeft: '0.5rem' }}>
             <Link to={`/raids/${selectedRaidId}`}>View full raid</Link>
           </span>
+        )}
+      </section>
+
+      {/* Create new DKP account (officer-only); player claims it on the account page */}
+      <section className="card" style={{ marginBottom: '1.5rem' }}>
+        <h2 style={{ marginTop: 0 }}>Create new DKP account</h2>
+        <p style={{ color: '#71717a', fontSize: '0.9rem', marginBottom: '0.75rem' }}>
+          Create an account that a player can then claim on the account page. Share the account link with them.
+        </p>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+          <input
+            type="text"
+            placeholder="Display name (e.g. player main)"
+            value={newAccountDisplayName}
+            onChange={(e) => setNewAccountDisplayName(e.target.value)}
+            style={{ padding: '0.35rem 0.5rem', minWidth: '200px' }}
+            onKeyDown={(e) => e.key === 'Enter' && handleCreateAccount()}
+          />
+          <button type="button" className="btn" onClick={handleCreateAccount} disabled={newAccountLoading}>
+            {newAccountLoading ? 'Creating…' : 'Create account'}
+          </button>
+        </div>
+        {newAccountError && <p className="error" style={{ marginTop: '0.5rem', marginBottom: 0 }}>{newAccountError}</p>}
+        {newAccountResult && (
+          <p style={{ color: '#22c55e', marginTop: '0.5rem', marginBottom: 0 }}>
+            Created. <Link to={`/accounts/${newAccountResult}`}>View account</Link> — share this link so the player can claim it.
+          </p>
         )}
       </section>
 
