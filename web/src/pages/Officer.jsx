@@ -190,6 +190,44 @@ export default function Officer({ isOfficer }) {
     }
   }, [getAccountId, accountIdToDisplayName, nameToChar, charIdToName])
 
+  const getAccountDisplayName = useMemo(() => {
+    return (key) => {
+      if (key == null || key === '') return null
+      const accId = getAccountId(key)
+      return accId ? (accountIdToDisplayName[accId] || accId) : null
+    }
+  }, [getAccountId, accountIdToDisplayName])
+
+  const groupAttendeesByAccount = useCallback((attendeeList, getAccId, getAccDisplayName) => {
+    const byKey = new Map()
+    for (const a of attendeeList) {
+      const name = (a.character_name ?? a.name ?? a.char_id ?? '').toString().trim() || '—'
+      const charId = a.char_id ?? a.character_name
+      const accId = getAccId(name !== '—' ? name : charId)
+      const key = accId != null ? `account:${accId}` : `char:${String(charId ?? name).trim()}`
+      if (!byKey.has(key)) {
+        byKey.set(key, {
+          accountId: accId ?? null,
+          accountDisplayName: accId ? (getAccDisplayName(name !== '—' ? name : charId) ?? accId) : null,
+          names: [],
+          charIds: [],
+        })
+      }
+      const entry = byKey.get(key)
+      if (!entry.names.includes(name)) {
+        entry.names.push(name)
+        entry.charIds.push(charId)
+      }
+    }
+    const list = [...byKey.values()]
+    list.sort((a, b) => {
+      const aLabel = a.accountDisplayName || a.names[0] || ''
+      const bLabel = b.accountDisplayName || b.names[0] || ''
+      return String(aLabel).localeCompare(String(bLabel))
+    })
+    return list
+  }, [])
+
   const allItemNamesForLootLog = useMemo(() => {
     const byLower = new Map()
     ;(itemNames || []).forEach((n) => { if (n) byLower.set(n.trim().toLowerCase(), n.trim()) })
@@ -1168,12 +1206,18 @@ export default function Officer({ isOfficer }) {
                         <tr>
                           <td colSpan={7} style={{ padding: '0.5rem 1rem', verticalAlign: 'top', backgroundColor: 'rgba(0,0,0,0.2)', borderBottom: '1px solid #27272a' }}>
                             <div className="attendee-list">
-                              {attendees.map((a, i) => {
-                                const name = a.name || a.char_id || ''
-                                const accountId = getAccountId(a.name || a.char_id)
-                                const to = accountId ? `/accounts/${accountId}` : `/characters/${encodeURIComponent(name)}`
-                                const label = getAccountCharacterDisplay(a.name || a.char_id) || name
-                                return <Link key={a.char_id || a.name || i} to={to}>{label}</Link>
+                              {groupAttendeesByAccount(
+                                attendees.map((a) => ({ character_name: a.name, name: a.name, char_id: a.char_id })),
+                                getAccountId,
+                                getAccountDisplayName
+                              ).map((group) => {
+                                const label = group.accountDisplayName
+                                  ? `${group.accountDisplayName} (${group.names.join(', ')})`
+                                  : group.names[0] || '—'
+                                const to = group.accountId
+                                  ? `/accounts/${group.accountId}`
+                                  : `/characters/${encodeURIComponent(group.names[0] || '')}`
+                                return <Link key={group.accountId ?? group.names[0]} to={to}>{label}</Link>
                               })}
                             </div>
                           </td>
@@ -1232,12 +1276,14 @@ export default function Officer({ isOfficer }) {
 
             <h3 style={{ marginTop: '1.25rem' }}>Attendees</h3>
             <div className="attendee-list">
-              {attendance.length > 0 ? attendance.map((a) => {
-                const charName = a.character_name || a.char_id || ''
-                const accountId = getAccountId(a.character_name || a.char_id)
-                const to = accountId ? `/accounts/${accountId}` : `/characters/${encodeURIComponent(charName)}`
-                const label = getAccountCharacterDisplay(a.character_name || a.char_id) || charName
-                return <Link key={a.char_id || a.character_name} to={to}>{label}</Link>
+              {attendance.length > 0 ? groupAttendeesByAccount(attendance, getAccountId, getAccountDisplayName).map((group) => {
+                const label = group.accountDisplayName
+                  ? `${group.accountDisplayName} (${group.names.join(', ')})`
+                  : group.names[0] || '—'
+                const to = group.accountId
+                  ? `/accounts/${group.accountId}`
+                  : `/characters/${encodeURIComponent(group.names[0] || '')}`
+                return <Link key={group.accountId ?? group.names[0]} to={to}>{label}</Link>
               }) : (
                 <span style={{ color: '#71717a' }}>None (add a DKP tic to record attendance)</span>
               )}

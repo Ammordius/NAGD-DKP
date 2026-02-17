@@ -100,6 +100,42 @@ export default function RaidDetail({ isOfficer }) {
     return byEvent
   }, [eventAttendance])
 
+  // Group attendees by account for display: AccountName (Char1, Char2). Unlinked chars shown as single name.
+  const groupAttendeesByAccount = useCallback((attendeeList, getAccId, getAccDisplayName) => {
+    const byKey = new Map()
+    for (const a of attendeeList) {
+      const name = (a.character_name ?? a.name ?? a.char_id ?? '').toString().trim() || '—'
+      const charId = a.char_id ?? a.character_name
+      const accId = getAccId(name !== '—' ? name : charId)
+      const key = accId != null ? `account:${accId}` : `char:${String(charId ?? name).trim()}`
+      if (!byKey.has(key)) {
+        byKey.set(key, {
+          accountId: accId ?? null,
+          accountDisplayName: accId ? (getAccDisplayName(name !== '—' ? name : charId) ?? accId) : null,
+          names: [],
+          charIds: [],
+        })
+      }
+      const entry = byKey.get(key)
+      if (!entry.names.includes(name)) {
+        entry.names.push(name)
+        entry.charIds.push(charId)
+      }
+    }
+    const list = [...byKey.values()]
+    list.sort((a, b) => {
+      const aLabel = a.accountDisplayName || a.names[0] || ''
+      const bLabel = b.accountDisplayName || b.names[0] || ''
+      return String(aLabel).localeCompare(String(bLabel))
+    })
+    return list
+  }, [])
+
+  const displayAttendanceByAccount = useMemo(
+    () => groupAttendeesByAccount(displayAttendance, getAccountId, getAccountDisplayName ?? (() => null)),
+    [displayAttendance, groupAttendeesByAccount, getAccountId, getAccountDisplayName]
+  )
+
   // When we have per-event attendance, derive attendees from current events only (excludes deleted tics).
   const currentEventIds = useMemo(() => new Set(events.map((e) => String(e.event_id ?? '').trim())), [events])
   const effectiveAttendance = useMemo(() => {
@@ -363,13 +399,18 @@ export default function RaidDetail({ isOfficer }) {
                     <tr key={`${e.event_id}-attendees`}>
                       <td colSpan={isOfficer ? 7 : 6} style={{ padding: '0.5rem 1rem', verticalAlign: 'top', backgroundColor: 'rgba(0,0,0,0.2)', borderBottom: '1px solid #27272a' }}>
                         <div className="attendee-list">
-                          {attendees.map((a, i) => {
-                            const name = a.name || a.char_id || ''
-                            const accountId = getAccountId(a.name || a.char_id)
-                            const accountName = getAccountDisplayName?.(a.name || a.char_id)
-                            const to = accountId ? `/accounts/${accountId}` : `/characters/${encodeURIComponent(name)}`
-                            const label = accountName ? `${accountName} (${name})` : name
-                            return <Link key={a.char_id || a.name || i} to={to}>{label}</Link>
+                          {groupAttendeesByAccount(
+                            attendees.map((a) => ({ character_name: a.name, name: a.name, char_id: a.char_id })),
+                            getAccountId,
+                            getAccountDisplayName ?? (() => null)
+                          ).map((group) => {
+                            const label = group.accountDisplayName
+                              ? `${group.accountDisplayName} (${group.names.join(', ')})`
+                              : group.names[0] || '—'
+                            const to = group.accountId
+                              ? `/accounts/${group.accountId}`
+                              : `/characters/${encodeURIComponent(group.names[0] || '')}`
+                            return <Link key={group.accountId ?? group.names[0]} to={to}>{label}</Link>
                           })}
                         </div>
                       </td>
@@ -510,11 +551,14 @@ export default function RaidDetail({ isOfficer }) {
       <h2>Attendees</h2>
       <div className="card">
         <div className="attendee-list">
-          {displayAttendance.map((a) => {
-            const name = a.character_name || a.char_id || ''
-            const accountId = getAccountId(a.character_name || a.char_id)
-            const to = accountId ? `/accounts/${accountId}` : `/characters/${encodeURIComponent(name)}`
-            return <Link key={a.char_id || a.character_name} to={to}>{name}</Link>
+          {displayAttendanceByAccount.map((group) => {
+            const label = group.accountDisplayName
+              ? `${group.accountDisplayName} (${group.names.join(', ')})`
+              : group.names[0] || '—'
+            const to = group.accountId
+              ? `/accounts/${group.accountId}`
+              : `/characters/${encodeURIComponent(group.names[0] || '')}`
+            return <Link key={group.accountId ?? group.names[0]} to={to}>{label}</Link>
           })}
         </div>
       </div>
