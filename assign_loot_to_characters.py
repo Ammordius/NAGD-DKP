@@ -21,6 +21,9 @@ Rules:
 
 Inputs:
 - DKP data: data/raid_loot.csv, data/raids.csv, data/character_account.csv, data/characters.csv, data/accounts.csv
+  To preserve existing assignments (manual or from a previous run), raid_loot.csv must already
+  contain assigned_char_id/assigned_character_name. For manual runs: fetch from Supabase first:
+  python fetch_raid_loot_from_supabase.py --out data/raid_loot.csv --all-tables
 - Magelo: character/TAKP_character.txt, inventory/TAKP_character_inventory.txt (or --magelo-dir)
 - Elemental: magelo/elemental_armor.json (or --elemental-armor-json)
 
@@ -80,6 +83,13 @@ ELEMENTAL_SLOT_KEYWORDS: dict[str, list[int]] = {
     "feet": [19], "boot": [19],
     "waist": [20], "girdle": [20],
 }
+
+# Loot name (normalized) -> list of Magelo item names (normalized) that count as "having" this loot.
+# Used when a DKP item is turned in / upgraded (e.g. Soul Essence -> Talisman of Vah Kerrath).
+LOOT_TO_MAGELO_EQUIVALENTS: dict[str, list[str]] = {
+    "soul essence of aten ha ra": ["talisman of vah kerrath"],
+}
+
 
 def normalize_item_name(s: str) -> str:
     """Lowercase, strip, collapse spaces for matching."""
@@ -346,6 +356,7 @@ def which_toons_have_item(
     required_slot_ids (and elemental_item_ids / armor type).
     """
     norm_loot = normalize_item_name(item_name)
+    magelo_names_to_match = {norm_loot} | set(LOOT_TO_MAGELO_EQUIVALENTS.get(norm_loot, []))
     is_elemental_source = norm_loot in elemental_source_names
     d2m = dkp_to_magelo_id or {}
     id_to_armor = elemental_id_to_armor or {}
@@ -392,7 +403,7 @@ def which_toons_have_item(
                     candidates.append(cid)
                     break
             else:
-                if normalize_item_name(inv_item_name) == norm_loot:
+                if normalize_item_name(inv_item_name) in magelo_names_to_match:
                     candidates.append(cid)
                     break
     return candidates
@@ -416,6 +427,7 @@ def item_count_per_toon(
     When elemental_lookup is set: count how many times they have the magelo item_id for their class (e.g. 2 bracers = 2).
     """
     norm_loot = normalize_item_name(item_name)
+    magelo_names_to_match = {norm_loot} | set(LOOT_TO_MAGELO_EQUIVALENTS.get(norm_loot, []))
     is_elemental_source = norm_loot in elemental_source_names
     d2m = dkp_to_magelo_id or {}
     id_to_armor = elemental_id_to_armor or {}
@@ -459,7 +471,7 @@ def item_count_per_toon(
                 break
             out[cid] = count
         else:
-            count = sum(1 for it in items if normalize_item_name((it.get("item_name") or "").strip()) == norm_loot)
+            count = sum(1 for it in items if normalize_item_name((it.get("item_name") or "").strip()) in magelo_names_to_match)
             out[cid] = count
     return out
 
