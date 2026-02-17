@@ -282,15 +282,15 @@ export default function LootRecipients() {
         const db = b.lastLootDate || ''
         if (da !== db) return db.localeCompare(da) // most recent first (desc date)
       } else {
-        // DKP spent on character = Character DKP spent (all time)
-        const va = a.characterDkpSpentTotal ?? 0
-        const vb = b.characterDkpSpentTotal ?? 0
+        // Sort by window sum; when all time, use backend total so we sort on full data (fetch is capped by raid limit)
+        const va = months === 0 ? (a.characterDkpSpentTotal ?? 0) : (a.dkpSpentOnToon ?? 0)
+        const vb = months === 0 ? (b.characterDkpSpentTotal ?? 0) : (b.dkpSpentOnToon ?? 0)
         if (va !== vb) return vb - va
       }
       return (a.account_display_name || a.character_name || '').localeCompare(b.account_display_name || b.character_name || '')
     })
     return list
-  }, [loot, raids, characters, accounts, accountDkpTotals, dkpSummary, characterDkpSpent, classFilter, sortBy, getAccountId])
+  }, [loot, raids, characters, accounts, accountDkpTotals, dkpSummary, characterDkpSpent, classFilter, sortBy, months, getAccountId])
 
   if (loading) return <div className="container">Loading…</div>
   if (error) return <div className="container"><span className="error">{error}</span> <Link to="/">← Home</Link></div>
@@ -301,6 +301,9 @@ export default function LootRecipients() {
       <h1>Loot recipients</h1>
       <p style={{ color: '#a1a1aa', marginBottom: '1rem' }}>
         Characters who received loot {months === 0 ? ' (all time)' : `in the last ${months} month${months !== 1 ? 's' : ''}`}. Loot and DKP spent are for this window. Account DKP total is current.
+      </p>
+      <p style={{ color: '#eab308', marginBottom: '1rem', fontSize: '0.9rem' }}>
+        Note: This page shows data from at most the last 1,000 raids. Loot lists and window DKP are based on that set; sorting when &quot;All time&quot; uses full backend totals.
       </p>
       <div className="card" style={{ marginBottom: '1rem', display: 'flex', flexWrap: 'wrap', gap: '1rem', alignItems: 'center' }}>
         <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
