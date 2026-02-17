@@ -3,8 +3,7 @@ import { useParams, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useCharToAccountMap } from '../lib/useCharToAccountMap'
 import AssignedLootDisclaimer from '../components/AssignedLootDisclaimer'
-
-const TAKP_ITEM_BASE = 'https://www.takproject.net/allaclone/item.php?id='
+import ItemLink from '../components/ItemLink'
 
 // Build item_name (lowercase) -> item_id from dkp_mob_loot.json
 function buildItemIdMap(mobLoot) {
@@ -204,11 +203,13 @@ export default function ItemPage() {
     <div className="container">
       <p><Link to="/loot">← Loot search</Link> · <Link to="/mobs">Mob loot</Link></p>
       <h1 style={{ marginBottom: '1rem' }}>
-        {takpId != null ? (
-          <a href={`${TAKP_ITEM_BASE}${takpId}`} target="_blank" rel="noopener noreferrer">{itemName || '—'}</a>
-        ) : (
-          itemName || '—'
-        )}
+        <ItemLink
+          itemName={itemName}
+          itemId={takpId}
+          to={`/items/${encodeURIComponent(itemName || '')}`}
+        >
+          {itemName || '—'}
+        </ItemLink>
       </h1>
 
       {lastThree.length > 0 && (

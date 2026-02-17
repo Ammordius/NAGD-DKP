@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo, Fragment } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { createCache } from '../lib/cache'
+import ItemLink from '../components/ItemLink'
 
 const LAST3_CACHE_KEY = 'mob_loot_last3_v2'
 const CACHE_TTL = 10 * 60 * 1000
@@ -352,7 +353,7 @@ export default function MobLoot() {
                                   return (
                                     <tr key={item.item_id || item.name}>
                                       <td>
-                                        <Link to={`/items/${encodeURIComponent(name)}`}>{name}</Link>
+                                        <ItemLink itemName={name} itemId={item.item_id}>{name}</ItemLink>
                                       </td>
                                       <td style={{ fontSize: '0.875rem' }}>
                                         {last3?.values?.length ? last3.values.join(', ') : '—'}
