@@ -67,6 +67,27 @@ export default function RaidDetail({ isOfficer }) {
     }
   }, [isOfficer, raidId])
 
+  // When attendees are derived from current events only, keep raid.attendees and raid_attendance in sync (fixes count after a tic was deleted).
+  useEffect(() => {
+    if (!raid?.raid_id || effectiveAttendance == null) return
+    const expectedCount = effectiveAttendance.length
+    const currentCount = raid.attendees != null && raid.attendees !== '' ? Math.round(Number(raid.attendees)) : null
+    const charIdsInCurrentEvents = new Set(effectiveAttendance.map((a) => String(a.char_id ?? '').trim()).filter(Boolean))
+    const needsSync = currentCount !== expectedCount || attendance.some((a) => !charIdsInCurrentEvents.has(String(a.char_id ?? '').trim()))
+    if (!needsSync) return
+    const cleanup = async () => {
+      for (const row of attendance) {
+        const cid = String(row.char_id ?? '').trim()
+        if (cid && !charIdsInCurrentEvents.has(cid)) {
+          await supabase.from('raid_attendance').delete().eq('raid_id', raid.raid_id).eq('char_id', row.char_id)
+        }
+      }
+      await supabase.from('raids').update({ attendees: String(expectedCount) }).eq('raid_id', raid.raid_id)
+      loadData()
+    }
+    cleanup()
+  }, [raid?.raid_id, raid?.attendees, effectiveAttendance, attendance])
+
   useEffect(() => {
     if (events.length > 0 && (!addToTicEventId || !events.some((e) => e.event_id === addToTicEventId))) {
       setAddToTicEventId(events[0].event_id)
@@ -100,6 +121,28 @@ export default function RaidDetail({ isOfficer }) {
     return byEvent
   }, [eventAttendance])
 
+  // When we have per-event attendance, derive attendees from current events only (excludes deleted tics).
+  const currentEventIds = useMemo(() => new Set(events.map((e) => String(e.event_id ?? '').trim())), [events])
+  const effectiveAttendance = useMemo(() => {
+    if (!events.length || !eventAttendance.length) return null
+    const seen = new Set()
+    const list = []
+    eventAttendance.forEach((row) => {
+      const eid = String(row.event_id ?? '').trim()
+      if (!currentEventIds.has(eid)) return
+      const key = String(row.char_id ?? row.character_name ?? '').trim()
+      if (!key || seen.has(key)) return
+      seen.add(key)
+      list.push({ char_id: row.char_id, character_name: row.character_name || row.char_id || '—' })
+    })
+    list.sort((a, b) => (a.character_name || '').localeCompare(b.character_name || ''))
+    return list
+  }, [events.length, eventAttendance, currentEventIds])
+
+  // Attendee list and count to show: use event-derived list when available, else raid_attendance.
+  const displayAttendance = effectiveAttendance ?? attendance
+  const displayAttendeeCount = displayAttendance.length
+
   // Account-aware: an account is "present" for an event if any of its characters is in that event.
   // "Not present for all events" = accounts (or unlinked chars) that missed at least one event.
   const notPresentForAllEvents = useMemo(() => {
@@ -116,7 +159,8 @@ export default function RaidDetail({ isOfficer }) {
       eventAccountKeys[eid] = set
     })
     const missedByKey = new Map()
-    attendance.forEach((a) => {
+    const sourceList = effectiveAttendance ?? attendance
+    sourceList.forEach((a) => {
       const accountId = getAccountId(a.character_name ?? a.char_id)
       const key = accountId != null ? `account:${accountId}` : `char:${String(a.char_id ?? a.character_name ?? '').trim()}`
       const missed = events.some((ev) => {
@@ -130,7 +174,7 @@ export default function RaidDetail({ isOfficer }) {
       }
     })
     return [...missedByKey.values()]
-  }, [attendance, events, attendeesByEvent, eventAttendance.length, getAccountId])
+  }, [attendance, effectiveAttendance, events, attendeesByEvent, eventAttendance.length, getAccountId])
 
   const handleSaveEventDkp = async (eventId) => {
     const val = String(editingEventDkp).trim()
@@ -233,7 +277,7 @@ export default function RaidDetail({ isOfficer }) {
     <div className="container">
       <p><Link to="/raids">← Raids</Link></p>
       <h1>{raid.raid_name || raidId}</h1>
-      <p style={{ color: '#a1a1aa' }}>{raid.date_iso || raid.date} · {(attendance.length > 0 ? attendance.length : (raid.attendees ?? '—'))} attendees</p>
+      <p style={{ color: '#a1a1aa' }}>{raid.date_iso || raid.date} · {(displayAttendeeCount > 0 ? displayAttendeeCount : (raid.attendees ?? '—'))} attendees</p>
 
       <h2>DKP by event</h2>
       <div className="card">
@@ -466,7 +510,7 @@ export default function RaidDetail({ isOfficer }) {
       <h2>Attendees</h2>
       <div className="card">
         <div className="attendee-list">
-          {attendance.map((a) => {
+          {displayAttendance.map((a) => {
             const name = a.character_name || a.char_id || ''
             const accountId = getAccountId(a.character_name || a.char_id)
             const to = accountId ? `/accounts/${accountId}` : `/characters/${encodeURIComponent(name)}`

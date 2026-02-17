@@ -719,9 +719,25 @@ export default function Officer({ isOfficer }) {
     setMutating(true)
     await supabase.from('raid_event_attendance').delete().eq('raid_id', selectedRaidId).eq('event_id', eventId)
     const { error: err } = await supabase.from('raid_events').delete().eq('raid_id', selectedRaidId).eq('event_id', eventId)
+    if (err) {
+      setMutating(false)
+      setError(err.message)
+      return
+    }
+    // Remove from raid_attendance anyone who is no longer in any remaining event (they were only on the deleted tic).
+    const { data: remainingEventAtt } = await supabase.from('raid_event_attendance').select('char_id').eq('raid_id', selectedRaidId)
+    const charIdsStillInEvents = new Set((remainingEventAtt || []).map((r) => String(r.char_id ?? '')).filter(Boolean))
+    const { data: raidAtt } = await supabase.from('raid_attendance').select('char_id').eq('raid_id', selectedRaidId)
+    for (const row of raidAtt || []) {
+      const cid = String(row.char_id ?? '').trim()
+      if (cid && !charIdsStillInEvents.has(cid)) {
+        await supabase.from('raid_attendance').delete().eq('raid_id', selectedRaidId).eq('char_id', row.char_id)
+      }
+    }
+    const { count } = await supabase.from('raid_attendance').select('*', { count: 'exact', head: true }).eq('raid_id', selectedRaidId)
+    if (count != null) await supabase.from('raids').update({ attendees: String(count) }).eq('raid_id', selectedRaidId)
     setMutating(false)
-    if (err) setError(err.message)
-    else loadSelectedRaid()
+    loadSelectedRaid()
   }
 
   const attendeesByEvent = useMemo(() => {
