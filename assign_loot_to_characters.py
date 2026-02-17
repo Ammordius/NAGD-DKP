@@ -4,8 +4,10 @@ Assign raid_loot to the character that actually has the item (from Magelo invent
 
 Rules:
 - Only assign rows that do not already have assigned_char_id/assigned_character_name set
-  (unless --clear-assignments: then recompute all). Rows with assigned_via_magelo=0 (set in the
-  Loot tab) are always preserved, even with --clear-assignments.
+  (unless --clear-assignments: then recompute all). If unassigned (assigned_* empty), we run
+  assignment. Rows with assigned_via_magelo=0 and an existing assignment are preserved when not
+  --clear-assignments (manual in Loot tab); rows with assigned_via_magelo=0 but no assignment are
+  treated as unassigned and get assigned. manual_assignment=1 rows are always preserved.
 - For each loot row on an account: check all characters on that account for that item.
 - Cap per toon per item: use the **number of that item on that toon in Magelo** (so if they have 2x on Magelo we can assign up to 2; if 1x then 1). No lore tag.
 - Among toons that have the item and are under their Magelo cap: assign to the toon with the **most DKP spent**
@@ -546,7 +548,8 @@ def run(
     assigned_via_magelo: list[bool] = [False] * len(loot_rows)  # True if we found item on a toon (incl. namesake)
 
     # Rows explicitly marked manual_assignment=1 (or manual=1): never reassign, even with --clear-assignments.
-    # Other rows with assigned_via_magelo=0: preserve when not --clear-assignments (script left on namesake or legacy).
+    # Rows with assigned_via_magelo=0 and (ac or an) set: preserve when not --clear-assignments (manual in UI or legacy).
+    # Rows with assigned_via_magelo=0 but no assigned char/name: treat as unassigned and run assignment below.
     manual_only_indices: set[int] = set()
     n_preserved = 0
     for idx, row in enumerate(loot_rows):
@@ -555,6 +558,7 @@ def run(
         via_magelo_raw = (row.get("assigned_via_magelo") or "").strip()
         manual_col = (row.get("manual_assignment") or row.get("manual") or "").strip().lower()
         is_explicit_manual = manual_col in ("1", "true", "yes")
+        has_existing_assignment = bool(ac or an)
         is_legacy_manual = via_magelo_raw == "0"
         if is_explicit_manual:
             # User honestly set this in UI; never overwrite
@@ -563,14 +567,14 @@ def run(
             assigned_via_magelo[idx] = False
             manual_only_indices.add(idx)
             n_preserved += 1
-        elif is_legacy_manual and not clear_assignments:
-            # Preserve when not doing a full recompute
+        elif is_legacy_manual and has_existing_assignment and not clear_assignments:
+            # Preserve only when there is an actual assignment (manual in UI or legacy); unassigned (ac/an empty) will be assigned below
             assigned_char_id[idx] = ac or None
             assigned_character_name[idx] = an or None
             assigned_via_magelo[idx] = via_magelo_raw == "1"
             manual_only_indices.add(idx)
             n_preserved += 1
-        elif (ac or an) and not clear_assignments:
+        elif has_existing_assignment and not clear_assignments:
             assigned_char_id[idx] = ac or None
             assigned_character_name[idx] = an or None
             assigned_via_magelo[idx] = via_magelo_raw == "1"
@@ -738,7 +742,10 @@ def run(
         w.writeheader()
         w.writerows(counts_rows)
 
-    n_new = len(loot_rows) - n_preserved
+    n_new = sum(
+        1 for i in range(len(loot_rows))
+        if i not in manual_only_indices and (assigned_char_id[i] or assigned_character_name[i])
+    )
     print(f"Wrote {out_raid_loot} with assigned_char_id, assigned_character_name")
     print(f"Preserved {n_preserved} existing assignments; assigned {n_new} new.")
     print(f"Wrote {out_counts} ({len(counts_rows)} characters with assigned loot)")
