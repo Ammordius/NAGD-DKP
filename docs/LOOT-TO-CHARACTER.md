@@ -51,6 +51,17 @@ To ship loot-to-character on the live site:
 
 **CI log: “Preserved N existing; assigned M new.”** So you can see how many rows were left as-is vs newly assigned.
 
+**All (or most) loot from yesterday’s raid stayed unassigned.** The assigner only assigns a row when it finds a character (on the buyer’s account) who **has that item in the Magelo inventory dump**. Two common causes:
+
+1. **Magelo cache timing (CI)**  
+   The workflow caches Magelo dumps by date (`magelo-dumps-Linux-YYYY-MM-DD`). When the run gets a **cache hit**, it does **not** re-download the TAKP character/inventory files. So the inventory snapshot can be from earlier in the day (or an earlier run). If the TAKP Magelo export at https://www.takproject.net/magelo/export/ hasn’t been updated yet with the new loot (players haven’t refreshed their Magelo), **no character will have the item** in the dump → every such row gets “no candidates” and is left unassigned.  
+   **What to do:** Run the workflow **manually** (Actions → Loot-to-character assignment → Run workflow) later in the day (or the next day) after the TAKP export has updated; that run will use the cache from that day, or if the cache was invalidated, it will re-download fresh dumps. To force a fresh download, you can change the cache key (e.g. in the workflow) or wait until the next calendar day.
+
+2. **Account/character resolution**  
+   If the buyer’s `char_id` or `character_name` from the raid isn’t in Supabase `characters` or `character_account`, the script can’t resolve an account and falls back to “single-toon” (only that buyer). Assignment can still work if that toon has the item in Magelo. If many raid buyers are missing from `characters`/`character_account`, or names don’t match (casing, spelling), you’ll see more unassigned rows.
+
+**Diagnostics:** Run the assign script with **`--verbose`** (or `-v`) to see loaded counts (raids, character_account links, DKP chars, Magelo chars/inventory), how many loot rows were resolved by account vs single-toon vs unknown, how many rows had “no toon has item on Magelo”, and a sample of those item names. Use this to tell whether the failure is “no Magelo match” (cache/export timing) vs “no account/name match”.
+
 ## Applying assignments to Supabase (no duplicates)
 
 After running `assign_loot_to_characters.py`, the output CSV has `id` only if the **input** CSV had `id` (e.g. from a Supabase export). To push assignments into Supabase without inserting duplicate rows:
@@ -85,6 +96,12 @@ To treat an item name as elemental when it doesn’t appear in the Magelo dump (
 
 ```bash
 python assign_loot_to_characters.py --elemental-source-name "Elemental Plate Vambraces"
+```
+
+To print diagnostic counts and a sample of items that couldn’t be assigned (e.g. to debug “no assignments for a raid”):
+
+```bash
+python assign_loot_to_characters.py --verbose
 ```
 
 ## Continuous integration (CI) in the DKP repo

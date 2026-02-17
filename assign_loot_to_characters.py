@@ -23,9 +23,12 @@ Rules:
 
 Inputs:
 - DKP data: data/raid_loot.csv, data/raids.csv, data/character_account.csv, data/characters.csv, data/accounts.csv
-  To preserve existing assignments (manual or from a previous run), raid_loot.csv must already
-  contain assigned_char_id/assigned_character_name. For manual runs: fetch from Supabase first:
+  This script does NOT pull from the database. It only reads the CSVs above. To get the most recent
+  loot (and characters/accounts) from Supabase you must run the fetch first:
   python fetch_raid_loot_from_supabase.py --out data/raid_loot.csv --all-tables
+  CI does this automatically when new loot is detected; for local runs, run the fetch first or the
+  assigner will only see whatever is currently in data/raid_loot.csv (which may be stale).
+  To preserve existing assignments, raid_loot.csv must already contain assigned_char_id/assigned_character_name.
 - Magelo: character/TAKP_character.txt, inventory/TAKP_character_inventory.txt (or --magelo-dir)
 - Elemental: magelo/elemental_armor.json (or --elemental-armor-json)
 
@@ -488,6 +491,7 @@ def run(
     elemental_extra_names: Optional[list[str]] = None,
     clear_assignments: bool = False,
     dkp_elemental_json: Optional[Path] = None,
+    verbose: bool = False,
 ) -> None:
     raids = load_raids(data_dir)
     char_to_account, account_to_chars = load_character_account(data_dir)
@@ -497,6 +501,12 @@ def run(
     magelo_names_to_id, magelo_id_to_name = load_magelo_character_file(magelo_char_file)
     magelo_inv = load_magelo_inventory(magelo_inv_file)
     elemental_ids = load_elemental_armor(elemental_json)
+
+    if verbose:
+        n_ca = sum(len(v) for v in account_to_chars.values())
+        n_inv = sum(len(v) for v in magelo_inv.values())
+        print(f"[verbose] Loaded: {len(raids)} raids, {n_ca} character_account links, {len(dkp_char_id_to_name)} DKP chars, "
+              f"{len(loot_rows)} loot rows, {len(magelo_id_to_name)} Magelo chars, {n_inv} Magelo inventory entries.")
 
     # Elemental loot: when dkp_elemental_to_magelo.json is present, use it (item IDs only). Else names from Magelo.
     dkp_elemental_map: dict[str, dict] = {}
@@ -516,6 +526,9 @@ def run(
         if magelo_id:
             dkp_to_magelo_id[dkp_cid] = magelo_id
 
+    if verbose:
+        print(f"[verbose] DKP->Magelo id mapping: {len(dkp_to_magelo_id)} of {len(dkp_char_id_to_name)} DKP chars have a Magelo match.")
+
     # Sort key for loot: (raid_date_iso, raid_id, event_id, index)
     def loot_sort_key(idx: int) -> tuple[str, str, str, int]:
         row = loot_rows[idx]
@@ -526,20 +539,30 @@ def run(
 
     # Group loot by account (buyer's account)
     loot_by_account: dict[str, list[int]] = defaultdict(list)
+    n_resolved_account = 0
+    n_single_toon = 0
+    n_unknown = 0
     for i, row in enumerate(loot_rows):
         acc = resolve_buyer_account(row, char_to_account, name_to_char)
         if acc:
             loot_by_account[acc].append(i)
+            n_resolved_account += 1
         else:
             # No account found; treat as single-toon "account" (namesake only)
             cid = (row.get("char_id") or "").strip()
             name = (row.get("character_name") or "").strip()
             if cid:
                 loot_by_account[cid].append(i)  # use char_id as fake account so we only have namesake
+                n_single_toon += 1
             elif name and name in name_to_char:
                 loot_by_account[name_to_char[name]].append(i)
+                n_single_toon += 1
             else:
                 loot_by_account["_unknown"].append(i)
+                n_unknown += 1
+
+    if verbose:
+        print(f"[verbose] Account resolution: {n_resolved_account} by account, {n_single_toon} single-toon fallback, {n_unknown} unknown (no char/name match).")
 
     # Per-account assignment: process in raid order, maintain items_assigned per char.
     # Only assign rows that don't already have an assignment (we can't assign loot more than once).
@@ -579,6 +602,11 @@ def run(
             assigned_character_name[idx] = an or None
             assigned_via_magelo[idx] = via_magelo_raw == "1"
             n_preserved += 1
+
+    # Verbose: global counters for rows that could not be assigned
+    no_candidates_sample: list[tuple[str, str]] = []
+    no_candidates_total = 0
+    no_account_toons_total = 0
 
     for acc, indices in loot_by_account.items():
         # Sort by raid date then raid_id, event_id, index
@@ -634,6 +662,8 @@ def run(
 
             if not account_toons:
                 # Single-toon "account": leave unassigned so user can assign in UI
+                if verbose:
+                    no_account_toons_total += 1
                 continue
 
             candidates = which_toons_have_item(
@@ -652,6 +682,10 @@ def run(
 
             if len(candidates) == 0:
                 # No toon has item on Magelo: leave unassigned
+                if verbose:
+                    no_candidates_total += 1
+                    if len(no_candidates_sample) < 20:
+                        no_candidates_sample.append((item_name, (row.get("character_name") or "").strip()))
                 continue
             elif len(candidates) == 1:
                 cid = candidates[0]
@@ -683,6 +717,13 @@ def run(
                     count_per_char[best] += 1
                     dkp_spent_per_char[best] += cost_val
                     item_count_per_char[(best, norm_item)] += 1
+
+    if verbose:
+        print(f"[verbose] Rows unassigned: {no_account_toons_total} (no account/toons), {no_candidates_total} (no toon has item on Magelo).")
+        if no_candidates_sample:
+            print("[verbose] Sample items with no Magelo match (item_name | buyer):")
+            for it, buyer in no_candidates_sample[:15]:
+                print(f"  {it!r} | {buyer!r}")
 
     # Resolve assigned_character_name from DKP characters or Magelo
     for idx in range(len(loot_rows)):
@@ -772,6 +813,8 @@ def main() -> int:
                     help="Extra item name to treat as elemental (if not seen in Magelo dump; can repeat)")
     ap.add_argument("--clear-assignments", action="store_true",
                     help="Recompute all assignments from Magelo (manual Loot-tab rows, assigned_via_magelo=0, are always preserved)")
+    ap.add_argument("--verbose", "-v", action="store_true",
+                    help="Print diagnostic counts (loaded data, account resolution, unassigned reasons) and sample of items with no Magelo match")
     args = ap.parse_args()
 
     magelo = args.magelo_dir
@@ -796,6 +839,7 @@ def main() -> int:
         elemental_extra_names=args.elemental_extra,
         clear_assignments=args.clear_assignments,
         dkp_elemental_json=args.dkp_elemental_json,
+        verbose=args.verbose,
     )
     return 0
 

@@ -8,7 +8,7 @@
 # Then CI will: check if raid_loot count changed -> if so, fetch -> assign -> update Supabase by id.
 # The live DB is the source of truth; we do not commit the CSVs. Run at most once daily (cron) or manually.
 # We only pull Magelo and run assignment when there is new loot (count changed); otherwise skip.
-# Magelo dumps are cached for 24h (key by date) so re-runs within the same day skip the download and only re-run assignment.
+# We always download Magelo dumps fresh right before assignment (no cache) so assignments use today's data.
 
 name: Loot-to-character assignment
 
@@ -66,10 +66,6 @@ jobs:
             fi
           fi
 
-      - name: Set cache date (for 24h Magelo cache)
-        if: ${{ env.SUPABASE_URL != '' && env.SUPABASE_SERVICE_ROLE_KEY != '' && steps.check.outputs.new_loot == 'true' }}
-        run: echo "DATE=$(date -u +%Y-%m-%d)" >> $GITHUB_ENV
-
       - name: Fetch raid_loot and account data from Supabase
         if: ${{ env.SUPABASE_URL != '' && env.SUPABASE_SERVICE_ROLE_KEY != '' && steps.check.outputs.new_loot == 'true' }}
         run: python fetch_raid_loot_from_supabase.py --out data/raid_loot.csv --all-tables
@@ -91,16 +87,8 @@ jobs:
           print(f'Fetched CSV: {len(rows)} rows, {n_with} with existing assignment (to be preserved)')
           "
 
-      - name: Restore Magelo dumps (24h cache)
-        id: magelo_cache
-        if: ${{ env.SUPABASE_URL != '' && env.SUPABASE_SERVICE_ROLE_KEY != '' && steps.check.outputs.new_loot == 'true' }}
-        uses: actions/cache/restore@v4
-        with:
-          path: .magelo_dump
-          key: magelo-dumps-${{ runner.os }}-${{ env.DATE }}
-
       - name: Download Magelo dumps from TAKP
-        if: ${{ env.SUPABASE_URL != '' && env.SUPABASE_SERVICE_ROLE_KEY != '' && steps.check.outputs.new_loot == 'true' && steps.magelo_cache.outputs.cache-hit != 'true' }}
+        if: ${{ env.SUPABASE_URL != '' && env.SUPABASE_SERVICE_ROLE_KEY != '' && steps.check.outputs.new_loot == 'true' }}
         run: |
           mkdir -p .magelo_dump
           echo "Downloading character dump (names, char_ids)..."
@@ -117,13 +105,6 @@ jobs:
           }
           echo "Character lines: $(wc -l < .magelo_dump/TAKP_character.txt)"
           echo "Inventory lines: $(wc -l < .magelo_dump/TAKP_character_inventory.txt)"
-
-      - name: Save Magelo dumps cache (24h)
-        if: ${{ env.SUPABASE_URL != '' && env.SUPABASE_SERVICE_ROLE_KEY != '' && steps.check.outputs.new_loot == 'true' && steps.magelo_cache.outputs.cache-hit != 'true' }}
-        uses: actions/cache/save@v4
-        with:
-          path: .magelo_dump
-          key: magelo-dumps-${{ runner.os }}-${{ env.DATE }}
 
       - name: Run loot-to-character assignment
         if: ${{ env.SUPABASE_URL != '' && env.SUPABASE_SERVICE_ROLE_KEY != '' && steps.check.outputs.new_loot == 'true' }}
