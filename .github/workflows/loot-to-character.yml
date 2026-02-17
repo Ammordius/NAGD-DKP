@@ -74,6 +74,23 @@ jobs:
         if: ${{ env.SUPABASE_URL != '' && env.SUPABASE_SERVICE_ROLE_KEY != '' && steps.check.outputs.new_loot == 'true' }}
         run: python fetch_raid_loot_from_supabase.py --out data/raid_loot.csv --all-tables
 
+      - name: Log existing assignments in fetched CSV
+        if: ${{ env.SUPABASE_URL != '' && env.SUPABASE_SERVICE_ROLE_KEY != '' && steps.check.outputs.new_loot == 'true' }}
+        run: |
+          python -c "
+          import csv
+          from pathlib import Path
+          p = Path('data/raid_loot.csv')
+          if not p.exists():
+            print('No raid_loot.csv yet')
+            exit(0)
+          with open(p, encoding='utf-8') as f:
+            r = csv.DictReader(f)
+            rows = list(r)
+          n_with = sum(1 for row in rows if (row.get('assigned_char_id') or '').strip() or (row.get('assigned_character_name') or '').strip())
+          print(f'Fetched CSV: {len(rows)} rows, {n_with} with existing assignment (to be preserved)')
+          "
+
       - name: Restore Magelo dumps (24h cache)
         id: magelo_cache
         if: ${{ env.SUPABASE_URL != '' && env.SUPABASE_SERVICE_ROLE_KEY != '' && steps.check.outputs.new_loot == 'true' }}
