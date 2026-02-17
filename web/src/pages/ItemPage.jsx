@@ -4,6 +4,8 @@ import { supabase } from '../lib/supabase'
 import { useCharToAccountMap } from '../lib/useCharToAccountMap'
 import AssignedLootDisclaimer from '../components/AssignedLootDisclaimer'
 import ItemLink from '../components/ItemLink'
+import ItemCard from '../components/ItemCard'
+import { getItemStats } from '../lib/itemStats'
 
 // Build item_name (lowercase) -> item_id from dkp_mob_loot.json
 function buildItemIdMap(mobLoot) {
@@ -131,6 +133,7 @@ export default function ItemPage() {
   const [lootRows, setLootRows] = useState([])
   const [raids, setRaids] = useState({})
   const [mobLoot, setMobLoot] = useState(null)
+  const [itemStats, setItemStats] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -196,21 +199,38 @@ export default function ItemPage() {
   const itemIdMap = useMemo(() => buildItemIdMap(mobLoot), [mobLoot])
   const takpId = itemIdMap[(itemName || '').trim().toLowerCase()]
 
+  useEffect(() => {
+    if (takpId == null) {
+      setItemStats(null)
+      return
+    }
+    let cancelled = false
+    getItemStats(takpId).then((stats) => {
+      if (!cancelled) setItemStats(stats)
+    })
+    return () => { cancelled = true }
+  }, [takpId])
+
   if (loading) return <div className="container">Loading item…</div>
   if (error) return <div className="container"><span className="error">{error}</span> <Link to="/loot">← Loot search</Link></div>
 
   return (
     <div className="container">
       <p><Link to="/loot">← Loot search</Link> · <Link to="/mobs">Mob loot</Link></p>
-      <h1 style={{ marginBottom: '1rem' }}>
+      <h1 style={{ marginBottom: '0.5rem' }}>
         <ItemLink
           itemName={itemName}
           itemId={takpId}
-          to={`/items/${encodeURIComponent(itemName || '')}`}
+          externalHref={takpId != null ? `https://www.takproject.net/allaclone/item.php?id=${takpId}` : undefined}
         >
           {itemName || '—'}
         </ItemLink>
       </h1>
+      {takpId != null && (
+        <div style={{ marginBottom: '1rem' }}>
+          <ItemCard name={itemName} itemId={takpId} stats={itemStats} compact={!itemStats} />
+        </div>
+      )}
 
       {lastThree.length > 0 && (
         <div className="card" style={{ borderLeft: '4px solid #7c3aed' }}>

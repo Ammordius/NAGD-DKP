@@ -8,11 +8,11 @@ const HOVER_DELAY_MS = 400
 const POPOVER_OFFSET = 8
 
 /**
- * Link to internal item page that shows a Discord-style item card on hover.
- * Use when you have item name and optionally item_id (from dkp_mob_loot).
+ * Link that shows a Discord-style item card on hover.
+ * When externalHref is set (e.g. TAKP item URL), click goes there; otherwise uses React Router to /items/...
  * Pass itemId when known so we can show stats and TAKP link in the card.
  */
-export default function ItemLink({ itemName, itemId, children, className, ...linkProps }) {
+export default function ItemLink({ itemName, itemId, children, className, externalHref, ...linkProps }) {
   const [showCard, setShowCard] = useState(false)
   const [positionReady, setPositionReady] = useState(false)
   const [stats, setStats] = useState(null)
@@ -87,18 +87,34 @@ export default function ItemLink({ itemName, itemId, children, className, ...lin
     document.body
   )
 
+  const isExternal = externalHref != null
+
   return (
     <>
-      <Link
-        ref={anchorRef}
-        to={linkProps.to ?? `/items/${encodeURIComponent(displayName)}`}
-        className={className}
-        onMouseEnter={showPopover}
-        onMouseLeave={hidePopover}
-        {...linkProps}
-      >
-        {children ?? displayName}
-      </Link>
+      {isExternal ? (
+        <a
+          ref={anchorRef}
+          href={externalHref}
+          target="_blank"
+          rel="noopener noreferrer"
+          className={className}
+          onMouseEnter={showPopover}
+          onMouseLeave={hidePopover}
+        >
+          {children ?? displayName}
+        </a>
+      ) : (
+        <Link
+          ref={anchorRef}
+          to={linkProps.to ?? `/items/${encodeURIComponent(displayName)}`}
+          className={className}
+          onMouseEnter={showPopover}
+          onMouseLeave={hidePopover}
+          {...linkProps}
+        >
+          {children ?? displayName}
+        </Link>
+      )}
       {popover}
     </>
   )
