@@ -67,27 +67,6 @@ export default function RaidDetail({ isOfficer }) {
     }
   }, [isOfficer, raidId])
 
-  // When attendees are derived from current events only, keep raid.attendees and raid_attendance in sync (fixes count after a tic was deleted).
-  useEffect(() => {
-    if (!raid?.raid_id || effectiveAttendance == null) return
-    const expectedCount = effectiveAttendance.length
-    const currentCount = raid.attendees != null && raid.attendees !== '' ? Math.round(Number(raid.attendees)) : null
-    const charIdsInCurrentEvents = new Set(effectiveAttendance.map((a) => String(a.char_id ?? '').trim()).filter(Boolean))
-    const needsSync = currentCount !== expectedCount || attendance.some((a) => !charIdsInCurrentEvents.has(String(a.char_id ?? '').trim()))
-    if (!needsSync) return
-    const cleanup = async () => {
-      for (const row of attendance) {
-        const cid = String(row.char_id ?? '').trim()
-        if (cid && !charIdsInCurrentEvents.has(cid)) {
-          await supabase.from('raid_attendance').delete().eq('raid_id', raid.raid_id).eq('char_id', row.char_id)
-        }
-      }
-      await supabase.from('raids').update({ attendees: String(expectedCount) }).eq('raid_id', raid.raid_id)
-      loadData()
-    }
-    cleanup()
-  }, [raid?.raid_id, raid?.attendees, effectiveAttendance, attendance])
-
   useEffect(() => {
     if (events.length > 0 && (!addToTicEventId || !events.some((e) => e.event_id === addToTicEventId))) {
       setAddToTicEventId(events[0].event_id)
@@ -142,6 +121,27 @@ export default function RaidDetail({ isOfficer }) {
   // Attendee list and count to show: use event-derived list when available, else raid_attendance.
   const displayAttendance = effectiveAttendance ?? attendance
   const displayAttendeeCount = displayAttendance.length
+
+  // When attendees are derived from current events only, keep raid.attendees and raid_attendance in sync (fixes count after a tic was deleted).
+  useEffect(() => {
+    if (!raid?.raid_id || effectiveAttendance == null) return
+    const expectedCount = effectiveAttendance.length
+    const currentCount = raid.attendees != null && raid.attendees !== '' ? Math.round(Number(raid.attendees)) : null
+    const charIdsInCurrentEvents = new Set(effectiveAttendance.map((a) => String(a.char_id ?? '').trim()).filter(Boolean))
+    const needsSync = currentCount !== expectedCount || attendance.some((a) => !charIdsInCurrentEvents.has(String(a.char_id ?? '').trim()))
+    if (!needsSync) return
+    const cleanup = async () => {
+      for (const row of attendance) {
+        const cid = String(row.char_id ?? '').trim()
+        if (cid && !charIdsInCurrentEvents.has(cid)) {
+          await supabase.from('raid_attendance').delete().eq('raid_id', raid.raid_id).eq('char_id', row.char_id)
+        }
+      }
+      await supabase.from('raids').update({ attendees: String(expectedCount) }).eq('raid_id', raid.raid_id)
+      loadData()
+    }
+    cleanup()
+  }, [raid?.raid_id, raid?.attendees, effectiveAttendance, attendance, loadData])
 
   // Account-aware: an account is "present" for an event if any of its characters is in that event.
   // "Not present for all events" = accounts (or unlinked chars) that missed at least one event.
