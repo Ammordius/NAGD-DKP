@@ -45,6 +45,14 @@ export default function RaidDetail({ isOfficer }) {
       if (!l.error) setLoot(l.data || [])
       if (!a.error) setAttendance(a.data || [])
       if (!ea.error) setEventAttendance(ea.data || [])
+      const attendanceList = a.data || []
+      if (!r.error && r.data && attendanceList.length > 0) {
+        const expected = String(attendanceList.length)
+        const current = r.data.attendees
+        if (current == null || current === '' || String(Math.round(Number(current))) !== expected) {
+          supabase.from('raids').update({ attendees: expected }).eq('raid_id', raidId).then(() => {})
+        }
+      }
       setLoading(false)
     })
   }, [raidId])
@@ -92,29 +100,37 @@ export default function RaidDetail({ isOfficer }) {
     return byEvent
   }, [eventAttendance])
 
+  // Account-aware: an account is "present" for an event if any of its characters is in that event.
+  // "Not present for all events" = accounts (or unlinked chars) that missed at least one event.
   const notPresentForAllEvents = useMemo(() => {
     if (!events.length || eventAttendance.length === 0) return []
-    const eventKeys = {}
+    const eventAccountKeys = {}
     events.forEach((ev) => {
       const eid = String(ev.event_id ?? '').trim()
       const set = new Set()
       ;(attendeesByEvent[eid] || []).forEach((a) => {
-        if (a.name) set.add(String(a.name).trim())
-        if (a.char_id != null && a.char_id !== '') set.add(String(a.char_id).trim())
+        const accountId = getAccountId(a.char_id ?? a.name)
+        const key = accountId != null ? `account:${accountId}` : `char:${String(a.char_id ?? a.name ?? '').trim()}`
+        set.add(key)
       })
-      eventKeys[eid] = set
+      eventAccountKeys[eid] = set
     })
-    return attendance.filter((a) => {
-      const name = (a.character_name || '').trim()
-      const cid = a.char_id != null && a.char_id !== '' ? String(a.char_id).trim() : ''
-      return events.some((ev) => {
+    const missedByKey = new Map()
+    attendance.forEach((a) => {
+      const accountId = getAccountId(a.character_name ?? a.char_id)
+      const key = accountId != null ? `account:${accountId}` : `char:${String(a.char_id ?? a.character_name ?? '').trim()}`
+      const missed = events.some((ev) => {
         const eid = String(ev.event_id ?? '').trim()
-        const keys = eventKeys[eid]
+        const keys = eventAccountKeys[eid]
         if (!keys || keys.size === 0) return false
-        return !keys.has(name) && !keys.has(cid)
+        return !keys.has(key)
       })
+      if (missed && !missedByKey.has(key)) {
+        missedByKey.set(key, { accountId, character_name: a.character_name, char_id: a.char_id })
+      }
     })
-  }, [attendance, events, attendeesByEvent, eventAttendance.length])
+    return [...missedByKey.values()]
+  }, [attendance, events, attendeesByEvent, eventAttendance.length, getAccountId])
 
   const handleSaveEventDkp = async (eventId) => {
     const val = String(editingEventDkp).trim()
@@ -202,6 +218,8 @@ export default function RaidDetail({ isOfficer }) {
     setAddToTicCharQuery('')
     await supabase.rpc('refresh_dkp_summary')
     try { sessionStorage.removeItem('dkp_leaderboard_v2') } catch (_) {}
+    const { count } = await supabase.from('raid_attendance').select('*', { count: 'exact', head: true }).eq('raid_id', raidId)
+    if (count != null) await supabase.from('raids').update({ attendees: String(count) }).eq('raid_id', raidId)
     loadData()
     setMutating(false)
   }
@@ -215,7 +233,7 @@ export default function RaidDetail({ isOfficer }) {
     <div className="container">
       <p><Link to="/raids">← Raids</Link></p>
       <h1>{raid.raid_name || raidId}</h1>
-      <p style={{ color: '#a1a1aa' }}>{raid.date_iso || raid.date} · {raid.attendees} attendees</p>
+      <p style={{ color: '#a1a1aa' }}>{raid.date_iso || raid.date} · {(attendance.length > 0 ? attendance.length : (raid.attendees ?? '—'))} attendees</p>
 
       <h2>DKP by event</h2>
       <div className="card">
@@ -465,9 +483,11 @@ export default function RaidDetail({ isOfficer }) {
             <div className="attendee-list">
               {notPresentForAllEvents.map((a) => {
                 const name = a.character_name || a.char_id || ''
-                const accountId = getAccountId(a.character_name || a.char_id)
+                const accountId = a.accountId ?? getAccountId(a.character_name || a.char_id)
+                const accountName = getAccountDisplayName?.(a.character_name || a.char_id)
+                const label = accountName ? `${accountName} (${name})` : name
                 const to = accountId ? `/accounts/${accountId}` : `/characters/${encodeURIComponent(name)}`
-                return <Link key={a.char_id || a.character_name} to={to}>{name}</Link>
+                return <Link key={accountId || a.char_id || a.character_name} to={to}>{label}</Link>
               })}
             </div>
           </div>

@@ -361,6 +361,8 @@ export default function Officer({ isOfficer }) {
     setAddToTicCharQuery('')
     await supabase.rpc('refresh_dkp_summary')
     try { sessionStorage.removeItem('dkp_leaderboard_v2') } catch (_) {}
+    const { count } = await supabase.from('raid_attendance').select('*', { count: 'exact', head: true }).eq('raid_id', selectedRaidId)
+    if (count != null) await supabase.from('raids').update({ attendees: String(count) }).eq('raid_id', selectedRaidId)
     loadSelectedRaid()
     setMutating(false)
   }
@@ -522,6 +524,8 @@ export default function Officer({ isOfficer }) {
     setTicPaste('')
     await supabase.rpc('refresh_dkp_summary')
     try { sessionStorage.removeItem('dkp_leaderboard_v2') } catch (_) {}
+    const { count } = await supabase.from('raid_attendance').select('*', { count: 'exact', head: true }).eq('raid_id', selectedRaidId)
+    if (count != null) await supabase.from('raids').update({ attendees: String(count) }).eq('raid_id', selectedRaidId)
     loadSelectedRaid()
     setMutating(false)
   }
@@ -1078,7 +1082,7 @@ export default function Officer({ isOfficer }) {
             <h2 style={{ marginTop: 0 }}>Raid: {raid.raid_name}</h2>
             <p style={{ color: '#a1a1aa', marginBottom: '1rem' }}>
               {raid.date_iso || raid.date}
-              {raid.attendees != null && raid.attendees !== '' && ` · ${Math.round(Number(raid.attendees))} attendees`}
+              {` · ${attendance.length > 0 ? attendance.length : (raid.attendees != null && raid.attendees !== '' ? Math.round(Number(raid.attendees)) : '—')} attendees`}
               {' · '}
               <Link to={`/raids/${selectedRaidId}`}>Open full raid page</Link>
             </p>
