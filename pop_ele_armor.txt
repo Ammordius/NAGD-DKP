@@ -1,0 +1,349 @@
+<td>Warrior
+<p>Raex's Armor of Destruction
+</p>
+<table class="wikitable" style="background-color:#00001c;">
+<tbody><tr>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=9629"><img src="http://www.takproject.net/allaclone/icons/item_747.gif" alt="item_747.gif" /></a>
+</td></tr>
+<tr>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=32129"><img src="http://www.takproject.net/allaclone/icons/item_624.gif" alt="item_624.gif" /></a>
+</td>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=11429"><img src="http://www.takproject.net/allaclone/icons/item_546.gif" alt="item_546.gif" /></a>
+</td></tr>
+<tr>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=16693"><img src="http://www.takproject.net/allaclone/icons/item_540.gif" alt="item_540.gif" /></a>
+</td>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=11138"><img src="http://www.takproject.net/allaclone/icons/item_516.gif" alt="item_516.gif" /></a>
+</td></tr>
+<tr>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=19440"><img src="http://www.takproject.net/allaclone/icons/item_524.gif" alt="item_524.gif" /></a>
+</td>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=12595"><img src="http://www.takproject.net/allaclone/icons/item_529.gif" alt="item_529.gif" /></a>
+</td></tr></tbody></table>
+</td>
+<td>Rogue
+<p>Bidilis' Armor of the Elusive
+</p>
+<table class="wikitable" style="background-color:#141414;">
+<tbody><tr>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=9806"><img src="http://www.takproject.net/allaclone/icons/item_628.gif" alt="item_628.gif" /></a>
+</td></tr>
+<tr>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=32130"><img src="http://www.takproject.net/allaclone/icons/item_538.gif" alt="item_538.gif" /></a>
+</td>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=11432"><img src="http://www.takproject.net/allaclone/icons/item_543.gif" alt="item_543.gif" /></a>
+</td></tr>
+<tr>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=16717"><img src="http://www.takproject.net/allaclone/icons/item_610.gif" alt="item_610.gif" /></a>
+</td>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=11141"><img src="http://www.takproject.net/allaclone/icons/item_620.gif" alt="item_620.gif" /></a>
+</td></tr>
+<tr>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=19443"><img src="http://www.takproject.net/allaclone/icons/item_545.gif" alt="item_545.gif" /></a>
+</td>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=12598"><img src="http://www.takproject.net/allaclone/icons/item_526.gif" alt="item_526.gif" /></a>
+</td></tr></tbody></table>
+</td>
+<td>Monk
+<p>Ton Po's Armor of Composure
+</p>
+<table class="wikitable">
+<tbody><tr>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=9809"><img src="http://www.takproject.net/allaclone/icons/item_937.gif" alt="item_937.gif" /></a>
+</td></tr>
+<tr>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=32131"><img src="http://www.takproject.net/allaclone/icons/item_632.gif" alt="item_632.gif" /></a>
+</td>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=11435"><img src="http://www.takproject.net/allaclone/icons/item_670.gif" alt="item_670.gif" /></a>
+</td></tr>
+<tr>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=16727"><img src="http://www.takproject.net/allaclone/icons/item_635.gif" alt="item_635.gif" /></a>
+</td>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=11146"><img src="http://www.takproject.net/allaclone/icons/item_790.gif" alt="item_790.gif" /></a>
+</td></tr>
+<tr>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=19446"><img src="http://www.takproject.net/allaclone/icons/item_558.gif" alt="item_558.gif" /></a>
+</td>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=12624"><img src="http://www.takproject.net/allaclone/icons/item_636.gif" alt="item_636.gif" /></a>
+</td></tr></tbody></table>
+</td></tr>
+<tr>
+<td>Cleric
+<p>Ultor's Armor of Faith
+</p>
+<table class="wikitable" style="background-color:#32021d;">
+<tbody><tr>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=9827"><img src="http://www.takproject.net/allaclone/icons/item_745.gif" alt="item_745.gif" /></a>
+</td></tr>
+<tr>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=32603"><img src="http://www.takproject.net/allaclone/icons/item_624.gif" alt="item_624.gif" /></a>
+</td>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=32012"><img src="http://www.takproject.net/allaclone/icons/item_546.gif" alt="item_546.gif" /></a>
+</td></tr>
+<tr>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=16797"><img src="http://www.takproject.net/allaclone/icons/item_540.gif" alt="item_540.gif" /></a>
+</td>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=11199"><img src="http://www.takproject.net/allaclone/icons/item_516.gif" alt="item_516.gif" /></a>
+</td></tr>
+<tr>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=20074"><img src="http://www.takproject.net/allaclone/icons/item_779.gif" alt="item_779.gif" /></a>
+</td>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=13563"><img src="http://www.takproject.net/allaclone/icons/item_529.gif" alt="item_529.gif" /></a>
+</td></tr></tbody></table>
+</td>
+<td>Shaman
+<p>Rosrak's Armor of the Primal
+</p>
+<table class="wikitable" style="background-color:#49461b;">
+<tbody><tr>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=9830"><img src="http://www.takproject.net/allaclone/icons/item_625.gif" alt="item_625.gif" /></a>
+</td></tr>
+<tr>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=32138"><img src="http://www.takproject.net/allaclone/icons/item_538.gif" alt="item_538.gif" /></a>
+</td>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=11529"><img src="http://www.takproject.net/allaclone/icons/item_543.gif" alt="item_543.gif" /></a>
+</td></tr>
+<tr>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=16803"><img src="http://www.takproject.net/allaclone/icons/item_630.gif" alt="item_630.gif" /></a>
+</td>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=11278"><img src="http://www.takproject.net/allaclone/icons/item_620.gif" alt="item_620.gif" /></a>
+</td></tr>
+<tr>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=20078"><img src="http://www.takproject.net/allaclone/icons/item_545.gif" alt="item_545.gif" /></a>
+</td>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=13579"><img src="http://www.takproject.net/allaclone/icons/item_526.gif" alt="item_526.gif" /></a>
+</td></tr></tbody></table>
+</td>
+<td>Druid
+<p>Kerasha's Sylvan Armor
+</p>
+<table class="wikitable" style="background-color:#0a320a;">
+<tbody><tr>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=9833"><img src="http://www.takproject.net/allaclone/icons/item_641.gif" alt="item_641.gif" /></a>
+</td></tr>
+<tr>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=32139"><img src="http://www.takproject.net/allaclone/icons/item_632.gif" alt="item_632.gif" /></a>
+</td>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=11575"><img src="http://www.takproject.net/allaclone/icons/item_634.gif" alt="item_634.gif" /></a>
+</td></tr>
+<tr>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=16811"><img src="http://www.takproject.net/allaclone/icons/item_635.gif" alt="item_635.gif" /></a>
+</td>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=11281"><img src="http://www.takproject.net/allaclone/icons/item_637.gif" alt="item_637.gif" /></a>
+</td></tr>
+<tr>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=20422"><img src="http://www.takproject.net/allaclone/icons/item_633.gif" alt="item_633.gif" /></a>
+</td>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=13603"><img src="http://www.takproject.net/allaclone/icons/item_636.gif" alt="item_636.gif" /></a>
+</td></tr></tbody></table>
+</td></tr>
+<tr>
+<td>Shadow Knight
+<p>Grimror's Armor of the Plagues
+</p>
+<table class="wikitable" style="background-color:#320000;">
+<tbody><tr>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=9815"><img src="http://www.takproject.net/allaclone/icons/item_745.gif" alt="item_745.gif" /></a>
+</td></tr>
+<tr>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=32602"><img src="http://www.takproject.net/allaclone/icons/item_624.gif" alt="item_624.gif" /></a>
+</td>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=11441"><img src="http://www.takproject.net/allaclone/icons/item_546.gif" alt="item_546.gif" /></a>
+</td></tr>
+<tr>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=16763"><img src="http://www.takproject.net/allaclone/icons/item_540.gif" alt="item_540.gif" /></a>
+</td>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=11173"><img src="http://www.takproject.net/allaclone/icons/item_516.gif" alt="item_516.gif" /></a>
+</td></tr>
+<tr>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=19546"><img src="http://www.takproject.net/allaclone/icons/item_524.gif" alt="item_524.gif" /></a>
+</td>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=12637"><img src="http://www.takproject.net/allaclone/icons/item_529.gif" alt="item_529.gif" /></a>
+</td></tr></tbody></table>
+</td>
+<td>Bard
+<p>Rizlona's Fiery Armor
+</p>
+<table class="wikitable" style="background-color:#9f2806;">
+<tbody><tr>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=9818"><img src="http://www.takproject.net/allaclone/icons/item_745.gif" alt="item_745.gif" /></a>
+</td></tr>
+<tr>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=32134"><img src="http://www.takproject.net/allaclone/icons/item_624.gif" alt="item_624.gif" /></a>
+</td>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=11444"><img src="http://www.takproject.net/allaclone/icons/item_546.gif" alt="item_546.gif" /></a>
+</td></tr>
+<tr>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=16771"><img src="http://www.takproject.net/allaclone/icons/item_540.gif" alt="item_540.gif" /></a>
+</td>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=11178"><img src="http://www.takproject.net/allaclone/icons/item_516.gif" alt="item_516.gif" /></a>
+</td></tr>
+<tr>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=19549"><img src="http://www.takproject.net/allaclone/icons/item_524.gif" alt="item_524.gif" /></a>
+</td>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=12664"><img src="http://www.takproject.net/allaclone/icons/item_529.gif" alt="item_529.gif" /></a>
+</td></tr></tbody></table>
+</td>
+<td>Paladin
+<p>Trydan's Armor of Nobility
+</p>
+<table class="wikitable" style="background-color:#ffffb4;">
+<tbody><tr>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=9812"><img src="http://www.takproject.net/allaclone/icons/item_745.gif" alt="item_745.gif" /></a>
+</td></tr>
+<tr>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=32132"><img src="http://www.takproject.net/allaclone/icons/item_624.gif" alt="item_624.gif" /></a>
+</td>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=11438"><img src="http://www.takproject.net/allaclone/icons/item_546.gif" alt="item_546.gif" /></a>
+</td></tr>
+<tr>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=16757"><img src="http://www.takproject.net/allaclone/icons/item_610.gif" alt="item_610.gif" /></a>
+</td>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=11163"><img src="http://www.takproject.net/allaclone/icons/item_516.gif" alt="item_516.gif" /></a>
+</td></tr>
+<tr>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=19449"><img src="http://www.takproject.net/allaclone/icons/item_524.gif" alt="item_524.gif" /></a>
+</td>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=12627"><img src="http://www.takproject.net/allaclone/icons/item_529.gif" alt="item_529.gif" /></a>
+</td></tr></tbody></table>
+</td></tr>
+<tr>
+<td>Ranger
+<p>Askr's Thunderous Armor
+</p>
+<table class="wikitable" style="background-color:#391504;">
+<tbody><tr>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=9821"><img src="http://www.takproject.net/allaclone/icons/item_536.gif" alt="item_536.gif" /></a>
+</td></tr>
+<tr>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=32604"><img src="http://www.takproject.net/allaclone/icons/item_538.gif" alt="item_538.gif" /></a>
+</td>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=11447"><img src="http://www.takproject.net/allaclone/icons/item_543.gif" alt="item_543.gif" /></a>
+</td></tr>
+<tr>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=16777"><img src="http://www.takproject.net/allaclone/icons/item_630.gif" alt="item_630.gif" /></a>
+</td>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=11193"><img src="http://www.takproject.net/allaclone/icons/item_620.gif" alt="item_620.gif" /></a>
+</td></tr>
+<tr>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=19838"><img src="http://www.takproject.net/allaclone/icons/item_545.gif" alt="item_545.gif" /></a>
+</td>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=12816"><img src="http://www.takproject.net/allaclone/icons/item_526.gif" alt="item_526.gif" /></a>
+</td></tr></tbody></table>
+</td>
+<td>Beast Lord
+<p>Dumul's Armor of the Brute
+</p>
+<table class="wikitable" style="background-color:#986f45;">
+<tbody><tr>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=9824"><img src="http://www.takproject.net/allaclone/icons/item_640.gif" alt="item_640.gif" /></a>
+</td></tr>
+<tr>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=32136"><img src="http://www.takproject.net/allaclone/icons/item_632.gif" alt="item_632.gif" /></a>
+</td>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=11450"><img src="http://www.takproject.net/allaclone/icons/item_634.gif" alt="item_634.gif" /></a>
+</td></tr>
+<tr>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=16787"><img src="http://www.takproject.net/allaclone/icons/item_655.gif" alt="item_655.gif" /></a>
+</td>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=11196"><img src="http://www.takproject.net/allaclone/icons/item_637.gif" alt="item_637.gif" /></a>
+</td></tr>
+<tr>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=20032"><img src="http://www.takproject.net/allaclone/icons/item_525.gif" alt="item_525.gif" /></a>
+</td>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=13553"><img src="http://www.takproject.net/allaclone/icons/item_636.gif" alt="item_636.gif" /></a>
+</td></tr></tbody></table>
+</td>
+<td>Wizard
+<p>Maelins Armor of Lore
+</p>
+<table class="wikitable">
+<tbody><tr>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=9950"><img src="http://www.takproject.net/allaclone/icons/item_1124.gif" alt="item_1124.gif" /></a>
+</td></tr>
+<tr>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=32143"><img src="http://www.takproject.net/allaclone/icons/item_1126.gif" alt="item_1126.gif" /></a>
+</td>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=11876"><img src="http://www.takproject.net/allaclone/icons/item_669.gif" alt="item_669.gif" /></a>
+</td></tr>
+<tr>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=19027"><img src="http://www.takproject.net/allaclone/icons/item_655.gif" alt="item_655.gif" /></a>
+</td>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=11309"><img src="http://www.takproject.net/allaclone/icons/item_521.gif" alt="item_521.gif" /></a>
+</td></tr>
+<tr>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=20434"><img src="http://www.takproject.net/allaclone/icons/item_764.gif" alt="item_764.gif" /></a>
+</td>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=13627"><img src="http://www.takproject.net/allaclone/icons/item_517.gif" alt="item_517.gif" /></a>
+</td></tr></tbody></table>
+</td></tr>
+<tr>
+<td>Magician
+<p>Magi`Kot's Armor of Convergence
+</p>
+<table class="wikitable">
+<tbody><tr>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=9944"><img src="http://www.takproject.net/allaclone/icons/item_1124.gif" alt="item_1124.gif" /></a>
+</td></tr>
+<tr>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=32141"><img src="http://www.takproject.net/allaclone/icons/item_1126.gif" alt="item_1126.gif" /></a>
+</td>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=11598"><img src="http://www.takproject.net/allaclone/icons/item_669.gif" alt="item_669.gif" /></a>
+</td></tr>
+<tr>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=19021"><img src="http://www.takproject.net/allaclone/icons/item_631.gif" alt="item_631.gif" /></a>
+</td>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=11303"><img src="http://www.takproject.net/allaclone/icons/item_637.gif" alt="item_637.gif" /></a>
+</td></tr>
+<tr>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=20428"><img src="http://www.takproject.net/allaclone/icons/item_764.gif" alt="item_764.gif" /></a>
+</td>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=13619"><img src="http://www.takproject.net/allaclone/icons/item_517.gif" alt="item_517.gif" /></a>
+</td></tr></tbody></table>
+</td>
+<td>Necromancer
+<p>Miragul's Armor of Risen Souls
+</p>
+<table class="wikitable">
+<tbody><tr>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=9947"><img src="http://www.takproject.net/allaclone/icons/item_1124.gif" alt="item_1124.gif" /></a>
+</td></tr>
+<tr>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=32142"><img src="http://www.takproject.net/allaclone/icons/item_1126.gif" alt="item_1126.gif" /></a>
+</td>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=11618"><img src="http://www.takproject.net/allaclone/icons/item_669.gif" alt="item_669.gif" /></a>
+</td></tr>
+<tr>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=19024"><img src="http://www.takproject.net/allaclone/icons/item_655.gif" alt="item_655.gif" /></a>
+</td>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=11306"><img src="http://www.takproject.net/allaclone/icons/item_637.gif" alt="item_637.gif" /></a>
+</td></tr>
+<tr>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=20431"><img src="http://www.takproject.net/allaclone/icons/item_764.gif" alt="item_764.gif" /></a>
+</td>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=13623"><img src="http://www.takproject.net/allaclone/icons/item_517.gif" alt="item_517.gif" /></a>
+</td></tr></tbody></table>
+</td>
+<td>Enchanter
+<p>Romar's Armor of Visions
+</p>
+<table class="wikitable">
+<tbody><tr>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=9836"><img src="http://www.takproject.net/allaclone/icons/item_1124.gif" alt="item_1124.gif" /></a>
+</td></tr>
+<tr>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=32140"><img src="http://www.takproject.net/allaclone/icons/item_1126.gif" alt="item_1126.gif" /></a>
+</td>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=11578"><img src="http://www.takproject.net/allaclone/icons/item_670.gif" alt="item_670.gif" /></a>
+</td></tr>
+<tr>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=16931"><img src="http://www.takproject.net/allaclone/icons/item_655.gif" alt="item_655.gif" /></a>
+</td>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=11298"><img src="http://www.takproject.net/allaclone/icons/item_521.gif" alt="item_521.gif" /></a>
+</td></tr>
+<tr>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=20425"><img src="http://www.takproject.net/allaclone/icons/item_666.gif" alt="item_666.gif" /></a>
+</td>
+<td><a rel="nofollow" class="external text" href="https://www.takproject.net/allaclone/item.php?id=13614"><img src="http://www.takproject.net/allaclone/icons/item_517.gif" alt="item_517.gif" /></a>
+</td></tr></tbody></table>
+</td></tr></tbody></table>

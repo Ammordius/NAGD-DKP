@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { createPortal } from 'react-dom'
 import ItemCard from './ItemCard'
 import { getItemStats, getItemStatsCached } from '../lib/itemStats'
@@ -13,6 +13,7 @@ const POPOVER_OFFSET = 8
  * Pass itemId when known so we can show stats and TAKP link in the card.
  */
 export default function ItemLink({ itemName, itemId, children, className, externalHref, ...linkProps }) {
+  const { pathname } = useLocation()
   const [showCard, setShowCard] = useState(false)
   const [positionReady, setPositionReady] = useState(false)
   const [stats, setStats] = useState(null)
@@ -21,6 +22,8 @@ export default function ItemLink({ itemName, itemId, children, className, extern
   const anchorRef = useRef(null)
 
   const displayName = itemName || (typeof children === 'string' ? children : null) || 'Item'
+  const internalTo = linkProps.to ?? `/items/${encodeURIComponent(displayName)}`
+  const isSelfLink = !externalHref && pathname === internalTo
 
   const showPopover = () => {
     timerRef.current = window.setTimeout(() => {
@@ -103,10 +106,14 @@ export default function ItemLink({ itemName, itemId, children, className, extern
         >
           {children ?? displayName}
         </a>
+      ) : isSelfLink ? (
+        <span ref={anchorRef} className={className} onMouseEnter={showPopover} onMouseLeave={hidePopover}>
+          {children ?? displayName}
+        </span>
       ) : (
         <Link
           ref={anchorRef}
-          to={linkProps.to ?? `/items/${encodeURIComponent(displayName)}`}
+          to={internalTo}
           className={className}
           onMouseEnter={showPopover}
           onMouseLeave={hidePopover}

@@ -1,0 +1,284 @@
+{
+  "1117": {
+    "flags": [
+      "MAGIC ITEM",
+      "LORE ITEM"
+    ],
+    "slot": "PRIMARY",
+    "mods": [
+      {
+        "label": "STA",
+        "value": 5
+      },
+      {
+        "label": "INT",
+        "value": 8
+      },
+      {
+        "label": "CHA",
+        "value": 5
+      },
+      {
+        "label": "MANA",
+        "value": 100
+      }
+    ],
+    "resists": [
+      {
+        "label": "Fire",
+        "value": 10
+      },
+      {
+        "label": "Cold",
+        "value": 10
+      },
+      {
+        "label": "Magic",
+        "value": 20
+      },
+      {
+        "label": "Poison",
+        "value": 5
+      },
+      {
+        "label": "Disease",
+        "value": 5
+      }
+    ],
+    "weight": 0.5,
+    "size": "MEDIUM",
+    "classes": "NEC WIZ MAG ENC",
+    "races": "HUM ERU HIE DEF GNM IKS",
+    "light": 1
+  },
+  "1531": {
+    "flags": [
+      "MAGIC ITEM",
+      "LORE ITEM",
+      "NO DROP"
+    ],
+    "slot": "SHOULDERS",
+    "ac": 20,
+    "mods": [
+      {
+        "label": "STR",
+        "value": 10
+      },
+      {
+        "label": "STA",
+        "value": 10
+      },
+      {
+        "label": "HP",
+        "value": 20
+      },
+      {
+        "label": "MANA",
+        "value": 20
+      }
+    ],
+    "resists": [
+      {
+        "label": "Fire",
+        "value": 5
+      },
+      {
+        "label": "Cold",
+        "value": 5
+      },
+      {
+        "label": "Magic",
+        "value": 5
+      },
+      {
+        "label": "Poison",
+        "value": 5
+      },
+      {
+        "label": "Disease",
+        "value": 5
+      }
+    ],
+    "effectSpellId": 1327,
+    "effectSpellName": "Aura of Battle",
+    "effectNote": "",
+    "weight": 4.0,
+    "size": "MEDIUM",
+    "classes": "WAR PAL SHD"
+  },
+  "1547": {
+    "flags": [
+      "MAGIC ITEM",
+      "LORE ITEM",
+      "NO DROP"
+    ],
+    "slot": "FACE",
+    "ac": 15,
+    "mods": [
+      {
+        "label": "STA",
+        "value": 5
+      },
+      {
+        "label": "WIS",
+        "value": 5
+      },
+      {
+        "label": "INT",
+        "value": 5
+      },
+      {
+        "label": "HP",
+        "value": 50
+      },
+      {
+        "label": "MANA",
+        "value": 100
+      }
+    ],
+    "resists": [
+      {
+        "label": "Fire",
+        "value": 5
+      },
+      {
+        "label": "Cold",
+        "value": 5
+      },
+      {
+        "label": "Magic",
+        "value": 5
+      },
+      {
+        "label": "Poison",
+        "value": 5
+      },
+      {
+        "label": "Disease",
+        "value": 5
+      }
+    ],
+    "effectSpellId": 1298,
+    "effectSpellName": "Flowing Thought I",
+    "effectNote": "",
+    "weight": 0.5,
+    "size": "SMALL",
+    "classes": "ALL",
+    "races": "ALL",
+    "light": 14
+  },
+  "1549": {
+    "flags": [
+      "MAGIC ITEM",
+      "LORE ITEM",
+      "NO DROP"
+    ],
+    "slot": "HEAD",
+    "ac": 25,
+    "mods": [
+      {
+        "label": "STR",
+        "value": 10
+      },
+      {
+        "label": "STA",
+        "value": 10
+      },
+      {
+        "label": "WIS",
+        "value": 15
+      },
+      {
+        "label": "HP",
+        "value": 100
+      },
+      {
+        "label": "MANA",
+        "value": 100
+      }
+    ],
+    "resists": [
+      {
+        "label": "Fire",
+        "value": 7
+      },
+      {
+        "label": "Cold",
+        "value": 7
+      },
+      {
+        "label": "Magic",
+        "value": 7
+      },
+      {
+        "label": "Poison",
+        "value": 7
+      },
+      {
+        "label": "Disease",
+        "value": 7
+      }
+    ],
+    "effectSpellId": 80,
+    "effectSpellName": "See Invisible",
+    "effectNote": "",
+    "weight": 0.1,
+    "size": "SMALL",
+    "classes": "CLR"
+  },
+  "1550": {
+    "flags": [
+      "MAGIC ITEM",
+      "LORE ITEM",
+      "NO DROP"
+    ],
+    "slot": "NECK WAIST",
+    "ac": 10,
+    "mods": [
+      {
+        "label": "STR",
+        "value": 10
+      },
+      {
+        "label": "STA",
+        "value": 10
+      },
+      {
+        "label": "DEX",
+        "value": 10
+      },
+      {
+        "label": "HP",
+        "value": 100
+      }
+    ],
+    "resists": [
+      {
+        "label": "Fire",
+        "value": 5
+      },
+      {
+        "label": "Cold",
+        "value": 5
+      },
+      {
+        "label": "Magic",
+        "value": 5
+      },
+      {
+        "label": "Poison",
+        "value": 5
+      },
+      {
+        "label": "Disease",
+        "value": 5
+      }
+    ],
+    "effectSpellId": 80,
+    "effectSpellName": "See Invisible",
+    "effectNote": "",
+    "weight": 0.2,
+    "size": "SMALL",
+    "classes": "WAR PAL RNG SHD MNK BRD ROG BST"
+  }
+}
