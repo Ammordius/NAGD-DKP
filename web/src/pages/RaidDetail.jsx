@@ -131,11 +131,6 @@ export default function RaidDetail({ isOfficer }) {
     return list
   }, [])
 
-  const displayAttendanceByAccount = useMemo(
-    () => groupAttendeesByAccount(displayAttendance, getAccountId, getAccountDisplayName ?? (() => null)),
-    [displayAttendance, groupAttendeesByAccount, getAccountId, getAccountDisplayName]
-  )
-
   // When we have per-event attendance, derive attendees from current events only (excludes deleted tics).
   const currentEventIds = useMemo(() => new Set(events.map((e) => String(e.event_id ?? '').trim())), [events])
   const effectiveAttendance = useMemo(() => {
@@ -157,6 +152,11 @@ export default function RaidDetail({ isOfficer }) {
   // Attendee list and count to show: use event-derived list when available, else raid_attendance.
   const displayAttendance = effectiveAttendance ?? attendance
   const displayAttendeeCount = displayAttendance.length
+
+  const displayAttendanceByAccount = useMemo(
+    () => groupAttendeesByAccount(displayAttendance, getAccountId, getAccountDisplayName ?? (() => null)),
+    [displayAttendance, groupAttendeesByAccount, getAccountId, getAccountDisplayName]
+  )
 
   // When attendees are derived from current events only, keep raid.attendees and raid_attendance in sync (fixes count after a tic was deleted).
   useEffect(() => {
