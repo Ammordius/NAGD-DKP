@@ -3,6 +3,36 @@ import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useCharToAccountMap } from '../lib/useCharToAccountMap'
 import AssignedLootDisclaimer from '../components/AssignedLootDisclaimer'
+import ItemLink from '../components/ItemLink'
+import { getDkpMobLoot, getRaidItemSources } from '../lib/staticData'
+
+function buildItemIdMap(mobLoot) {
+  const map = {}
+  if (!mobLoot || typeof mobLoot !== 'object') return map
+  Object.values(mobLoot).forEach((entry) => {
+    (entry?.loot || []).forEach((item) => {
+      if (item?.name && item?.item_id != null) {
+        const key = item.name.trim().toLowerCase()
+        if (map[key] == null) map[key] = item.item_id
+      }
+    })
+  })
+  return map
+}
+
+function buildRaidItemNameToId(raidSources) {
+  const map = {}
+  if (!raidSources || typeof raidSources !== 'object') return map
+  Object.entries(raidSources).forEach(([id, entry]) => {
+    const name = entry?.name && typeof entry.name === 'string' ? entry.name.trim() : null
+    if (name) {
+      const key = name.toLowerCase()
+      const numId = Number(id)
+      if (!Number.isNaN(numId) && map[key] == null) map[key] = numId
+    }
+  })
+  return map
+}
 
 const MONTHS_OPTIONS = [
   { value: 1, label: 'Last 1 month' },
@@ -30,6 +60,21 @@ export default function LootRecipients() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [expandedLootRows, setExpandedLootRows] = useState(() => new Set()) // character_key -> show full loot list
+  const [mobLoot, setMobLoot] = useState(null)
+  const [raidItemSources, setRaidItemSources] = useState(null)
+
+  useEffect(() => {
+    Promise.all([getDkpMobLoot(), getRaidItemSources()]).then(([mob, raid]) => {
+      setMobLoot(mob)
+      setRaidItemSources(raid)
+    })
+  }, [])
+
+  const itemIdMap = useMemo(() => {
+    const fromMob = buildItemIdMap(mobLoot)
+    const fromRaid = buildRaidItemNameToId(raidItemSources)
+    return { ...fromRaid, ...fromMob }
+  }, [mobLoot, raidItemSources])
 
   useEffect(() => {
     setLoading(true)
@@ -386,12 +431,15 @@ export default function LootRecipients() {
                             </button>
                           )}
                           <ul style={{ margin: 0, paddingLeft: '1.25rem', listStyle: 'disc' }}>
-                            {r.lootItems.map((it, i) => (
-                              <li key={i}>
-                                <Link to={`/items/${encodeURIComponent(it.item_name)}`}>{it.item_name}</Link>
-                                {it.cost != null && it.cost !== '' && <span style={{ color: '#71717a' }}> ({it.cost} DKP)</span>}
-                              </li>
-                            ))}
+                            {r.lootItems.map((it, i) => {
+                              const itemId = itemIdMap[(it.item_name || '').trim().toLowerCase()] ?? null
+                              return (
+                                <li key={i}>
+                                  <ItemLink itemName={it.item_name} itemId={itemId}>{it.item_name}</ItemLink>
+                                  {it.cost != null && it.cost !== '' && <span style={{ color: '#71717a' }}> ({it.cost} DKP)</span>}
+                                </li>
+                              )
+                            })}
                           </ul>
                         </>
                       )}
