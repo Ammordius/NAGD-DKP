@@ -282,8 +282,9 @@ export default function LootRecipients() {
         const db = b.lastLootDate || ''
         if (da !== db) return db.localeCompare(da) // most recent first (desc date)
       } else {
-        const va = a.dkpSpentOnToon ?? 0
-        const vb = b.dkpSpentOnToon ?? 0
+        // DKP spent on character = Character DKP spent (all time)
+        const va = a.characterDkpSpentTotal ?? 0
+        const vb = b.characterDkpSpentTotal ?? 0
         if (va !== vb) return vb - va
       }
       return (a.account_display_name || a.character_name || '').localeCompare(b.account_display_name || b.character_name || '')
