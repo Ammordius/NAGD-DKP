@@ -78,7 +78,7 @@ function saveCache(loot, raids, maxLootId) {
 }
 
 export default function LootSearch() {
-  const { getAccountId } = useCharToAccountMap()
+  const { getAccountId, getAccountDisplayName } = useCharToAccountMap()
   const [loot, setLoot] = useState([])
   const [raids, setRaids] = useState({})
   const [classifications, setClassifications] = useState({})
@@ -264,8 +264,10 @@ export default function LootSearch() {
                     {(() => {
                       const charName = row.character_name || row.char_id || '—'
                       const accountId = getAccountId(row.character_name || row.char_id)
+                      const accountName = getAccountDisplayName?.(row.character_name || row.char_id)
+                      const label = accountName ? `${accountName} (${charName})` : charName
                       const to = accountId ? `/accounts/${accountId}` : `/characters/${encodeURIComponent(charName)}`
-                      return <Link to={to}>{charName}</Link>
+                      return <Link to={to}>{label}</Link>
                     })()}
                   </td>
                   <td style={{ color: '#a1a1aa', fontSize: '0.875rem' }}>

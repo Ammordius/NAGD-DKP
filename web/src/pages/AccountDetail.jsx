@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { useCharToAccountMap } from '../lib/useCharToAccountMap'
 import AssignedLootDisclaimer from '../components/AssignedLootDisclaimer'
 
 const MAGELO_BASE = 'https://www.takproject.net/magelo/character.php?char='
@@ -44,6 +45,7 @@ async function fetchByChunkedIn(table, select, column, values) {
 export default function AccountDetail({ isOfficer, profile, session }) {
   const { accountId } = useParams()
   const navigate = useNavigate()
+  const { getAccountDisplayName } = useCharToAccountMap()
   const [tab, setTab] = useState('activity')
   const [activityPage, setActivityPage] = useState(1)
   const [account, setAccount] = useState(null)
@@ -390,7 +392,13 @@ export default function AccountDetail({ isOfficer, profile, session }) {
                       <td style={{ padding: '0.5rem 0.75rem' }}>
                         <Link to={`/items/${encodeURIComponent(row.item_name || '')}`}>{row.item_name || '—'}</Link>
                       </td>
-                      <td style={{ padding: '0.5rem 0.75rem', color: '#a1a1aa' }}>{row.character_name || row.char_id || '—'}</td>
+                      <td style={{ padding: '0.5rem 0.75rem', color: '#a1a1aa' }}>
+                        {(() => {
+                          const charName = row.character_name || row.char_id || '—'
+                          const accountName = getAccountDisplayName?.(row.character_name || row.char_id)
+                          return accountName ? `${accountName} (${charName})` : charName
+                        })()}
+                      </td>
                       <td style={{ padding: '0.5rem 0.75rem' }}>
                         {canEditLoot ? (
                           <select

@@ -401,10 +401,11 @@ export default function RaidDetail({ isOfficer }) {
                   <td>
                     {(() => {
                       const charName = row.character_name || row.char_id || '—'
-                      const displayChar = (row.assigned_character_name || '').trim() || charName
                       const accountId = getAccountId(row.character_name || row.char_id)
-                      const to = accountId ? `/accounts/${accountId}` : `/characters/${encodeURIComponent(displayChar)}`
-                      return <Link to={to}>{displayChar}</Link>
+                      const accountName = getAccountDisplayName?.(row.character_name || row.char_id)
+                      const label = accountName ? `${accountName} (${charName})` : charName
+                      const to = accountId ? `/accounts/${accountId}` : `/characters/${encodeURIComponent(charName)}`
+                      return <Link to={to}>{label}</Link>
                     })()}
                   </td>
                   <td style={{ color: '#a1a1aa', fontSize: '0.875rem' }}>
