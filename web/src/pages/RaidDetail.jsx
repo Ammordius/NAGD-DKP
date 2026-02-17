@@ -1,10 +1,40 @@
 import { useEffect, useState, useMemo, useCallback, Fragment } from 'react'
 import { useParams, Link } from 'react-router-dom'
+import useSWR from 'swr'
 import { supabase } from '../lib/supabase'
 import { useCharToAccountMap } from '../lib/useCharToAccountMap'
 import AssignedLootDisclaimer from '../components/AssignedLootDisclaimer'
 import ItemLink from '../components/ItemLink'
 import { getDkpMobLoot } from '../lib/staticData'
+
+/** SWR deduplication: 60s so revisiting the same raid or multiple components don't each hit the DB. */
+const RAID_DEDUPING_INTERVAL_MS = 60_000
+
+async function fetchRaidDetail(raidId) {
+  const [r, e, l, a, ea] = await Promise.all([
+    supabase.from('raids').select('raid_id, raid_name, date_iso, date, attendees').eq('raid_id', raidId).single(),
+    supabase.from('raid_events').select('id, raid_id, event_id, event_order, event_name, dkp_value, attendee_count, event_time').eq('raid_id', raidId).order('event_order'),
+    supabase.from('raid_loot').select('id, raid_id, event_id, item_name, char_id, character_name, cost, assigned_char_id, assigned_character_name').eq('raid_id', raidId),
+    supabase.from('raid_attendance').select('id, raid_id, char_id, character_name').eq('raid_id', raidId).order('character_name'),
+    supabase.from('raid_event_attendance').select('event_id, char_id, character_name').eq('raid_id', raidId),
+  ])
+  if (r.error) throw new Error(r.error.message)
+  const attendanceList = a.data || []
+  if (r.data && attendanceList.length > 0) {
+    const expected = String(attendanceList.length)
+    const current = r.data.attendees
+    if (current == null || current === '' || String(Math.round(Number(current))) !== expected) {
+      supabase.from('raids').update({ attendees: expected }).eq('raid_id', raidId).then(() => {})
+    }
+  }
+  return {
+    raid: r.data,
+    events: e.data || [],
+    loot: l.data || [],
+    attendance: a.data || [],
+    eventAttendance: ea.data || [],
+  }
+}
 
 function buildItemIdMap(mobLoot) {
   const map = {}
@@ -23,13 +53,19 @@ function buildItemIdMap(mobLoot) {
 export default function RaidDetail({ isOfficer }) {
   const { raidId } = useParams()
   const { getAccountId, getAccountDisplayName } = useCharToAccountMap()
-  const [raid, setRaid] = useState(null)
-  const [events, setEvents] = useState([])
-  const [loot, setLoot] = useState([])
-  const [attendance, setAttendance] = useState([])
-  const [eventAttendance, setEventAttendance] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
+  const { data, error: swrError, isLoading, mutate } = useSWR(
+    raidId ? `raid-detail-${raidId}` : null,
+    () => fetchRaidDetail(raidId),
+    { dedupingInterval: RAID_DEDUPING_INTERVAL_MS, revalidateOnFocus: false }
+  )
+  const raid = data?.raid ?? null
+  const events = data?.events ?? []
+  const loot = data?.loot ?? []
+  const attendance = data?.attendance ?? []
+  const eventAttendance = data?.eventAttendance ?? []
+  const loading = isLoading
+  const [mutationError, setMutationError] = useState('')
+  const error = swrError?.message ?? mutationError
   const [expandedEvents, setExpandedEvents] = useState({})
   const [editingEventId, setEditingEventId] = useState(null)
   const [editingEventDkp, setEditingEventDkp] = useState('')
@@ -48,39 +84,6 @@ export default function RaidDetail({ isOfficer }) {
   useEffect(() => {
     getDkpMobLoot().then(setMobLoot)
   }, [])
-
-  const loadData = useCallback(() => {
-    if (!raidId) return
-    setLoading(true)
-    setError('')
-    Promise.all([
-      supabase.from('raids').select('*').eq('raid_id', raidId).single(),
-      supabase.from('raid_events').select('*').eq('raid_id', raidId).order('event_order'),
-      supabase.from('raid_loot').select('*').eq('raid_id', raidId),
-      supabase.from('raid_attendance').select('*').eq('raid_id', raidId).order('character_name'),
-      supabase.from('raid_event_attendance').select('event_id, char_id, character_name').eq('raid_id', raidId),
-    ]).then(([r, e, l, a, ea]) => {
-      if (r.error) setError(r.error.message)
-      else setRaid(r.data)
-      if (!e.error) setEvents(e.data || [])
-      if (!l.error) setLoot(l.data || [])
-      if (!a.error) setAttendance(a.data || [])
-      if (!ea.error) setEventAttendance(ea.data || [])
-      const attendanceList = a.data || []
-      if (!r.error && r.data && attendanceList.length > 0) {
-        const expected = String(attendanceList.length)
-        const current = r.data.attendees
-        if (current == null || current === '' || String(Math.round(Number(current))) !== expected) {
-          supabase.from('raids').update({ attendees: expected }).eq('raid_id', raidId).then(() => {})
-        }
-      }
-      setLoading(false)
-    })
-  }, [raidId])
-
-  useEffect(() => {
-    loadData()
-  }, [loadData])
 
   useEffect(() => {
     if (isOfficer && raidId) {
@@ -197,10 +200,10 @@ export default function RaidDetail({ isOfficer }) {
         }
       }
       await supabase.from('raids').update({ attendees: String(expectedCount) }).eq('raid_id', raid.raid_id)
-      loadData()
+      mutate()
     }
     cleanup()
-  }, [raid?.raid_id, raid?.attendees, effectiveAttendance, attendance, loadData])
+  }, [raid?.raid_id, raid?.attendees, effectiveAttendance, attendance, mutate])
 
   // Account-aware: an account is "present" for an event if any of its characters is in that event.
   // "Not present for all events" = accounts (or unlinked chars) that missed at least one event.
@@ -241,10 +244,10 @@ export default function RaidDetail({ isOfficer }) {
     setMutating(true)
     const { error: err } = await supabase.from('raid_events').update({ dkp_value: val }).eq('raid_id', raidId).eq('event_id', eventId)
     setMutating(false)
-    if (err) setError(err.message)
+    if (err) setMutationError(err.message)
     else {
       setEditingEventId(null)
-      loadData()
+      mutate()
     }
   }
 
@@ -253,10 +256,10 @@ export default function RaidDetail({ isOfficer }) {
     setMutating(true)
     const { error: err } = await supabase.from('raid_events').update({ event_time: val || null }).eq('raid_id', raidId).eq('event_id', eventId)
     setMutating(false)
-    if (err) setError(err.message)
+    if (err) setMutationError(err.message)
     else {
       setEditingEventTimeId(null)
-      loadData()
+      mutate()
     }
   }
 
@@ -265,10 +268,10 @@ export default function RaidDetail({ isOfficer }) {
     setMutating(true)
     const { error: err } = await supabase.from('raid_loot').update({ cost: val }).eq('id', row.id)
     setMutating(false)
-    if (err) setError(err.message)
+    if (err) setMutationError(err.message)
     else {
       setEditingLootId(null)
-      loadData()
+      mutate()
     }
   }
 
@@ -278,8 +281,8 @@ export default function RaidDetail({ isOfficer }) {
     setMutating(true)
     const { error: err } = await supabase.from('raid_loot').delete().eq('id', row.id)
     setMutating(false)
-    if (err) setError(err.message)
-    else loadData()
+    if (err) setMutationError(err.message)
+    else mutate()
   }
 
   const handleAddAttendeeToTic = async () => {
@@ -287,17 +290,17 @@ export default function RaidDetail({ isOfficer }) {
     const name = addToTicCharQuery.trim()
     const char = nameToChar[name.toLowerCase()]
     if (!char) {
-      setError('Select a character from the list (name must match DKP list).')
+      setMutationError('Select a character from the list (name must match DKP list).')
       return
     }
     const alreadyInTic = eventAttendance.some((r) => String(r.event_id) === String(addToTicEventId) && String(r.char_id) === String(char.char_id))
     if (alreadyInTic) {
-      setError(`${char.name} is already in this tic.`)
+      setMutationError(`${char.name} is already in this tic.`)
       return
     }
     setMutating(true)
     setAddToTicResult(null)
-    setError('')
+    setMutationError('')
     const { error: attErr } = await supabase.from('raid_event_attendance').insert({
       raid_id: raidId,
       event_id: addToTicEventId,
@@ -305,7 +308,7 @@ export default function RaidDetail({ isOfficer }) {
       character_name: char.name,
     })
     if (attErr) {
-      setError(attErr.message)
+      setMutationError(attErr.message)
       setMutating(false)
       return
     }
@@ -321,9 +324,9 @@ export default function RaidDetail({ isOfficer }) {
     setAddToTicCharQuery('')
     await supabase.rpc('refresh_dkp_summary')
     try { sessionStorage.removeItem('dkp_leaderboard_v2') } catch (_) {}
-    const { count } = await supabase.from('raid_attendance').select('*', { count: 'exact', head: true }).eq('raid_id', raidId)
+    const { count } = await supabase.from('raid_attendance').select('raid_id', { count: 'exact', head: true }).eq('raid_id', raidId)
     if (count != null) await supabase.from('raids').update({ attendees: String(count) }).eq('raid_id', raidId)
-    loadData()
+    mutate()
     setMutating(false)
   }
 
