@@ -25,8 +25,8 @@ DELAY_DEFAULT = 1.5
 USER_AGENT = "NAGD-DKP-ItemStats/1.0 (guild DKP site; item card data)"
 
 
-def collect_item_ids(mob_loot_path: Path) -> list[tuple[int, str]]:
-    """Return unique (item_id, name) from dkp_mob_loot.json."""
+def collect_item_ids_from_mob_loot(mob_loot_path: Path) -> dict[int, str]:
+    """Return { item_id: name } from dkp_mob_loot.json."""
     data = json.loads(mob_loot_path.read_text(encoding="utf-8"))
     seen = {}
     for entry in data.values() if isinstance(data, dict) else []:
@@ -34,6 +34,33 @@ def collect_item_ids(mob_loot_path: Path) -> list[tuple[int, str]]:
             iid = item.get("item_id")
             name = (item.get("name") or "").strip()
             if iid is not None and name and iid not in seen:
+                seen[iid] = name
+    return seen
+
+
+def collect_item_ids_from_raid_sources(raid_sources_path: Path) -> dict[int, str]:
+    """Return { item_id: name } from raid_item_sources.json (id -> { name })."""
+    if not raid_sources_path.exists():
+        return {}
+    data = json.loads(raid_sources_path.read_text(encoding="utf-8"))
+    seen = {}
+    for sid, entry in (data.items() if isinstance(data, dict) else []):
+        try:
+            iid = int(sid)
+        except (ValueError, TypeError):
+            continue
+        name = (entry.get("name") or "").strip()
+        if name and iid not in seen:
+            seen[iid] = name
+    return seen
+
+
+def collect_item_ids(mob_loot_path: Path, raid_sources_path: Path | None = None) -> list[tuple[int, str]]:
+    """Return unique (item_id, name) from dkp_mob_loot.json and optionally raid_item_sources.json."""
+    seen = collect_item_ids_from_mob_loot(mob_loot_path)
+    if raid_sources_path:
+        for iid, name in collect_item_ids_from_raid_sources(raid_sources_path).items():
+            if iid not in seen:
                 seen[iid] = name
     return [(iid, seen[iid]) for iid in sorted(seen)]
 
@@ -185,6 +212,7 @@ def main():
     parser.add_argument("--limit", type=int, default=0, help="Max items to fetch (0 = all)")
     parser.add_argument("--out", type=str, default="", help="Output path (default: data/item_stats.json)")
     parser.add_argument("--mob-loot", type=str, default="", help="Path to dkp_mob_loot.json (default: data/dkp_mob_loot.json or web/public/dkp_mob_loot.json)")
+    parser.add_argument("--raid-sources", type=str, default="", help="Path to raid_item_sources.json (default: raid_item_sources.json or web/public/raid_item_sources.json)")
     parser.add_argument("--no-resume", action="store_true", help="Ignore existing output file; refetch all (default: resume by skipping ids already in file)")
     args = parser.parse_args()
 
@@ -199,11 +227,20 @@ def main():
         print("dkp_mob_loot.json not found in data/ or web/public/")
         return 1
 
+    raid_sources_path = Path(args.raid_sources) if args.raid_sources else None
+    if not raid_sources_path or not raid_sources_path.is_absolute():
+        for candidate in [base / "raid_item_sources.json", base / "web" / "public" / "raid_item_sources.json"]:
+            if candidate.exists():
+                raid_sources_path = candidate
+                break
+    if not raid_sources_path or not raid_sources_path.exists():
+        raid_sources_path = None  # optional
+
     out_path = Path(args.out) if args.out else base / "data" / "item_stats.json"
     if not out_path.is_absolute():
         out_path = base / out_path
 
-    items = collect_item_ids(mob_loot_path)
+    items = collect_item_ids(mob_loot_path, raid_sources_path)
     total = len(items)
     if args.limit:
         items = items[: args.limit]

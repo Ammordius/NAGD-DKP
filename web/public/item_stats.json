@@ -4272,7 +4272,7 @@
     "instrumentMods": [
       {
         "label": "Singing",
-        "value": 0,
+        "value": 20,
         "pct": "+100%"
       }
     ],
@@ -4280,10 +4280,11 @@
     "levelType": "required",
     "effectSpellId": 1300,
     "effectSpellName": "Flowing Thought III",
-    "effectNote": "",
+    "effectNote": "(Worn) (Level 0)",
     "weight": 1.0,
     "size": "SMALL",
-    "classes": "PAL RNG SHD BRD BST"
+    "classes": "PAL RNG SHD BRD BST",
+    "races": "ALL"
   },
   "9490": {
     "flags": [
@@ -4724,6 +4725,64 @@
     "weight": 0.9,
     "size": "TINY",
     "classes": "NEC WIZ MAG ENC"
+  },
+  "10234": {
+    "flags": [
+      "MAGIC ITEM",
+      "LORE ITEM",
+      "NO DROP"
+    ],
+    "slot": "FINGERS",
+    "ac": 10,
+    "mods": [
+      {
+        "label": "DEX",
+        "value": 20
+      },
+      {
+        "label": "STA",
+        "value": 20
+      },
+      {
+        "label": "WIS",
+        "value": 15
+      },
+      {
+        "label": "INT",
+        "value": 15
+      },
+      {
+        "label": "AGI",
+        "value": 15
+      },
+      {
+        "label": "HP",
+        "value": 145
+      },
+      {
+        "label": "MANA",
+        "value": 160
+      }
+    ],
+    "resists": [
+      {
+        "label": "Cold",
+        "value": 25
+      },
+      {
+        "label": "Magic",
+        "value": 25
+      }
+    ],
+    "requiredLevel": 65,
+    "levelType": "required",
+    "effectSpellName": "Flowing Thought II",
+    "effectNote": "(Worn) (Lvl: 0)",
+    "focusSpellName": "Marr's Gift",
+    "weight": 1,
+    "size": "TINY",
+    "classes": "ALL",
+    "races": "ALL"
   },
   "10240": {
     "flags": [
@@ -7036,16 +7095,24 @@
         "value": 25
       }
     ],
+    "instrumentMods": [
+      {
+        "label": "Wind Instruments",
+        "value": 22,
+        "pct": "+120%"
+      }
+    ],
     "requiredLevel": 65,
     "levelType": "required",
     "effectSpellId": 2194,
     "effectSpellName": "Vengeance IV",
-    "effectNote": "",
+    "effectNote": "(Worn) (Level 0)",
     "focusSpellId": 3530,
     "focusSpellName": "Quickening of Solusek",
     "weight": 1.2,
     "size": "MEDIUM",
-    "classes": "PAL RNG SHD BRD BST"
+    "classes": "PAL RNG SHD BRD BST",
+    "races": "ALL"
   },
   "13674": {
     "flags": [
@@ -10894,12 +10961,13 @@
     "levelType": "required",
     "effectSpellId": 3630,
     "effectSpellName": "Time Lapse",
-    "effectNote": "",
+    "effectNote": "(Combat) (Level 0)",
     "focusSpellId": 3843,
     "focusSpellName": "Timeburn",
     "weight": 2.7,
     "size": "MEDIUM",
-    "classes": "CLR DRU SHM"
+    "classes": "CLR DRU SHM",
+    "races": "ALL"
   },
   "21893": {
     "flags": [
@@ -12464,14 +12532,22 @@
         "value": 18
       }
     ],
+    "instrumentMods": [
+      {
+        "label": "Percussion Instruments",
+        "value": 25,
+        "pct": "+150%"
+      }
+    ],
     "requiredLevel": 65,
     "levelType": "required",
     "effectSpellId": 3648,
     "effectSpellName": "Time Snap",
-    "effectNote": "",
+    "effectNote": "(Combat) (Lvl: 1) (Rate: 100%)",
     "weight": 1.0,
     "size": "MEDIUM",
-    "classes": "WAR RNG BRD ROG"
+    "classes": "WAR RNG BRD ROG",
+    "races": "ALL"
   },
   "22990": {
     "flags": [
@@ -26293,6 +26369,74 @@
     "size": "TINY",
     "classes": "WAR CLR PAL RNG SHD BRD ROG SHM",
     "tint": "(200, 200, 225)"
+  },
+  "28296": {
+    "flags": [
+      "MAGIC ITEM",
+      "LORE ITEM",
+      "NO DROP"
+    ],
+    "slot": "NECK",
+    "mods": [
+      {
+        "label": "STR",
+        "value": 15
+      },
+      {
+        "label": "STA",
+        "value": 15
+      },
+      {
+        "label": "WIS",
+        "value": 15
+      },
+      {
+        "label": "INT",
+        "value": 15
+      },
+      {
+        "label": "AGI",
+        "value": 15
+      },
+      {
+        "label": "HP",
+        "value": 75
+      },
+      {
+        "label": "MANA",
+        "value": 75
+      }
+    ],
+    "resists": [
+      {
+        "label": "Fire",
+        "value": 15
+      },
+      {
+        "label": "Disease",
+        "value": 15
+      },
+      {
+        "label": "Cold",
+        "value": 15
+      },
+      {
+        "label": "Magic",
+        "value": 15
+      },
+      {
+        "label": "Poison",
+        "value": 15
+      }
+    ],
+    "effectSpellId": 3046,
+    "effectSpellName": "Talisman Gate",
+    "effectNote": "(Must Equip. Casting Time: 20)",
+    "weight": 1.0,
+    "size": "SMALL",
+    "classes": "ALL",
+    "races": "ALL",
+    "light": 7
   },
   "28605": {
     "flags": [
