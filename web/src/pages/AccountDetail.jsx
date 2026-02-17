@@ -3,8 +3,23 @@ import { useParams, Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useCharToAccountMap } from '../lib/useCharToAccountMap'
 import AssignedLootDisclaimer from '../components/AssignedLootDisclaimer'
+import ItemLink from '../components/ItemLink'
 
 const MAGELO_BASE = 'https://www.takproject.net/magelo/character.php?char='
+
+function buildItemIdMap(mobLoot) {
+  const map = {}
+  if (!mobLoot || typeof mobLoot !== 'object') return map
+  Object.values(mobLoot).forEach((entry) => {
+    (entry?.loot || []).forEach((item) => {
+      if (item?.name && item?.item_id != null) {
+        const key = item.name.trim().toLowerCase()
+        if (map[key] == null) map[key] = item.item_id
+      }
+    })
+  })
+  return map
+}
 const MIDDLE_DOT = '\u00B7'
 
 const PAGE = 1000
@@ -68,6 +83,11 @@ export default function AccountDetail({ isOfficer, profile, session }) {
   const canEditLoot = isOfficer || isMyAccount
   const [savingLootId, setSavingLootId] = useState(null)
   const [lootAssignError, setLootAssignError] = useState('')
+  const [mobLoot, setMobLoot] = useState(null)
+
+  useEffect(() => {
+    fetch('/dkp_mob_loot.json').then((r) => (r.ok ? r.json() : null)).then(setMobLoot).catch(() => setMobLoot(null))
+  }, [])
 
   useEffect(() => {
     if (!accountId || !profile) return
@@ -247,6 +267,8 @@ export default function AccountDetail({ isOfficer, profile, session }) {
     setRefreshKey((k) => k + 1)
   }
 
+  const itemIdMap = useMemo(() => buildItemIdMap(mobLoot), [mobLoot])
+
   if (loading) return <div className="container">Loading account...</div>
   if (error) return <div className="container"><span className="error">{error}</span> <Link to="/accounts">← Accounts</Link></div>
   if (!account) return <div className="container">Account not found. <Link to="/accounts">← Accounts</Link></div>
@@ -390,7 +412,7 @@ export default function AccountDetail({ isOfficer, profile, session }) {
                         {row._date && <span style={{ color: '#71717a', marginLeft: '0.25rem' }}>{row._date}</span>}
                       </td>
                       <td style={{ padding: '0.5rem 0.75rem' }}>
-                        <Link to={`/items/${encodeURIComponent(row.item_name || '')}`}>{row.item_name || '—'}</Link>
+                        <ItemLink itemName={row.item_name || ''} itemId={itemIdMap[(row.item_name || '').trim().toLowerCase()]}>{row.item_name || '—'}</ItemLink>
                       </td>
                       <td style={{ padding: '0.5rem 0.75rem', color: '#a1a1aa' }}>
                         {(() => {
@@ -579,7 +601,7 @@ export default function AccountDetail({ isOfficer, profile, session }) {
                                 const charName = hasAssignment ? (row.assigned_character_name || row.assigned_char_id) : 'Unassigned'
                                 return (
                                   <li key={i} style={{ marginBottom: '0.25rem', fontSize: '0.9rem' }}>
-                                    <Link to={`/items/${encodeURIComponent(row.item_name || '')}`}>{row.item_name || '—'}</Link>
+                                    <ItemLink itemName={row.item_name || ''} itemId={itemIdMap[(row.item_name || '').trim().toLowerCase()]}>{row.item_name || '—'}</ItemLink>
                                     {' '}{MIDDLE_DOT}{' '}
                                     {hasAssignment ? (
                                       <Link to={`/characters/${encodeURIComponent(charName)}`}>{charName}</Link>

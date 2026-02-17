@@ -3,6 +3,21 @@ import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useCharToAccountMap } from '../lib/useCharToAccountMap'
 import AssignedLootDisclaimer from '../components/AssignedLootDisclaimer'
+import ItemLink from '../components/ItemLink'
+
+function buildItemIdMap(mobLoot) {
+  const map = {}
+  if (!mobLoot || typeof mobLoot !== 'object') return map
+  Object.values(mobLoot).forEach((entry) => {
+    (entry?.loot || []).forEach((item) => {
+      if (item?.name && item?.item_id != null) {
+        const key = item.name.trim().toLowerCase()
+        if (map[key] == null) map[key] = item.item_id
+      }
+    })
+  })
+  return map
+}
 
 const LOOT_CACHE_KEY = 'loot_search_cache_v3' // v3: includes assigned_char_id, assigned_character_name
 const CACHE_TTL_MS = 10 * 60 * 1000 // 10 minutes
@@ -84,10 +99,15 @@ export default function LootSearch() {
   const [classifications, setClassifications] = useState({})
   const [raidToMobs, setRaidToMobs] = useState({})
   const [itemSources, setItemSources] = useState(null)
+  const [mobLoot, setMobLoot] = useState(null)
   const [itemQuery, setItemQuery] = useState('')
   const [mobFilter, setMobFilter] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+
+  useEffect(() => {
+    fetch('/dkp_mob_loot.json').then((r) => (r.ok ? r.json() : null)).then(setMobLoot).catch(() => setMobLoot(null))
+  }, [])
 
   useEffect(() => {
     const PAGE = 1000
@@ -183,6 +203,8 @@ export default function LootSearch() {
     return mobs.map((m) => ({ value: m, label: m.replace(/^#/, '') }))
   }, [classifications])
 
+  const itemIdMap = useMemo(() => buildItemIdMap(mobLoot), [mobLoot])
+
   const filteredLoot = useMemo(() => {
     let list = loot
     const q = (itemQuery || '').trim().toLowerCase()
@@ -258,7 +280,7 @@ export default function LootSearch() {
               {filteredLoot.slice(0, 500).map((row, i) => (
                 <tr key={row.id || `${row.raid_id}-${row.item_name}-${i}`}>
                   <td style={{ color: '#a1a1aa', fontSize: '0.875rem' }}>{(raids[row.raid_id]?.date_iso && String(raids[row.raid_id].date_iso).trim()) ? String(raids[row.raid_id].date_iso).slice(0, 10) : (raids[row.raid_id]?.date || '—')}</td>
-                  <td><Link to={`/items/${encodeURIComponent(row.item_name || '')}`}>{row.item_name || '—'}</Link></td>
+                  <td><ItemLink itemName={row.item_name || ''} itemId={itemIdMap[(row.item_name || '').trim().toLowerCase()]}>{row.item_name || '—'}</ItemLink></td>
                   <td>{row.cost ?? '—'}</td>
                   <td>
                     {(() => {

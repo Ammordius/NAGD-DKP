@@ -2,8 +2,23 @@ import { useEffect, useState, useMemo } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import AssignedLootDisclaimer from '../components/AssignedLootDisclaimer'
+import ItemLink from '../components/ItemLink'
 
 const MAGELO_BASE = 'https://www.takproject.net/magelo/character.php?char='
+
+function buildItemIdMap(mobLoot) {
+  const map = {}
+  if (!mobLoot || typeof mobLoot !== 'object') return map
+  Object.values(mobLoot).forEach((entry) => {
+    (entry?.loot || []).forEach((item) => {
+      if (item?.name && item?.item_id != null) {
+        const key = item.name.trim().toLowerCase()
+        if (map[key] == null) map[key] = item.item_id
+      }
+    })
+  })
+  return map
+}
 
 export default function CharacterPage() {
   const { charKey } = useParams()
@@ -13,8 +28,13 @@ export default function CharacterPage() {
   const [displayName, setDisplayName] = useState(charIdOrName)
   const [lootOnCharacter, setLootOnCharacter] = useState([])
   const [raids, setRaids] = useState({})
+  const [mobLoot, setMobLoot] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+
+  useEffect(() => {
+    fetch('/dkp_mob_loot.json').then((r) => (r.ok ? r.json() : null)).then(setMobLoot).catch(() => setMobLoot(null))
+  }, [])
 
   useEffect(() => {
     if (!charIdOrName) {
@@ -87,6 +107,8 @@ export default function CharacterPage() {
     })
   }, [displayName, charId])
 
+  const itemIdMap = useMemo(() => buildItemIdMap(mobLoot), [mobLoot])
+
   if (loading) return <div className="container">Loading character…</div>
   if (error) return <div className="container"><span className="error">{error}</span> <Link to="/dkp">← DKP</Link></div>
 
@@ -125,7 +147,7 @@ export default function CharacterPage() {
           <ul style={{ listStyle: 'none', paddingLeft: 0, margin: 0 }}>
             {lootOnCharacter.map((row, i) => (
               <li key={i} style={{ marginBottom: '0.35rem', fontSize: '0.9rem' }}>
-                <Link to={`/items/${encodeURIComponent(row.item_name || '')}`}>{row.item_name || '—'}</Link>
+                <ItemLink itemName={row.item_name || ''} itemId={itemIdMap[(row.item_name || '').trim().toLowerCase()]}>{row.item_name || '—'}</ItemLink>
                 {' · '}
                 <Link to={`/raids/${row.raid_id}`}>{raids[row.raid_id]?.raid_name || row.raid_id}</Link>
                 {raids[row.raid_id]?.date_iso && <span style={{ color: '#71717a', marginLeft: '0.25rem' }}>{String(raids[row.raid_id].date_iso).slice(0, 10)}</span>}
