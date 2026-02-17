@@ -6,7 +6,7 @@ import AssignedLootDisclaimer from '../components/AssignedLootDisclaimer'
 
 export default function RaidDetail({ isOfficer }) {
   const { raidId } = useParams()
-  const { getAccountId } = useCharToAccountMap()
+  const { getAccountId, getAccountDisplayName } = useCharToAccountMap()
   const [raid, setRaid] = useState(null)
   const [events, setEvents] = useState([])
   const [loot, setLoot] = useState([])
@@ -304,8 +304,10 @@ export default function RaidDetail({ isOfficer }) {
                           {attendees.map((a, i) => {
                             const name = a.name || a.char_id || ''
                             const accountId = getAccountId(a.name || a.char_id)
+                            const accountName = getAccountDisplayName?.(a.name || a.char_id)
                             const to = accountId ? `/accounts/${accountId}` : `/characters/${encodeURIComponent(name)}`
-                            return <Link key={a.char_id || a.name || i} to={to}>{name}</Link>
+                            const label = accountName ? `${accountName} (${name})` : name
+                            return <Link key={a.char_id || a.name || i} to={to}>{label}</Link>
                           })}
                         </div>
                       </td>

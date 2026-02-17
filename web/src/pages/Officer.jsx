@@ -107,6 +107,7 @@ export default function Officer({ isOfficer }) {
   const [eventAttendance, setEventAttendance] = useState([])
   const [characters, setCharacters] = useState([])
   const [charIdToAccountId, setCharIdToAccountId] = useState({})
+  const [accountIdToDisplayName, setAccountIdToDisplayName] = useState({})
   const [itemNames, setItemNames] = useState([])
   const [jsonLootItemNames, setJsonLootItemNames] = useState([])
   const [loading, setLoading] = useState(true)
@@ -173,6 +174,22 @@ export default function Officer({ isOfficer }) {
     }
   }, [characters, charIdToAccountId])
 
+  const charIdToName = useMemo(() => {
+    const m = {}
+    characters.forEach((c) => { if (c?.char_id && c?.name) m[String(c.char_id)] = c.name })
+    return m
+  }, [characters])
+
+  const getAccountCharacterDisplay = useMemo(() => {
+    return (key) => {
+      if (key == null || key === '') return ''
+      const accId = getAccountId(key)
+      const accName = accId ? (accountIdToDisplayName[accId] || accId) : null
+      const charName = nameToChar[String(key).toLowerCase().trim()]?.name || charIdToName[String(key)] || key
+      return accName ? `${accName} (${charName})` : (charName || key)
+    }
+  }, [getAccountId, accountIdToDisplayName, nameToChar, charIdToName])
+
   const allItemNamesForLootLog = useMemo(() => {
     const byLower = new Map()
     ;(itemNames || []).forEach((n) => { if (n) byLower.set(n.trim().toLowerCase(), n.trim()) })
@@ -203,6 +220,12 @@ export default function Officer({ isOfficer }) {
       if (r.char_id && r.account_id && map[r.char_id] == null) map[r.char_id] = r.account_id
     })
     setCharIdToAccountId(map)
+    const accRes = await supabase.from('accounts').select('account_id, display_name').limit(5000)
+    const accNames = {}
+    ;(accRes.data || []).forEach((a) => {
+      if (a?.account_id) accNames[a.account_id] = (a.display_name || '').trim() || a.account_id
+    })
+    setAccountIdToDisplayName(accNames)
     // Fetch all distinct item_name from raid_loot (paginate; Supabase returns max 1000 per request)
     const allItemRows = []
     let from = 0
@@ -475,15 +498,26 @@ export default function Officer({ isOfficer }) {
       missingFromThisTic.push(row.character_name || row.char_id || cid)
     })
     missingFromThisTic.sort((a, b) => String(a).localeCompare(b))
+    const newThisTic = events.length === 0 ? matched.map((m) => m.character_name) : matched.filter((m) => !eventAttendance.some((r) => String(r.char_id) === String(m.char_id))).map((m) => m.character_name)
+
+    const charIdToName = {}
+    characters.forEach((c) => { if (c?.char_id && c?.name) charIdToName[String(c.char_id)] = c.name })
+    const fmt = (charId, charName) => {
+      const accId = charIdToAccountId[charId]
+      const accName = accId ? (accountIdToDisplayName[accId] || accId) : null
+      return accName ? `${accName} (${charName || charId})` : (charName || charId)
+    }
+    const resolve = (s) => nameToChar[String(s).toLowerCase().trim()] || (charIdToName[String(s)] ? { char_id: s, name: charIdToName[String(s)] } : null)
 
     setTicResult({
       matched: matched.length,
+      matchedDisplay: matched.map((m) => fmt(m.char_id, m.character_name)),
       unmatched: unmatched.length > 0 ? unmatched : null,
-      duplicates: duplicates.length > 0 ? duplicates : null,
-      sameAccount: sameAccount.length > 0 ? sameAccount : null,
+      duplicatesDisplay: duplicates.length > 0 ? duplicates.map((n) => { const c = resolve(n); return c ? fmt(c.char_id, c.name) : n }) : null,
+      sameAccountDisplay: sameAccount.length > 0 ? sameAccount.map((n) => { const c = resolve(n); return c ? fmt(c.char_id, c.name) : n }) : null,
       event_id,
-      missingFromThisTic: missingFromThisTic.length > 0 ? missingFromThisTic : null,
-      newThisTic: events.length === 0 ? matched.map((m) => m.character_name) : matched.filter((m) => !eventAttendance.some((r) => String(r.char_id) === String(m.char_id))).map((m) => m.character_name),
+      missingFromThisTicDisplay: missingFromThisTic.length > 0 ? missingFromThisTic.map((s) => { const c = resolve(s); return c ? fmt(c.char_id, c.name) : s }) : null,
+      newThisTicDisplay: newThisTic.length > 0 ? newThisTic.map((s) => { const c = resolve(s); return c ? fmt(c.char_id, c.name) : s }) : null,
     })
     setTicPaste('')
     await supabase.rpc('refresh_dkp_summary')
@@ -797,20 +831,20 @@ export default function Officer({ isOfficer }) {
 
       {selectedRaidId && raid && (
         <>
-          {/* Add DKP tic */}
+          {/* Add DKP tic: paste and result close together so officers see what was done */}
           <section className="card" style={{ marginBottom: '1.5rem' }}>
             <h2 style={{ marginTop: 0 }}>Add DKP tic (attendance)</h2>
-            <p style={{ color: '#71717a', fontSize: '0.9rem' }}>
-              Paste channel member list. Names are matched to the DKP list; unmatched names are reported. No double counting.
+            <p style={{ color: '#a1a1aa', fontSize: '0.9rem', marginBottom: '0.5rem' }}>
+              <strong>Matching:</strong> Paste the channel member list below. Each comma-separated name is matched to the DKP list by <strong>exact character name</strong> (case-insensitive). Only names that match a character on the DKP list receive credit. One credit per <strong>account</strong> per tic—duplicate character names in the paste and other toons on the same account are skipped and listed so you can verify.
             </p>
             <textarea
               value={ticPaste}
               onChange={(e) => setTicPaste(e.target.value)}
               placeholder="[Sun Apr 14 10:17:09 2024] Channel Nag(30) members:&#10;[Sun Apr 14 10:17:09 2024] Meldrath, Fridge, Geom, ..."
-              rows={6}
-              style={{ width: '100%', maxWidth: '600px', padding: '0.5rem', marginBottom: '0.5rem', fontFamily: 'monospace' }}
+              rows={5}
+              style={{ width: '100%', maxWidth: '600px', padding: '0.5rem', marginBottom: '0.35rem', fontFamily: 'monospace' }}
             />
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.35rem' }}>
               <label>DKP per attendee:</label>
               <input
                 type="number"
@@ -825,22 +859,25 @@ export default function Officer({ isOfficer }) {
               </button>
             </div>
             {ticResult && (
-              <div style={{ marginTop: '0.5rem', padding: '0.75rem', backgroundColor: 'rgba(0,0,0,0.2)', borderRadius: '4px' }}>
-                <p style={{ color: '#22c55e', marginTop: 0 }}>Tic added. Credited <strong>{ticResult.matched}</strong> attendee(s). See raid view below.</p>
+              <div style={{ marginTop: 0, padding: '0.75rem', backgroundColor: 'rgba(0,0,0,0.25)', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.08)' }}>
+                <p style={{ color: '#22c55e', marginTop: 0, marginBottom: '0.5rem' }}><strong>Result:</strong> Tic added. Credited <strong>{ticResult.matched}</strong> attendee(s). Names shown as account (character).</p>
+                {ticResult.matchedDisplay?.length > 0 && (
+                  <p style={{ color: '#22c55e', marginBottom: '0.25rem', fontSize: '0.9rem' }}><strong>Credited:</strong> {ticResult.matchedDisplay.join(', ')}</p>
+                )}
                 {ticResult.unmatched?.length > 0 && (
-                  <p style={{ color: '#f59e0b', marginBottom: '0.25rem' }}><strong>Unmatched</strong> (not on DKP list, no credit): {ticResult.unmatched.join(', ')}</p>
+                  <p style={{ color: '#f59e0b', marginBottom: '0.25rem' }}><strong>Unmatched</strong> (not on DKP list—no credit): {ticResult.unmatched.join(', ')}</p>
                 )}
-                {ticResult.duplicates?.length > 0 && (
-                  <p style={{ color: '#a78bfa', marginBottom: '0.25rem' }}><strong>Duplicates</strong> (in paste again, not double-counted): {ticResult.duplicates.join(', ')}</p>
+                {ticResult.duplicatesDisplay?.length > 0 && (
+                  <p style={{ color: '#a78bfa', marginBottom: '0.25rem' }}><strong>Duplicates</strong> (in paste again—not double-counted): {ticResult.duplicatesDisplay.join(', ')}</p>
                 )}
-                {ticResult.sameAccount?.length > 0 && (
-                  <p style={{ color: '#a78bfa', marginBottom: '0.25rem' }}><strong>Same account</strong> (other toon already credited this tic): {ticResult.sameAccount.join(', ')}</p>
+                {ticResult.sameAccountDisplay?.length > 0 && (
+                  <p style={{ color: '#a78bfa', marginBottom: '0.25rem' }}><strong>Same account</strong> (other toon already credited this tic): {ticResult.sameAccountDisplay.join(', ')}</p>
                 )}
-                {ticResult.missingFromThisTic?.length > 0 && (
-                  <p style={{ color: '#f97316', marginBottom: '0.25rem' }}><strong>Missing from this tic</strong> (were in earlier tics this raid): {ticResult.missingFromThisTic.join(', ')}</p>
+                {ticResult.missingFromThisTicDisplay?.length > 0 && (
+                  <p style={{ color: '#f97316', marginBottom: '0.25rem' }}><strong>Missing from this tic</strong> (were in earlier tics this raid): {ticResult.missingFromThisTicDisplay.join(', ')}</p>
                 )}
-                {ticResult.newThisTic?.length > 0 && (
-                  <p style={{ color: '#71717a', fontSize: '0.9rem', marginBottom: 0 }}><strong>New this tic</strong> (first time this raid): {ticResult.newThisTic.join(', ')}</p>
+                {ticResult.newThisTicDisplay?.length > 0 && (
+                  <p style={{ color: '#71717a', fontSize: '0.9rem', marginBottom: 0 }}><strong>New this tic</strong> (first time this raid): {ticResult.newThisTicDisplay.join(', ')}</p>
                 )}
               </div>
             )}
@@ -1115,7 +1152,8 @@ export default function Officer({ isOfficer }) {
                                 const name = a.name || a.char_id || ''
                                 const accountId = getAccountId(a.name || a.char_id)
                                 const to = accountId ? `/accounts/${accountId}` : `/characters/${encodeURIComponent(name)}`
-                                return <Link key={a.char_id || a.name || i} to={to}>{name}</Link>
+                                const label = getAccountCharacterDisplay(a.name || a.char_id) || name
+                                return <Link key={a.char_id || a.name || i} to={to}>{label}</Link>
                               })}
                             </div>
                           </td>
@@ -1178,7 +1216,8 @@ export default function Officer({ isOfficer }) {
                 const charName = a.character_name || a.char_id || ''
                 const accountId = getAccountId(a.character_name || a.char_id)
                 const to = accountId ? `/accounts/${accountId}` : `/characters/${encodeURIComponent(charName)}`
-                return <Link key={a.char_id || a.character_name} to={to}>{charName}</Link>
+                const label = getAccountCharacterDisplay(a.character_name || a.char_id) || charName
+                return <Link key={a.char_id || a.character_name} to={to}>{label}</Link>
               }) : (
                 <span style={{ color: '#71717a' }}>None (add a DKP tic to record attendance)</span>
               )}
