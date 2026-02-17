@@ -3,6 +3,21 @@ import { useParams, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useCharToAccountMap } from '../lib/useCharToAccountMap'
 import AssignedLootDisclaimer from '../components/AssignedLootDisclaimer'
+import ItemLink from '../components/ItemLink'
+
+function buildItemIdMap(mobLoot) {
+  const map = {}
+  if (!mobLoot || typeof mobLoot !== 'object') return map
+  Object.values(mobLoot).forEach((entry) => {
+    (entry?.loot || []).forEach((item) => {
+      if (item?.name && item?.item_id != null) {
+        const key = item.name.trim().toLowerCase()
+        if (map[key] == null) map[key] = item.item_id
+      }
+    })
+  })
+  return map
+}
 
 export default function RaidDetail({ isOfficer }) {
   const { raidId } = useParams()
@@ -27,6 +42,11 @@ export default function RaidDetail({ isOfficer }) {
   const [addToTicCharQuery, setAddToTicCharQuery] = useState('')
   const [showCharDropdown, setShowCharDropdown] = useState(false)
   const [addToTicResult, setAddToTicResult] = useState(null)
+  const [mobLoot, setMobLoot] = useState(null)
+
+  useEffect(() => {
+    fetch('/dkp_mob_loot.json').then((r) => (r.ok ? r.json() : null)).then(setMobLoot).catch(() => setMobLoot(null))
+  }, [])
 
   const loadData = useCallback(() => {
     if (!raidId) return
@@ -72,6 +92,8 @@ export default function RaidDetail({ isOfficer }) {
       setAddToTicEventId(events[0].event_id)
     }
   }, [events, addToTicEventId])
+
+  const itemIdMap = useMemo(() => buildItemIdMap(mobLoot), [mobLoot])
 
   const nameToChar = useMemo(() => {
     const m = {}
@@ -500,7 +522,14 @@ export default function RaidDetail({ isOfficer }) {
               const isEditingCost = isOfficer && editingLootId === row.id
               return (
                 <tr key={row.id || i}>
-                  <td><Link to={`/items/${encodeURIComponent(row.item_name || '')}`}>{row.item_name || '—'}</Link></td>
+                  <td>
+                    <ItemLink
+                      itemName={row.item_name || ''}
+                      itemId={itemIdMap[(row.item_name || '').trim().toLowerCase()]}
+                    >
+                      {row.item_name || '—'}
+                    </ItemLink>
+                  </td>
                   <td>
                     {(() => {
                       const charName = row.character_name || row.char_id || '—'
