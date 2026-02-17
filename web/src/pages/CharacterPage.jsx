@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import AssignedLootDisclaimer from '../components/AssignedLootDisclaimer'
 import ItemLink from '../components/ItemLink'
+import { getDkpMobLoot } from '../lib/staticData'
 
 const MAGELO_BASE = 'https://www.takproject.net/magelo/character.php?char='
 
@@ -33,7 +34,7 @@ export default function CharacterPage() {
   const [error, setError] = useState('')
 
   useEffect(() => {
-    fetch('/dkp_mob_loot.json').then((r) => (r.ok ? r.json() : null)).then(setMobLoot).catch(() => setMobLoot(null))
+    getDkpMobLoot().then(setMobLoot)
   }, [])
 
   useEffect(() => {

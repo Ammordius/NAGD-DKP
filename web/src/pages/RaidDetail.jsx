@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 import { useCharToAccountMap } from '../lib/useCharToAccountMap'
 import AssignedLootDisclaimer from '../components/AssignedLootDisclaimer'
 import ItemLink from '../components/ItemLink'
+import { getDkpMobLoot } from '../lib/staticData'
 
 function buildItemIdMap(mobLoot) {
   const map = {}
@@ -45,7 +46,7 @@ export default function RaidDetail({ isOfficer }) {
   const [mobLoot, setMobLoot] = useState(null)
 
   useEffect(() => {
-    fetch('/dkp_mob_loot.json').then((r) => (r.ok ? r.json() : null)).then(setMobLoot).catch(() => setMobLoot(null))
+    getDkpMobLoot().then(setMobLoot)
   }, [])
 
   const loadData = useCallback(() => {

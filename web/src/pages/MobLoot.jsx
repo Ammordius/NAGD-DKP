@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo, Fragment } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { createCache } from '../lib/cache'
+import { getDkpMobLoot } from '../lib/staticData'
 import ItemLink from '../components/ItemLink'
 
 const LAST3_CACHE_KEY = 'mob_loot_last3_v2'
@@ -54,8 +55,7 @@ export default function MobLoot() {
   const [mobZoneFromRaids, setMobZoneFromRaids] = useState({})
 
   useEffect(() => {
-    fetch('/dkp_mob_loot.json')
-      .then((res) => (res.ok ? res.json() : null))
+    getDkpMobLoot()
       .then((json) => setData(json || null))
       .catch(() => setData(null))
       .finally(() => setLoading(false))

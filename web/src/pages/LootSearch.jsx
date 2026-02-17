@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 import { useCharToAccountMap } from '../lib/useCharToAccountMap'
 import AssignedLootDisclaimer from '../components/AssignedLootDisclaimer'
 import ItemLink from '../components/ItemLink'
+import { getDkpMobLoot, getItemSources } from '../lib/staticData'
 
 function buildItemIdMap(mobLoot) {
   const map = {}
@@ -106,7 +107,7 @@ export default function LootSearch() {
   const [error, setError] = useState('')
 
   useEffect(() => {
-    fetch('/dkp_mob_loot.json').then((r) => (r.ok ? r.json() : null)).then(setMobLoot).catch(() => setMobLoot(null))
+    getDkpMobLoot().then(setMobLoot)
   }, [])
 
   useEffect(() => {
@@ -192,8 +193,7 @@ export default function LootSearch() {
       setClassifications(raidByMob)
       setRaidToMobs(raidToMobsMap)
     })
-    fetch('/item_sources.json')
-      .then((res) => (res.ok ? res.json() : null))
+    getItemSources()
       .then((json) => setItemSources(json || null))
       .catch(() => setItemSources(null))
   }, [])

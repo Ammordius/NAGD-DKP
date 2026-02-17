@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 import { useCharToAccountMap } from '../lib/useCharToAccountMap'
 import AssignedLootDisclaimer from '../components/AssignedLootDisclaimer'
 import ItemLink from '../components/ItemLink'
+import { getDkpMobLoot } from '../lib/staticData'
 
 const MAGELO_BASE = 'https://www.takproject.net/magelo/character.php?char='
 
@@ -86,7 +87,7 @@ export default function AccountDetail({ isOfficer, profile, session }) {
   const [mobLoot, setMobLoot] = useState(null)
 
   useEffect(() => {
-    fetch('/dkp_mob_loot.json').then((r) => (r.ok ? r.json() : null)).then(setMobLoot).catch(() => setMobLoot(null))
+    getDkpMobLoot().then(setMobLoot)
   }, [])
 
   useEffect(() => {

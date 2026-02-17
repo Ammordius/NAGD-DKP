@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useMemo, useRef, Fragment } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { getDkpMobLoot } from '../lib/staticData'
 
 // --- Parsing ---
 
@@ -286,11 +287,10 @@ export default function Officer({ isOfficer }) {
     const names = [...byLower.values()].sort((a, b) => a.localeCompare(b))
     setItemNames(names)
     try {
-      const res = await fetch('/dkp_mob_loot.json')
-      if (res.ok) {
-        const data = await res.json()
+      const data = await getDkpMobLoot()
+      if (data) {
         const fromJson = new Set()
-        Object.values(data || {}).forEach((entry) => {
+        Object.values(data).forEach((entry) => {
           ;(entry?.loot || []).forEach((l) => { if (l?.name) fromJson.add(l.name) })
         })
         setJsonLootItemNames([...fromJson])

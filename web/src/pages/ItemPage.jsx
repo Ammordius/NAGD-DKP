@@ -6,6 +6,7 @@ import AssignedLootDisclaimer from '../components/AssignedLootDisclaimer'
 import ItemLink from '../components/ItemLink'
 import ItemCard from '../components/ItemCard'
 import { getItemStats } from '../lib/itemStats'
+import { getDkpMobLoot, getRaidItemSources } from '../lib/staticData'
 
 // Build item_name (lowercase) -> item_id from dkp_mob_loot.json
 function buildItemIdMap(mobLoot) {
@@ -18,6 +19,21 @@ function buildItemIdMap(mobLoot) {
         if (map[key] == null) map[key] = item.item_id
       }
     })
+  })
+  return map
+}
+
+// Build item_name (lowercase) -> item_id from raid_item_sources.json (id -> { name })
+function buildRaidItemNameToId(raidSources) {
+  const map = {}
+  if (!raidSources || typeof raidSources !== 'object') return map
+  Object.entries(raidSources).forEach(([id, entry]) => {
+    const name = entry?.name && typeof entry.name === 'string' ? entry.name.trim() : null
+    if (name) {
+      const key = name.toLowerCase()
+      const numId = Number(id)
+      if (!Number.isNaN(numId) && map[key] == null) map[key] = numId
+    }
   })
   return map
 }
@@ -133,6 +149,7 @@ export default function ItemPage() {
   const [lootRows, setLootRows] = useState([])
   const [raids, setRaids] = useState({})
   const [mobLoot, setMobLoot] = useState(null)
+  const [raidItemSources, setRaidItemSources] = useState(null)
   const [itemStats, setItemStats] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -148,8 +165,9 @@ export default function ItemPage() {
     const escaped = (itemName || '').replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_')
     Promise.all([
       supabase.from('raid_loot').select('id, raid_id, event_id, item_name, char_id, character_name, cost, assigned_char_id, assigned_character_name').ilike('item_name', escaped).limit(500),
-      fetch('/dkp_mob_loot.json').then((r) => (r.ok ? r.json() : null)).catch(() => null),
-    ]).then(([lootRes, mobJson]) => {
+      getDkpMobLoot(),
+      getRaidItemSources(),
+    ]).then(([lootRes, mobJson, raidJson]) => {
       if (lootRes.error) {
         setError(lootRes.error.message)
         setLoading(false)
@@ -157,6 +175,7 @@ export default function ItemPage() {
       }
       const rows = lootRes.data || []
       setMobLoot(mobJson)
+      setRaidItemSources(raidJson)
       if (rows.length === 0) {
         setLootRows([])
         setRaids({})
@@ -197,7 +216,9 @@ export default function ItemPage() {
   }, [lootRows, raids])
 
   const itemIdMap = useMemo(() => buildItemIdMap(mobLoot), [mobLoot])
-  const takpId = itemIdMap[(itemName || '').trim().toLowerCase()]
+  const raidNameToId = useMemo(() => buildRaidItemNameToId(raidItemSources), [raidItemSources])
+  const itemKey = (itemName || '').trim().toLowerCase()
+  const takpId = itemIdMap[itemKey] ?? raidNameToId[itemKey]
 
   useEffect(() => {
     if (takpId == null) {
@@ -218,13 +239,17 @@ export default function ItemPage() {
     <div className="container">
       <p><Link to="/loot">← Loot search</Link> · <Link to="/mobs">Mob loot</Link></p>
       <h1 style={{ marginBottom: '0.5rem' }}>
-        <ItemLink
-          itemName={itemName}
-          itemId={takpId}
-          externalHref={takpId != null ? `https://www.takproject.net/allaclone/item.php?id=${takpId}` : undefined}
-        >
-          {itemName || '—'}
-        </ItemLink>
+        {takpId != null ? (
+          <ItemLink
+            itemName={itemName}
+            itemId={takpId}
+            externalHref={`https://www.takproject.net/allaclone/item.php?id=${takpId}`}
+          >
+            {itemName || '—'}
+          </ItemLink>
+        ) : (
+          <span>{itemName || '—'}</span>
+        )}
       </h1>
       {takpId != null && (
         <div style={{ marginBottom: '1rem' }}>
