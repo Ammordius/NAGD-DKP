@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Routes, Route, Navigate } from 'react-router-dom'
+import { Routes, Route, Navigate, Link } from 'react-router-dom'
 import { Analytics } from '@vercel/analytics/react'
 import { supabase } from './lib/supabase'
 import Login from './pages/Login'
@@ -67,8 +67,8 @@ export default function App() {
         {session ? (
           <>
             <a href="/profile">Profile</a>
-            {isOfficer && <a href="/officer" style={{ color: '#fbbf24' }}>Officer</a>}
-            {isOfficer && <a href="/officer/dkp-changelog">DKP changelog</a>}
+            {isOfficer && <Link to="/officer" style={{ color: '#fbbf24' }}>Officer</Link>}
+            {isOfficer && <Link to="/officer/dkp-changelog">DKP changelog</Link>}
             <span className="role">{profile?.role === 'officer' ? 'Officer' : 'Player'}</span>
             <button
               className="btn btn-ghost"
