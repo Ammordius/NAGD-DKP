@@ -8,6 +8,45 @@ import ItemLink from '../components/ItemLink'
 const LAST3_CACHE_KEY = 'mob_loot_last3_v2'
 const CACHE_TTL = 10 * 60 * 1000
 
+/** Zone display order: Time first, then Fire/Water/Air/Vex Thal, then the rest. */
+const ZONE_ORDER = [
+  'Plane of Time',
+  'Plane of Fire',
+  'Plane of Water',
+  'Plane of Air',
+  'Vex Thal',
+]
+/** Within Plane of Time, mob/group order (match by first mob in row). Names normalized for match (lowercase, spaces → underscores). */
+const PLANE_OF_TIME_MOB_ORDER = [
+  'P1',
+  'Earthen_Overseer',
+  'Gutripping_War_Beast',
+  'Ralthos_Enrok',
+  'A_Deadly_Warboar',
+  'Avatar_of_the_Elements',
+  'Saryrn',
+  'Terris_Thule',
+  'Tallon_Zek',
+  'Vallon_Zek',
+  'Bertoxxulous',
+  'Cazic_Thule',
+  'Rallos_Zek',
+  'Innoruuk',
+  'Quarm',
+]
+const POT_ORDER_MAP = new Map(PLANE_OF_TIME_MOB_ORDER.map((name, i) => [name.toLowerCase().replace(/\s+/g, '_'), i]))
+
+function mobSortKeyForPlaneOfTime(entry) {
+  const names = (entry.mobs && entry.mobs.length) ? entry.mobs : [entry.mob]
+  const normalized = names.map((n) => (n || '').replace(/^#/, '').trim().toLowerCase().replace(/\s+/g, '_'))
+  let idx = PLANE_OF_TIME_MOB_ORDER.length
+  for (const n of normalized) {
+    const i = POT_ORDER_MAP.get(n)
+    if (i !== undefined && i < idx) idx = i
+  }
+  return idx
+}
+
 /** Infer canonical zone from raid title (e.g. "Potime", "Time Day 1" -> "Plane of Time"). */
 function inferZoneFromRaidName(raidName) {
   if (!raidName || typeof raidName !== 'string') return ''
@@ -191,13 +230,45 @@ export default function MobLoot() {
       const fromJson = (e.zone || '').trim()
       const mobKeys = e.mobs?.length ? e.mobs : [e.mob]
       const fromRaids = mobKeys.map((m) => mobZoneFromRaids[normalizeMobKey(m)]).find(Boolean)
-      const displayZone = fromJson || fromRaids || 'Other / Unknown'
+      let displayZone = fromJson || fromRaids || 'Other / Unknown'
+      const isAvatarOfWar = mobKeys.some((m) => /avatar\s*of\s*war|avatar_of_war/i.test((m || '').replace(/^#/, '')))
+      if (isAvatarOfWar) displayZone = 'Kael Drakkel'
       return { ...e, displayZone }
     })
   }, [entries, mobZoneFromRaids])
 
+  /** Use JSON mobs array when present; otherwise group entries with same zone + same loot (backward compat). */
+  const entriesGrouped = useMemo(() => {
+    const hasGroupedFormat = entriesWithZone.length > 0 && entriesWithZone.every((e) => Array.isArray(e.mobs) && e.mobs.length > 0)
+    if (hasGroupedFormat) return entriesWithZone
+    const lootKey = (loot) => (loot || []).map((x) => x.item_id ?? x.name).filter(Boolean).sort((a, b) => String(a).localeCompare(String(b))).join(',')
+    const byGroup = new Map()
+    entriesWithZone.forEach((e) => {
+      const z = (e.displayZone || '').trim() || 'Other / Unknown'
+      const sig = lootKey(e.loot)
+      const key = `${z}|${sig}`
+      if (!byGroup.has(key)) {
+        byGroup.set(key, {
+          key,
+          mob: e.mob,
+          mobs: [],
+          zone: e.zone,
+          displayZone: z,
+          loot: e.loot || [],
+        })
+      }
+      const g = byGroup.get(key)
+      const name = (e.mob || '').replace(/^#/, '').trim()
+      if (name && !g.mobs.includes(name)) g.mobs.push(name)
+    })
+    return Array.from(byGroup.values()).map((g) => ({
+      ...g,
+      mobs: g.mobs.length ? g.mobs.sort((a, b) => a.localeCompare(b)) : null,
+    }))
+  }, [entriesWithZone])
+
   const entriesWithDkp = useMemo(() => {
-    return entriesWithZone.map((e) => {
+    return entriesGrouped.map((e) => {
       let totalAvgDkp = 0
       ;(e.loot || []).forEach((item) => {
         const name = (item.name || '').trim().toLowerCase()
@@ -206,7 +277,7 @@ export default function MobLoot() {
       })
       return { ...e, totalAvgDkp }
     })
-  }, [entriesWithZone, itemLast3])
+  }, [entriesGrouped, itemLast3])
 
   const filtered = useMemo(() => {
     let list = entriesWithDkp
@@ -233,20 +304,33 @@ export default function MobLoot() {
       if (!groups[z]) groups[z] = []
       groups[z].push(e)
     })
+    const zoneOrderSet = new Set(ZONE_ORDER)
     Object.keys(groups).forEach((z) => {
-      groups[z].sort((a, b) => (a.mob || '').localeCompare(b.mob || ''))
+      if (z === 'Plane of Time') {
+        groups[z].sort((a, b) => {
+          const ka = mobSortKeyForPlaneOfTime(a)
+          const kb = mobSortKeyForPlaneOfTime(b)
+          if (ka !== kb) return ka - kb
+          return (a.mob || '').localeCompare(b.mob || '')
+        })
+      } else {
+        groups[z].sort((a, b) => (a.mob || '').localeCompare(b.mob || ''))
+      }
     })
-    const bottomZones = new Set(['Other / Unknown', '—', ''])
     const zoneEntries = Object.entries(groups)
     const totalDkp = (entries) => entries.reduce((sum, e) => sum + (e.totalAvgDkp || 0), 0)
+    const bottomZones = new Set(['Other / Unknown', '—', ''])
     zoneEntries.sort((a, b) => {
       const [zoneA, entriesA] = a
       const [zoneB, entriesB] = b
-      const aBottom = bottomZones.has(zoneA)
-      const bBottom = bottomZones.has(zoneB)
-      if (aBottom && bBottom) return zoneA.localeCompare(zoneB)
-      if (aBottom) return 1
-      if (bBottom) return -1
+      const aInOrder = zoneOrderSet.has(zoneA)
+      const bInOrder = zoneOrderSet.has(zoneB)
+      if (aInOrder && bInOrder) return ZONE_ORDER.indexOf(zoneA) - ZONE_ORDER.indexOf(zoneB)
+      if (aInOrder) return -1
+      if (bInOrder) return 1
+      if (bottomZones.has(zoneA) && bottomZones.has(zoneB)) return zoneA.localeCompare(zoneB)
+      if (bottomZones.has(zoneA)) return 1
+      if (bottomZones.has(zoneB)) return -1
       return totalDkp(entriesB) - totalDkp(entriesA)
     })
     return zoneEntries
