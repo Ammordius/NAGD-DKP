@@ -1,178 +1,33 @@
 import { useEffect, useState, useCallback } from 'react'
 import { Link } from 'react-router-dom'
-import useSWR from 'swr'
 import { supabase } from '../lib/supabase'
-
-const ACTIVE_DAYS = 120 // Show raiders marked active or with activity in last N days
-const DKP_API_KEY = '/api/get-dkp'
-const DEDUPING_INTERVAL_MS = 60 * 1000 // 60s: prevent multiple components from triggering simultaneous requests
-
-async function fetcher(url) {
-  const res = await fetch(url)
-  if (!res.ok) throw new Error(res.statusText || 'Failed to fetch DKP')
-  return res.json()
-}
-
-function applyAdjustmentsAndBalance(list, adjustmentsMap) {
-  list.forEach((r) => {
-    const adjRow = adjustmentsMap[(r.name || '').trim()] || adjustmentsMap[(r.name || '').trim().replace(/^\(\*\)\s*/, '')]
-    if (adjRow) {
-      r.earned += Math.round(Number(adjRow.earned_delta) || 0)
-      r.spent += Math.round(Number(adjRow.spent_delta) || 0)
-    }
-    r.balance = r.earned - r.spent
-  })
-  list.sort((a, b) => b.balance - a.balance)
-}
-
-function buildAccountLeaderboard(list, caData, accData, charData) {
-  const charToAccount = {}
-  ;(caData || []).forEach((r) => { charToAccount[String(r.char_id)] = r.account_id })
-  const nameToAccount = {}
-  if (charData?.length) {
-    const charIdToName = {}
-    charData.forEach((c) => { if (c.name) charIdToName[String(c.char_id)] = c.name })
-    ;(caData || []).forEach((r) => {
-      const name = charIdToName[String(r.char_id)]
-      if (name) nameToAccount[name] = r.account_id
-    })
-  }
-  const accountNames = {}
-  ;(accData || []).forEach((r) => {
-    const display = (r.display_name || '').trim()
-    const first = (r.toon_names || '').split(',')[0]?.trim() || r.account_id
-    accountNames[r.account_id] = display || first
-  })
-  const byAccount = {}
-  list.forEach((r) => {
-    const aid = charToAccount[String(r.char_id)] ?? nameToAccount[String(r.name || '')] ?? '_no_account_'
-    if (!byAccount[aid]) byAccount[aid] = { account_id: aid, earned: 0, spent: 0, earned_30d: 0, earned_60d: 0, name: accountNames[aid] || (aid === '_no_account_' ? '(no account)' : aid) }
-    byAccount[aid].earned += r.earned
-    byAccount[aid].spent += r.spent
-    byAccount[aid].earned_30d += (r.earned_30d != null ? r.earned_30d : 0)
-    byAccount[aid].earned_60d += (r.earned_60d != null ? r.earned_60d : 0)
-  })
-  const accountList = Object.values(byAccount).map((r) => ({ ...r, balance: r.earned - r.spent }))
-  accountList.sort((a, b) => b.balance - a.balance)
-  return accountList
-}
-
-function isActiveRow(r, activeKeysSet, cutoffDate) {
-  if (activeKeysSet?.has(String(r.char_id))) return true
-  if (!cutoffDate) return false
-  if (r.last_activity_date == null || r.last_activity_date === '') return false
-  const d = typeof r.last_activity_date === 'string' ? new Date(r.last_activity_date) : r.last_activity_date
-  if (isNaN(d.getTime())) return false
-  return d >= cutoffDate
-}
-
-/** Merge duplicate character rows (same character name) so adjustments are applied only once per character.
- *  dkp_summary can have two rows for one person (e.g. character_key = char_id vs character_key = name); we merge by name. */
-function dedupeByCharacterName(list) {
-  const byName = {}
-  list.forEach((r) => {
-    const key = (r.name || r.char_id || '').toString().trim().toLowerCase()
-    if (!key) return
-    if (!byName[key]) {
-      byName[key] = { ...r }
-      return
-    }
-    const m = byName[key]
-    m.earned += r.earned
-    m.spent += r.spent
-    m.earned_30d += r.earned_30d ?? 0
-    m.earned_60d += r.earned_60d ?? 0
-    if (r.last_activity_date && (!m.last_activity_date || (r.last_activity_date > m.last_activity_date))) {
-      m.last_activity_date = r.last_activity_date
-    }
-    if (r.char_id && r.char_id !== m.char_id) m.char_id = m.char_id || r.char_id
-  })
-  return Object.values(byName)
-}
-
-/** Process /api/get-dkp response into leaderboard list and account list. */
-function processApiPayload(payload, buildAccountLeaderboard) {
-  if (!payload?.dkp_summary?.length) return null
-  const rows = payload.dkp_summary
-  const activeKeys = (payload.active_raiders ?? []).map((x) => String(x.character_key))
-  const activeSet = new Set(activeKeys)
-  const cutoff = new Date()
-  cutoff.setDate(cutoff.getDate() - ACTIVE_DAYS)
-  cutoff.setHours(0, 0, 0, 0)
-  const adjustmentsMap = {}
-  ;(payload.dkp_adjustments ?? []).forEach((row) => {
-    const n = (row.character_name || '').trim()
-    if (n) adjustmentsMap[n] = { earned_delta: Number(row.earned_delta) || 0, spent_delta: Number(row.spent_delta) || 0 }
-  })
-  const pt = { '30d': 0, '60d': 0 }
-  ;(payload.dkp_period_totals ?? []).forEach((row) => { pt[row.period] = Math.round(Number(row.total_dkp) || 0) })
-  let list = rows.map((r) => ({
-    char_id: r.character_key,
-    name: r.character_name || r.character_key,
-    earned: Math.round(Number(r.earned) || 0),
-    spent: Math.round(Number(r.spent) || 0),
-    earned_30d: Math.round(Number(r.earned_30d) || 0),
-    earned_60d: Math.round(Number(r.earned_60d) || 0),
-    last_activity_date: r.last_activity_date || null,
-  }))
-  list = dedupeByCharacterName(list)
-  list = list.filter((r) => isActiveRow(r, activeSet, cutoff))
-  applyAdjustmentsAndBalance(list, adjustmentsMap)
-  const caData = payload.character_account ?? []
-  const accData = payload.accounts ?? []
-  const charData = payload.characters ?? []
-  const accountList = buildAccountLeaderboard(list, caData, accData, charData)
-  const summaryUpdatedAt = rows[0]?.updated_at ?? null
-  return { list, accountList, activeKeys, periodTotals: pt, caData, accData, charData, summaryUpdatedAt }
-}
+import { useDkpData, ACTIVE_DAYS } from '../lib/dkpLeaderboard'
 
 export default function DKP({ isOfficer }) {
-  const [leaderboard, setLeaderboard] = useState([])
-  const [accountLeaderboard, setAccountLeaderboard] = useState([])
-  const [usingCache, setUsingCache] = useState(false)
-  const [summaryUpdatedAt, setSummaryUpdatedAt] = useState(null)
+  const {
+    list: leaderboard,
+    accountList: accountLeaderboard,
+    activeKeys,
+    periodTotals,
+    summaryUpdatedAt,
+    isLoading,
+    error: hookError,
+    mutate,
+  } = useDkpData()
   const [refreshing, setRefreshing] = useState(false)
   const [activeRaiders, setActiveRaiders] = useState([])
   const [activeManageOpen, setActiveManageOpen] = useState(false)
   const [activeAddKey, setActiveAddKey] = useState('')
   const [activeMutating, setActiveMutating] = useState(false)
-  const [caData, setCaData] = useState(null)
-  const [accData, setAccData] = useState(null)
-  const [charData, setCharData] = useState(null)
-  const [periodTotals, setPeriodTotals] = useState({ '30d': 0, '60d': 0 })
   const [mutationError, setMutationError] = useState('')
 
-  const { data: apiData, error: swrError, isLoading, mutate } = useSWR(DKP_API_KEY, fetcher, {
-    dedupingInterval: DEDUPING_INTERVAL_MS,
-    revalidateOnFocus: false,
-  })
-
-  // Process /api/get-dkp payload into leaderboard and account list.
   useEffect(() => {
-    if (!apiData) return
-    setMutationError('')
-    const result = processApiPayload(apiData, buildAccountLeaderboard)
-    if (!result) return
-    setLeaderboard(result.list)
-    setAccountLeaderboard(result.accountList)
-    setActiveRaiders(result.activeKeys)
-    setPeriodTotals(result.periodTotals)
-    setCaData(result.caData)
-    setAccData(result.accData)
-    setCharData(result.charData)
-    setSummaryUpdatedAt(result.summaryUpdatedAt)
-    setUsingCache(true)
-  }, [apiData])
+    if (activeKeys?.length !== undefined) setActiveRaiders(activeKeys)
+  }, [activeKeys])
 
-  // When ca/acc/char data or leaderboard changes, rebuild account leaderboard.
-  useEffect(() => {
-    if (caData === null || accData === null || leaderboard.length === 0) return
-    const accountList = buildAccountLeaderboard(leaderboard, caData, accData, charData ?? [])
-    setAccountLeaderboard(accountList)
-  }, [caData, accData, charData, leaderboard])
-
+  const usingCache = Boolean(accountLeaderboard?.length)
   const loading = isLoading
-  const error = swrError?.message ?? mutationError ?? ''
+  const error = hookError ?? mutationError ?? ''
 
   const handleRefreshTotals = useCallback(async () => {
     setRefreshing(true)

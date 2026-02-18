@@ -5,6 +5,7 @@ import { useCharToAccountMap } from '../lib/useCharToAccountMap'
 import AssignedLootDisclaimer from '../components/AssignedLootDisclaimer'
 import ItemLink from '../components/ItemLink'
 import { getDkpMobLoot } from '../lib/staticData'
+import { useDkpData } from '../lib/dkpLeaderboard'
 
 const MAGELO_BASE = 'https://www.takproject.net/magelo/character.php?char='
 
@@ -85,7 +86,7 @@ export default function AccountDetail({ isOfficer, profile, session }) {
   const [savingLootId, setSavingLootId] = useState(null)
   const [lootAssignError, setLootAssignError] = useState('')
   const [mobLoot, setMobLoot] = useState(null)
-  const [dkpAdjustments, setDkpAdjustments] = useState([])
+  const { accountBalanceByAccountId } = useDkpData()
 
   useEffect(() => {
     getDkpMobLoot().then(setMobLoot)
@@ -115,11 +116,7 @@ export default function AccountDetail({ isOfficer, profile, session }) {
         return
       }
       setAccount(accRes.data)
-      Promise.all([
-        supabase.from('character_account').select('char_id').eq('account_id', accountId),
-        supabase.from('dkp_adjustments').select('character_name, earned_delta, spent_delta'),
-      ]).then(([caRes, adjRes]) => {
-        setDkpAdjustments(adjRes.data || [])
+      supabase.from('character_account').select('char_id').eq('account_id', accountId).then((caRes) => {
         const charIds = (caRes.data || []).map((r) => r.char_id).filter(Boolean)
         if (charIds.length === 0) {
           setCharacters([])
@@ -226,22 +223,7 @@ export default function AccountDetail({ isOfficer, profile, session }) {
 
   const displayName = account?.display_name?.trim() || account?.toon_names?.split(',')[0]?.trim() || accountId
 
-  const dkpTotal = useMemo(() => {
-    let earned = 0
-    let spent = 0
-    activityByRaid.forEach((act) => {
-      earned += Number(act.dkpEarned ?? 0) || 0
-      ;(act.items || []).forEach((row) => { spent += Number(row.cost) || 0 })
-    })
-    const charNames = new Set((characters || []).map((c) => (c.name || '').trim().toLowerCase()).filter(Boolean))
-    ;(dkpAdjustments || []).forEach((row) => {
-      const n = (row.character_name || '').trim()
-      if (!n || !charNames.has(n.toLowerCase())) return
-      earned += Number(row.earned_delta) || 0
-      spent += Number(row.spent_delta) || 0
-    })
-    return earned - spent
-  }, [activityByRaid, characters, dkpAdjustments])
+  const dkpTotal = accountId != null ? (accountBalanceByAccountId[accountId] ?? 0) : 0
 
   async function handleClaimAccount() {
     const { data: { user } } = await supabase.auth.getUser()

@@ -5,6 +5,7 @@ import { useCharToAccountMap } from '../lib/useCharToAccountMap'
 import AssignedLootDisclaimer from '../components/AssignedLootDisclaimer'
 import ItemLink from '../components/ItemLink'
 import { getDkpMobLoot, getRaidItemSources } from '../lib/staticData'
+import { useDkpData } from '../lib/dkpLeaderboard'
 
 function buildItemIdMap(mobLoot) {
   const map = {}
@@ -55,9 +56,8 @@ export default function LootRecipients() {
   const [characters, setCharacters] = useState([])
   const [accounts, setAccounts] = useState({})
   const [accountChars, setAccountChars] = useState([]) // { account_id, char_id, name }
-  const [dkpSummary, setDkpSummary] = useState({}) // character_key -> { earned, spent } (for account totals)
-  const [dkpAdjustments, setDkpAdjustments] = useState([]) // { character_name, earned_delta, spent_delta } so Account DKP total matches DKP page
   const [characterDkpSpent, setCharacterDkpSpent] = useState({}) // key (id or name) -> total_spent on that character (from backend table)
+  const { accountBalanceByAccountId } = useDkpData() // single source of truth for Account DKP total (same cache as DKP page)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [expandedLootRows, setExpandedLootRows] = useState(() => new Set()) // character_key -> show full loot list
@@ -105,8 +105,6 @@ export default function LootRecipients() {
         setCharacters([])
         setAccounts({})
         setAccountChars([])
-        setDkpSummary({})
-        setDkpAdjustments([])
         setCharacterDkpSpent({})
         setLoading(false)
         return
@@ -135,8 +133,6 @@ export default function LootRecipients() {
           setCharacters([])
           setAccounts({})
           setAccountChars([])
-          setDkpSummary({})
-          setDkpAdjustments([])
           setCharacterDkpSpent({})
           setLoading(false)
           return
@@ -153,8 +149,7 @@ export default function LootRecipients() {
           keys.length > 0 ? supabase.from('characters').select('char_id, name, class_name').in('name', keys) : { data: [] },
           aidList.length > 0 ? supabase.from('accounts').select('account_id, display_name, toon_names').in('account_id', aidList) : { data: [] },
           aidList.length > 0 ? supabase.from('character_account').select('account_id, char_id').in('account_id', aidList) : { data: [] },
-          supabase.from('dkp_adjustments').select('character_name, earned_delta, spent_delta'),
-        ]).then(async ([byIdRes, byNameRes, aRes, caRes, adjRes]) => {
+        ]).then(async ([byIdRes, byNameRes, aRes, caRes]) => {
           const byId = (byIdRes.data || []).filter((c) => c && c.char_id)
           const byName = (byNameRes.data || []).filter((c) => c && c.name)
           const charMap = {}
@@ -173,7 +168,6 @@ export default function LootRecipients() {
 
           const accountCharsList = (caRes.data || []).map((r) => ({ account_id: r.account_id, char_id: r.char_id }))
           setAccountChars(accountCharsList)
-          setDkpAdjustments(adjRes?.data ?? [])
 
           const charIdsFromAccounts = [...new Set(accountCharsList.map((r) => r.char_id).filter(Boolean))]
           const charsForAccounts = charIdsFromAccounts.length > 0
@@ -182,7 +176,6 @@ export default function LootRecipients() {
           const nameByCharId = {}
           ;(charsForAccounts.data || []).forEach((c) => { nameByCharId[c.char_id] = (c.name || '').trim() })
           const allKeysForDkp = new Set(keys)
-          // Include every resolved loot-recipient by both id and name so dkp_summary fetch matches backend keys
           chars.forEach((c) => {
             const id = (c.char_id != null && c.char_id !== '') ? String(c.char_id).trim() : null
             const name = (c.name || '').trim()
@@ -195,30 +188,8 @@ export default function LootRecipients() {
             if (n) allKeysForDkp.add(n)
           })
           const dkpKeys = [...allKeysForDkp]
-          if (dkpKeys.length === 0) {
-            setDkpSummary({})
-            setDkpAdjustments(adjRes?.data ?? [])
-            setCharacterDkpSpent({})
-            setLoading(false)
-            return
-          }
           const toKeyStable = (v) => (v != null && v !== '') ? String(v).trim() : ''
-          const dkpChunks = []
-          for (let i = 0; i < dkpKeys.length; i += CHUNK) {
-            dkpChunks.push(dkpKeys.slice(i, i + CHUNK))
-          }
-          const [dkpResults, spentRes] = await Promise.all([
-            Promise.all(dkpChunks.map((c) => supabase.from('dkp_summary').select('character_key, earned, spent').in('character_key', c))),
-            supabase.rpc('get_character_dkp_spent', { p_keys: dkpKeys })
-          ])
-          const dkpMap = {}
-          dkpResults.forEach((res) => {
-            (res.data || []).forEach((row) => {
-              const key = row.character_key != null ? String(row.character_key).trim() : ''
-              if (!key) return
-              dkpMap[key] = { earned: parseFloat(row.earned || 0) || 0, spent: parseFloat(row.spent || 0) || 0 }
-            })
-          })
+          const spentRes = dkpKeys.length > 0 ? await supabase.rpc('get_character_dkp_spent', { p_keys: dkpKeys }) : { data: [], error: null }
           const spentMap = {}
           if (!spentRes.error && Array.isArray(spentRes.data)) {
             spentRes.data.forEach((row) => {
@@ -228,7 +199,6 @@ export default function LootRecipients() {
               if (row.character_name != null) spentMap[toKeyStable(row.character_name)] = total
             })
           }
-          setDkpSummary(dkpMap)
           setCharacterDkpSpent(spentMap)
           setLoading(false)
         }).catch((err) => {
@@ -250,40 +220,6 @@ export default function LootRecipients() {
     })
     return [...set].sort((a, b) => a.localeCompare(b))
   }, [characters])
-
-  const accountDkpTotals = useMemo(() => {
-    const adjustmentsMap = {}
-    ;(dkpAdjustments || []).forEach((row) => {
-      const n = (row.character_name || '').trim()
-      if (n) adjustmentsMap[n] = { earned_delta: Number(row.earned_delta) || 0, spent_delta: Number(row.spent_delta) || 0 }
-    })
-    const totals = {}
-    const counted = {} // account_id -> Set of char_id we've counted (one row per character in dkp_summary)
-    accountChars.forEach((r) => {
-      const aid = r.account_id
-      if (!aid) return
-      if (!totals[aid]) totals[aid] = 0
-      const cid = (r.char_id || '').trim()
-      if (!cid) return
-      if (!counted[aid]) counted[aid] = new Set()
-      if (counted[aid].has(cid)) return
-      counted[aid].add(cid)
-      const name = (characters.find((c) => (c.char_id || '').trim() === cid)?.name || '').trim()
-      const adj = adjustmentsMap[name] || adjustmentsMap[name.replace(/^\(\*\)\s*/, '')] || { earned_delta: 0, spent_delta: 0 }
-      const adjBalance = (adj.earned_delta || 0) - (adj.spent_delta || 0)
-      const row = dkpSummary[cid]
-      if (row) {
-        totals[aid] += (row.earned - row.spent) + adjBalance
-        return
-      }
-      if (name && dkpSummary[name]) {
-        totals[aid] += (dkpSummary[name].earned - dkpSummary[name].spent) + adjBalance
-        return
-      }
-      if (adjBalance !== 0) totals[aid] += adjBalance
-    })
-    return totals
-  }, [accountChars, characters, dkpSummary, dkpAdjustments])
 
   const recipients = useMemo(() => {
     const byKey = {}
@@ -323,7 +259,7 @@ export default function LootRecipients() {
       list = list.filter((r) => (r.class_name || '').toLowerCase() === classFilter.toLowerCase())
     }
     list.forEach((r) => {
-      r.accountDkpTotal = r.account_id ? (accountDkpTotals[r.account_id] ?? 0) : 0
+      r.accountDkpTotal = r.account_id ? (accountBalanceByAccountId[r.account_id] ?? 0) : 0
       const toKey = (v) => (v != null && v !== '') ? String(v).trim() : ''
       const charRow = characters.find((c) => toKey(c.name) === toKey(r.character_name || r.character_key) || toKey(c.char_id) === toKey(r.char_id))
       const spent =
@@ -350,7 +286,7 @@ export default function LootRecipients() {
       return (a.account_display_name || a.character_name || '').localeCompare(b.account_display_name || b.character_name || '')
     })
     return list
-  }, [loot, raids, characters, accounts, accountDkpTotals, dkpSummary, characterDkpSpent, classFilter, sortBy, months, getAccountId])
+  }, [loot, raids, characters, accounts, accountBalanceByAccountId, characterDkpSpent, classFilter, sortBy, months, getAccountId])
 
   if (loading) return <div className="container">Loading…</div>
   if (error) return <div className="container"><span className="error">{error}</span> <Link to="/">← Home</Link></div>
