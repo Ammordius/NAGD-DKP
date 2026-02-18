@@ -66,16 +66,18 @@ function isActiveRow(r, activeKeysSet, cutoffDate) {
   return d >= cutoffDate
 }
 
-/** Merge duplicate character rows (same character_key) so adjustments are applied only once per character. */
-function dedupeByCharacterKey(list) {
-  const byKey = {}
+/** Merge duplicate character rows (same character name) so adjustments are applied only once per character.
+ *  dkp_summary can have two rows for one person (e.g. character_key = char_id vs character_key = name); we merge by name. */
+function dedupeByCharacterName(list) {
+  const byName = {}
   list.forEach((r) => {
-    const key = String(r.char_id ?? r.name ?? '')
-    if (!byKey[key]) {
-      byKey[key] = { ...r }
+    const key = (r.name || r.char_id || '').toString().trim().toLowerCase()
+    if (!key) return
+    if (!byName[key]) {
+      byName[key] = { ...r }
       return
     }
-    const m = byKey[key]
+    const m = byName[key]
     m.earned += r.earned
     m.spent += r.spent
     m.earned_30d += r.earned_30d ?? 0
@@ -83,8 +85,9 @@ function dedupeByCharacterKey(list) {
     if (r.last_activity_date && (!m.last_activity_date || (r.last_activity_date > m.last_activity_date))) {
       m.last_activity_date = r.last_activity_date
     }
+    if (r.char_id && r.char_id !== m.char_id) m.char_id = m.char_id || r.char_id
   })
-  return Object.values(byKey)
+  return Object.values(byName)
 }
 
 /** Process /api/get-dkp response into leaderboard list and account list. */
@@ -112,7 +115,7 @@ function processApiPayload(payload, buildAccountLeaderboard) {
     earned_60d: Math.round(Number(r.earned_60d) || 0),
     last_activity_date: r.last_activity_date || null,
   }))
-  list = dedupeByCharacterKey(list)
+  list = dedupeByCharacterName(list)
   list = list.filter((r) => isActiveRow(r, activeSet, cutoff))
   applyAdjustmentsAndBalance(list, adjustmentsMap)
   const caData = payload.character_account ?? []
