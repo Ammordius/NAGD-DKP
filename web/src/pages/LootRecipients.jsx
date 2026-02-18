@@ -56,6 +56,7 @@ export default function LootRecipients() {
   const [accounts, setAccounts] = useState({})
   const [accountChars, setAccountChars] = useState([]) // { account_id, char_id, name }
   const [dkpSummary, setDkpSummary] = useState({}) // character_key -> { earned, spent } (for account totals)
+  const [dkpAdjustments, setDkpAdjustments] = useState([]) // { character_name, earned_delta, spent_delta } so Account DKP total matches DKP page
   const [characterDkpSpent, setCharacterDkpSpent] = useState({}) // key (id or name) -> total_spent on that character (from backend table)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -105,6 +106,7 @@ export default function LootRecipients() {
         setAccounts({})
         setAccountChars([])
         setDkpSummary({})
+        setDkpAdjustments([])
         setCharacterDkpSpent({})
         setLoading(false)
         return
@@ -134,6 +136,7 @@ export default function LootRecipients() {
           setAccounts({})
           setAccountChars([])
           setDkpSummary({})
+          setDkpAdjustments([])
           setCharacterDkpSpent({})
           setLoading(false)
           return
@@ -150,7 +153,8 @@ export default function LootRecipients() {
           keys.length > 0 ? supabase.from('characters').select('char_id, name, class_name').in('name', keys) : { data: [] },
           aidList.length > 0 ? supabase.from('accounts').select('account_id, display_name, toon_names').in('account_id', aidList) : { data: [] },
           aidList.length > 0 ? supabase.from('character_account').select('account_id, char_id').in('account_id', aidList) : { data: [] },
-        ]).then(async ([byIdRes, byNameRes, aRes, caRes]) => {
+          supabase.from('dkp_adjustments').select('character_name, earned_delta, spent_delta'),
+        ]).then(async ([byIdRes, byNameRes, aRes, caRes, adjRes]) => {
           const byId = (byIdRes.data || []).filter((c) => c && c.char_id)
           const byName = (byNameRes.data || []).filter((c) => c && c.name)
           const charMap = {}
@@ -169,6 +173,7 @@ export default function LootRecipients() {
 
           const accountCharsList = (caRes.data || []).map((r) => ({ account_id: r.account_id, char_id: r.char_id }))
           setAccountChars(accountCharsList)
+          setDkpAdjustments(adjRes?.data ?? [])
 
           const charIdsFromAccounts = [...new Set(accountCharsList.map((r) => r.char_id).filter(Boolean))]
           const charsForAccounts = charIdsFromAccounts.length > 0
@@ -192,6 +197,7 @@ export default function LootRecipients() {
           const dkpKeys = [...allKeysForDkp]
           if (dkpKeys.length === 0) {
             setDkpSummary({})
+            setDkpAdjustments(adjRes?.data ?? [])
             setCharacterDkpSpent({})
             setLoading(false)
             return
@@ -246,6 +252,11 @@ export default function LootRecipients() {
   }, [characters])
 
   const accountDkpTotals = useMemo(() => {
+    const adjustmentsMap = {}
+    ;(dkpAdjustments || []).forEach((row) => {
+      const n = (row.character_name || '').trim()
+      if (n) adjustmentsMap[n] = { earned_delta: Number(row.earned_delta) || 0, spent_delta: Number(row.spent_delta) || 0 }
+    })
     const totals = {}
     const counted = {} // account_id -> Set of char_id we've counted (one row per character in dkp_summary)
     accountChars.forEach((r) => {
@@ -257,18 +268,22 @@ export default function LootRecipients() {
       if (!counted[aid]) counted[aid] = new Set()
       if (counted[aid].has(cid)) return
       counted[aid].add(cid)
+      const name = (characters.find((c) => (c.char_id || '').trim() === cid)?.name || '').trim()
+      const adj = adjustmentsMap[name] || adjustmentsMap[name.replace(/^\(\*\)\s*/, '')] || { earned_delta: 0, spent_delta: 0 }
+      const adjBalance = (adj.earned_delta || 0) - (adj.spent_delta || 0)
       const row = dkpSummary[cid]
       if (row) {
-        totals[aid] += row.earned - row.spent
+        totals[aid] += (row.earned - row.spent) + adjBalance
         return
       }
-      const name = (characters.find((c) => (c.char_id || '').trim() === cid)?.name || '').trim()
       if (name && dkpSummary[name]) {
-        totals[aid] += dkpSummary[name].earned - dkpSummary[name].spent
+        totals[aid] += (dkpSummary[name].earned - dkpSummary[name].spent) + adjBalance
+        return
       }
+      if (adjBalance !== 0) totals[aid] += adjBalance
     })
     return totals
-  }, [accountChars, characters, dkpSummary])
+  }, [accountChars, characters, dkpSummary, dkpAdjustments])
 
   const recipients = useMemo(() => {
     const byKey = {}
