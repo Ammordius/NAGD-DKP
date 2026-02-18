@@ -39,6 +39,9 @@ CREATE INDEX IF NOT EXISTS idx_raid_loot_assigned_char ON raid_loot(assigned_cha
 
 -- Bulk update assignments: resolve conflicts by updating existing rows (do not ignore).
 -- CI/update_raid_loot_assignments_supabase.py calls this RPC so updates always apply.
+-- Triggers that refresh dkp_summary and character_dkp_spent on raid_loot UPDATE are disabled
+-- for the duration of this call so bulk runs do not time out; call refresh_after_bulk_loot_assignment()
+-- once after all batches to refresh caches.
 -- data: jsonb array of { id, assigned_char_id, assigned_character_name, assigned_via_magelo }.
 CREATE OR REPLACE FUNCTION update_raid_loot_assignments(data jsonb)
 RETURNS bigint
@@ -49,6 +52,10 @@ AS $$
 DECLARE
   updated_count bigint;
 BEGIN
+  -- Disable triggers that do full-table refreshes on raid_loot UPDATE (they cause statement timeout on bulk).
+  ALTER TABLE raid_loot DISABLE TRIGGER full_refresh_dkp_after_loot_change;
+  ALTER TABLE raid_loot DISABLE TRIGGER refresh_character_dkp_spent_after_loot;
+
   WITH payload AS (
     SELECT (e->>'id')::bigint AS id,
            nullif(trim(e->>'assigned_char_id'), '') AS assigned_char_id,
@@ -64,11 +71,30 @@ BEGIN
   FROM payload p
   WHERE r.id = p.id;
   GET DIAGNOSTICS updated_count = ROW_COUNT;
+
+  ALTER TABLE raid_loot ENABLE TRIGGER full_refresh_dkp_after_loot_change;
+  ALTER TABLE raid_loot ENABLE TRIGGER refresh_character_dkp_spent_after_loot;
+
   RETURN updated_count;
 END;
 $$;
 
-COMMENT ON FUNCTION update_raid_loot_assignments(jsonb) IS 'Bulk update raid_loot assignment columns by id; resolves conflicts by updating, never ignores.';
+COMMENT ON FUNCTION update_raid_loot_assignments(jsonb) IS 'Bulk update raid_loot assignment columns by id; resolves conflicts by updating, never ignores. Triggers disabled during update; run refresh_after_bulk_loot_assignment() once after all batches.';
+
+-- Run once after all update_raid_loot_assignments batches to refresh dkp_summary and character_dkp_spent.
+CREATE OR REPLACE FUNCTION refresh_after_bulk_loot_assignment()
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  PERFORM refresh_character_dkp_spent();
+  PERFORM refresh_dkp_summary_internal();
+END;
+$$;
+
+COMMENT ON FUNCTION refresh_after_bulk_loot_assignment() IS 'Refreshes character_dkp_spent and dkp_summary after bulk loot assignment updates. Call once after all update_raid_loot_assignments batches.';
 
 -- Single-row assignment update: officers or the account that owns the loot row (buyer char_id on that account).
 -- p_assigned_char_id / p_assigned_character_name may be NULL or '' to set Unassigned.

@@ -114,6 +114,8 @@ def main() -> int:
         else:
             n += len(chunk)
         print(f"ok ({len(chunk)} rows)", flush=True)
+    print("Refreshing dkp_summary and character_dkp_spent...", flush=True)
+    client.rpc("refresh_after_bulk_loot_assignment", {}).execute()
     print(f"Done. Updated {n} raid_loot rows.", flush=True)
     return 0
 
