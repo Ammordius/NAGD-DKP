@@ -63,13 +63,13 @@ jobs:
         with:
           name: ${{ steps.artifacts.outputs.old_name }}
           run-id: ${{ steps.artifacts.outputs.old_run_id }}
+          path: artifacts_old
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Extract older backup to backup_old
         if: steps.artifacts.outputs.has_two == 'true'
         run: |
-          DIR="${{ steps.artifacts.outputs.old_name }}"
-          TAR=$(find "$DIR" -name "*.tar.gz" | head -1)
+          TAR=$(find artifacts_old -name "*.tar.gz" | head -1)
           mkdir -p backup_old
           tar xzf "$TAR" -C backup_old
           [ -d backup_old/backup ] && mv backup_old/backup/* backup_old/ && rmdir backup_old/backup
@@ -80,13 +80,13 @@ jobs:
         with:
           name: ${{ steps.artifacts.outputs.new_name }}
           run-id: ${{ steps.artifacts.outputs.new_run_id }}
+          path: artifacts_new
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Extract newer backup to backup_new
         if: steps.artifacts.outputs.has_two == 'true'
         run: |
-          DIR="${{ steps.artifacts.outputs.new_name }}"
-          TAR=$(find "$DIR" -name "*.tar.gz" | head -1)
+          TAR=$(find artifacts_new -name "*.tar.gz" | head -1)
           mkdir -p backup_new
           tar xzf "$TAR" -C backup_new
           [ -d backup_new/backup ] && mv backup_new/backup/* backup_new/ && rmdir backup_new/backup
