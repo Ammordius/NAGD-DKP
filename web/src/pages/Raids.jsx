@@ -270,24 +270,7 @@ export default function Raids({ isOfficer }) {
     [viewYear, viewMonth, raidsByDate]
   )
 
-  const loadMoreRef = useRef(null)
-  const [loadMoreVisible, setLoadMoreVisible] = useState(false)
-  const prevLoadMoreVisibleRef = useRef(false)
-  useEffect(() => {
-    const el = loadMoreRef.current
-    if (!el) return
-    const obs = new IntersectionObserver(
-      ([e]) => setLoadMoreVisible(e.isIntersecting),
-      { root: null, rootMargin: '100px', threshold: 0 }
-    )
-    obs.observe(el)
-    return () => obs.disconnect()
-  }, [])
-  useEffect(() => {
-    const justBecameVisible = loadMoreVisible && !prevLoadMoreVisibleRef.current
-    prevLoadMoreVisibleRef.current = loadMoreVisible
-    if (justBecameVisible && !loading) goOlder()
-  }, [loadMoreVisible, loading])
+  const jumpToMonthInputRef = useRef(null)
 
   const raidsByMonth = useMemo(() => {
     const map = new Map()
@@ -338,7 +321,7 @@ export default function Raids({ isOfficer }) {
         )}
       </div>
       <p style={{ color: '#71717a', marginBottom: '1rem' }}>
-        One month shown; 3 months of data are loaded. Use <strong>← Older raids</strong> at the top or scroll to the bottom of the page to go back in time. Use <strong>→</strong> / <strong>←</strong> to switch between the 3 loaded months.
+        One month shown; 3 months of data are loaded. Use <strong>← Older raids</strong> or click the month name below to pick a date and load raids. Use <strong>→</strong> / <strong>←</strong> to switch between the 3 loaded months.
       </p>
 
       {error && <p className="error" style={{ marginBottom: '1rem' }}>{error}</p>}
@@ -368,6 +351,7 @@ export default function Raids({ isOfficer }) {
           <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.875rem', color: '#a1a1aa', marginLeft: '0.5rem' }}>
             <span>Jump to month:</span>
             <input
+              ref={jumpToMonthInputRef}
               type="month"
               value={`${windowEndYear}-${String(windowEndMonth).padStart(2, '0')}`}
               max={`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`}
@@ -403,7 +387,29 @@ export default function Raids({ isOfficer }) {
           >
             ←
           </button>
-          <h2 className="calendar-title">{MONTH_NAMES[viewMonth - 1]} {viewYear}</h2>
+          <h2
+            className="calendar-title"
+            role="button"
+            tabIndex={0}
+            onClick={() => {
+              const el = jumpToMonthInputRef.current
+              if (!el) return
+              if (typeof el.showPicker === 'function') el.showPicker()
+              else el.click()
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault()
+                const el = jumpToMonthInputRef.current
+                if (el && typeof el.showPicker === 'function') el.showPicker()
+                else el?.click()
+              }
+            }}
+            style={{ cursor: 'pointer', userSelect: 'none' }}
+            title="Click to pick a month and load raids"
+          >
+            {MONTH_NAMES[viewMonth - 1]} {viewYear}
+          </h2>
           <button
             type="button"
             className="calendar-nav"
@@ -450,7 +456,6 @@ export default function Raids({ isOfficer }) {
           >
             {loading ? 'Loading…' : 'Load older raids'}
           </button>
-          <p style={{ fontSize: '0.75rem', color: '#71717a', marginTop: '0.35rem', marginBottom: 0 }}>Or scroll to the bottom of the page to load more</p>
         </div>
       </div>
 
@@ -488,8 +493,6 @@ export default function Raids({ isOfficer }) {
           </div>
         ))
       )}
-
-      <div ref={loadMoreRef} style={{ height: 20, marginTop: '2rem' }} aria-hidden />
     </div>
   )
 }
