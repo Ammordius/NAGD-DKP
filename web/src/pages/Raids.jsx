@@ -286,8 +286,8 @@ export default function Raids({ isOfficer }) {
   useEffect(() => {
     const justBecameVisible = loadMoreVisible && !prevLoadMoreVisibleRef.current
     prevLoadMoreVisibleRef.current = loadMoreVisible
-    if (justBecameVisible && !loading && viewIndex === 0) goOlder()
-  }, [loadMoreVisible, loading, viewIndex])
+    if (justBecameVisible && !loading) goOlder()
+  }, [loadMoreVisible, loading])
 
   const raidsByMonth = useMemo(() => {
     const map = new Map()
@@ -338,10 +338,58 @@ export default function Raids({ isOfficer }) {
         )}
       </div>
       <p style={{ color: '#71717a', marginBottom: '1rem' }}>
-        One month shown; 3 months of data are loaded. Use arrows to change month, or scroll down / click <strong>Load older raids</strong> to go back in time.
+        One month shown; 3 months of data are loaded. Use <strong>← Older raids</strong> at the top or scroll to the bottom of the page to go back in time. Use <strong>→</strong> / <strong>←</strong> to switch between the 3 loaded months.
       </p>
 
       {error && <p className="error" style={{ marginBottom: '1rem' }}>{error}</p>}
+
+      <div className="raids-time-nav card" style={{ marginBottom: '1rem' }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', alignItems: 'center' }}>
+          <button
+            type="button"
+            className="calendar-nav calendar-nav-wide"
+            onClick={goOlder}
+            disabled={loading}
+            aria-label="Older raids (go back in time)"
+          >
+            ← Older raids
+          </button>
+          <span style={{ color: '#71717a', fontSize: '0.875rem' }}>|</span>
+          <button
+            type="button"
+            className="calendar-nav calendar-nav-wide"
+            onClick={goNewer}
+            disabled={isAtCurrentMonth}
+            aria-label="Newer raids"
+            style={isAtCurrentMonth ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
+          >
+            Newer raids →
+          </button>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.875rem', color: '#a1a1aa', marginLeft: '0.5rem' }}>
+            <span>Jump to month:</span>
+            <input
+              type="month"
+              value={`${windowEndYear}-${String(windowEndMonth).padStart(2, '0')}`}
+              max={`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`}
+              onChange={(e) => {
+                const v = e.target.value
+                if (!v) return
+                const [y, m] = v.split('-').map(Number)
+                if (y != null && m != null) {
+                  setWindowEndYear(y)
+                  setWindowEndMonth(m)
+                }
+              }}
+              style={{ padding: '0.35rem 0.5rem', maxWidth: '160px' }}
+            />
+          </label>
+          {!isAtCurrentMonth && (
+            <button type="button" className="btn btn-ghost" onClick={goToCurrentMonth} style={{ fontSize: '0.875rem' }}>
+              Show current month
+            </button>
+          )}
+        </div>
+      </div>
 
       <div className="calendar-wrap card" style={{ marginBottom: '1rem' }}>
         <div className="calendar-header">
@@ -393,57 +441,17 @@ export default function Raids({ isOfficer }) {
       </div>
 
       <div className="raids-load-more card" style={{ marginBottom: '1rem' }}>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', alignItems: 'center', justifyContent: 'center' }}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.875rem', color: '#a1a1aa' }}>
-            <span>Jump to month:</span>
-            <input
-              type="month"
-              value={`${windowEndYear}-${String(windowEndMonth).padStart(2, '0')}`}
-              max={`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`}
-              onChange={(e) => {
-                const v = e.target.value
-                if (!v) return
-                const [y, m] = v.split('-').map(Number)
-                if (y != null && m != null) {
-                  setWindowEndYear(y)
-                  setWindowEndMonth(m)
-                }
-              }}
-              style={{ padding: '0.35rem 0.5rem', maxWidth: '160px' }}
-            />
-          </label>
-          {!isAtCurrentMonth && (
-            <button type="button" className="btn btn-ghost" onClick={goToCurrentMonth} style={{ fontSize: '0.875rem' }}>
-              Show current month
-            </button>
-          )}
+        <div style={{ textAlign: 'center' }}>
           <button
             type="button"
-            className="calendar-nav calendar-nav-wide"
-            onClick={goNewer}
-            disabled={isAtCurrentMonth}
-            aria-label="Newer raids"
-            style={isAtCurrentMonth ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
+            className="btn"
+            onClick={goOlder}
+            disabled={loading}
           >
-            Newer raids →
+            {loading ? 'Loading…' : 'Load older raids'}
           </button>
+          <p style={{ fontSize: '0.75rem', color: '#71717a', marginTop: '0.35rem', marginBottom: 0 }}>Or scroll to the bottom of the page to load more</p>
         </div>
-        {viewIndex === 0 && (
-          <>
-            <div ref={loadMoreRef} style={{ height: 1, margin: '0.5rem 0' }} aria-hidden />
-            <div style={{ textAlign: 'center', marginTop: '0.5rem' }}>
-              <button
-                type="button"
-                className="btn"
-                onClick={goOlder}
-                disabled={loading}
-              >
-                {loading ? 'Loading…' : 'Load older raids'}
-              </button>
-              <p style={{ fontSize: '0.75rem', color: '#71717a', marginTop: '0.35rem', marginBottom: 0 }}>Or scroll to load more</p>
-            </div>
-          </>
-        )}
       </div>
 
       <h3 style={{ marginTop: '2rem', marginBottom: '0.5rem', fontSize: '1rem', color: '#a1a1aa' }}>Raids by month</h3>
@@ -480,6 +488,8 @@ export default function Raids({ isOfficer }) {
           </div>
         ))
       )}
+
+      <div ref={loadMoreRef} style={{ height: 20, marginTop: '2rem' }} aria-hidden />
     </div>
   )
 }
