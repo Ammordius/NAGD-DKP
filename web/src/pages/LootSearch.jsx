@@ -1,4 +1,5 @@
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, useRef } from 'react'
+import { useVirtualizer } from '@tanstack/react-virtual'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useCharToAccountMap } from '../lib/useCharToAccountMap'
@@ -21,7 +22,7 @@ function buildItemIdMap(mobLoot) {
 }
 
 const LOOT_CACHE_KEY = 'loot_search_cache_v3' // v3: includes assigned_char_id, assigned_character_name
-const CACHE_TTL_MS = 10 * 60 * 1000 // 10 minutes
+const CACHE_TTL_MS = 30 * 60 * 1000 // 30 minutes
 
 // Normalize mob name for comparison (strip # and trim, lowercase)
 function normMob(m) {
@@ -223,6 +224,45 @@ export default function LootSearch() {
     return list
   }, [loot, itemQuery, mobFilter, classifications, raids])
 
+  const parentRef = useRef(null)
+  const ROW_HEIGHT = 40
+  const virtualizer = useVirtualizer({
+    count: filteredLoot.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => ROW_HEIGHT,
+    overscan: 10,
+  })
+
+  const renderRow = (row, i) => {
+    const dateStr = (raids[row.raid_id]?.date_iso && String(raids[row.raid_id].date_iso).trim()) ? String(raids[row.raid_id].date_iso).slice(0, 10) : (raids[row.raid_id]?.date || '—')
+    const charName = row.character_name || row.char_id || '—'
+    const accountId = getAccountId(row.character_name || row.char_id)
+    const accountName = getAccountDisplayName?.(row.character_name || row.char_id)
+    const label = accountName ? `${accountName} (${charName})` : charName
+    const to = accountId ? `/accounts/${accountId}` : `/characters/${encodeURIComponent(charName)}`
+    return (
+      <>
+        <div style={{ color: '#a1a1aa', fontSize: '0.875rem', padding: '0.5rem 0.75rem', borderBottom: '1px solid var(--border, #27272a)' }}>{dateStr}</div>
+        <div style={{ padding: '0.5rem 0.75rem', borderBottom: '1px solid var(--border, #27272a)' }}><ItemLink itemName={row.item_name || ''} itemId={itemIdMap[(row.item_name || '').trim().toLowerCase()]}>{row.item_name || '—'}</ItemLink></div>
+        <div style={{ padding: '0.5rem 0.75rem', borderBottom: '1px solid var(--border, #27272a)' }}>{row.cost ?? '—'}</div>
+        <div style={{ padding: '0.5rem 0.75rem', borderBottom: '1px solid var(--border, #27272a)' }}><Link to={to}>{label}</Link></div>
+        <div style={{ color: '#a1a1aa', fontSize: '0.875rem', padding: '0.5rem 0.75rem', borderBottom: '1px solid var(--border, #27272a)' }}>
+          {(row.assigned_character_name || row.assigned_char_id) ? (
+            <Link to={`/characters/${encodeURIComponent(row.assigned_character_name || row.assigned_char_id)}`}>{row.assigned_character_name || row.assigned_char_id}</Link>
+          ) : (
+            <span style={{ color: '#71717a' }}>Unassigned</span>
+          )}
+        </div>
+        <div style={{ padding: '0.5rem 0.75rem', borderBottom: '1px solid var(--border, #27272a)' }}><Link to={`/raids/${row.raid_id}`}>{raids[row.raid_id]?.name ?? row.raid_id}</Link></div>
+        <div style={{ color: '#a1a1aa', fontSize: '0.875rem', padding: '0.5rem 0.75rem', borderBottom: '1px solid var(--border, #27272a)' }}>
+          {itemSourceLabel(itemSources, row.item_name, row.raid_id, raids[row.raid_id]?.name, raidToMobs) ?? '—'}
+        </div>
+      </>
+    )
+  }
+
+  const gridStyle = { display: 'grid', gridTemplateColumns: '100px minmax(120px, 1fr) 60px minmax(100px, 1fr) minmax(100px, 1fr) minmax(100px, 1fr) minmax(120px, 1fr)', minWidth: 700 }
+
   if (loading) return <div className="container">Loading loot…</div>
   if (error) return <div className="container"><span className="error">{error}</span></div>
 
@@ -264,55 +304,51 @@ export default function LootSearch() {
       <AssignedLootDisclaimer compact />
       <div className="card">
         <div style={{ overflowX: 'auto' }}>
-          <table>
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th>Item</th>
-                <th>Cost</th>
-                <th>Buyer</th>
-                <th>On toon</th>
-                <th>Raid</th>
-                <th>Drops from</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredLoot.slice(0, 500).map((row, i) => (
-                <tr key={row.id || `${row.raid_id}-${row.item_name}-${i}`}>
-                  <td style={{ color: '#a1a1aa', fontSize: '0.875rem' }}>{(raids[row.raid_id]?.date_iso && String(raids[row.raid_id].date_iso).trim()) ? String(raids[row.raid_id].date_iso).slice(0, 10) : (raids[row.raid_id]?.date || '—')}</td>
-                  <td><ItemLink itemName={row.item_name || ''} itemId={itemIdMap[(row.item_name || '').trim().toLowerCase()]}>{row.item_name || '—'}</ItemLink></td>
-                  <td>{row.cost ?? '—'}</td>
-                  <td>
-                    {(() => {
-                      const charName = row.character_name || row.char_id || '—'
-                      const accountId = getAccountId(row.character_name || row.char_id)
-                      const accountName = getAccountDisplayName?.(row.character_name || row.char_id)
-                      const label = accountName ? `${accountName} (${charName})` : charName
-                      const to = accountId ? `/accounts/${accountId}` : `/characters/${encodeURIComponent(charName)}`
-                      return <Link to={to}>{label}</Link>
-                    })()}
-                  </td>
-                  <td style={{ color: '#a1a1aa', fontSize: '0.875rem' }}>
-                    {(row.assigned_character_name || row.assigned_char_id) ? (
-                      <Link to={`/characters/${encodeURIComponent(row.assigned_character_name || row.assigned_char_id)}`}>{row.assigned_character_name || row.assigned_char_id}</Link>
-                    ) : (
-                      <span style={{ color: '#71717a' }}>Unassigned</span>
-                    )}
-                  </td>
-                  <td><Link to={`/raids/${row.raid_id}`}>{raids[row.raid_id]?.name ?? row.raid_id}</Link></td>
-                  <td style={{ color: '#a1a1aa', fontSize: '0.875rem' }}>
-                    {itemSourceLabel(itemSources, row.item_name, row.raid_id, raids[row.raid_id]?.name, raidToMobs) ?? '—'}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div style={gridStyle} role="row" aria-rowindex={0}>
+            <div style={{ padding: '0.5rem 0.75rem', fontWeight: 600, borderBottom: '1px solid var(--border, #27272a)', background: 'var(--card-bg, #18181b)' }}>Date</div>
+            <div style={{ padding: '0.5rem 0.75rem', fontWeight: 600, borderBottom: '1px solid var(--border, #27272a)', background: 'var(--card-bg, #18181b)' }}>Item</div>
+            <div style={{ padding: '0.5rem 0.75rem', fontWeight: 600, borderBottom: '1px solid var(--border, #27272a)', background: 'var(--card-bg, #18181b)' }}>Cost</div>
+            <div style={{ padding: '0.5rem 0.75rem', fontWeight: 600, borderBottom: '1px solid var(--border, #27272a)', background: 'var(--card-bg, #18181b)' }}>Buyer</div>
+            <div style={{ padding: '0.5rem 0.75rem', fontWeight: 600, borderBottom: '1px solid var(--border, #27272a)', background: 'var(--card-bg, #18181b)' }}>On toon</div>
+            <div style={{ padding: '0.5rem 0.75rem', fontWeight: 600, borderBottom: '1px solid var(--border, #27272a)', background: 'var(--card-bg, #18181b)' }}>Raid</div>
+            <div style={{ padding: '0.5rem 0.75rem', fontWeight: 600, borderBottom: '1px solid var(--border, #27272a)', background: 'var(--card-bg, #18181b)' }}>Drops from</div>
+          </div>
+          <div
+            ref={parentRef}
+            style={{ overflow: 'auto', maxHeight: '70vh' }}
+            aria-label="Loot table body"
+          >
+            <div
+              style={{
+                height: `${virtualizer.getTotalSize()}px`,
+                width: '100%',
+                position: 'relative',
+              }}
+            >
+              {virtualizer.getVirtualItems().map((virtualRow) => {
+                const row = filteredLoot[virtualRow.index]
+                return (
+                  <div
+                    key={row.id || `${row.raid_id}-${row.item_name}-${virtualRow.index}`}
+                    style={{
+                      ...gridStyle,
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      width: '100%',
+                      height: `${virtualRow.size}px`,
+                      transform: `translateY(${virtualRow.start}px)`,
+                    }}
+                    role="row"
+                    aria-rowindex={virtualRow.index + 1}
+                  >
+                    {renderRow(row, virtualRow.index)}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
         </div>
-        {filteredLoot.length > 500 && (
-          <p style={{ marginTop: '0.75rem', color: '#71717a', fontSize: '0.875rem' }}>
-            Showing first 500. Narrow by item or raid type to see more.
-          </p>
-        )}
       </div>
     </div>
   )
