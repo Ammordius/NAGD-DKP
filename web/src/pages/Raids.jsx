@@ -1,12 +1,12 @@
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 
 const OFFICER_ADD_RAID_HASH = '#add-raid'
 import { supabase } from '../lib/supabase'
 import { createCache } from '../lib/cache'
 
-const CACHE_KEY = 'raids_list_v2'
-const CACHE_TTL = 10 * 60 * 1000
+const CACHE_KEY_PREFIX = 'raids_month_'
+const CACHE_TTL = 15 * 60 * 1000 // 15 min per month
 
 const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
 const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
@@ -16,13 +16,31 @@ function getRaidDateKey(r) {
   return iso.length >= 10 ? iso.slice(0, 10) : null
 }
 
+/** Returns 3 (year, month) pairs for the window ending at endYear/endMonth, oldest first. */
+function getWindowMonths(endYear, endMonth) {
+  const out = []
+  for (let i = 2; i >= 0; i--) {
+    let y = endYear
+    let m = endMonth - i
+    while (m < 1) {
+      m += 12
+      y -= 1
+    }
+    while (m > 12) {
+      m -= 12
+      y += 1
+    }
+    out.push({ year: y, month: m })
+  }
+  return out
+}
+
 function buildCalendarGrid(year, month, raidsByDate) {
   const first = new Date(year, month - 1, 1)
   const last = new Date(year, month, 0)
   const startDow = first.getDay()
   const daysInMonth = last.getDate()
   const cells = []
-  // leading empty cells
   for (let i = 0; i < startDow; i++) cells.push({ dateKey: null, day: null, isCurrentMonth: false, raids: [] })
   for (let d = 1; d <= daysInMonth; d++) {
     const dateKey = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`
@@ -33,87 +51,163 @@ function buildCalendarGrid(year, month, raidsByDate) {
   return cells
 }
 
+/** Start (inclusive) and end (exclusive) for a calendar month for date_iso text comparison. */
+function getMonthRange(year, month) {
+  const start = `${year}-${String(month).padStart(2, '0')}-01`
+  let endYear = year
+  let endMonth = month + 1
+  if (endMonth > 12) {
+    endMonth = 1
+    endYear += 1
+  }
+  const end = `${endYear}-${String(endMonth).padStart(2, '0')}-01`
+  return { start, end }
+}
+
+const CHUNK = 80
+
+async function fetchOneMonth(year, month) {
+  const cacheKey = `${CACHE_KEY_PREFIX}${year}_${month}`
+  const cache = createCache(cacheKey, CACHE_TTL)
+  const cached = cache.get()
+  if (cached?.raids?.length !== undefined) {
+    return cached
+  }
+
+  const { start, end } = getMonthRange(year, month)
+  const { data: raidList, error } = await supabase
+    .from('raids')
+    .select('raid_id, raid_name, date_iso, date, attendees')
+    .gte('date_iso', start)
+    .lt('date_iso', end)
+    .order('date_iso', { ascending: false })
+    .order('raid_id', { ascending: false })
+
+  if (error) throw new Error(error.message)
+  const raids = raidList || []
+
+  let eventsByRaid = {}
+  let classificationsByRaid = {}
+
+  if (raids.length > 0) {
+    const raidIds = raids.map((r) => String(r.raid_id).trim()).filter(Boolean)
+    const allEvents = []
+    for (let i = 0; i < raidIds.length; i += CHUNK) {
+      const chunk = raidIds.slice(i, i + CHUNK)
+      const { data } = await supabase.from('raid_events').select('raid_id, dkp_value, event_order').in('raid_id', chunk)
+      if (data?.length) allEvents.push(...data)
+    }
+    allEvents.forEach((ev) => {
+      const rid = String(ev.raid_id ?? '').trim()
+      if (!rid) return
+      if (!eventsByRaid[rid]) eventsByRaid[rid] = { totalDkp: 0, events: [] }
+      const v = parseFloat(ev.dkp_value || 0)
+      eventsByRaid[rid].totalDkp += v
+      eventsByRaid[rid].events.push({ ...ev, dkp_value: v })
+    })
+
+    const classPromises = []
+    for (let i = 0; i < raidIds.length; i += CHUNK) {
+      classPromises.push(
+        supabase.from('raid_classifications').select('raid_id, mob, zone').in('raid_id', raidIds.slice(i, i + CHUNK))
+      )
+    }
+    const classResponses = await Promise.all(classPromises)
+    classResponses.forEach(({ data }) => {
+      ;(data || []).forEach((row) => {
+        const rid = String(row.raid_id ?? '').trim()
+        if (!classificationsByRaid[rid]) classificationsByRaid[rid] = []
+        classificationsByRaid[rid].push({ mob: row.mob, zone: row.zone })
+      })
+    })
+  }
+
+  const result = { raids, eventsByRaid, classificationsByRaid }
+  cache.set(result)
+  return result
+}
+
+function mergeMonthData(arrays) {
+  const raids = []
+  const eventsByRaid = {}
+  const classificationsByRaid = {}
+  arrays.forEach(({ raids: r, eventsByRaid: e, classificationsByRaid: c }) => {
+    raids.push(...r)
+    Object.assign(eventsByRaid, e)
+    Object.assign(classificationsByRaid, c)
+  })
+  raids.sort((a, b) => {
+    const ai = (a.date_iso || a.date || '').toString().trim()
+    const bi = (b.date_iso || b.date || '').toString().trim()
+    if (bi !== ai) return bi.localeCompare(ai)
+    return String(b.raid_id).localeCompare(String(a.raid_id))
+  })
+  return { raids, eventsByRaid, classificationsByRaid }
+}
+
 export default function Raids({ isOfficer }) {
+  const now = useMemo(() => new Date(), [])
+  const [windowEndYear, setWindowEndYear] = useState(now.getFullYear())
+  const [windowEndMonth, setWindowEndMonth] = useState(now.getMonth() + 1)
   const [raids, setRaids] = useState([])
   const [eventsByRaid, setEventsByRaid] = useState({})
   const [classificationsByRaid, setClassificationsByRaid] = useState({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [viewYear, setViewYear] = useState(() => new Date().getFullYear())
-  const [viewMonth, setViewMonth] = useState(() => new Date().getMonth() + 1)
+
+  const windowMonths = useMemo(
+    () => getWindowMonths(windowEndYear, windowEndMonth),
+    [windowEndYear, windowEndMonth]
+  )
+
+  const isAtCurrentMonth = windowEndYear === now.getFullYear() && windowEndMonth === now.getMonth() + 1
+
+  const loadWindow = useCallback(
+    async (endYear, endMonth) => {
+      setLoading(true)
+      setError('')
+      const months = getWindowMonths(endYear, endMonth)
+      try {
+        const results = await Promise.all(months.map(({ year, month }) => fetchOneMonth(year, month)))
+        const merged = mergeMonthData(results)
+        setRaids(merged.raids)
+        setEventsByRaid(merged.eventsByRaid)
+        setClassificationsByRaid(merged.classificationsByRaid)
+      } catch (err) {
+        setError(err?.message || 'Failed to load raids')
+      } finally {
+        setLoading(false)
+      }
+    },
+    []
+  )
 
   useEffect(() => {
-    const cache = createCache(CACHE_KEY, CACHE_TTL)
-    const cached = cache.get()
-    if (cached?.raids?.length) {
-      setRaids(cached.raids)
-      setEventsByRaid(cached.eventsByRaid || {})
-      setClassificationsByRaid(cached.classificationsByRaid || {})
-      setLoading(false)
-    }
+    loadWindow(windowEndYear, windowEndMonth)
+  }, [windowEndYear, windowEndMonth, loadWindow])
 
-    const limit = 200
-    supabase
-      .from('raids')
-      .select('raid_id, raid_name, date_iso, date, attendees')
-      .order('date_iso', { ascending: false, nullsFirst: false })
-      .order('raid_id', { ascending: false })
-      .limit(limit)
-      .then((r) => {
-        if (r.error) {
-          setError(r.error.message)
-          setLoading(false)
-          return
-        }
-        const raidList = r.data || []
-        setRaids(raidList)
-        if (raidList.length === 0) {
-          setEventsByRaid({})
-          setLoading(false)
-          return
-        }
-        const raidIds = raidList.map((row) => String(row.raid_id).trim()).filter(Boolean)
-        const CHUNK = 80
-        const fetchAllEvents = async () => {
-          const all = []
-          for (let i = 0; i < raidIds.length; i += CHUNK) {
-            const chunk = raidIds.slice(i, i + CHUNK)
-            const { data } = await supabase.from('raid_events').select('raid_id, dkp_value, event_order').in('raid_id', chunk)
-            if (data?.length) all.push(...data)
-          }
-          return all
-        }
-        fetchAllEvents().then((eventRows) => {
-          const byRaid = {}
-          eventRows.forEach((ev) => {
-            const rid = String(ev.raid_id ?? '').trim()
-            if (!rid) return
-            if (!byRaid[rid]) byRaid[rid] = { totalDkp: 0, events: [] }
-            const v = parseFloat(ev.dkp_value || 0)
-            byRaid[rid].totalDkp += v
-            byRaid[rid].events.push({ ...ev, dkp_value: v })
-          })
-          setEventsByRaid(byRaid)
-          setLoading(false)
-          const classChunks = []
-          for (let i = 0; i < raidIds.length; i += CHUNK) {
-            classChunks.push(supabase.from('raid_classifications').select('raid_id, mob, zone').in('raid_id', raidIds.slice(i, i + CHUNK)))
-          }
-          Promise.all(classChunks).then((responses) => {
-            const classByRaid = {}
-            responses.forEach(({ data }) => {
-              ;(data || []).forEach((row) => {
-                const rid = String(row.raid_id ?? '').trim()
-                if (!classByRaid[rid]) classByRaid[rid] = []
-                classByRaid[rid].push({ mob: row.mob, zone: row.zone })
-              })
-            })
-            setClassificationsByRaid(classByRaid)
-            cache.set({ raids: raidList, eventsByRaid: byRaid, classificationsByRaid: classByRaid })
-          })
-        })
-      })
-  }, [])
+  const goOlder = () => {
+    if (windowEndMonth === 1) {
+      setWindowEndYear((y) => y - 1)
+      setWindowEndMonth(12)
+    } else {
+      setWindowEndMonth((m) => m - 1)
+    }
+  }
+
+  const goNewer = () => {
+    if (windowEndMonth === 12) {
+      setWindowEndYear((y) => y + 1)
+      setWindowEndMonth(1)
+    } else {
+      setWindowEndMonth((m) => m + 1)
+    }
+  }
+
+  const goToCurrentMonth = () => {
+    setWindowEndYear(now.getFullYear())
+    setWindowEndMonth(now.getMonth() + 1)
+  }
 
   const raidsByDate = useMemo(() => {
     const byDate = {}
@@ -126,31 +220,22 @@ export default function Raids({ isOfficer }) {
     return byDate
   }, [raids])
 
-  const calendarGrid = useMemo(
-    () => buildCalendarGrid(viewYear, viewMonth, raidsByDate),
-    [viewYear, viewMonth, raidsByDate]
-  )
-
-  const goPrevMonth = () => {
-    if (viewMonth === 1) {
-      setViewMonth(12)
-      setViewYear((y) => y - 1)
-    } else setViewMonth((m) => m - 1)
-  }
-  const goNextMonth = () => {
-    if (viewMonth === 12) {
-      setViewMonth(1)
-      setViewYear((y) => y + 1)
-    } else setViewMonth((m) => m + 1)
-  }
-
-  const todayKey = (() => {
+  const todayKey = useMemo(() => {
     const t = new Date()
     return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`
-  })()
+  }, [])
 
-  // Group raids by year-month for table list (calendar order: newest month first)
-  const raidsByMonth = (() => {
+  const calendarGrids = useMemo(
+    () =>
+      windowMonths.map(({ year, month }) => ({
+        year,
+        month,
+        grid: buildCalendarGrid(year, month, raidsByDate),
+      })),
+    [windowMonths, raidsByDate]
+  )
+
+  const raidsByMonth = useMemo(() => {
     const map = new Map()
     for (const r of raids) {
       const iso = (r.date_iso || r.date || '').toString().trim()
@@ -171,10 +256,27 @@ export default function Raids({ isOfficer }) {
       return b.localeCompare(a)
     })
     return keys.map((k) => ({ key: k, ...map.get(k) }))
-  })()
+  }, [raids])
 
-  if (loading) return <div className="container">Loading raids…</div>
-  if (error) return <div className="container"><span className="error">{error}</span></div>
+  if (loading && raids.length === 0)
+    return (
+      <div className="container">
+        <h1 style={{ margin: 0 }}>Raids</h1>
+        <p>Loading raids…</p>
+      </div>
+    )
+  if (error && raids.length === 0)
+    return (
+      <div className="container">
+        <h1 style={{ margin: 0 }}>Raids</h1>
+        <span className="error">{error}</span>
+      </div>
+    )
+
+  const windowLabel =
+    windowMonths.length === 3
+      ? `${MONTH_NAMES[windowMonths[0].month - 1]} ${windowMonths[0].year} – ${MONTH_NAMES[windowMonths[2].month - 1]} ${windowMonths[2].year}`
+      : ''
 
   return (
     <div className="container">
@@ -186,71 +288,123 @@ export default function Raids({ isOfficer }) {
           </Link>
         )}
       </div>
-      <p style={{ color: '#71717a', marginBottom: '1rem' }}>Calendar of raids by date. Use arrows to change month.</p>
+      <p style={{ color: '#71717a', marginBottom: '1rem' }}>
+        Calendar shows last 3 months. Use <strong>Older raids</strong> to go back in time (1 month at a time). Data is cached to avoid extra loads.
+      </p>
 
-      <div className="calendar-wrap card">
-        <div className="calendar-header">
-          <button type="button" className="calendar-nav" onClick={goPrevMonth} aria-label="Previous month">←</button>
-          <h2 className="calendar-title">{MONTH_NAMES[viewMonth - 1]} {viewYear}</h2>
-          <button type="button" className="calendar-nav" onClick={goNextMonth} aria-label="Next month">→</button>
-        </div>
-        <div className="calendar-grid">
-          {DOW.map((d) => (
-            <div key={d} className="calendar-dow">{d}</div>
-          ))}
-          {calendarGrid.map((cell, idx) => (
-            <div
-              key={idx}
-              className={`calendar-day ${!cell.isCurrentMonth ? 'calendar-day-other' : ''} ${cell.dateKey === todayKey ? 'calendar-day-today' : ''} ${cell.raids?.length ? 'calendar-day-has-raids' : ''}`}
+      {error && <p className="error" style={{ marginBottom: '1rem' }}>{error}</p>}
+
+      <div className="raids-window-nav card" style={{ marginBottom: '1rem' }}>
+        <div className="calendar-header" style={{ flexWrap: 'wrap', gap: '0.75rem' }}>
+          <button type="button" className="calendar-nav calendar-nav-wide" onClick={goOlder} aria-label="Older raids (previous month)">
+            ← Older raids
+          </button>
+          <h2 className="calendar-title" style={{ flex: '1 1 auto', minWidth: '200px', textAlign: 'center' }}>
+            {windowLabel}
+          </h2>
+          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.875rem', color: '#a1a1aa' }}>
+              <span>Jump to month:</span>
+              <input
+                type="month"
+                value={`${windowEndYear}-${String(windowEndMonth).padStart(2, '0')}`}
+                max={`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`}
+                onChange={(e) => {
+                  const v = e.target.value
+                  if (!v) return
+                  const [y, m] = v.split('-').map(Number)
+                  if (y != null && m != null) {
+                    setWindowEndYear(y)
+                    setWindowEndMonth(m)
+                  }
+                }}
+                style={{ padding: '0.35rem 0.5rem', maxWidth: '160px' }}
+              />
+            </label>
+            {!isAtCurrentMonth && (
+              <button type="button" className="btn btn-ghost" onClick={goToCurrentMonth} style={{ fontSize: '0.875rem' }}>
+                Show current month
+              </button>
+            )}
+            <button
+              type="button"
+              className="calendar-nav calendar-nav-wide"
+              onClick={goNewer}
+              disabled={isAtCurrentMonth}
+              aria-label="Newer raids (next month)"
+              style={isAtCurrentMonth ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
             >
-              {cell.day != null && <span className="calendar-day-num">{cell.day}</span>}
-              {cell.raids?.length > 0 && (
-                <div className="calendar-day-raids">
-                  {cell.raids.slice(0, 3).map((r) => (
-                    <Link key={r.raid_id} to={`/raids/${r.raid_id}`} className="calendar-raid-link" title={r.raid_name || r.raid_id}>
-                      {r.raid_name || r.raid_id}
-                    </Link>
-                  ))}
-                  {cell.raids.length > 3 && <span className="calendar-day-more">+{cell.raids.length - 3}</span>}
-                </div>
-              )}
-            </div>
-          ))}
+              Newer raids →
+            </button>
+          </div>
         </div>
       </div>
 
+      <div className="calendar-three-wrap">
+        {calendarGrids.map(({ year, month, grid }) => (
+          <div key={`${year}-${month}`} className="calendar-wrap card calendar-month-block">
+            <h3 className="calendar-month-title">{MONTH_NAMES[month - 1]} {year}</h3>
+            <div className="calendar-grid">
+              {DOW.map((d) => (
+                <div key={d} className="calendar-dow">{d}</div>
+              ))}
+              {grid.map((cell, idx) => (
+                <div
+                  key={idx}
+                  className={`calendar-day ${!cell.isCurrentMonth ? 'calendar-day-other' : ''} ${cell.dateKey === todayKey ? 'calendar-day-today' : ''} ${cell.raids?.length ? 'calendar-day-has-raids' : ''}`}
+                >
+                  {cell.day != null && <span className="calendar-day-num">{cell.day}</span>}
+                  {cell.raids?.length > 0 && (
+                    <div className="calendar-day-raids">
+                      {cell.raids.slice(0, 3).map((r) => (
+                        <Link key={r.raid_id} to={`/raids/${r.raid_id}`} className="calendar-raid-link" title={r.raid_name || r.raid_id}>
+                          {r.raid_name || r.raid_id}
+                        </Link>
+                      ))}
+                      {cell.raids.length > 3 && <span className="calendar-day-more">+{cell.raids.length - 3}</span>}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+
       <h3 style={{ marginTop: '2rem', marginBottom: '0.5rem', fontSize: '1rem', color: '#a1a1aa' }}>Raids by month</h3>
-      {raidsByMonth.map(({ key, label, raids: monthRaids }) => (
-        <div key={key} className="card" style={{ marginBottom: '1.5rem' }}>
-          <h2 style={{ margin: '0 0 0.75rem 0', fontSize: '1.125rem', fontWeight: 600, color: '#a1a1aa' }}>
-            {label}
-          </h2>
-          <table>
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th>Raid</th>
-                <th>Total DKP</th>
-                <th>Attendees</th>
-              </tr>
-            </thead>
-            <tbody>
-              {monthRaids.map((r) => {
-                const ev = eventsByRaid[String(r.raid_id ?? '').trim()]
-                const totalDkp = ev ? ev.totalDkp : null
-                return (
-                  <tr key={r.raid_id}>
-                    <td>{r.date_iso || r.date || '—'}</td>
-                    <td><Link to={`/raids/${r.raid_id}`}>{r.raid_name || r.raid_id}</Link></td>
-                    <td>{totalDkp != null ? Math.round(Number(totalDkp)) : '—'}</td>
-                    <td>{r.attendees != null && r.attendees !== '' ? Math.round(Number(r.attendees)) : '—'}</td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
-      ))}
+      {raidsByMonth.length === 0 ? (
+        <p style={{ color: '#71717a' }}>No raids in this window.</p>
+      ) : (
+        raidsByMonth.map(({ key, label, raids: monthRaids }) => (
+          <div key={key} className="card" style={{ marginBottom: '1.5rem' }}>
+            <h2 style={{ margin: '0 0 0.75rem 0', fontSize: '1.125rem', fontWeight: 600, color: '#a1a1aa' }}>{label}</h2>
+            <table>
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Raid</th>
+                  <th>Total DKP</th>
+                  <th>Attendees</th>
+                </tr>
+              </thead>
+              <tbody>
+                {monthRaids.map((r) => {
+                  const ev = eventsByRaid[String(r.raid_id ?? '').trim()]
+                  const totalDkp = ev ? ev.totalDkp : null
+                  return (
+                    <tr key={r.raid_id}>
+                      <td>{r.date_iso || r.date || '—'}</td>
+                      <td><Link to={`/raids/${r.raid_id}`}>{r.raid_name || r.raid_id}</Link></td>
+                      <td>{totalDkp != null ? Math.round(Number(totalDkp)) : '—'}</td>
+                      <td>{r.attendees != null && r.attendees !== '' ? Math.round(Number(r.attendees)) : '—'}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        ))
+      )}
     </div>
   )
 }
