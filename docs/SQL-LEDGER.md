@@ -2,9 +2,24 @@
 
 The **Public SQL Ledger** audits the database for changes and displays a **daily delta** on a GitHub Pages site. It provides a transparent, historical record of database state. Because it is hosted on GitHub, it acts as a **root of trust**: even a site admin cannot easily wipe it without leaving a trace (history lives in the repo and in Actions).
 
+## Backup type selection
+
+When you run the SQL Ledger workflow (manually or on schedule), you can choose which backup artifacts to compare:
+
+| Type     | Artifact name pattern              | Default |
+|----------|------------------------------------|--------|
+| **daily**  | `supabase-backup-YYYY-MM-DD`       | Yes (schedule and manual) |
+| **weekly** | `supabase-backup-weekly-YYYY-Www`  | No |
+| **monthly** | `supabase-backup-monthly-YYYY-MM` | No |
+
+- **Scheduled runs** (cron): always use **daily** (two most recent daily backups).
+- **Manual run** (Actions → “SQL Ledger” → Run workflow): use the **“Backup artifact type to compare”** dropdown. Pick **daily**, **weekly**, or **monthly** to compare the two most recent artifacts of that type. Default is **daily**.
+
+The report title and index page show the type and the two backup labels (e.g. `2026-02-15 → 2026-02-18` for daily, `2026-W06 → 2026-W07` for weekly, `2026-01 → 2026-02` for monthly).
+
 ## What is included
 
-- **Daily-to-daily comparison**: the CI compares the two most recent **daily** backup artifacts (from the [DB backup](CI-DB-BACKUP.md) workflow) and generates an HTML report.
+- **Backup-to-backup comparison**: the CI compares the two most recent backup artifacts of the selected type (from the [DB backup](CI-DB-BACKUP.md) workflow) and generates an HTML report. Default is daily-to-daily.
 - **All audited tables** from the schema are included **except**:
   - **`raid_loot`** — loot assignments to character are excluded by design (as requested).
 - Tables that are diffed: `profiles`, `characters`, `accounts`, `character_account`, `raids`, `raid_events`, `raid_attendance`, `raid_event_attendance`, `raid_dkp_totals`, `raid_attendance_dkp`, `raid_classifications`, `dkp_adjustments`, `dkp_summary`, `dkp_period_totals`, `active_raiders`.  
@@ -13,8 +28,8 @@ The **Public SQL Ledger** audits the database for changes and displays a **daily
 ## How it works
 
 1. **DB backup workflow** (`.github/workflows/db-backup.yml`) runs on a schedule and, when data has changed, exports public tables to CSV and uploads a rolling artifact named `supabase-backup-YYYY-MM-DD`.
-2. **SQL Ledger workflow** (`.github/workflows/sql-ledger.yml`) runs daily (after the backup). It:
-   - Lists repository artifacts and picks the **two most recent** daily backup artifact names (matching `supabase-backup-YYYY-MM-DD`).
+2. **SQL Ledger workflow** (`.github/workflows/sql-ledger.yml`) runs daily (after the backup) or on manual trigger. It:
+   - Uses the selected backup type (daily, weekly, or monthly; default daily) and picks the **two most recent** artifact names of that type.
    - Downloads those two artifacts (from their respective workflow runs).
    - Extracts the backup CSVs and runs `scripts/ledger_delta.py` to diff every table (except `raid_loot`).
    - Generates:

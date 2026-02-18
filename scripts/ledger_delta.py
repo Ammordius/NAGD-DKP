@@ -40,6 +40,12 @@ LEDGER_TABLES = [
     "active_raiders",
 ]
 
+# Columns to redact in HTML and JSON output (never display on the delta page).
+REDACT_COLUMNS = frozenset({"email"})
+
+# Rows per page for Added/Removed/Changed tables (client-side paging).
+PAGE_SIZE = 50
+
 # Primary key column(s) per table for row identity (composite = tuple).
 TABLE_KEYS: dict[str, tuple[str, ...]] = {
     "profiles": ("id",),
@@ -111,9 +117,30 @@ def escape(s: str) -> str:
     return html.escape(str(s))
 
 
+def redact_value(col: str, value: str) -> str:
+    """Return display value; redact PII columns."""
+    if not value:
+        return value
+    if col in REDACT_COLUMNS:
+        return "[redacted]"
+    return value
+
+
 def format_row_as_html(row: dict[str, str], columns: list[str]) -> str:
     return "".join(
-        f"<td>{escape(row.get(c, ''))}</td>" for c in columns
+        f"<td>{escape(redact_value(c, row.get(c, '')))}</td>" for c in columns
+    )
+
+
+def _append_pager(html_parts: list[str], total: int, container_id: str) -> None:
+    """Append pager nav and data attrs for JS."""
+    total_pages = max(1, (total + PAGE_SIZE - 1) // PAGE_SIZE)
+    html_parts.append(
+        f'<nav class="pager" data-container="{escape(container_id)}" data-total-pages="{total_pages}" data-total="{total}">'
+        f'<span class="pager-label">Page <strong class="pager-current">1</strong> of {total_pages}</span> '
+        f'<button type="button" class="pager-prev" aria-label="Previous page">Prev</button> '
+        f'<button type="button" class="pager-next" aria-label="Next page">Next</button>'
+        "</nav>"
     )
 
 
@@ -164,6 +191,11 @@ def render_html(
         .no-change { color: var(--muted); font-size: 0.9rem; }
         .back { margin-bottom: 1rem; }
         summary { cursor: pointer; }
+        .pager { margin: 0.5rem 0 1rem; font-size: 0.9rem; }
+        .pager button { margin: 0 0.25rem; padding: 0.25rem 0.5rem; cursor: pointer; background: var(--surface); color: var(--text); border: 1px solid var(--muted); border-radius: 4px; }
+        .pager button:hover:not(:disabled) { background: var(--muted); }
+        .pager button:disabled { opacity: 0.5; cursor: not-allowed; }
+        .ledger-paged { margin-bottom: 1rem; }
         """,
         "</style>",
         "</head>",
@@ -187,57 +219,94 @@ def render_html(
             f"<span class='badge badge-chg'>{len(changed)} changed</span></p>"
         )
 
-        # Collect all columns used
-        all_cols: list[str] = []
+        # Collect all columns used (exclude redacted so they are not displayed at all)
+        all_cols_raw: list[str] = []
         for row in added + removed:
             for c in row:
-                if c not in all_cols:
-                    all_cols.append(c)
+                if c not in all_cols_raw:
+                    all_cols_raw.append(c)
         for c in (changed or []):
             for k in c.get("old", {}).keys() | c.get("new", {}).keys():
-                if k not in all_cols:
-                    all_cols.append(k)
-        if not all_cols and changed:
-            all_cols = list(changed[0]["old"].keys()) if changed else []
+                if k not in all_cols_raw:
+                    all_cols_raw.append(k)
+        if not all_cols_raw and changed:
+            all_cols_raw = list(changed[0]["old"].keys()) if changed else []
+        all_cols = [c for c in all_cols_raw if c not in REDACT_COLUMNS]
 
+        table_id = escape(table).replace(" ", "_")
         if added:
             html_parts.append("<h3>Added</h3>")
+            html_parts.append(f'<div class="ledger-paged" data-page-size="{PAGE_SIZE}" id="paged-{table_id}-added">')
             html_parts.append("<table><thead><tr>")
             html_parts.append("".join(f"<th>{escape(c)}</th>" for c in all_cols))
             html_parts.append("</tr></thead><tbody>")
-            for row in added[:200]:  # cap for huge tables
-                html_parts.append(f"<tr class='added'>{format_row_as_html(row, all_cols)}</tr>")
-            if len(added) > 200:
-                html_parts.append(f"<tr><td colspan='{len(all_cols)}' class='no-change'>… and {len(added) - 200} more</td></tr>")
+            for i, row in enumerate(added):
+                p = i // PAGE_SIZE
+                html_parts.append(f"<tr class='added ledger-row' data-page='{p}'>{format_row_as_html(row, all_cols)}</tr>")
             html_parts.append("</tbody></table>")
+            _append_pager(html_parts, len(added), f"paged-{table_id}-added")
+            html_parts.append("</div>")
 
         if removed:
             html_parts.append("<h3>Removed</h3>")
+            html_parts.append(f'<div class="ledger-paged" data-page-size="{PAGE_SIZE}" id="paged-{table_id}-removed">')
             html_parts.append("<table><thead><tr>")
             html_parts.append("".join(f"<th>{escape(c)}</th>" for c in all_cols))
             html_parts.append("</tr></thead><tbody>")
-            for row in removed[:200]:
-                html_parts.append(f"<tr class='removed'>{format_row_as_html(row, all_cols)}</tr>")
-            if len(removed) > 200:
-                html_parts.append(f"<tr><td colspan='{len(all_cols)}' class='no-change'>… and {len(removed) - 200} more</td></tr>")
+            for i, row in enumerate(removed):
+                p = i // PAGE_SIZE
+                html_parts.append(f"<tr class='removed ledger-row' data-page='{p}'>{format_row_as_html(row, all_cols)}</tr>")
             html_parts.append("</tbody></table>")
+            _append_pager(html_parts, len(removed), f"paged-{table_id}-removed")
+            html_parts.append("</div>")
 
         if changed:
             html_parts.append("<h3>Changed</h3>")
+            html_parts.append(f'<div class="ledger-paged" data-page-size="{PAGE_SIZE}" id="paged-{table_id}-changed">')
             html_parts.append("<table><thead><tr><th>Field</th><th>Old</th><th>New</th></tr></thead><tbody>")
-            for item in changed[:100]:
+            for i, item in enumerate(changed):
                 old_r, new_r = item["old"], item["new"]
+                p = i // PAGE_SIZE
                 for col in all_cols:
                     ov, nv = old_r.get(col, ""), new_r.get(col, "")
                     if ov != nv:
+                        rov, rnv = redact_value(col, ov), redact_value(col, nv)
                         html_parts.append(
-                            f"<tr class='changed-old'><td>{escape(col)}</td><td>{escape(ov)}</td><td class='changed-new'>{escape(nv)}</td></tr>"
+                            f"<tr class='changed-old ledger-row' data-item-index='{i}' data-page='{p}'><td>{escape(col)}</td><td>{escape(rov)}</td><td class='changed-new'>{escape(rnv)}</td></tr>"
                         )
-            if len(changed) > 100:
-                html_parts.append(f"<tr><td colspan='3'>… and {len(changed) - 100} more changed rows</td></tr>")
             html_parts.append("</tbody></table>")
+            _append_pager(html_parts, len(changed), f"paged-{table_id}-changed")
+            html_parts.append("</div>")
 
-    html_parts.append("</body></html>")
+    html_parts.append("""
+<script>
+(function() {
+  var PAGE_SIZE = """ + str(PAGE_SIZE) + """;
+  document.querySelectorAll('.ledger-paged').forEach(function(block) {
+    var rows = block.querySelectorAll('.ledger-row');
+    var nav = block.querySelector('.pager');
+    if (!nav || !rows.length) return;
+    var totalPages = parseInt(nav.dataset.totalPages, 10) || 1;
+    var current = 0;
+    var curEl = nav.querySelector('.pager-current');
+    var prevBtn = nav.querySelector('.pager-prev');
+    var nextBtn = nav.querySelector('.pager-next');
+    function showPage(p) {
+      current = Math.max(0, Math.min(p, totalPages - 1));
+      rows.forEach(function(tr) {
+        tr.style.display = parseInt(tr.dataset.page, 10) === current ? '' : 'none';
+      });
+      if (curEl) curEl.textContent = current + 1;
+      if (prevBtn) prevBtn.disabled = current <= 0;
+      if (nextBtn) nextBtn.disabled = current >= totalPages - 1;
+    }
+    if (prevBtn) prevBtn.addEventListener('click', function() { showPage(current - 1); });
+    if (nextBtn) nextBtn.addEventListener('click', function() { showPage(current + 1); });
+    showPage(0);
+  });
+})();
+</script>
+</body></html>""")
 
     with open(out_path, "w", encoding="utf-8") as f:
         f.write("\n".join(html_parts))
@@ -267,16 +336,26 @@ def main() -> int:
 
     delta = diff_tables(args.old, args.new)
 
-    # JSON: make serializable (no dicts with non-string keys in lists)
+    def _redact_row(row: dict) -> dict:
+        return {c: "[redacted]" if c in REDACT_COLUMNS and row.get(c) else row.get(c, "") for c in row}
+
     def _serialize(d: dict) -> dict:
         out = {}
         for k, v in d.items():
-            if isinstance(v, list):
+            if not isinstance(v, dict):
                 out[k] = v
-            elif isinstance(v, dict):
-                out[k] = _serialize(v)
-            else:
-                out[k] = v
+                continue
+            out[k] = {}
+            for section, rows in v.items():
+                if section == "changed":
+                    out[k][section] = [
+                        {"key": x["key"], "old": _redact_row(x["old"]), "new": _redact_row(x["new"])}
+                        for x in rows
+                    ]
+                elif section in ("added", "removed") and isinstance(rows, list):
+                    out[k][section] = [_redact_row(r) for r in rows]
+                else:
+                    out[k][section] = rows
         return out
 
     if args.json:
