@@ -42,7 +42,7 @@ export default function DkpChangelog({ isOfficer }) {
     <div className="container">
       <h1>DKP changelog</h1>
       <p style={{ color: '#a1a1aa', marginBottom: '1rem' }}>
-        Who made which sensitive changes: add raid, manual DKP edits. Officer-only. <Link to="/officer">← Officer</Link>
+        Who made which sensitive changes: add/delete raid, tics, loot, manual DKP edits. Officer-only. <Link to="/officer">← Officer</Link>
       </p>
       <div style={{ overflowX: 'auto' }}>
         <table>
@@ -70,6 +70,7 @@ export default function DkpChangelog({ isOfficer }) {
                 add_attendee_to_tic: 'Add player to tic',
                 remove_attendee_from_tic: 'Remove player from tic',
                 delete_event: 'Delete tic',
+                raid_deleted: 'Raid deleted',
                 add_loot: 'Add loot',
                 add_loot_from_log: 'Add loot from log',
                 delete_loot: 'Delete loot',
@@ -94,7 +95,8 @@ export default function DkpChangelog({ isOfficer }) {
                 else if (entry.action === 'add_loot_from_log' && d.cnt != null) details = `${d.cnt} item(s)`
                 else if (entry.action === 'delete_loot' && d.i) details = `${d.i} (${d.c})`
                 else if (entry.action === 'edit_event_dkp' && d.v != null) details = `DKP: ${d.v}`
-                else if (entry.action === 'edit_loot_cost' && d.c != null) details = `Cost: ${d.c}`
+                else if (entry.action === 'edit_loot_cost' && d.c != null) details = d.i ? `${d.i}: ${d.c} DKP` : `Cost: ${d.c}`
+                else if (entry.action === 'raid_deleted' && d.n != null) details = `Raid: ${d.n}`
                 else if (d.n) details = `Raid: ${d.n}`
                 else if (d.v != null) details = `DKP: ${d.v}`
                 else if (d.t != null) details = `Time: ${d.t}`

@@ -287,7 +287,7 @@ export default function RaidDetail({ isOfficer }) {
         action: 'edit_loot_cost',
         target_type: 'raid_loot',
         target_id: String(row.id),
-        delta: { r: raidId, l: row.id, c: val },
+        delta: { r: raidId, l: row.id, i: row.item_name, c: val },
       })
       setEditingLootId(null)
       mutate()

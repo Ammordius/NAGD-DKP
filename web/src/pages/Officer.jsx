@@ -775,12 +775,19 @@ export default function Officer({ isOfficer }) {
     }
     setMutating(true)
     setDeleteError('')
+    const raidName = raid?.raid_name ?? selectedRaidId
     const { error: err } = await supabase.rpc('delete_raid', { p_raid_id: selectedRaidId })
     if (err) {
       setDeleteError(err.message)
       setMutating(false)
       return
     }
+    await logOfficerAudit(supabase, {
+      action: 'raid_deleted',
+      target_type: 'raid',
+      target_id: selectedRaidId,
+      delta: { r: selectedRaidId, n: raidName },
+    })
     setSelectedRaidId('')
     setDeleteConfirm('')
     await loadRaids()
@@ -837,7 +844,7 @@ export default function Officer({ isOfficer }) {
         action: 'edit_loot_cost',
         target_type: 'raid_loot',
         target_id: String(row.id),
-        delta: { r: selectedRaidId, l: row.id, c: val },
+        delta: { r: selectedRaidId, l: row.id, i: row.item_name, c: val },
       })
       setEditingLootId(null)
       loadSelectedRaid()
