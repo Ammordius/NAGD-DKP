@@ -53,8 +53,9 @@ function parseChannelList(paste) {
 
 /**
  * Parse loot log by matching against known character names and item names.
- * - Look for character names (tied to account/DKP list) that appear in the line.
  * - Look for any loot item that appears in the line (DKP raid_loot or JSON loot list); longest match wins.
+ * - Look for character names only in the line AFTER removing the matched item text, so item names
+ *   like "Tiny Jade Ring" do not match the character "Jade".
  * - Look for number + "dkp" for cost (default 0).
  * Returns per-line: { rawLine, itemName, characterNames[], cost, hasDkp }.
  * 3 matches → add; 1 or 2 matches → report what's missing.
@@ -68,7 +69,6 @@ function parseLootLogByMatch(paste, characterNamesList, itemNamesList) {
     const quoted = (line.match(/'([^']+)'/)?.[1] || line).trim()
     if (!quoted) continue
     const lower = quoted.toLowerCase()
-    const characterNames = chars.filter((name) => name && lower.includes(name.toLowerCase()))
     let itemName = ''
     for (const name of items) {
       if (name && lower.includes(name.toLowerCase())) {
@@ -76,6 +76,13 @@ function parseLootLogByMatch(paste, characterNamesList, itemNamesList) {
         break
       }
     }
+    // Match character names only in the line with the item name removed, so "Tiny Jade Ring" doesn't match character "Jade"
+    const itemIndex = itemName ? lower.indexOf(itemName.toLowerCase()) : -1
+    const lineWithoutItem = itemIndex >= 0
+      ? (quoted.slice(0, itemIndex) + quoted.slice(itemIndex + itemName.length)).trim()
+      : quoted
+    const lowerWithoutItem = lineWithoutItem.toLowerCase()
+    const characterNames = chars.filter((name) => name && lowerWithoutItem.includes(name.toLowerCase()))
     const dkpMatch = quoted.match(/(\d+)\s*dkp/i)
     const cost = dkpMatch ? parseInt(dkpMatch[1], 10) : 0
     const hasDkp = !!dkpMatch
