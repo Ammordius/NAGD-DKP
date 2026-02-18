@@ -85,6 +85,7 @@ export default function AccountDetail({ isOfficer, profile, session }) {
   const [savingLootId, setSavingLootId] = useState(null)
   const [lootAssignError, setLootAssignError] = useState('')
   const [mobLoot, setMobLoot] = useState(null)
+  const [dkpAdjustments, setDkpAdjustments] = useState([])
 
   useEffect(() => {
     getDkpMobLoot().then(setMobLoot)
@@ -114,7 +115,11 @@ export default function AccountDetail({ isOfficer, profile, session }) {
         return
       }
       setAccount(accRes.data)
-      supabase.from('character_account').select('char_id').eq('account_id', accountId).then((caRes) => {
+      Promise.all([
+        supabase.from('character_account').select('char_id').eq('account_id', accountId),
+        supabase.from('dkp_adjustments').select('character_name, earned_delta, spent_delta'),
+      ]).then(([caRes, adjRes]) => {
+        setDkpAdjustments(adjRes.data || [])
         const charIds = (caRes.data || []).map((r) => r.char_id).filter(Boolean)
         if (charIds.length === 0) {
           setCharacters([])
@@ -228,8 +233,15 @@ export default function AccountDetail({ isOfficer, profile, session }) {
       earned += Number(act.dkpEarned ?? 0) || 0
       ;(act.items || []).forEach((row) => { spent += Number(row.cost) || 0 })
     })
+    const charNames = new Set((characters || []).map((c) => (c.name || '').trim().toLowerCase()).filter(Boolean))
+    ;(dkpAdjustments || []).forEach((row) => {
+      const n = (row.character_name || '').trim()
+      if (!n || !charNames.has(n.toLowerCase())) return
+      earned += Number(row.earned_delta) || 0
+      spent += Number(row.spent_delta) || 0
+    })
     return earned - spent
-  }, [activityByRaid])
+  }, [activityByRaid, characters, dkpAdjustments])
 
   async function handleClaimAccount() {
     const { data: { user } } = await supabase.auth.getUser()
