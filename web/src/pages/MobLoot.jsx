@@ -36,6 +36,18 @@ const PLANE_OF_TIME_MOB_ORDER = [
 ]
 const POT_ORDER_MAP = new Map(PLANE_OF_TIME_MOB_ORDER.map((name, i) => [name.toLowerCase().replace(/\s+/g, '_'), i]))
 
+/** Force specific mobs to the correct zone (overrides JSON/raid inference when wrong). */
+const MOB_ZONE_OVERRIDES = {
+  'a_monsterous_mudwalker': 'Plane of Earth',
+  'a_mystical_arbitor_of_earth': 'Plane of Earth',
+  'a_perfected_warder_of_earth': 'Plane of Earth',
+  'peregrin_rockskull': 'Plane of Earth',
+  'tribal_leader_diseranon': 'Plane of Earth',
+  'avatar_of_earth': 'Tower of Solusek Ro',
+  'the_protector_of_dresolik': 'Tower of Solusek Ro',
+  'rizlona': 'Tower of Solusek Ro',
+}
+
 function mobSortKeyForPlaneOfTime(entry) {
   const names = (entry.mobs && entry.mobs.length) ? entry.mobs : [entry.mob]
   const normalized = names.map((n) => (n || '').replace(/^#/, '').trim().toLowerCase().replace(/\s+/g, '_'))
@@ -229,6 +241,10 @@ export default function MobLoot() {
     return entries.map((e) => {
       const fromJson = (e.zone || '').trim()
       const mobKeys = e.mobs?.length ? e.mobs : [e.mob]
+      const overrideKey = mobKeys.map((m) => (m || '').replace(/^#/, '').trim().toLowerCase().replace(/\s+/g, '_')).find((k) => MOB_ZONE_OVERRIDES[k])
+      if (overrideKey) {
+        return { ...e, displayZone: MOB_ZONE_OVERRIDES[overrideKey] }
+      }
       const fromRaids = mobKeys.map((m) => mobZoneFromRaids[normalizeMobKey(m)]).find(Boolean)
       let displayZone = fromJson || fromRaids || 'Other / Unknown'
       const isAvatarOfWar = mobKeys.some((m) => /avatar\s*of\s*war|avatar_of_war/i.test((m || '').replace(/^#/, '')))
