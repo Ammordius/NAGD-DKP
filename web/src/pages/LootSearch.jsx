@@ -24,6 +24,14 @@ function buildItemIdMap(mobLoot) {
 const LOOT_CACHE_KEY = 'loot_search_cache_v3' // v3: includes assigned_char_id, assigned_character_name
 const CACHE_TTL_MS = 30 * 60 * 1000 // 30 minutes
 
+// Prevent grid cells from overflowing into adjacent rows/columns
+const cellStyle = {
+  minWidth: 0,
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
+}
+
 // Normalize mob name for comparison (strip # and trim, lowercase)
 function normMob(m) {
   return (m || '').replace(/^#/, '').trim().toLowerCase()
@@ -98,12 +106,11 @@ export default function LootSearch() {
   const { getAccountId, getAccountDisplayName } = useCharToAccountMap()
   const [loot, setLoot] = useState([])
   const [raids, setRaids] = useState({})
-  const [classifications, setClassifications] = useState({})
   const [raidToMobs, setRaidToMobs] = useState({})
   const [itemSources, setItemSources] = useState(null)
   const [mobLoot, setMobLoot] = useState(null)
   const [itemQuery, setItemQuery] = useState('')
-  const [mobFilter, setMobFilter] = useState('')
+  const [sortBy, setSortBy] = useState('date')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -183,26 +190,17 @@ export default function LootSearch() {
     }
     run()
     supabase.from('raid_classifications').select('raid_id, mob').limit(50000).then(({ data }) => {
-      const raidByMob = {}
       const raidToMobsMap = {}
       ;(data || []).forEach((row) => {
-        if (!raidByMob[row.mob]) raidByMob[row.mob] = []
-        if (!raidByMob[row.mob].includes(row.raid_id)) raidByMob[row.mob].push(row.raid_id)
         if (!raidToMobsMap[row.raid_id]) raidToMobsMap[row.raid_id] = []
         if (!raidToMobsMap[row.raid_id].includes(row.mob)) raidToMobsMap[row.raid_id].push(row.mob)
       })
-      setClassifications(raidByMob)
       setRaidToMobs(raidToMobsMap)
     })
     getItemSources()
       .then((json) => setItemSources(json || null))
       .catch(() => setItemSources(null))
   }, [])
-
-  const mobOptions = useMemo(() => {
-    const mobs = Object.keys(classifications).filter((m) => m).sort()
-    return mobs.map((m) => ({ value: m, label: m.replace(/^#/, '') }))
-  }, [classifications])
 
   const itemIdMap = useMemo(() => buildItemIdMap(mobLoot), [mobLoot])
 
@@ -212,17 +210,27 @@ export default function LootSearch() {
     if (q) {
       list = list.filter((row) => (row.item_name || '').toLowerCase().includes(q))
     }
-    if (mobFilter) {
-      const raidIds = classifications[mobFilter]
-      if (raidIds && raidIds.length) {
-        const set = new Set(raidIds)
-        list = list.filter((row) => set.has(row.raid_id))
+    const dateIso = (raidId) => (raids[raidId]?.date_iso && String(raids[raidId].date_iso).trim()) ? String(raids[raidId].date_iso).slice(0, 10) : ''
+    const cmp = (a, b) => {
+      switch (sortBy) {
+        case 'item':
+          return (a.item_name || '').localeCompare(b.item_name || '')
+        case 'cost': {
+          const ca = a.cost != null ? Number(a.cost) : -1
+          const cb = b.cost != null ? Number(b.cost) : -1
+          return ca - cb
+        }
+        case 'buyer':
+          return (a.character_name || a.char_id || '').localeCompare(b.character_name || b.char_id || '')
+        case 'toon':
+          return (a.assigned_character_name || a.assigned_char_id || '').localeCompare(b.assigned_character_name || b.assigned_char_id || '')
+        case 'date':
+        default:
+          return (dateIso(b.raid_id) || '').localeCompare(dateIso(a.raid_id) || '')
       }
     }
-    const dateIso = (raidId) => (raids[raidId]?.date_iso && String(raids[raidId].date_iso).trim()) ? String(raids[raidId].date_iso).slice(0, 10) : ''
-    list = [...list].sort((a, b) => (dateIso(b.raid_id) || '').localeCompare(dateIso(a.raid_id) || ''))
-    return list
-  }, [loot, itemQuery, mobFilter, classifications, raids])
+    return [...list].sort(cmp)
+  }, [loot, itemQuery, sortBy, raids])
 
   const parentRef = useRef(null)
   const ROW_HEIGHT = 40
@@ -233,6 +241,7 @@ export default function LootSearch() {
     overscan: 10,
   })
 
+  const baseCell = { ...cellStyle, padding: '0.5rem 0.75rem', borderBottom: '1px solid var(--border, #27272a)' }
   const renderRow = (row, i) => {
     const dateStr = (raids[row.raid_id]?.date_iso && String(raids[row.raid_id].date_iso).trim()) ? String(raids[row.raid_id].date_iso).slice(0, 10) : (raids[row.raid_id]?.date || '—')
     const charName = row.character_name || row.char_id || '—'
@@ -242,19 +251,19 @@ export default function LootSearch() {
     const to = accountId ? `/accounts/${accountId}` : `/characters/${encodeURIComponent(charName)}`
     return (
       <>
-        <div style={{ color: '#a1a1aa', fontSize: '0.875rem', padding: '0.5rem 0.75rem', borderBottom: '1px solid var(--border, #27272a)' }}>{dateStr}</div>
-        <div style={{ padding: '0.5rem 0.75rem', borderBottom: '1px solid var(--border, #27272a)' }}><ItemLink itemName={row.item_name || ''} itemId={itemIdMap[(row.item_name || '').trim().toLowerCase()]}>{row.item_name || '—'}</ItemLink></div>
-        <div style={{ padding: '0.5rem 0.75rem', borderBottom: '1px solid var(--border, #27272a)' }}>{row.cost ?? '—'}</div>
-        <div style={{ padding: '0.5rem 0.75rem', borderBottom: '1px solid var(--border, #27272a)' }}><Link to={to}>{label}</Link></div>
-        <div style={{ color: '#a1a1aa', fontSize: '0.875rem', padding: '0.5rem 0.75rem', borderBottom: '1px solid var(--border, #27272a)' }}>
+        <div className="loot-cell" style={{ ...baseCell, color: '#a1a1aa', fontSize: '0.875rem' }} title={dateStr}>{dateStr}</div>
+        <div className="loot-cell" style={baseCell} title={row.item_name || ''}><ItemLink itemName={row.item_name || ''} itemId={itemIdMap[(row.item_name || '').trim().toLowerCase()]}>{row.item_name || '—'}</ItemLink></div>
+        <div className="loot-cell" style={baseCell}>{row.cost ?? '—'}</div>
+        <div className="loot-cell" style={baseCell} title={label}><Link to={to}>{label}</Link></div>
+        <div className="loot-cell" style={{ ...baseCell, color: '#a1a1aa', fontSize: '0.875rem' }} title={row.assigned_character_name || row.assigned_char_id || 'Unassigned'}>
           {(row.assigned_character_name || row.assigned_char_id) ? (
             <Link to={`/characters/${encodeURIComponent(row.assigned_character_name || row.assigned_char_id)}`}>{row.assigned_character_name || row.assigned_char_id}</Link>
           ) : (
             <span style={{ color: '#71717a' }}>Unassigned</span>
           )}
         </div>
-        <div style={{ padding: '0.5rem 0.75rem', borderBottom: '1px solid var(--border, #27272a)' }}><Link to={`/raids/${row.raid_id}`}>{raids[row.raid_id]?.name ?? row.raid_id}</Link></div>
-        <div style={{ color: '#a1a1aa', fontSize: '0.875rem', padding: '0.5rem 0.75rem', borderBottom: '1px solid var(--border, #27272a)' }}>
+        <div className="loot-cell" style={baseCell} title={raids[row.raid_id]?.name ?? row.raid_id}><Link to={`/raids/${row.raid_id}`}>{raids[row.raid_id]?.name ?? row.raid_id}</Link></div>
+        <div className="loot-cell" style={{ ...baseCell, color: '#a1a1aa', fontSize: '0.875rem' }} title={itemSourceLabel(itemSources, row.item_name, row.raid_id, raids[row.raid_id]?.name, raidToMobs) ?? ''}>
           {itemSourceLabel(itemSources, row.item_name, row.raid_id, raids[row.raid_id]?.name, raidToMobs) ?? '—'}
         </div>
       </>
@@ -268,9 +277,9 @@ export default function LootSearch() {
 
   return (
     <div className="container">
-      <h1>Loot &amp; DKP by item or raid type</h1>
+      <h1>Loot &amp; DKP by item</h1>
       <p style={{ color: '#71717a', marginBottom: '1rem' }}>
-        Search by exact item name or filter by raid type (mobs we killed). Shows cost (DKP spent) per row.
+        Search by item name. Cost is DKP spent per row. Hover truncated cells for full text.
       </p>
       <div className="search-bar">
         <label>
@@ -284,17 +293,18 @@ export default function LootSearch() {
           />
         </label>
         <label>
-          <span style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.875rem', color: '#a1a1aa' }}>Raid type (mob)</span>
+          <span style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.875rem', color: '#a1a1aa' }}>Sort by</span>
           <select
             className="filter-select"
-            value={mobFilter}
-            onChange={(e) => setMobFilter(e.target.value)}
-            aria-label="Filter by raid type"
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value)}
+            aria-label="Sort by"
           >
-            <option value="">All raids</option>
-            {mobOptions.map((opt) => (
-              <option key={opt.value} value={opt.value}>{opt.label}</option>
-            ))}
+            <option value="date">Date (newest first)</option>
+            <option value="item">Item</option>
+            <option value="cost">Cost</option>
+            <option value="buyer">Buyer</option>
+            <option value="toon">On toon</option>
           </select>
         </label>
       </div>
@@ -305,13 +315,13 @@ export default function LootSearch() {
       <div className="card">
         <div style={{ overflowX: 'auto' }}>
           <div style={gridStyle} role="row" aria-rowindex={0}>
-            <div style={{ padding: '0.5rem 0.75rem', fontWeight: 600, borderBottom: '1px solid var(--border, #27272a)', background: 'var(--card-bg, #18181b)' }}>Date</div>
-            <div style={{ padding: '0.5rem 0.75rem', fontWeight: 600, borderBottom: '1px solid var(--border, #27272a)', background: 'var(--card-bg, #18181b)' }}>Item</div>
-            <div style={{ padding: '0.5rem 0.75rem', fontWeight: 600, borderBottom: '1px solid var(--border, #27272a)', background: 'var(--card-bg, #18181b)' }}>Cost</div>
-            <div style={{ padding: '0.5rem 0.75rem', fontWeight: 600, borderBottom: '1px solid var(--border, #27272a)', background: 'var(--card-bg, #18181b)' }}>Buyer</div>
-            <div style={{ padding: '0.5rem 0.75rem', fontWeight: 600, borderBottom: '1px solid var(--border, #27272a)', background: 'var(--card-bg, #18181b)' }}>On toon</div>
-            <div style={{ padding: '0.5rem 0.75rem', fontWeight: 600, borderBottom: '1px solid var(--border, #27272a)', background: 'var(--card-bg, #18181b)' }}>Raid</div>
-            <div style={{ padding: '0.5rem 0.75rem', fontWeight: 600, borderBottom: '1px solid var(--border, #27272a)', background: 'var(--card-bg, #18181b)' }}>Drops from</div>
+            <div className="loot-cell" style={{ ...cellStyle, padding: '0.5rem 0.75rem', fontWeight: 600, borderBottom: '1px solid var(--border, #27272a)', background: 'var(--card-bg, #18181b)' }}>Date</div>
+            <div className="loot-cell" style={{ ...cellStyle, padding: '0.5rem 0.75rem', fontWeight: 600, borderBottom: '1px solid var(--border, #27272a)', background: 'var(--card-bg, #18181b)' }}>Item</div>
+            <div className="loot-cell" style={{ ...cellStyle, padding: '0.5rem 0.75rem', fontWeight: 600, borderBottom: '1px solid var(--border, #27272a)', background: 'var(--card-bg, #18181b)' }}>Cost</div>
+            <div className="loot-cell" style={{ ...cellStyle, padding: '0.5rem 0.75rem', fontWeight: 600, borderBottom: '1px solid var(--border, #27272a)', background: 'var(--card-bg, #18181b)' }}>Buyer</div>
+            <div className="loot-cell" style={{ ...cellStyle, padding: '0.5rem 0.75rem', fontWeight: 600, borderBottom: '1px solid var(--border, #27272a)', background: 'var(--card-bg, #18181b)' }}>On toon</div>
+            <div className="loot-cell" style={{ ...cellStyle, padding: '0.5rem 0.75rem', fontWeight: 600, borderBottom: '1px solid var(--border, #27272a)', background: 'var(--card-bg, #18181b)' }}>Raid</div>
+            <div className="loot-cell" style={{ ...cellStyle, padding: '0.5rem 0.75rem', fontWeight: 600, borderBottom: '1px solid var(--border, #27272a)', background: 'var(--card-bg, #18181b)' }}>Drops from</div>
           </div>
           <div
             ref={parentRef}
