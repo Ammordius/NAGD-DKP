@@ -66,6 +66,27 @@ function isActiveRow(r, activeKeysSet, cutoffDate) {
   return d >= cutoffDate
 }
 
+/** Merge duplicate character rows (same character_key) so adjustments are applied only once per character. */
+function dedupeByCharacterKey(list) {
+  const byKey = {}
+  list.forEach((r) => {
+    const key = String(r.char_id ?? r.name ?? '')
+    if (!byKey[key]) {
+      byKey[key] = { ...r }
+      return
+    }
+    const m = byKey[key]
+    m.earned += r.earned
+    m.spent += r.spent
+    m.earned_30d += r.earned_30d ?? 0
+    m.earned_60d += r.earned_60d ?? 0
+    if (r.last_activity_date && (!m.last_activity_date || (r.last_activity_date > m.last_activity_date))) {
+      m.last_activity_date = r.last_activity_date
+    }
+  })
+  return Object.values(byKey)
+}
+
 /** Process /api/get-dkp response into leaderboard list and account list. */
 function processApiPayload(payload, buildAccountLeaderboard) {
   if (!payload?.dkp_summary?.length) return null
@@ -91,6 +112,7 @@ function processApiPayload(payload, buildAccountLeaderboard) {
     earned_60d: Math.round(Number(r.earned_60d) || 0),
     last_activity_date: r.last_activity_date || null,
   }))
+  list = dedupeByCharacterKey(list)
   list = list.filter((r) => isActiveRow(r, activeSet, cutoff))
   applyAdjustmentsAndBalance(list, adjustmentsMap)
   const caData = payload.character_account ?? []
