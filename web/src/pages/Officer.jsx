@@ -257,11 +257,30 @@ export default function Officer({ isOfficer }) {
     setLoading(true)
     setError('')
     await loadRaids()
-    const charsRes = await supabase.from('characters').select('char_id, name').limit(5000)
-    if (charsRes.data) setCharacters(charsRes.data)
-    const caRes = await supabase.from('character_account').select('char_id, account_id').limit(10000)
+    // Load all characters (paginate so newly added / account-linked characters are never excluded)
+    const allChars = []
+    let charFrom = 0
+    const charPageSize = 1000
+    while (true) {
+      const { data: charPage } = await supabase.from('characters').select('char_id, name').range(charFrom, charFrom + charPageSize - 1)
+      if (!charPage?.length) break
+      allChars.push(...charPage)
+      if (charPage.length < charPageSize) break
+      charFrom += charPageSize
+    }
+    setCharacters(allChars)
+    const allCa = []
+    let caFrom = 0
+    const caPageSize = 1000
+    while (true) {
+      const { data: caPage } = await supabase.from('character_account').select('char_id, account_id').range(caFrom, caFrom + caPageSize - 1)
+      if (!caPage?.length) break
+      allCa.push(...caPage)
+      if (caPage.length < caPageSize) break
+      caFrom += caPageSize
+    }
     const map = {}
-    ;(caRes.data || []).forEach((r) => {
+    allCa.forEach((r) => {
       if (r.char_id && r.account_id && map[r.char_id] == null) map[r.char_id] = r.account_id
     })
     setCharIdToAccountId(map)
