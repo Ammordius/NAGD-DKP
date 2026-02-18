@@ -15,6 +15,7 @@ import ItemPage from './pages/ItemPage'
 import CharacterPage from './pages/CharacterPage'
 import LootRecipients from './pages/LootRecipients'
 import Officer from './pages/Officer'
+import DkpChangelog from './pages/DkpChangelog'
 import Profile from './pages/Profile'
 
 export default function App() {
@@ -67,6 +68,7 @@ export default function App() {
           <>
             <a href="/profile">Profile</a>
             {isOfficer && <a href="/officer" style={{ color: '#fbbf24' }}>Officer</a>}
+            {isOfficer && <a href="/officer/dkp-changelog">DKP changelog</a>}
             <span className="role">{profile?.role === 'officer' ? 'Officer' : 'Player'}</span>
             <button
               className="btn btn-ghost"
@@ -86,6 +88,7 @@ export default function App() {
         <Route path="/raids/:raidId" element={<RaidDetail isOfficer={isOfficer} />} />
         <Route path="/dkp" element={<DKP isOfficer={isOfficer} />} />
         <Route path="/officer" element={session ? <Officer isOfficer={isOfficer} /> : <Navigate to="/login?redirect=%2Fofficer" replace />} />
+        <Route path="/officer/dkp-changelog" element={session ? <DkpChangelog isOfficer={isOfficer} /> : <Navigate to="/login?redirect=%2Fofficer%2Fdkp-changelog" replace />} />
         <Route path="/loot" element={<LootSearch />} />
         <Route path="/loot-recipients" element={<LootRecipients />} />
         <Route path="/mobs" element={<MobLoot />} />
