@@ -66,6 +66,13 @@ export default function DkpChangelog({ isOfficer }) {
               const who = (entry.actor_display_name || '').trim() || (entry.actor_email || '').trim() || entry.actor_id || '—'
               const actionLabel = {
                 add_raid: 'Add raid',
+                add_tic: 'Add tic',
+                add_attendee_to_tic: 'Add player to tic',
+                remove_attendee_from_tic: 'Remove player from tic',
+                delete_event: 'Delete tic',
+                add_loot: 'Add loot',
+                add_loot_from_log: 'Add loot from log',
+                delete_loot: 'Delete loot',
                 edit_event_dkp: 'Edit event DKP',
                 edit_event_time: 'Edit event time',
                 edit_loot_cost: 'Edit loot cost',
@@ -79,10 +86,19 @@ export default function DkpChangelog({ isOfficer }) {
               const d = entry.delta
               let details = '—'
               if (d && typeof d === 'object') {
-                if (d.n) details = `Raid: ${d.n}`
+                if (d.n != null && entry.action === 'add_raid') details = `Raid: ${d.n}`
+                else if (entry.action === 'add_tic' && d.n != null) details = `${d.n} attendee(s), ${d.v} DKP`
+                else if (entry.action === 'add_attendee_to_tic' && d.c) details = d.c
+                else if (entry.action === 'remove_attendee_from_tic' && d.c) details = d.c
+                else if (entry.action === 'add_loot' && d.i) details = `${d.i} → ${d.c} (${d.cost} DKP)`
+                else if (entry.action === 'add_loot_from_log' && d.cnt != null) details = `${d.cnt} item(s)`
+                else if (entry.action === 'delete_loot' && d.i) details = `${d.i} (${d.c})`
+                else if (entry.action === 'edit_event_dkp' && d.v != null) details = `DKP: ${d.v}`
+                else if (entry.action === 'edit_loot_cost' && d.c != null) details = `Cost: ${d.c}`
+                else if (d.n) details = `Raid: ${d.n}`
                 else if (d.v != null) details = `DKP: ${d.v}`
-                else if (d.c != null) details = `Cost: ${d.c}`
                 else if (d.t != null) details = `Time: ${d.t}`
+                else if (d.c != null) details = String(d.c)
                 else details = Object.entries(d).map(([k, v]) => `${k}=${v}`).join(', ')
               }
               return (

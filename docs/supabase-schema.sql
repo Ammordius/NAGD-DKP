@@ -160,7 +160,7 @@ CREATE TABLE IF NOT EXISTS officer_audit_log (
   delta JSONB
 );
 ALTER TABLE officer_audit_log ADD COLUMN IF NOT EXISTS actor_display_name TEXT;
-COMMENT ON TABLE officer_audit_log IS 'Audit trail for officer actions: add_raid, edit_event_dkp, edit_event_time, edit_loot_cost. Delta is minimal (short keys) to limit storage and egress.';
+COMMENT ON TABLE officer_audit_log IS 'Audit trail for officer actions: add_raid, add_tic, delete_event, add_loot, add_loot_from_log, delete_loot, add_attendee_to_tic, remove_attendee_from_tic, edit_event_dkp, edit_event_time, edit_loot_cost. Delta is minimal (short keys) to limit storage and egress.';
 
 -- Add new columns if upgrading from an older schema (no-op if already present)
 ALTER TABLE dkp_summary ADD COLUMN IF NOT EXISTS last_activity_date DATE;

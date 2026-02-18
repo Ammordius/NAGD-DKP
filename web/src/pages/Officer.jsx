@@ -422,6 +422,12 @@ export default function Officer({ isOfficer }) {
       setMutating(false)
       return
     }
+    await logOfficerAudit(supabase, {
+      action: 'add_attendee_to_tic',
+      target_type: 'raid_event_attendance',
+      target_id: addToTicEventId,
+      delta: { r: selectedRaidId, e: addToTicEventId, c: char.name },
+    })
     const { data: existingRaidAtt } = await supabase.from('raid_attendance').select('char_id').eq('raid_id', selectedRaidId)
     const existingCharIds = new Set((existingRaidAtt || []).map((r) => String(r.char_id)))
     if (!existingCharIds.has(String(char.char_id))) {
@@ -618,6 +624,12 @@ export default function Officer({ isOfficer }) {
       newThisTicDisplay: newThisTic.length > 0 ? newThisTic.map((s) => { const c = resolve(s); return c ? fmt(c.char_id, c.name) : s }) : null,
     })
     setTicPaste('')
+    await logOfficerAudit(supabase, {
+      action: 'add_tic',
+      target_type: 'raid_event',
+      target_id: event_id,
+      delta: { r: selectedRaidId, e: event_id, v: String(dkpValue), n: matched.length },
+    })
     await supabase.rpc('refresh_dkp_summary')
     try { sessionStorage.removeItem('dkp_leaderboard_v2') } catch (_) {}
     const { count } = await supabase.from('raid_attendance').select('*', { count: 'exact', head: true }).eq('raid_id', selectedRaidId)
@@ -661,6 +673,12 @@ export default function Officer({ isOfficer }) {
       setMutating(false)
       return
     }
+    await logOfficerAudit(supabase, {
+      action: 'add_loot',
+      target_type: 'raid_loot',
+      target_id: null,
+      delta: { r: selectedRaidId, i: itemName, c: char.name, cost: String(isNaN(cost) ? 0 : cost) },
+    })
     setLootResult({ itemName, characterName: char.name, cost: isNaN(cost) ? 0 : cost })
     setLootItemQuery('')
     setLootCharName('')
@@ -732,6 +750,14 @@ export default function Officer({ isOfficer }) {
       parts.push(`No DKP amount in line (used 0) (${missingDkpAmount.length}): ${missingDkpAmount.map((r) => `"${r.itemName}" → ${r.characterName}`).join('; ')}.`)
     }
     if (parts.length > 0) setError(parts.join(' '))
+    if (inserted > 0) {
+      await logOfficerAudit(supabase, {
+        action: 'add_loot_from_log',
+        target_type: 'raid_loot',
+        target_id: null,
+        delta: { r: selectedRaidId, cnt: inserted },
+      })
+    }
     setLootResult({ fromLog: true, inserted, total: totalRows })
     if (playerNotFound.length === 0 && itemNotFound.length === 0) setLootLogPaste('')
     loadSelectedRaid()
@@ -825,7 +851,15 @@ export default function Officer({ isOfficer }) {
     const { error: err } = await supabase.from('raid_loot').delete().eq('id', row.id)
     setMutating(false)
     if (err) setError(err.message)
-    else loadSelectedRaid()
+    else {
+      await logOfficerAudit(supabase, {
+        action: 'delete_loot',
+        target_type: 'raid_loot',
+        target_id: String(row.id),
+        delta: { r: selectedRaidId, l: row.id, i: row.item_name, c: row.character_name },
+      })
+      loadSelectedRaid()
+    }
   }
 
   const handleDeleteEvent = async (eventId) => {
@@ -838,6 +872,12 @@ export default function Officer({ isOfficer }) {
       setError(err.message)
       return
     }
+    await logOfficerAudit(supabase, {
+      action: 'delete_event',
+      target_type: 'raid_event',
+      target_id: eventId,
+      delta: { r: selectedRaidId, e: eventId },
+    })
     // Remove from raid_attendance anyone who is no longer in any remaining event (they were only on the deleted tic).
     const { data: remainingEventAtt } = await supabase.from('raid_event_attendance').select('char_id').eq('raid_id', selectedRaidId)
     const charIdsStillInEvents = new Set((remainingEventAtt || []).map((r) => String(r.char_id ?? '')).filter(Boolean))
@@ -852,6 +892,29 @@ export default function Officer({ isOfficer }) {
     if (count != null) await supabase.from('raids').update({ attendees: String(count) }).eq('raid_id', selectedRaidId)
     setMutating(false)
     loadSelectedRaid()
+  }
+
+  const handleRemoveAttendeeFromTic = async (eventId, charId, charName) => {
+    if (!selectedRaidId || !window.confirm(`Remove ${charName || charId} from this tic?`)) return
+    setMutating(true)
+    await supabase.from('raid_event_attendance').delete().eq('raid_id', selectedRaidId).eq('event_id', eventId).eq('char_id', charId)
+    const { data: remainingEventAtt } = await supabase.from('raid_event_attendance').select('char_id').eq('raid_id', selectedRaidId)
+    const charIdsStillInEvents = new Set((remainingEventAtt || []).map((r) => String(r.char_id ?? '')).filter(Boolean))
+    if (!charIdsStillInEvents.has(String(charId))) {
+      await supabase.from('raid_attendance').delete().eq('raid_id', selectedRaidId).eq('char_id', charId)
+    }
+    await logOfficerAudit(supabase, {
+      action: 'remove_attendee_from_tic',
+      target_type: 'raid_event_attendance',
+      target_id: eventId,
+      delta: { r: selectedRaidId, e: eventId, c: charName },
+    })
+    const { count } = await supabase.from('raid_attendance').select('*', { count: 'exact', head: true }).eq('raid_id', selectedRaidId)
+    if (count != null) await supabase.from('raids').update({ attendees: String(count) }).eq('raid_id', selectedRaidId)
+    await supabase.rpc('refresh_dkp_summary')
+    try { sessionStorage.removeItem('dkp_leaderboard_v2') } catch (_) {}
+    loadSelectedRaid()
+    setMutating(false)
   }
 
   const attendeesByEvent = useMemo(() => {
@@ -1317,15 +1380,19 @@ export default function Officer({ isOfficer }) {
                                 attendees.map((a) => ({ character_name: a.name, name: a.name, char_id: a.char_id })),
                                 getAccountId,
                                 getAccountDisplayName
-                              ).map((group) => {
-                                const label = group.accountDisplayName
-                                  ? `${group.accountDisplayName} (${group.names.join(', ')})`
-                                  : group.names[0] || '—'
-                                const to = group.accountId
-                                  ? `/accounts/${group.accountId}`
-                                  : `/characters/${encodeURIComponent(group.names[0] || '')}`
-                                return <Link key={group.accountId ?? group.names[0]} to={to}>{label}</Link>
-                              })}
+                              ).flatMap((group) =>
+                                group.names.map((name, i) => {
+                                  const charId = group.charIds[i]
+                                  const label = group.accountDisplayName ? `${group.accountDisplayName} (${name})` : name
+                                  const to = group.accountId ? `/accounts/${group.accountId}` : `/characters/${encodeURIComponent(name || '')}`
+                                  return (
+                                    <span key={charId ?? name} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', marginRight: '0.5rem' }}>
+                                      <Link to={to}>{label}</Link>
+                                      <button type="button" className="btn btn-ghost" style={{ fontSize: '0.75rem', color: '#f87171' }} onClick={() => handleRemoveAttendeeFromTic(e.event_id, charId, name)} disabled={mutating} title="Remove from tic">−</button>
+                                    </span>
+                                  )
+                                })
+                              )}
                             </div>
                           </td>
                         </tr>
