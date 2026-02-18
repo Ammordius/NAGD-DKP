@@ -147,6 +147,21 @@ CREATE TABLE IF NOT EXISTS active_raiders (
   character_key TEXT PRIMARY KEY
 );
 
+-- Officer audit log: who, what, when for sensitive officer actions (add raid, edit DKP totals). Officer-only (RLS). Append-only.
+CREATE TABLE IF NOT EXISTS officer_audit_log (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  actor_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  actor_email TEXT,
+  actor_display_name TEXT,
+  action TEXT NOT NULL,
+  target_type TEXT NOT NULL,
+  target_id TEXT,
+  delta JSONB
+);
+ALTER TABLE officer_audit_log ADD COLUMN IF NOT EXISTS actor_display_name TEXT;
+COMMENT ON TABLE officer_audit_log IS 'Audit trail for officer actions: add_raid, edit_event_dkp, edit_event_time, edit_loot_cost. Delta is minimal (short keys) to limit storage and egress.';
+
 -- Add new columns if upgrading from an older schema (no-op if already present)
 ALTER TABLE dkp_summary ADD COLUMN IF NOT EXISTS last_activity_date DATE;
 ALTER TABLE dkp_summary ADD COLUMN IF NOT EXISTS earned_30d INTEGER;
@@ -177,6 +192,7 @@ CREATE INDEX IF NOT EXISTS idx_raid_attendance_dkp_raid ON raid_attendance_dkp(r
 CREATE INDEX IF NOT EXISTS idx_raid_classifications_raid ON raid_classifications(raid_id);
 CREATE INDEX IF NOT EXISTS idx_raid_classifications_mob ON raid_classifications(mob);
 CREATE INDEX IF NOT EXISTS idx_dkp_adjustments_name ON dkp_adjustments(character_name);
+CREATE INDEX IF NOT EXISTS officer_audit_log_created_at_desc ON officer_audit_log (created_at DESC);
 
 -- Internal refresh: recomputes dkp_summary and last_activity_date. No auth check (used by triggers and by RPC).
 CREATE OR REPLACE FUNCTION public.refresh_dkp_summary_internal()
@@ -731,6 +747,7 @@ ALTER TABLE dkp_period_totals ENABLE ROW LEVEL SECURITY;
 ALTER TABLE active_raiders ENABLE ROW LEVEL SECURITY;
 ALTER TABLE raid_dkp_totals ENABLE ROW LEVEL SECURITY;
 ALTER TABLE raid_attendance_dkp ENABLE ROW LEVEL SECURITY;
+ALTER TABLE officer_audit_log ENABLE ROW LEVEL SECURITY;
 
 -- Profiles: one SELECT (own row or officer), one UPDATE (own row or officer)
 DROP POLICY IF EXISTS "Users can read own profile" ON profiles;
@@ -790,6 +807,12 @@ DROP POLICY IF EXISTS "Officers manage active_raiders" ON active_raiders;
 CREATE POLICY "Officers manage active_raiders" ON active_raiders FOR ALL TO authenticated
   USING (public.is_officer())
   WITH CHECK (public.is_officer());
+
+-- Officer audit log: officers only (no anon, no authenticated read for non-officers). Append-only.
+DROP POLICY IF EXISTS "Officer audit log select" ON officer_audit_log;
+CREATE POLICY "Officer audit log select" ON officer_audit_log FOR SELECT USING (public.is_officer());
+DROP POLICY IF EXISTS "Officer audit log insert" ON officer_audit_log;
+CREATE POLICY "Officer audit log insert" ON officer_audit_log FOR INSERT WITH CHECK (public.is_officer());
 
 -- Data tables: anon can read (public browse without login; claim/add chars and officer tools still require login)
 DROP POLICY IF EXISTS "Anon read characters" ON characters;

@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useMemo, useRef, Fragment } from 'rea
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { getDkpMobLoot } from '../lib/staticData'
+import { logOfficerAudit } from '../lib/officerAudit'
 
 // --- Parsing ---
 
@@ -158,6 +159,13 @@ export default function Officer({ isOfficer }) {
   const [addToTicCharQuery, setAddToTicCharQuery] = useState('')
   const [showCharDropdown, setShowCharDropdown] = useState(false)
   const [addToTicResult, setAddToTicResult] = useState(null)
+
+  // Audit log (paginated, small chunks)
+  const AUDIT_PAGE_SIZE = 25
+  const [auditLog, setAuditLog] = useState([])
+  const [auditLogLoading, setAuditLogLoading] = useState(false)
+  const [auditLogPage, setAuditLogPage] = useState(0)
+  const [auditLogHasMore, setAuditLogHasMore] = useState(true)
 
   const nameToChar = useMemo(() => {
     const m = {}
@@ -326,6 +334,23 @@ export default function Officer({ isOfficer }) {
     setLoading(false)
   }, [loadRaids])
 
+  const loadAuditLog = useCallback(async (page = 0, append = false) => {
+    setAuditLogLoading(true)
+    const from = page * AUDIT_PAGE_SIZE
+    const to = from + AUDIT_PAGE_SIZE - 1
+    const { data, error } = await supabase
+      .from('officer_audit_log')
+      .select('id,created_at,actor_display_name,actor_email,action,target_type,target_id,delta')
+      .order('created_at', { ascending: false })
+      .range(from, to)
+    setAuditLogLoading(false)
+    if (error) return
+    const rows = data ?? []
+    setAuditLog((prev) => append ? [...prev, ...rows] : rows)
+    setAuditLogHasMore(rows.length === AUDIT_PAGE_SIZE)
+    setAuditLogPage(page)
+  }, [])
+
   useEffect(() => {
     if (!isOfficer) {
       navigate('/')
@@ -333,6 +358,10 @@ export default function Officer({ isOfficer }) {
     }
     loadOfficerData()
   }, [isOfficer, navigate, loadOfficerData])
+
+  useEffect(() => {
+    if (isOfficer) loadAuditLog(0, false)
+  }, [isOfficer, loadAuditLog])
 
   // When linked from Raids "+" with #add-raid, scroll to add-raid section
   useEffect(() => {
@@ -481,6 +510,12 @@ export default function Officer({ isOfficer }) {
       setMutating(false)
       return
     }
+    await logOfficerAudit(supabase, {
+      action: 'add_raid',
+      target_type: 'raid',
+      target_id: raid_id,
+      delta: { r: raid_id, n: raidName.trim() },
+    })
     setAddRaidResult({ raid_id, raid_name: raidName.trim() })
     setRaidPaste('')
     await loadRaids()
@@ -763,6 +798,12 @@ export default function Officer({ isOfficer }) {
     setMutating(false)
     if (err) setError(err.message)
     else {
+      await logOfficerAudit(supabase, {
+        action: 'edit_event_dkp',
+        target_type: 'raid_event',
+        target_id: eventId,
+        delta: { r: selectedRaidId, e: eventId, v: val },
+      })
       setEditingEventId(null)
       loadSelectedRaid()
     }
@@ -776,6 +817,12 @@ export default function Officer({ isOfficer }) {
     setMutating(false)
     if (err) setError(err.message)
     else {
+      await logOfficerAudit(supabase, {
+        action: 'edit_event_time',
+        target_type: 'raid_event',
+        target_id: eventId,
+        delta: { r: selectedRaidId, e: eventId, t: val || null },
+      })
       setEditingEventTimeId(null)
       loadSelectedRaid()
     }
@@ -788,6 +835,12 @@ export default function Officer({ isOfficer }) {
     setMutating(false)
     if (err) setError(err.message)
     else {
+      await logOfficerAudit(supabase, {
+        action: 'edit_loot_cost',
+        target_type: 'raid_loot',
+        target_id: String(row.id),
+        delta: { r: selectedRaidId, l: row.id, c: val },
+      })
       setEditingLootId(null)
       loadSelectedRaid()
     }
@@ -936,6 +989,79 @@ export default function Officer({ isOfficer }) {
             <Link to={`/raids/${selectedRaidId}`}>View full raid</Link>
           </span>
         )}
+      </section>
+
+      {/* Officer Audit Log: who, what, when — paginated, small chunks. Only visible here; route and RLS are officer-only. */}
+      <section className="card" style={{ marginBottom: '1.5rem' }}>
+        <h2 style={{ marginTop: 0 }}>Audit log</h2>
+        <p style={{ color: '#71717a', fontSize: '0.9rem', marginBottom: '0.75rem' }}>
+          Who made which sensitive changes (officer-only). Add raid and manual DKP edits. Paginated to limit load.
+        </p>
+        <div style={{ overflowX: 'auto' }}>
+          <table>
+            <thead>
+              <tr>
+                <th>When</th>
+                <th>Who</th>
+                <th>Action</th>
+                <th>Target</th>
+                <th>Details</th>
+              </tr>
+            </thead>
+            <tbody>
+              {auditLog.length === 0 && !auditLogLoading && (
+                <tr><td colSpan={5} style={{ color: '#71717a' }}>No audit entries yet.</td></tr>
+              )}
+              {auditLog.map((entry) => {
+                const when = entry.created_at
+                  ? new Date(entry.created_at).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })
+                  : '—'
+                const who = (entry.actor_display_name || '').trim() || (entry.actor_email || '').trim() || entry.actor_id || '—'
+                const actionLabel = {
+                  add_raid: 'Add raid',
+                  edit_event_dkp: 'Edit event DKP',
+                  edit_event_time: 'Edit event time',
+                  edit_loot_cost: 'Edit loot cost',
+                }[entry.action] || entry.action
+                const raidId = entry.delta?.r || (entry.target_type === 'raid' ? entry.target_id : null)
+                const target = entry.target_type && entry.target_id
+                  ? raidId
+                    ? <Link to={`/raids/${raidId}`}>{entry.target_type}: {entry.target_id}</Link>
+                    : `${entry.target_type}: ${entry.target_id}`
+                  : entry.target_type || '—'
+                const d = entry.delta
+                let details = '—'
+                if (d && typeof d === 'object') {
+                  if (d.n) details = `Raid: ${d.n}`
+                  else if (d.v != null) details = `DKP: ${d.v}`
+                  else if (d.c != null) details = `Cost: ${d.c}`
+                  else if (d.t != null) details = `Time: ${d.t}`
+                  else details = Object.entries(d).map(([k, v]) => `${k}=${v}`).join(', ')
+                }
+                return (
+                  <tr key={entry.id}>
+                    <td style={{ whiteSpace: 'nowrap' }}>{when}</td>
+                    <td style={{ wordBreak: 'break-word' }}>{who}</td>
+                    <td>{actionLabel}</td>
+                    <td style={{ fontSize: '0.875rem' }}>{target}</td>
+                    <td style={{ fontSize: '0.875rem', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis' }} title={details}>{details}</td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+        <div style={{ marginTop: '0.5rem' }}>
+          {auditLogLoading && <span style={{ color: '#71717a' }}>Loading…</span>}
+          {!auditLogLoading && auditLogHasMore && (
+            <button type="button" className="btn btn-ghost" onClick={() => loadAuditLog(auditLogPage + 1, true)}>
+              Load next {AUDIT_PAGE_SIZE}
+            </button>
+          )}
+          {!auditLogLoading && auditLog.length > 0 && !auditLogHasMore && (
+            <span style={{ color: '#71717a', fontSize: '0.875rem' }}>No more entries.</span>
+          )}
+        </div>
       </section>
 
       {/* Create new DKP account (officer-only); player claims it on the account page */}

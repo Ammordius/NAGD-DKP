@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom'
 import useSWR from 'swr'
 import { supabase } from '../lib/supabase'
 import { useCharToAccountMap } from '../lib/useCharToAccountMap'
+import { logOfficerAudit } from '../lib/officerAudit'
 import AssignedLootDisclaimer from '../components/AssignedLootDisclaimer'
 import ItemLink from '../components/ItemLink'
 import { getDkpMobLoot } from '../lib/staticData'
@@ -246,6 +247,12 @@ export default function RaidDetail({ isOfficer }) {
     setMutating(false)
     if (err) setMutationError(err.message)
     else {
+      await logOfficerAudit(supabase, {
+        action: 'edit_event_dkp',
+        target_type: 'raid_event',
+        target_id: eventId,
+        delta: { r: raidId, e: eventId, v: val },
+      })
       setEditingEventId(null)
       mutate()
     }
@@ -258,6 +265,12 @@ export default function RaidDetail({ isOfficer }) {
     setMutating(false)
     if (err) setMutationError(err.message)
     else {
+      await logOfficerAudit(supabase, {
+        action: 'edit_event_time',
+        target_type: 'raid_event',
+        target_id: eventId,
+        delta: { r: raidId, e: eventId, t: val || null },
+      })
       setEditingEventTimeId(null)
       mutate()
     }
@@ -270,6 +283,12 @@ export default function RaidDetail({ isOfficer }) {
     setMutating(false)
     if (err) setMutationError(err.message)
     else {
+      await logOfficerAudit(supabase, {
+        action: 'edit_loot_cost',
+        target_type: 'raid_loot',
+        target_id: String(row.id),
+        delta: { r: raidId, l: row.id, c: val },
+      })
       setEditingLootId(null)
       mutate()
     }
