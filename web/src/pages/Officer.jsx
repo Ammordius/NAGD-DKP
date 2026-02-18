@@ -397,6 +397,16 @@ export default function Officer({ isOfficer }) {
       setError(`${char.name} is already in this tic.`)
       return
     }
+    const accountId = charIdToAccountId[char.char_id] ?? null
+    if (accountId != null) {
+      const accountAlreadyInTic = eventAttendance.some(
+        (r) => String(r.event_id) === String(addToTicEventId) && charIdToAccountId[r.char_id] === accountId
+      )
+      if (accountAlreadyInTic) {
+        setError('That account already has a character in this tic. Only one character per account per tic is allowed.')
+        return
+      }
+    }
     setMutating(true)
     setAddToTicResult(null)
     setError('')
