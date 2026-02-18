@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useCallback } from 'react'
+import { useEffect, useState, useMemo, useCallback, useRef } from 'react'
 import { Link } from 'react-router-dom'
 
 const OFFICER_ADD_RAID_HASH = '#add-raid'
@@ -145,10 +145,17 @@ function mergeMonthData(arrays) {
   return { raids, eventsByRaid, classificationsByRaid }
 }
 
+/** Check if (y, m) is in the window months list. */
+function isInWindow(windowMonths, year, month) {
+  return windowMonths.some((wm) => wm.year === year && wm.month === month)
+}
+
 export default function Raids({ isOfficer }) {
   const now = useMemo(() => new Date(), [])
   const [windowEndYear, setWindowEndYear] = useState(now.getFullYear())
   const [windowEndMonth, setWindowEndMonth] = useState(now.getMonth() + 1)
+  const [viewYear, setViewYear] = useState(now.getFullYear())
+  const [viewMonth, setViewMonth] = useState(now.getMonth() + 1)
   const [raids, setRaids] = useState([])
   const [eventsByRaid, setEventsByRaid] = useState({})
   const [classificationsByRaid, setClassificationsByRaid] = useState({})
@@ -161,6 +168,14 @@ export default function Raids({ isOfficer }) {
   )
 
   const isAtCurrentMonth = windowEndYear === now.getFullYear() && windowEndMonth === now.getMonth() + 1
+
+  const viewIndex = useMemo(() => {
+    const i = windowMonths.findIndex((wm) => wm.year === viewYear && wm.month === viewMonth)
+    return i >= 0 ? i : 2
+  }, [windowMonths, viewYear, viewMonth])
+
+  const canGoPrevMonth = viewIndex > 0
+  const canGoNextMonth = viewIndex < 2
 
   const loadWindow = useCallback(
     async (endYear, endMonth) => {
@@ -186,6 +201,15 @@ export default function Raids({ isOfficer }) {
     loadWindow(windowEndYear, windowEndMonth)
   }, [windowEndYear, windowEndMonth, loadWindow])
 
+  useEffect(() => {
+    if (windowMonths.length === 0) return
+    if (!isInWindow(windowMonths, viewYear, viewMonth)) {
+      const newest = windowMonths[2]
+      setViewYear(newest.year)
+      setViewMonth(newest.month)
+    }
+  }, [windowMonths, viewYear, viewMonth])
+
   const goOlder = () => {
     if (windowEndMonth === 1) {
       setWindowEndYear((y) => y - 1)
@@ -209,6 +233,22 @@ export default function Raids({ isOfficer }) {
     setWindowEndMonth(now.getMonth() + 1)
   }
 
+  const goPrevMonth = () => {
+    if (canGoPrevMonth) {
+      const prev = windowMonths[viewIndex - 1]
+      setViewYear(prev.year)
+      setViewMonth(prev.month)
+    }
+  }
+
+  const goNextMonth = () => {
+    if (canGoNextMonth) {
+      const next = windowMonths[viewIndex + 1]
+      setViewYear(next.year)
+      setViewMonth(next.month)
+    }
+  }
+
   const raidsByDate = useMemo(() => {
     const byDate = {}
     for (const r of raids) {
@@ -225,15 +265,29 @@ export default function Raids({ isOfficer }) {
     return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`
   }, [])
 
-  const calendarGrids = useMemo(
-    () =>
-      windowMonths.map(({ year, month }) => ({
-        year,
-        month,
-        grid: buildCalendarGrid(year, month, raidsByDate),
-      })),
-    [windowMonths, raidsByDate]
+  const calendarGrid = useMemo(
+    () => buildCalendarGrid(viewYear, viewMonth, raidsByDate),
+    [viewYear, viewMonth, raidsByDate]
   )
+
+  const loadMoreRef = useRef(null)
+  const [loadMoreVisible, setLoadMoreVisible] = useState(false)
+  const prevLoadMoreVisibleRef = useRef(false)
+  useEffect(() => {
+    const el = loadMoreRef.current
+    if (!el) return
+    const obs = new IntersectionObserver(
+      ([e]) => setLoadMoreVisible(e.isIntersecting),
+      { root: null, rootMargin: '100px', threshold: 0 }
+    )
+    obs.observe(el)
+    return () => obs.disconnect()
+  }, [])
+  useEffect(() => {
+    const justBecameVisible = loadMoreVisible && !prevLoadMoreVisibleRef.current
+    prevLoadMoreVisibleRef.current = loadMoreVisible
+    if (justBecameVisible && !loading && viewIndex === 0) goOlder()
+  }, [loadMoreVisible, loading, viewIndex])
 
   const raidsByMonth = useMemo(() => {
     const map = new Map()
@@ -273,11 +327,6 @@ export default function Raids({ isOfficer }) {
       </div>
     )
 
-  const windowLabel =
-    windowMonths.length === 3
-      ? `${MONTH_NAMES[windowMonths[0].month - 1]} ${windowMonths[0].year} – ${MONTH_NAMES[windowMonths[2].month - 1]} ${windowMonths[2].year}`
-      : ''
-
   return (
     <div className="container">
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
@@ -289,86 +338,112 @@ export default function Raids({ isOfficer }) {
         )}
       </div>
       <p style={{ color: '#71717a', marginBottom: '1rem' }}>
-        Calendar shows last 3 months. Use <strong>Older raids</strong> to go back in time (1 month at a time). Data is cached to avoid extra loads.
+        One month shown; 3 months of data are loaded. Use arrows to change month, or scroll down / click <strong>Load older raids</strong> to go back in time.
       </p>
 
       {error && <p className="error" style={{ marginBottom: '1rem' }}>{error}</p>}
 
-      <div className="raids-window-nav card" style={{ marginBottom: '1rem' }}>
-        <div className="calendar-header" style={{ flexWrap: 'wrap', gap: '0.75rem' }}>
-          <button type="button" className="calendar-nav calendar-nav-wide" onClick={goOlder} aria-label="Older raids (previous month)">
-            ← Older raids
+      <div className="calendar-wrap card" style={{ marginBottom: '1rem' }}>
+        <div className="calendar-header">
+          <button
+            type="button"
+            className="calendar-nav"
+            onClick={goPrevMonth}
+            disabled={!canGoPrevMonth}
+            aria-label="Previous month"
+            style={!canGoPrevMonth ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
+          >
+            ←
           </button>
-          <h2 className="calendar-title" style={{ flex: '1 1 auto', minWidth: '200px', textAlign: 'center' }}>
-            {windowLabel}
-          </h2>
-          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.875rem', color: '#a1a1aa' }}>
-              <span>Jump to month:</span>
-              <input
-                type="month"
-                value={`${windowEndYear}-${String(windowEndMonth).padStart(2, '0')}`}
-                max={`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`}
-                onChange={(e) => {
-                  const v = e.target.value
-                  if (!v) return
-                  const [y, m] = v.split('-').map(Number)
-                  if (y != null && m != null) {
-                    setWindowEndYear(y)
-                    setWindowEndMonth(m)
-                  }
-                }}
-                style={{ padding: '0.35rem 0.5rem', maxWidth: '160px' }}
-              />
-            </label>
-            {!isAtCurrentMonth && (
-              <button type="button" className="btn btn-ghost" onClick={goToCurrentMonth} style={{ fontSize: '0.875rem' }}>
-                Show current month
-              </button>
-            )}
-            <button
-              type="button"
-              className="calendar-nav calendar-nav-wide"
-              onClick={goNewer}
-              disabled={isAtCurrentMonth}
-              aria-label="Newer raids (next month)"
-              style={isAtCurrentMonth ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
+          <h2 className="calendar-title">{MONTH_NAMES[viewMonth - 1]} {viewYear}</h2>
+          <button
+            type="button"
+            className="calendar-nav"
+            onClick={goNextMonth}
+            disabled={!canGoNextMonth}
+            aria-label="Next month"
+            style={!canGoNextMonth ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
+          >
+            →
+          </button>
+        </div>
+        <div className="calendar-grid">
+          {DOW.map((d) => (
+            <div key={d} className="calendar-dow">{d}</div>
+          ))}
+          {calendarGrid.map((cell, idx) => (
+            <div
+              key={idx}
+              className={`calendar-day ${!cell.isCurrentMonth ? 'calendar-day-other' : ''} ${cell.dateKey === todayKey ? 'calendar-day-today' : ''} ${cell.raids?.length ? 'calendar-day-has-raids' : ''}`}
             >
-              Newer raids →
-            </button>
-          </div>
+              {cell.day != null && <span className="calendar-day-num">{cell.day}</span>}
+              {cell.raids?.length > 0 && (
+                <div className="calendar-day-raids">
+                  {cell.raids.slice(0, 3).map((r) => (
+                    <Link key={r.raid_id} to={`/raids/${r.raid_id}`} className="calendar-raid-link" title={r.raid_name || r.raid_id}>
+                      {r.raid_name || r.raid_id}
+                    </Link>
+                  ))}
+                  {cell.raids.length > 3 && <span className="calendar-day-more">+{cell.raids.length - 3}</span>}
+                </div>
+              )}
+            </div>
+          ))}
         </div>
       </div>
 
-      <div className="calendar-three-wrap">
-        {calendarGrids.map(({ year, month, grid }) => (
-          <div key={`${year}-${month}`} className="calendar-wrap card calendar-month-block">
-            <h3 className="calendar-month-title">{MONTH_NAMES[month - 1]} {year}</h3>
-            <div className="calendar-grid">
-              {DOW.map((d) => (
-                <div key={d} className="calendar-dow">{d}</div>
-              ))}
-              {grid.map((cell, idx) => (
-                <div
-                  key={idx}
-                  className={`calendar-day ${!cell.isCurrentMonth ? 'calendar-day-other' : ''} ${cell.dateKey === todayKey ? 'calendar-day-today' : ''} ${cell.raids?.length ? 'calendar-day-has-raids' : ''}`}
-                >
-                  {cell.day != null && <span className="calendar-day-num">{cell.day}</span>}
-                  {cell.raids?.length > 0 && (
-                    <div className="calendar-day-raids">
-                      {cell.raids.slice(0, 3).map((r) => (
-                        <Link key={r.raid_id} to={`/raids/${r.raid_id}`} className="calendar-raid-link" title={r.raid_name || r.raid_id}>
-                          {r.raid_name || r.raid_id}
-                        </Link>
-                      ))}
-                      {cell.raids.length > 3 && <span className="calendar-day-more">+{cell.raids.length - 3}</span>}
-                    </div>
-                  )}
-                </div>
-              ))}
+      <div className="raids-load-more card" style={{ marginBottom: '1rem' }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', alignItems: 'center', justifyContent: 'center' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.875rem', color: '#a1a1aa' }}>
+            <span>Jump to month:</span>
+            <input
+              type="month"
+              value={`${windowEndYear}-${String(windowEndMonth).padStart(2, '0')}`}
+              max={`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`}
+              onChange={(e) => {
+                const v = e.target.value
+                if (!v) return
+                const [y, m] = v.split('-').map(Number)
+                if (y != null && m != null) {
+                  setWindowEndYear(y)
+                  setWindowEndMonth(m)
+                }
+              }}
+              style={{ padding: '0.35rem 0.5rem', maxWidth: '160px' }}
+            />
+          </label>
+          {!isAtCurrentMonth && (
+            <button type="button" className="btn btn-ghost" onClick={goToCurrentMonth} style={{ fontSize: '0.875rem' }}>
+              Show current month
+            </button>
+          )}
+          <button
+            type="button"
+            className="calendar-nav calendar-nav-wide"
+            onClick={goNewer}
+            disabled={isAtCurrentMonth}
+            aria-label="Newer raids"
+            style={isAtCurrentMonth ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
+          >
+            Newer raids →
+          </button>
+        </div>
+        {viewIndex === 0 && (
+          <>
+            <div ref={loadMoreRef} style={{ height: 1, margin: '0.5rem 0' }} aria-hidden />
+            <div style={{ textAlign: 'center', marginTop: '0.5rem' }}>
+              <button
+                type="button"
+                className="btn"
+                onClick={goOlder}
+                disabled={loading}
+              >
+                {loading ? 'Loading…' : 'Load older raids'}
+              </button>
+              <p style={{ fontSize: '0.75rem', color: '#71717a', marginTop: '0.35rem', marginBottom: 0 }}>Or scroll to load more</p>
             </div>
-          </div>
-        ))}
+          </>
+        )}
       </div>
 
       <h3 style={{ marginTop: '2rem', marginBottom: '0.5rem', fontSize: '1rem', color: '#a1a1aa' }}>Raids by month</h3>

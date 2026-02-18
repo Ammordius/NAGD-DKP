@@ -47,11 +47,6 @@ label { display: block; margin-bottom: 0.25rem; font-size: 0.875rem; color: #a1a
 .calendar-raid-link { font-size: 0.7rem; color: #a78bfa; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .calendar-raid-link:hover { text-decoration: underline; color: #c4b5fd; }
 .calendar-day-more { font-size: 0.65rem; color: #71717a; }
-/* Raids 3-month view */
-.calendar-three-wrap { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-bottom: 1rem; }
-@media (max-width: 900px) { .calendar-three-wrap { grid-template-columns: 1fr; } }
-.calendar-month-block { max-width: 100%; }
-.calendar-month-title { margin: 0 0 0.75rem 0; font-size: 1rem; font-weight: 600; color: #a1a1aa; }
 
 /* Item card — Magelo-style (ItemOuter / ItemTitle / ItemInner) */
 .item-card {
