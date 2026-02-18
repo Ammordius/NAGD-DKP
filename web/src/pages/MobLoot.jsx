@@ -253,13 +253,65 @@ export default function MobLoot() {
     })
   }, [entries, mobZoneFromRaids])
 
+  /** Merge entries that are the same mob in the same zone (e.g. one from dkp, one from raid_item_sources). */
+  const entriesMergedByMobAndZone = useMemo(() => {
+    const zoneMobToEntries = new Map()
+    entriesWithZone.forEach((e) => {
+      const z = (e.displayZone || '').trim() || 'Other / Unknown'
+      const mobNames = (e.mobs?.length ? e.mobs : [e.mob]).map((m) => (m || '').replace(/^#/, '').trim()).filter(Boolean)
+      const mobSig = [...new Set(mobNames)].sort((a, b) => a.localeCompare(b)).join('\n')
+      const key = `${z}\n${mobSig}`
+      if (!zoneMobToEntries.has(key)) zoneMobToEntries.set(key, [])
+      zoneMobToEntries.get(key).push(e)
+    })
+    const result = []
+    zoneMobToEntries.forEach((group) => {
+      if (group.length === 1) {
+        result.push({ ...group[0], key: group[0].key })
+        return
+      }
+      const first = group[0]
+      const displayZone = (first.displayZone || '').trim() || 'Other / Unknown'
+      const mobsSet = new Set()
+      const lootByKey = new Map() // item_id or name -> { item, sources Set }
+      group.forEach((e) => {
+        (e.mobs?.length ? e.mobs : [e.mob]).forEach((m) => mobsSet.add((m || '').replace(/^#/, '').trim()))
+        ;(e.loot || []).forEach((item) => {
+          const id = item.item_id ?? item.name
+          const k = id != null ? String(id) : (item.name || '').trim().toLowerCase()
+          if (!lootByKey.has(k)) {
+            lootByKey.set(k, { item: { ...item }, sources: new Set(item.sources || []) })
+          } else {
+            const existing = lootByKey.get(k)
+            ;(item.sources || []).forEach((s) => existing.sources.add(s))
+          }
+        })
+      })
+      const mobs = [...mobsSet].filter(Boolean).sort((a, b) => a.localeCompare(b))
+      const loot = [...lootByKey.values()].map(({ item, sources }) => ({
+        ...item,
+        sources: [...sources].sort(),
+      }))
+      const mergedKey = `${mobs[0] || 'mob'}|${displayZone}|merged`
+      result.push({
+        key: mergedKey,
+        mob: mobs[0] || first.mob,
+        mobs,
+        zone: first.zone,
+        displayZone,
+        loot,
+      })
+    })
+    return result
+  }, [entriesWithZone])
+
   /** Use JSON mobs array when present; otherwise group entries with same zone + same loot (backward compat). */
   const entriesGrouped = useMemo(() => {
-    const hasGroupedFormat = entriesWithZone.length > 0 && entriesWithZone.every((e) => Array.isArray(e.mobs) && e.mobs.length > 0)
-    if (hasGroupedFormat) return entriesWithZone
+    const hasGroupedFormat = entriesMergedByMobAndZone.length > 0 && entriesMergedByMobAndZone.every((e) => Array.isArray(e.mobs) && e.mobs.length > 0)
+    if (hasGroupedFormat) return entriesMergedByMobAndZone
     const lootKey = (loot) => (loot || []).map((x) => x.item_id ?? x.name).filter(Boolean).sort((a, b) => String(a).localeCompare(String(b))).join(',')
     const byGroup = new Map()
-    entriesWithZone.forEach((e) => {
+    entriesMergedByMobAndZone.forEach((e) => {
       const z = (e.displayZone || '').trim() || 'Other / Unknown'
       const sig = lootKey(e.loot)
       const key = `${z}|${sig}`
@@ -281,7 +333,7 @@ export default function MobLoot() {
       ...g,
       mobs: g.mobs.length ? g.mobs.sort((a, b) => a.localeCompare(b)) : null,
     }))
-  }, [entriesWithZone])
+  }, [entriesMergedByMobAndZone])
 
   const entriesWithDkp = useMemo(() => {
     return entriesGrouped.map((e) => {
