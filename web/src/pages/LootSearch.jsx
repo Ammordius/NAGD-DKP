@@ -111,6 +111,7 @@ export default function LootSearch() {
   const [mobLoot, setMobLoot] = useState(null)
   const [itemQuery, setItemQuery] = useState('')
   const [sortBy, setSortBy] = useState('date')
+  const [sortDesc, setSortDesc] = useState(true)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -212,25 +213,31 @@ export default function LootSearch() {
     }
     const dateIso = (raidId) => (raids[raidId]?.date_iso && String(raids[raidId].date_iso).trim()) ? String(raids[raidId].date_iso).slice(0, 10) : ''
     const cmp = (a, b) => {
+      let raw
       switch (sortBy) {
         case 'item':
-          return (a.item_name || '').localeCompare(b.item_name || '')
+          raw = (a.item_name || '').localeCompare(b.item_name || '')
+          break
         case 'cost': {
           const ca = a.cost != null ? Number(a.cost) : -1
           const cb = b.cost != null ? Number(b.cost) : -1
-          return ca - cb
+          raw = ca - cb
+          break
         }
         case 'buyer':
-          return (a.character_name || a.char_id || '').localeCompare(b.character_name || b.char_id || '')
+          raw = (a.character_name || a.char_id || '').localeCompare(b.character_name || b.char_id || '')
+          break
         case 'toon':
-          return (a.assigned_character_name || a.assigned_char_id || '').localeCompare(b.assigned_character_name || b.assigned_char_id || '')
+          raw = (a.assigned_character_name || a.assigned_char_id || '').localeCompare(b.assigned_character_name || b.assigned_char_id || '')
+          break
         case 'date':
         default:
-          return (dateIso(b.raid_id) || '').localeCompare(dateIso(a.raid_id) || '')
+          raw = (dateIso(b.raid_id) || '').localeCompare(dateIso(a.raid_id) || '')
       }
+      return sortDesc ? raw : -raw
     }
     return [...list].sort(cmp)
-  }, [loot, itemQuery, sortBy, raids])
+  }, [loot, itemQuery, sortBy, sortDesc, raids])
 
   const parentRef = useRef(null)
   const ROW_HEIGHT = 40
@@ -300,11 +307,23 @@ export default function LootSearch() {
             onChange={(e) => setSortBy(e.target.value)}
             aria-label="Sort by"
           >
-            <option value="date">Date (newest first)</option>
+            <option value="date">Date</option>
             <option value="item">Item</option>
             <option value="cost">Cost</option>
             <option value="buyer">Buyer</option>
             <option value="toon">On toon</option>
+          </select>
+        </label>
+        <label>
+          <span style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.875rem', color: '#a1a1aa' }}>Order</span>
+          <select
+            className="filter-select"
+            value={sortDesc ? 'desc' : 'asc'}
+            onChange={(e) => setSortDesc(e.target.value === 'desc')}
+            aria-label="Sort order"
+          >
+            <option value="desc">Descending</option>
+            <option value="asc">Ascending</option>
           </select>
         </label>
       </div>
