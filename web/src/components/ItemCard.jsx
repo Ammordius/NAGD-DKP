@@ -15,8 +15,69 @@ function SpellLink({ spellId, name }) {
   )
 }
 
-export default function ItemCard({ name, itemId, stats, compact = false }) {
+/** Inline subset: slot, AC, effect, key mods, resists, level, classes in a few lines. */
+function ItemCardInline({ name, itemId, stats, href }) {
+  if (!stats) {
+    return (
+      <div className="item-card item-card--inline item-card--compact ItemOuter">
+        <div className="ItemTitle">
+          <div className="ItemTitleMid">
+            {href ? (
+              <a href={href} target="_blank" rel="noopener noreferrer">{name || 'Unknown item'}</a>
+            ) : (
+              <span>{name || 'Unknown item'}</span>
+            )}
+          </div>
+        </div>
+      </div>
+    )
+  }
+  const {
+    slot,
+    ac,
+    mods = [],
+    resists = [],
+    requiredLevel,
+    effectSpellName,
+    effectSpellId,
+    classes,
+  } = stats
+  const modsShort = mods.length > 0
+    ? mods.map((m) => {
+        const v = m.value
+        const plus = typeof v === 'number' && (m.label === 'HP' || m.label === 'MANA') ? (v >= 0 ? '+' : '') + v : v
+        return `${m.label}: ${plus}`
+      }).join(', ')
+    : ''
+  const resistsShort = resists.length > 0 ? resists.map((r) => `${r.label}: ${r.value}`).join(' ') : ''
+  const parts = []
+  if (slot) parts.push(slot)
+  if (ac != null) parts.push(`AC: ${ac}`)
+  if (effectSpellId != null || effectSpellName) parts.push(`Effect: ${effectSpellName || effectSpellId}`)
+  if (modsShort) parts.push(modsShort)
+  if (resistsShort) parts.push(resistsShort)
+  if (requiredLevel != null) parts.push(`Req ${requiredLevel}`)
+  if (classes) parts.push(classes)
+  return (
+    <div className="item-card item-card--inline ItemOuter">
+      <div className="ItemTitle">
+        <div className="ItemTitleMid">
+          <a href={href} target="_blank" rel="noopener noreferrer">{name || 'Unknown item'}</a>
+        </div>
+      </div>
+      <div className="ItemInner ItemInner--inline">
+        {parts.filter(Boolean).join(' · ')}
+      </div>
+    </div>
+  )
+}
+
+export default function ItemCard({ name, itemId, stats, compact = false, inline = false }) {
   const href = itemId != null ? `${TAKP_ITEM_BASE}${itemId}` : null
+
+  if (inline) {
+    return <ItemCardInline name={name} itemId={itemId} stats={stats} href={href} />
+  }
 
   if (compact || !stats) {
     return (

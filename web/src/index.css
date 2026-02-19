@@ -73,6 +73,35 @@ label { display: block; margin-bottom: 0.25rem; font-size: 0.875rem; color: #a1a
 }
 .item-card--compact .ItemInner { display: none; }
 
+/* Inline card (e.g. loot-by-mob table): compact block, subset of stats */
+.item-card--inline {
+  min-width: 0;
+  max-width: none;
+  font-size: 0.75rem;
+  box-shadow: none;
+}
+.item-card--inline .ItemTitle { padding: 0.25rem 0.4rem; }
+.item-card--inline .ItemTitleMid { text-align: left; }
+.ItemInner--inline {
+  padding: 0.25rem 0.4rem 0.35rem;
+  line-height: 1.35;
+  color: #a1a1aa;
+  font-size: 0.7rem;
+  word-break: break-word;
+}
+
+/* Loot-by-mob inline row: name + one-line stats, no card, no sources */
+.mob-loot-item-row { font-size: 0.8125rem; }
+.mob-loot-item-name a { color: #fbbf24; font-weight: 600; text-decoration: none; }
+.mob-loot-item-name a:hover { text-decoration: underline; }
+.mob-loot-item-stats {
+  font-size: 0.75rem;
+  color: #a1a1aa;
+  margin-top: 0.2rem;
+  line-height: 1.3;
+  word-break: break-word;
+}
+
 .ItemOuter .ItemTitle {
   display: flex;
   align-items: center;

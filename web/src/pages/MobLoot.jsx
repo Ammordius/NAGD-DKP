@@ -1,9 +1,45 @@
 import { useEffect, useState, useMemo, Fragment } from 'react'
-import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { createCache } from '../lib/cache'
 import { getDkpMobLoot } from '../lib/staticData'
-import ItemLink from '../components/ItemLink'
+import { getItemStats } from '../lib/itemStats'
+
+const ITEMS_PER_PAGE = 20
+const TAKP_ITEM_BASE = 'https://www.takproject.net/allaclone/item.php?id='
+
+/** Inline row: item name (link) + one line of stats when loaded. No card, no sources. */
+function InlineItemRow({ name, itemId }) {
+  const [stats, setStats] = useState(null)
+  useEffect(() => {
+    if (itemId == null) return
+    getItemStats(itemId).then(setStats)
+  }, [itemId])
+  const href = itemId != null ? `${TAKP_ITEM_BASE}${itemId}` : null
+  const parts = []
+  if (stats) {
+    const { slot, ac, mods = [], resists = [], requiredLevel, effectSpellName, effectSpellId, classes } = stats
+    if (slot) parts.push(slot)
+    if (ac != null) parts.push(`AC: ${ac}`)
+    if (effectSpellId != null || effectSpellName) parts.push(`Effect: ${effectSpellName || effectSpellId}`)
+    if (mods.length) parts.push(mods.map((m) => `${m.label}: ${typeof m.value === 'number' && (m.label === 'HP' || m.label === 'MANA') ? (m.value >= 0 ? '+' : '') + m.value : m.value}`).join(', '))
+    if (resists.length) parts.push(resists.map((r) => `${r.label}: ${r.value}`).join(' '))
+    if (requiredLevel != null) parts.push(`Req ${requiredLevel}`)
+    if (classes) parts.push(classes)
+  }
+  const statsLine = parts.filter(Boolean).join(' · ')
+  return (
+    <div className="mob-loot-item-row">
+      <div className="mob-loot-item-name">
+        {href ? (
+          <a href={href} target="_blank" rel="noopener noreferrer">{name || 'Unknown item'}</a>
+        ) : (
+          <span>{name || 'Unknown item'}</span>
+        )}
+      </div>
+      {statsLine && <div className="mob-loot-item-stats">{statsLine}</div>}
+    </div>
+  )
+}
 
 const LAST3_CACHE_KEY = 'mob_loot_last3_v2'
 const CACHE_TTL = 10 * 60 * 1000
@@ -102,6 +138,7 @@ export default function MobLoot() {
   const [minAvgDkp, setMinAvgDkp] = useState('')
   const [loading, setLoading] = useState(true)
   const [expanded, setExpanded] = useState({})
+  const [itemsShownPerKey, setItemsShownPerKey] = useState({}) // key -> number to show
   const [itemLast3, setItemLast3] = useState({})
   const [mobZoneFromRaids, setMobZoneFromRaids] = useState({})
 
@@ -408,6 +445,10 @@ export default function MobLoot() {
     setExpanded((prev) => ({ ...prev, [key]: !prev[key] }))
   }
 
+  const showMoreItems = (key) => {
+    setItemsShownPerKey((prev) => ({ ...prev, [key]: (prev[key] || ITEMS_PER_PAGE) + ITEMS_PER_PAGE }))
+  }
+
   if (loading) return <div className="container">Loading mob loot…</div>
   if (!data) {
     return (
@@ -494,31 +535,46 @@ export default function MobLoot() {
                       {isOpen && (
                         <tr key={`${e.key}-exp`}>
                           <td colSpan={5} style={{ padding: '0.5rem 1rem', verticalAlign: 'top', backgroundColor: 'rgba(0,0,0,0.2)' }}>
-                            <table style={{ margin: 0 }}>
-                              <thead>
-                                <tr><th>Item</th><th>Last 3 drops (DKP)</th><th>Rolling avg</th><th>Sources</th></tr>
-                              </thead>
-                              <tbody>
-                                {e.loot.map((item) => {
-                                  const name = item.name || '—'
-                                  const last3 = itemLast3[(name || '').trim().toLowerCase()]
-                                  return (
-                                    <tr key={item.item_id || item.name}>
-                                      <td>
-                                        <ItemLink itemName={name} itemId={item.item_id}>{name}</ItemLink>
-                                      </td>
-                                      <td style={{ fontSize: '0.875rem' }}>
-                                        {last3?.values?.length ? last3.values.join(', ') : '—'}
-                                      </td>
-                                      <td style={{ fontSize: '0.875rem', color: '#a78bfa' }}>
-                                        {last3?.avg != null ? last3.avg : '—'}
-                                      </td>
-                                      <td style={{ fontSize: '0.875rem', color: '#a1a1aa' }}>{(item.sources || []).join(', ') || '—'}</td>
-                                    </tr>
-                                  )
-                                })}
-                              </tbody>
-                            </table>
+                            {(() => {
+                              const limit = itemsShownPerKey[e.key] ?? ITEMS_PER_PAGE
+                              const visibleLoot = e.loot.slice(0, limit)
+                              const hasMore = e.loot.length > limit
+                              return (
+                                <>
+                                  <table style={{ margin: 0 }}>
+                                    <thead>
+                                      <tr><th>Item</th><th>DKP (last 3 / avg)</th></tr>
+                                    </thead>
+                                    <tbody>
+                                      {visibleLoot.map((item) => {
+                                        const name = item.name || '—'
+                                        const last3 = itemLast3[(name || '').trim().toLowerCase()]
+                                        const dkpStr = last3?.values?.length
+                                          ? (last3.avg != null ? `${last3.values.join(', ')} (avg ${last3.avg})` : last3.values.join(', '))
+                                          : '—'
+                                        return (
+                                          <tr key={item.item_id || item.name}>
+                                            <td style={{ verticalAlign: 'middle', maxWidth: '420px' }}>
+                                              <InlineItemRow name={name} itemId={item.item_id} />
+                                            </td>
+                                            <td style={{ fontSize: '0.875rem', color: '#a78bfa', verticalAlign: 'middle', whiteSpace: 'nowrap' }}>
+                                              {dkpStr}
+                                            </td>
+                                          </tr>
+                                        )
+                                      })}
+                                    </tbody>
+                                  </table>
+                                  {hasMore && (
+                                    <p style={{ margin: '0.5rem 0 0', fontSize: '0.875rem' }}>
+                                      <button type="button" className="btn btn-ghost" onClick={() => showMoreItems(e.key)}>
+                                        Show {Math.min(ITEMS_PER_PAGE, e.loot.length - limit)} more
+                                      </button>
+                                    </p>
+                                  )}
+                                </>
+                              )
+                            })()}
                           </td>
                         </tr>
                       )}
