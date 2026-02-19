@@ -576,6 +576,18 @@ export default function MobLoot() {
     return zoneEntries
   }, [filteredForDisplay, filterSlot, filterClass])
 
+  /** When filtering by slot/class, auto-expand mobs that have <3 matching items. */
+  useEffect(() => {
+    if (!filterSlot && !filterClass) return
+    const toExpand = {}
+    filteredForDisplay.forEach((e) => {
+      const loot = getFilteredAndSortedLoot(e.loot)
+      if (loot.length > 0 && loot.length < 3) toExpand[e.key] = true
+    })
+    if (Object.keys(toExpand).length === 0) return
+    setExpanded((prev) => ({ ...prev, ...toExpand }))
+  }, [filterSlot, filterClass, filteredForDisplay, getFilteredAndSortedLoot])
+
   const toggle = (key) => {
     setExpanded((prev) => ({ ...prev, [key]: !prev[key] }))
   }
