@@ -60,7 +60,7 @@ Run these in the Supabase **SQL Editor** (New query → paste → Run). Order ma
 |------|-------------|
 | **`docs/supabase-loot-to-character.sql`** | If you want loot-to-character assignment (Magelo) and the `update_raid_loot_assignments` RPC. Required for the **Loot-to-character** CI workflow. |
 | **`docs/supabase-loot-assignment-table.sql`** | Loot assignment split (loot_assignment table + RPC). Run if you use the split schema; then run **`docs/supabase-github-worker-role.sql`** for CI. |
-| **`docs/supabase-github-worker-role.sql`** | For GitHub Actions: creates `github_worker` role (SELECT on all tables, EXECUTE on `update_raid_loot_assignments` / `refresh_after_bulk_loot_assignment`, INSERT/DELETE on `character_loot_assignment_counts`, UPDATE on `characters`). Run after **loot-assignment-table** SQL. Then use a JWT with `role: github_worker` as your CI key (see Step 5 Option B). |
+| **`docs/supabase-github-worker-role.sql`** | For GitHub Actions: creates `github_worker` role (SELECT on all tables, EXECUTE on `update_raid_loot_assignments` / `refresh_after_bulk_loot_assignment`, INSERT/DELETE on `character_loot_assignment_counts`, UPDATE on `characters`). Run after **loot-assignment-table** SQL. CI must use the Dashboard **service_role** key (REST API does not accept custom JWTs); the worker role is for direct DB use only. |
 | **`docs/supabase-officer-audit-log.sql`** | If you want the officer audit log table (may already be in schema; run only if the table or policies are missing). |
 | **`docs/supabase-create-my-account-rpc.sql`** | If the schema doesn’t already define `create_my_account` / account-claiming (usually already in main schema). |
 | **`docs/supabase-anon-read-policies.sql`** | Only if you need to re-apply anon read policies (main schema already includes anon read; use only if you changed RLS). |
@@ -109,40 +109,12 @@ CI needs to talk to **your** Supabase project. In your **mirror** repo go to **S
 | Secret | Value | Used by |
 |--------|--------|--------|
 | **`SUPABASE_URL`** | Your Supabase **Project URL** (Settings → API) | DB backup, Loot-to-character |
-| **`SUPABASE_SERVICE_ROLE_KEY`** | See below: **service_role** key **or** scoped JWT | Same workflows |
+| **`SUPABASE_ANON_KEY`** | Your Supabase **anon** key (Settings → API) | Same workflows (scripts can fall back to anon) |
+| **`SUPABASE_SERVICE_ROLE_KEY`** | Your Supabase **service_role** key (Dashboard → Project Settings → API → service_role secret) | Same workflows |
 
 Without these, the **DB backup** and **Loot-to-character** workflows will skip or fail. The **SQL Ledger** workflow only uses backup artifacts and does not call Supabase.
 
-### Option A: Service role key (simplest)
-
-Use your Supabase **service_role** key (Dashboard → Project Settings → API → **service_role** secret). Paste it into the **`SUPABASE_SERVICE_ROLE_KEY`** secret. This key has full access; use it if you prefer minimal setup.
-
-### Option B: Scoped API key (GitHub worker JWT, recommended)
-
-Use a **custom JWT** that forces CI to run as the **`github_worker`** role: read-only on most tables, plus only the operations the workflows need (export, loot assignment RPC, character_loot_assignment_counts replace, character level/class update). Requires the **split** loot schema and the worker role.
-
-**1. Run the worker role SQL (if you haven’t already)**  
-In Supabase SQL Editor, run **`docs/supabase-loot-assignment-table.sql`** (so `loot_assignment` and the RPC exist), then **`docs/supabase-github-worker-role.sql`**. That creates the `github_worker` role and grants.
-
-**2. Generate a custom JWT**
-
-- In **Supabase Dashboard** → **Project Settings** → **API**, copy your **JWT Secret**.
-- Use a JWT generator (e.g. [jwt.io](https://jwt.io)):
-  - **Header:** `{"alg":"HS256","typ":"JWT"}`
-  - **Payload:** `{"role":"github_worker","iss":"supabase","iat":1708300000}`  
-    (Use a real Unix timestamp for `iat`; you can set `exp` far in the future or omit it for no expiry.)
-  - **Signature:** paste your **JWT Secret** in the “Verify Signature” box.
-- Copy the **encoded JWT** (the long string on the left).
-
-**3. Store it in GitHub**
-
-- Repo → **Settings** → **Secrets and variables** → **Actions**.
-- Add or edit **`SUPABASE_SERVICE_ROLE_KEY`** and set its value to the **encoded JWT** (not the service_role key). CI will use this token; Supabase will treat it as the `github_worker` role.
-
-**4. Keep `SUPABASE_URL`**  
-Leave **`SUPABASE_URL`** as your project URL (same for both options).
-
----
+**Use the service_role key:** Supabase’s REST API accepts only the built-in **anon** and **service_role** keys. Set **`SUPABASE_SERVICE_ROLE_KEY`** to the **service_role** value from the Dashboard (not a custom JWT). Custom JWTs return 401 when used as the API key.
 
 ## Step 6: Enable GitHub Pages (for SQL Ledger)
 
@@ -218,7 +190,7 @@ All three workflows use the **same** repo and the **same** Supabase project (you
 - [ ] **docs/supabase-schema.sql** run in SQL Editor.
 - [ ] Optional: **docs/supabase-loot-to-character.sql** (and any other optional SQL) run.
 - [ ] Data loaded: from backup artifact (Option A) or from **data/** CSVs (Option B), in correct import order.
-- [ ] GitHub Actions secrets set: **SUPABASE_URL**, **SUPABASE_SERVICE_ROLE_KEY** (service_role key or scoped JWT per Step 5).
+- [ ] GitHub Actions secrets set: **SUPABASE_URL**, **SUPABASE_ANON_KEY**, **SUPABASE_SERVICE_ROLE_KEY** (use Dashboard service_role key; see Step 5).
 - [ ] GitHub Pages enabled (Source: GitHub Actions).
 - [ ] Web app deployed (e.g. Vercel) with **VITE_SUPABASE_URL** and **VITE_SUPABASE_ANON_KEY** for the mirror.
 - [ ] First user created and set to officer; **refresh_dkp_summary** and **refresh_all_raid_attendance_totals** run once.

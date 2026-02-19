@@ -1,7 +1,6 @@
 # Supabase (public schema) backup only when data has changed; tiered artifacts.
-# Uses scoped CI secrets: SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY.
-# For least privilege, set SUPABASE_SERVICE_ROLE_KEY to the github_worker JWT (see docs/supabase-github-worker-role.sql).
-# Scripts use SERVICE_ROLE_KEY when set (worker has SELECT on all tables); ANON_KEY is available for fallback.
+# Requires: SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY.
+# Use the service_role key from Dashboard → Project Settings → API (REST API accepts only anon/service_role).
 # See docs/CI-DB-BACKUP.md for size estimate and restore steps.
 
 name: DB backup (on change)

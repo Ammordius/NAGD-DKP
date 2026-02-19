@@ -58,7 +58,11 @@ The script loads `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` from `web/.env
 |--------|--------|
 | `SUPABASE_URL` | Supabase project URL; used for change check and export. |
 | `SUPABASE_ANON_KEY` | Anon key; available for scripts that support anon fallback. |
-| `SUPABASE_SERVICE_ROLE_KEY` | For CI with least privilege: use the **github_worker** JWT (see `docs/supabase-github-worker-role.sql`). Scripts use this when set; worker has SELECT on all tables (backup) and no direct write to `raid_loot`. |
+| `SUPABASE_SERVICE_ROLE_KEY` | Use the **service_role** key from Supabase Dashboard → Project Settings → API (the secret key). The REST API accepts only the built-in anon and service_role keys; custom JWTs (e.g. github_worker) return 401. |
+
+### If you get 401 "Invalid API key"
+
+- Supabase’s REST API only accepts the project’s built-in **anon** and **service_role** keys. Set `SUPABASE_SERVICE_ROLE_KEY` in GitHub secrets to the **service_role** value from Dashboard → Project Settings → API. Do not use a custom JWT as the API key.
 
 ---
 

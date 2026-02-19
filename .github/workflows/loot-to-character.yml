@@ -4,8 +4,7 @@
 # from the Magelo repo's CI. Runs at most once per day, or when raid/loot data changes, or manually.
 #
 # Set repo secrets: SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY.
-# For least privilege, set SUPABASE_SERVICE_ROLE_KEY to the github_worker JWT (see docs/supabase-github-worker-role.sql).
-# Scripts use SERVICE_ROLE_KEY when set (worker has SELECT, RPC, character_loot_assignment_counts, UPDATE characters).
+# Use the service_role key from Dashboard → Project Settings → API (REST API accepts only anon/service_role).
 # CI: check if raid_loot count changed -> if so, fetch -> assign -> update Supabase by id. Run at most once daily (cron) or manually.
 # We only pull Magelo and run assignment when there is new loot (count changed); otherwise skip.
 # We always download Magelo dumps fresh right before assignment (no cache) so assignments use today's data.

@@ -1,10 +1,18 @@
--- GitHub worker role: scoped access for CI (DB backup + loot-to-character). No direct write to raid_loot;
+-- GitHub worker role: scoped access for direct DB use (e.g. future tooling). No direct write to raid_loot;
 -- assignments go through update_raid_loot_assignments (writes loot_assignment only).
 -- Run after supabase-schema.sql and supabase-loot-assignment-table.sql (so update_raid_loot_assignments exists).
 --
--- Use via JWT: generate a JWT with payload {"role": "github_worker", "iss": "supabase", "iat": <unix_ts>}
--- signed with your project JWT Secret (Dashboard -> Project Settings -> API). In GitHub Actions, set secrets:
--- SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY (worker JWT). CI uses SERVICE_ROLE_KEY when set.
+-- CI (GitHub Actions) must use the real service_role key:
+--   Supabase REST API accepts only the built-in anon and service_role keys. A custom JWT
+--   (e.g. role=github_worker) used as the API key always returns 401. So for DB backup and
+--   loot-to-character workflows, set GitHub secret SUPABASE_SERVICE_ROLE_KEY to the
+--   service_role key from Dashboard -> Project Settings -> API (the secret key).
+--
+-- The github_worker role is still useful for direct Postgres connections or if Supabase
+-- adds support for custom-role API keys later. scripts/gen_github_worker_jwt.py generates
+-- a JWT for that role (for direct DB use only, not for REST API key).
+--
+-- In GitHub Actions set: SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY.
 -- See docs/MIRROR-SETUP-FULL-STACK.md and docs/CI-DB-BACKUP.md.
 
 -- 1. Create the role (NOLOGIN: Supabase API assumes this role when the JWT has role=github_worker)
