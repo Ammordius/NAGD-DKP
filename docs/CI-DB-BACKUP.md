@@ -57,7 +57,8 @@ The script loads `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` from `web/.env
 | Secret | Purpose |
 |--------|--------|
 | `SUPABASE_URL` | Supabase project URL; used for change check and export. |
-| `SUPABASE_SERVICE_ROLE_KEY` | Service role key; used to read all public tables via REST API. |
+| `SUPABASE_ANON_KEY` | Anon key; available for scripts that support anon fallback. |
+| `SUPABASE_SERVICE_ROLE_KEY` | For CI with least privilege: use the **github_worker** JWT (see `docs/supabase-github-worker-role.sql`). Scripts use this when set; worker has SELECT on all tables (backup) and no direct write to `raid_loot`. |
 
 ---
 

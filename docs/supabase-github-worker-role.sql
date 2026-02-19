@@ -3,8 +3,9 @@
 -- Run after supabase-schema.sql and supabase-loot-assignment-table.sql (so update_raid_loot_assignments exists).
 --
 -- Use via JWT: generate a JWT with payload {"role": "github_worker", "iss": "supabase", "iat": <unix_ts>}
--- signed with your project JWT Secret (Dashboard -> Project Settings -> API). Use that token as
--- SUPABASE_SERVICE_ROLE_KEY in GitHub Actions so CI runs with least privilege. See docs/MIRROR-SETUP-FULL-STACK.md.
+-- signed with your project JWT Secret (Dashboard -> Project Settings -> API). In GitHub Actions, set secrets:
+-- SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY (worker JWT). CI uses SERVICE_ROLE_KEY when set.
+-- See docs/MIRROR-SETUP-FULL-STACK.md and docs/CI-DB-BACKUP.md.
 
 -- 1. Create the role (NOLOGIN: Supabase API assumes this role when the JWT has role=github_worker)
 CREATE ROLE github_worker NOLOGIN BYPASSRLS;

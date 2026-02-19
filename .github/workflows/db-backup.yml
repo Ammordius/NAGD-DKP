@@ -1,6 +1,7 @@
 # Supabase (public schema) backup only when data has changed; tiered artifacts.
-# Uses same secrets as loot-to-character: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY (REST API export, no pg_dump).
-# When backing up: uploads rolling (~last 3), weekly (first of week), monthly (first of month).
+# Uses scoped CI secrets: SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY.
+# For least privilege, set SUPABASE_SERVICE_ROLE_KEY to the github_worker JWT (see docs/supabase-github-worker-role.sql).
+# Scripts use SERVICE_ROLE_KEY when set (worker has SELECT on all tables); ANON_KEY is available for fallback.
 # See docs/CI-DB-BACKUP.md for size estimate and restore steps.
 
 name: DB backup (on change)
@@ -21,6 +22,7 @@ jobs:
       contents: write
     env:
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
     steps:
       - name: Checkout
@@ -38,7 +40,7 @@ jobs:
         id: check
         run: |
           CURRENT=""
-          if [ -n "$SUPABASE_URL" ] && [ -n "$SUPABASE_SERVICE_ROLE_KEY" ]; then
+          if [ -n "$SUPABASE_URL" ] && { [ -n "$SUPABASE_SERVICE_ROLE_KEY" ] || [ -n "$SUPABASE_ANON_KEY" ]; }; then
             CURRENT=$(python fetch_raid_loot_from_supabase.py --count-only 2>/dev/null || echo "")
           fi
           echo "current=$CURRENT" >> $GITHUB_OUTPUT

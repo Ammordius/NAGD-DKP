@@ -3,10 +3,10 @@
 # item; the script matches account loot rows to toons using that inventory. Fully separate
 # from the Magelo repo's CI. Runs at most once per day, or when raid/loot data changes, or manually.
 #
-# To push assignments to Supabase (no duplicates), set repo secrets:
-#   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
-# Then CI will: check if raid_loot count changed -> if so, fetch -> assign -> update Supabase by id.
-# The live DB is the source of truth; we do not commit the CSVs. Run at most once daily (cron) or manually.
+# Set repo secrets: SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY.
+# For least privilege, set SUPABASE_SERVICE_ROLE_KEY to the github_worker JWT (see docs/supabase-github-worker-role.sql).
+# Scripts use SERVICE_ROLE_KEY when set (worker has SELECT, RPC, character_loot_assignment_counts, UPDATE characters).
+# CI: check if raid_loot count changed -> if so, fetch -> assign -> update Supabase by id. Run at most once daily (cron) or manually.
 # We only pull Magelo and run assignment when there is new loot (count changed); otherwise skip.
 # We always download Magelo dumps fresh right before assignment (no cache) so assignments use today's data.
 
@@ -29,6 +29,7 @@ jobs:
       contents: write
     env:
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
     steps:
       - name: Checkout DKP repo
@@ -46,7 +47,7 @@ jobs:
       # Manual run (workflow_dispatch) always runs full assignment and character level update.
       - name: Check for new loot
         id: check
-        if: ${{ env.SUPABASE_URL != '' && env.SUPABASE_SERVICE_ROLE_KEY != '' }}
+        if: ${{ env.SUPABASE_URL != '' && (env.SUPABASE_SERVICE_ROLE_KEY != '' || env.SUPABASE_ANON_KEY != '') }}
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             echo "new_loot=true" >> $GITHUB_OUTPUT
@@ -67,11 +68,11 @@ jobs:
           fi
 
       - name: Fetch raid_loot and account data from Supabase
-        if: ${{ env.SUPABASE_URL != '' && env.SUPABASE_SERVICE_ROLE_KEY != '' && steps.check.outputs.new_loot == 'true' }}
+        if: ${{ env.SUPABASE_URL != '' && (env.SUPABASE_SERVICE_ROLE_KEY != '' || env.SUPABASE_ANON_KEY != '') && steps.check.outputs.new_loot == 'true' }}
         run: python fetch_raid_loot_from_supabase.py --out data/raid_loot.csv --all-tables
 
       - name: Log existing assignments in fetched CSV
-        if: ${{ env.SUPABASE_URL != '' && env.SUPABASE_SERVICE_ROLE_KEY != '' && steps.check.outputs.new_loot == 'true' }}
+        if: ${{ env.SUPABASE_URL != '' && (env.SUPABASE_SERVICE_ROLE_KEY != '' || env.SUPABASE_ANON_KEY != '') && steps.check.outputs.new_loot == 'true' }}
         run: |
           python -c "
           import csv
@@ -88,7 +89,7 @@ jobs:
           "
 
       - name: Download Magelo dumps from TAKP
-        if: ${{ env.SUPABASE_URL != '' && env.SUPABASE_SERVICE_ROLE_KEY != '' && steps.check.outputs.new_loot == 'true' }}
+        if: ${{ env.SUPABASE_URL != '' && (env.SUPABASE_SERVICE_ROLE_KEY != '' || env.SUPABASE_ANON_KEY != '') && steps.check.outputs.new_loot == 'true' }}
         run: |
           mkdir -p .magelo_dump
           echo "Downloading character dump (names, char_ids)..."
@@ -107,7 +108,7 @@ jobs:
           echo "Inventory lines: $(wc -l < .magelo_dump/TAKP_character_inventory.txt)"
 
       - name: Run loot-to-character assignment
-        if: ${{ env.SUPABASE_URL != '' && env.SUPABASE_SERVICE_ROLE_KEY != '' && steps.check.outputs.new_loot == 'true' }}
+        if: ${{ env.SUPABASE_URL != '' && (env.SUPABASE_SERVICE_ROLE_KEY != '' || env.SUPABASE_ANON_KEY != '') && steps.check.outputs.new_loot == 'true' }}
         run: |
           # Do not use --clear-assignments: preserve existing manual/UI assignments from Supabase CSV.
           python assign_loot_to_characters.py \
@@ -119,19 +120,19 @@ jobs:
             --out-counts data/character_loot_assignment_counts.csv
 
       - name: Push assignments to Supabase (update by id, no duplicates)
-        if: ${{ env.SUPABASE_URL != '' && env.SUPABASE_SERVICE_ROLE_KEY != '' && steps.check.outputs.new_loot == 'true' }}
+        if: ${{ env.SUPABASE_URL != '' && (env.SUPABASE_SERVICE_ROLE_KEY != '' || env.SUPABASE_ANON_KEY != '') && steps.check.outputs.new_loot == 'true' }}
         run: python update_raid_loot_assignments_supabase.py --csv data/raid_loot.csv
 
       - name: Push character_loot_assignment_counts to Supabase
-        if: ${{ env.SUPABASE_URL != '' && env.SUPABASE_SERVICE_ROLE_KEY != '' && steps.check.outputs.new_loot == 'true' }}
+        if: ${{ env.SUPABASE_URL != '' && (env.SUPABASE_SERVICE_ROLE_KEY != '' || env.SUPABASE_ANON_KEY != '') && steps.check.outputs.new_loot == 'true' }}
         run: python push_character_loot_assignment_counts_supabase.py
 
       - name: Update character levels/classes from Magelo (one-to-one name match)
-        if: ${{ env.SUPABASE_URL != '' && env.SUPABASE_SERVICE_ROLE_KEY != '' && steps.check.outputs.new_loot == 'true' }}
+        if: ${{ env.SUPABASE_URL != '' && (env.SUPABASE_SERVICE_ROLE_KEY != '' || env.SUPABASE_ANON_KEY != '') && steps.check.outputs.new_loot == 'true' }}
         run: python update_character_levels_from_magelo.py --character-file .magelo_dump/TAKP_character.txt
 
       - name: Record raid_loot count
-        if: ${{ env.SUPABASE_URL != '' && env.SUPABASE_SERVICE_ROLE_KEY != '' && steps.check.outputs.new_loot == 'true' }}
+        if: ${{ env.SUPABASE_URL != '' && (env.SUPABASE_SERVICE_ROLE_KEY != '' || env.SUPABASE_ANON_KEY != '') && steps.check.outputs.new_loot == 'true' }}
         run: |
           mkdir -p .ci
           python fetch_raid_loot_from_supabase.py --count-only > .ci/last_raid_loot_count.txt
