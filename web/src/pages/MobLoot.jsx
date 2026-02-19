@@ -9,7 +9,7 @@ const ITEMS_PER_PAGE = 20
 const TAKP_ITEM_BASE = 'https://www.takproject.net/allaclone/item.php?id='
 
 /** Build item name (lowercase) -> item_id from raid_item_sources (id -> { name }). */
-function buildNameToId(raidSources) {
+function buildNameToIdFromRaid(raidSources) {
   const map = {}
   if (!raidSources || typeof raidSources !== 'object') return map
   Object.entries(raidSources).forEach(([id, entry]) => {
@@ -19,6 +19,24 @@ function buildNameToId(raidSources) {
       const numId = Number(id)
       if (!Number.isNaN(numId) && map[key] == null) map[key] = numId
     }
+  })
+  return map
+}
+
+/** Build name (lowercase) -> item_id from dkp_mob_loot (all entries' loot that have item_id). */
+function buildNameToIdFromMobLoot(mobLootData) {
+  const map = {}
+  if (!mobLootData || typeof mobLootData !== 'object') return map
+  Object.values(mobLootData).forEach((entry) => {
+    if (!entry || !Array.isArray(entry.loot)) return
+    entry.loot.forEach((item) => {
+      const id = item?.item_id
+      const name = (item?.name || '').trim()
+      if (id != null && name) {
+        const key = name.toLowerCase()
+        if (map[key] == null) map[key] = Number(id)
+      }
+    })
   })
   return map
 }
@@ -163,7 +181,11 @@ export default function MobLoot() {
   const [itemLast3, setItemLast3] = useState({})
   const [mobZoneFromRaids, setMobZoneFromRaids] = useState({})
 
-  const nameToId = useMemo(() => buildNameToId(raidItemSources), [raidItemSources])
+  const nameToId = useMemo(() => {
+    const fromMobLoot = buildNameToIdFromMobLoot(data)
+    const fromRaid = buildNameToIdFromRaid(raidItemSources)
+    return { ...fromRaid, ...fromMobLoot }
+  }, [data, raidItemSources])
 
   useEffect(() => {
     getRaidItemSources().then(setRaidItemSources)
