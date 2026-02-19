@@ -506,11 +506,18 @@ export default function MobLoot() {
       }
     })
     const zoneEntries = Object.entries(groups)
+    const zoneMaxGearScore = (entries) => Math.max(0, ...(entries || []).map((e) => e.maxGearScore ?? 0))
     const totalLoot = (entries) => entries.reduce((sum, e) => sum + (e.loot?.length || 0), 0)
     const bottomZones = new Set(['Other / Unknown', '—', ''])
     zoneEntries.sort((a, b) => {
       const [zoneA, entriesA] = a
       const [zoneB, entriesB] = b
+      if (filterSlot || filterClass) {
+        const scoreA = zoneMaxGearScore(entriesA)
+        const scoreB = zoneMaxGearScore(entriesB)
+        if (scoreB !== scoreA) return scoreB - scoreA
+        return zoneA.localeCompare(zoneB)
+      }
       const aInOrder = zoneOrderSet.has(zoneA)
       const bInOrder = zoneOrderSet.has(zoneB)
       if (aInOrder && bInOrder) return ZONE_ORDER.indexOf(zoneA) - ZONE_ORDER.indexOf(zoneB)
