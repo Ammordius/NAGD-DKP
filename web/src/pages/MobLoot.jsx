@@ -1,11 +1,27 @@
 import { useEffect, useState, useMemo, Fragment } from 'react'
+import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { createCache } from '../lib/cache'
-import { getDkpMobLoot } from '../lib/staticData'
+import { getDkpMobLoot, getRaidItemSources } from '../lib/staticData'
 import { getItemStats } from '../lib/itemStats'
 
 const ITEMS_PER_PAGE = 20
 const TAKP_ITEM_BASE = 'https://www.takproject.net/allaclone/item.php?id='
+
+/** Build item name (lowercase) -> item_id from raid_item_sources (id -> { name }). */
+function buildNameToId(raidSources) {
+  const map = {}
+  if (!raidSources || typeof raidSources !== 'object') return map
+  Object.entries(raidSources).forEach(([id, entry]) => {
+    const name = entry?.name && typeof entry.name === 'string' ? entry.name.trim() : null
+    if (name) {
+      const key = name.toLowerCase()
+      const numId = Number(id)
+      if (!Number.isNaN(numId) && map[key] == null) map[key] = numId
+    }
+  })
+  return map
+}
 
 /** Inline row: item name (link) + one line of stats when loaded. No card, no sources. */
 function InlineItemRow({ name, itemId }) {
@@ -27,13 +43,17 @@ function InlineItemRow({ name, itemId }) {
     if (classes) parts.push(classes)
   }
   const statsLine = parts.filter(Boolean).join(' · ')
+  const displayName = name || 'Unknown item'
+  const itemPageTo = `/items/${encodeURIComponent(displayName)}`
   return (
     <div className="mob-loot-item-row">
       <div className="mob-loot-item-name">
-        {href ? (
-          <a href={href} target="_blank" rel="noopener noreferrer">{name || 'Unknown item'}</a>
-        ) : (
-          <span>{name || 'Unknown item'}</span>
+        <Link to={itemPageTo}>{displayName}</Link>
+        {href && (
+          <>
+            {' '}
+            <a href={href} target="_blank" rel="noopener noreferrer" className="mob-loot-item-takp" title="View on TAKP AllaClone">↗</a>
+          </>
         )}
       </div>
       {statsLine && <div className="mob-loot-item-stats">{statsLine}</div>}
@@ -134,6 +154,7 @@ function normalizeMobKey(mob) {
  */
 export default function MobLoot() {
   const [data, setData] = useState(null)
+  const [raidItemSources, setRaidItemSources] = useState(null)
   const [query, setQuery] = useState('')
   const [minAvgDkp, setMinAvgDkp] = useState('')
   const [loading, setLoading] = useState(true)
@@ -141,6 +162,12 @@ export default function MobLoot() {
   const [itemsShownPerKey, setItemsShownPerKey] = useState({}) // key -> number to show
   const [itemLast3, setItemLast3] = useState({})
   const [mobZoneFromRaids, setMobZoneFromRaids] = useState({})
+
+  const nameToId = useMemo(() => buildNameToId(raidItemSources), [raidItemSources])
+
+  useEffect(() => {
+    getRaidItemSources().then(setRaidItemSources)
+  }, [])
 
   useEffect(() => {
     getDkpMobLoot()
@@ -555,7 +582,7 @@ export default function MobLoot() {
                                         return (
                                           <tr key={item.item_id || item.name}>
                                             <td style={{ verticalAlign: 'middle', maxWidth: '420px' }}>
-                                              <InlineItemRow name={name} itemId={item.item_id} />
+                                              <InlineItemRow name={name} itemId={item.item_id ?? nameToId[(name || '').trim().toLowerCase()]} />
                                             </td>
                                             <td style={{ fontSize: '0.875rem', color: '#a78bfa', verticalAlign: 'middle', whiteSpace: 'nowrap' }}>
                                               {dkpStr}

@@ -94,6 +94,8 @@ label { display: block; margin-bottom: 0.25rem; font-size: 0.875rem; color: #a1a
 .mob-loot-item-row { font-size: 0.8125rem; }
 .mob-loot-item-name a { color: #fbbf24; font-weight: 600; text-decoration: none; }
 .mob-loot-item-name a:hover { text-decoration: underline; }
+.mob-loot-item-name .mob-loot-item-takp { font-weight: 400; color: #71717a; font-size: 0.75em; }
+.mob-loot-item-name .mob-loot-item-takp:hover { color: #a78bfa; }
 .mob-loot-item-stats {
   font-size: 0.75rem;
   color: #a1a1aa;
