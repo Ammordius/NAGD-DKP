@@ -194,6 +194,14 @@ CREATE INDEX IF NOT EXISTS idx_raid_classifications_mob ON raid_classifications(
 CREATE INDEX IF NOT EXISTS idx_dkp_adjustments_name ON dkp_adjustments(character_name);
 CREATE INDEX IF NOT EXISTS officer_audit_log_created_at_desc ON officer_audit_log (created_at DESC);
 
+-- Loot-only audit view: who added/deleted/edited raid_loot (see docs/AUDIT-OF-AUDIT-LOOT.md)
+CREATE OR REPLACE VIEW officer_audit_loot AS
+SELECT id, created_at, actor_id, actor_email, actor_display_name, action, target_type, target_id, delta
+FROM officer_audit_log
+WHERE action IN ('add_loot', 'add_loot_from_log', 'delete_loot', 'edit_loot_cost');
+COMMENT ON VIEW officer_audit_loot IS 'Loot-related officer audit entries. Delta: r=raid_id, l=loot_id, i=item_name, c=character_name, cost=DKP; add_loot_from_log has items[].';
+GRANT SELECT ON officer_audit_loot TO authenticated;
+
 -- Internal refresh: recomputes dkp_summary and last_activity_date. No auth check (used by triggers and by RPC).
 CREATE OR REPLACE FUNCTION public.refresh_dkp_summary_internal()
 RETURNS void

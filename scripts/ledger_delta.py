@@ -21,7 +21,7 @@ import sys
 from pathlib import Path
 
 # Tables we diff (export_supabase_public_tables.py list minus raid_loot).
-# officer_audit_log is in schema but not exported by default; include if present.
+# officer_audit_log included so ledger shows who-added-what audit deltas.
 LEDGER_TABLES = [
     "profiles",
     "characters",
@@ -38,6 +38,7 @@ LEDGER_TABLES = [
     "dkp_summary",
     "dkp_period_totals",
     "active_raiders",
+    "officer_audit_log",
 ]
 
 # Columns to redact in HTML and JSON output (never display on the delta page).
@@ -63,6 +64,7 @@ TABLE_KEYS: dict[str, tuple[str, ...]] = {
     "dkp_summary": ("character_key",),
     "dkp_period_totals": ("period",),
     "active_raiders": ("character_key",),
+    "officer_audit_log": ("id",),
 }
 
 

@@ -36,6 +36,7 @@ PUBLIC_TABLES = [
     "dkp_summary",
     "dkp_period_totals",
     "active_raiders",
+    "officer_audit_log",
 ]
 
 
@@ -71,6 +72,7 @@ def export_table(client, table: str, out_path: Path) -> int:
             "dkp_summary": ["character_key", "character_name", "earned", "spent", "earned_30d", "earned_60d", "last_activity_date", "updated_at"],
             "dkp_period_totals": ["period", "total_dkp"],
             "active_raiders": ["character_key"],
+            "officer_audit_log": ["id", "created_at", "actor_id", "actor_email", "actor_display_name", "action", "target_type", "target_id", "delta"],
         }
         fieldnames = defaults.get(table, ["id"])
         with open(out_path, "w", encoding="utf-8", newline="") as f:

@@ -719,6 +719,7 @@ export default function Officer({ isOfficer }) {
     const playerNotFound = []
     const itemNotFound = []
     const missingDkpAmount = []
+    const insertedItems = []
     let inserted = 0
     for (const line of lineResults) {
       const characterNames = line.characterNames.length > 0 ? line.characterNames : ['']
@@ -738,7 +739,10 @@ export default function Officer({ isOfficer }) {
             character_name: char.name,
             cost: String(line.cost),
           })
-          if (!err) inserted++
+          if (!err) {
+            inserted++
+            insertedItems.push({ i: canonicalItemName, c: char.name, cost: String(line.cost) })
+          }
           continue
         }
         if (!hasChar) playerNotFound.push({ itemName: line.itemName || line.rawLine, characterName: characterName || '(no character matched)' })
@@ -762,7 +766,7 @@ export default function Officer({ isOfficer }) {
         action: 'add_loot_from_log',
         target_type: 'raid_loot',
         target_id: null,
-        delta: { r: selectedRaidId, cnt: inserted },
+        delta: { r: selectedRaidId, cnt: inserted, items: insertedItems },
       })
     }
     setLootResult({ fromLog: true, inserted, total: totalRows })
@@ -870,7 +874,7 @@ export default function Officer({ isOfficer }) {
         action: 'delete_loot',
         target_type: 'raid_loot',
         target_id: String(row.id),
-        delta: { r: selectedRaidId, l: row.id, i: row.item_name, c: row.character_name },
+        delta: { r: selectedRaidId, l: row.id, i: row.item_name, c: row.character_name, cost: row.cost },
       })
       loadSelectedRaid()
     }

@@ -92,8 +92,9 @@ export default function DkpChangelog({ isOfficer }) {
                 else if (entry.action === 'add_attendee_to_tic' && d.c) details = d.c
                 else if (entry.action === 'remove_attendee_from_tic' && d.c) details = d.c
                 else if (entry.action === 'add_loot' && d.i) details = `${d.i} → ${d.c} (${d.cost} DKP)`
+                else if (entry.action === 'add_loot_from_log' && Array.isArray(d.items) && d.items.length > 0) details = d.items.map((x) => `${x.i} (${x.c}) — ${x.cost ?? 0} DKP`).join('; ')
                 else if (entry.action === 'add_loot_from_log' && d.cnt != null) details = `${d.cnt} item(s)`
-                else if (entry.action === 'delete_loot' && d.i) details = `${d.i} (${d.c})`
+                else if (entry.action === 'delete_loot' && d.i) details = d.cost != null ? `${d.i} (${d.c}) — ${d.cost} DKP` : `${d.i} (${d.c})`
                 else if (entry.action === 'edit_event_dkp' && d.v != null) details = `DKP: ${d.v}`
                 else if (entry.action === 'edit_loot_cost' && d.c != null) details = d.i ? `${d.i}: ${d.c} DKP` : `Cost: ${d.c}`
                 else if (entry.action === 'raid_deleted' && d.n != null) details = `Raid: ${d.n}`

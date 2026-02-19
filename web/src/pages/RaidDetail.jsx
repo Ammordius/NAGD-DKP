@@ -306,7 +306,7 @@ export default function RaidDetail({ isOfficer }) {
         action: 'delete_loot',
         target_type: 'raid_loot',
         target_id: String(row.id),
-        delta: { r: raidId, l: row.id, i: row.item_name, c: row.character_name },
+        delta: { r: raidId, l: row.id, i: row.item_name, c: row.character_name, cost: row.cost },
       })
       mutate()
     }
