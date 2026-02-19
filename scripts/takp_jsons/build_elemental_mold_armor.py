@@ -11,7 +11,7 @@ from pathlib import Path
 
 
 def main():
-    base = Path(__file__).resolve().parent.parent
+    base = Path(__file__).resolve().parent.parent.parent  # repo root
     src = base / "dkp_elemental_to_magelo.json"
     out_data = base / "data" / "elemental_mold_armor.json"
     out_public = base / "web" / "public" / "elemental_mold_armor.json"

@@ -26,6 +26,7 @@ import sys
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
+ROOT = SCRIPT_DIR.parent.parent  # repo root
 
 
 def _load_env_file(path: Path) -> None:
@@ -52,7 +53,7 @@ def _load_env_file(path: Path) -> None:
 
 def load_dotenv() -> None:
     """Load .env from repo root and/or web/.env.local; accept VITE_ prefixed vars."""
-    for path in (SCRIPT_DIR / ".env", SCRIPT_DIR / "web" / ".env.local"):
+    for path in (ROOT / ".env", ROOT / "web" / ".env.local"):
         if path.exists():
             _load_env_file(path)
 
@@ -64,7 +65,7 @@ def main() -> int:
     ap.add_argument(
         "--csv",
         type=Path,
-        default=SCRIPT_DIR / "data" / "raid_events_event_time_backfill.csv",
+        default=ROOT / "data" / "raid_events_event_time_backfill.csv",
         help="CSV with raid_id, event_id, event_time (or raid_events.csv with event_time column)",
     )
     ap.add_argument("--batch", type=int, default=500, help="RPC batch size")

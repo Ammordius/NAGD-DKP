@@ -84,19 +84,19 @@ You have two options.
 | raid_event_attendance | `raid_event_attendance.csv` (optional; for per-event DKP earned) |
 | raid_classifications | `raid_classifications.csv` |
 
-**Raid classifications:** Run `python build_raid_classifications.py` (after `extract_structured_data.py`) to generate `data/raid_classifications.csv` from `data/raid_loot.csv`, `data/items_seen_to_mobs.json`, and `data/raid_loot_classification.json` (overrides/aliases, e.g. Plane of Time P1/P3). The script also writes `web/public/item_sources.json` so the Item History page can show “Drops from”. Import `raid_classifications.csv` into the `raid_classifications` table. For the **Raid Items** page, copy `data/dkp_mob_loot.json` to `web/public/dkp_mob_loot.json`, or run `python build_raid_classifications.py --copy-dkp-mob-loot`.
+**Raid classifications:** Run `python scripts/takp_jsons/build_raid_classifications.py` (after `extract_structured_data.py`) to generate `data/raid_classifications.csv` from `data/raid_loot.csv`, `data/items_seen_to_mobs.json`, and `data/raid_loot_classification.json` (overrides/aliases, e.g. Plane of Time P1/P3). The script also writes `web/public/item_sources.json` so the Item History page can show “Drops from”. Import `raid_classifications.csv` into the `raid_classifications` table. For the **Raid Items** page, copy `data/dkp_mob_loot.json` to `web/public/dkp_mob_loot.json`, or run `python scripts/takp_jsons/build_raid_classifications.py --copy-dkp-mob-loot`.
 
 If the importer complains about types (e.g. empty numbers), you can:
 - Leave problematic columns unmapped and fix data later, or
 - Temporarily change the column type in SQL, import, then change it back.
 
 **Data notes:**
-- **Loot item names:** The `raid_loot` table has an `item_name` column and the app shows it on raid detail pages. **Item names are filled by the pipeline**: run `extract_structured_data.py` (after `pull_raids.py`) so `data/raid_loot.csv` is built from `raids/*.html`; re-run when you refresh raid HTML. (Previously the CSVs didn’t include item names. If you have another source (e.g. scrape from raid HTML) that includes item names, you can add an `item_name` column to the CSV or update rows in the Table Editor after import.
+- **Loot item names:** The `raid_loot` table has an `item_name` column and the app shows it on raid detail pages. **Item names are filled by the pipeline**: run `python scripts/pull_parse_dkp_site/extract_structured_data.py` (after `pull_raids.py`) so `data/raid_loot.csv` is built from `raids/*.html`; re-run when you refresh raid HTML. (Previously the CSVs didn’t include item names. If you have another source (e.g. scrape from raid HTML) that includes item names, you can add an `item_name` column to the CSV or update rows in the Table Editor after import.
 - **DKP:** If `raid_event_attendance` is imported, earned uses per-event attendance (matches official site); otherwise earned = sum of each raid’s event DKP for every raid that character attended. Spent = sum of loot costs for that character. Balance = earned − spent. The DKP page shows **one row per account** (all toons on the same account summed). Account labels use the account’s **display name** when set; run `docs/supabase-account-display-names.sql` in Supabase SQL Editor after importing accounts. That script is generated from `ground_truth.txt` (first character per account in file order) so names match the official DKP export.
 
 **DKP not matching ground truth (e.g. Spent = 0 or Earned too low)?**
 - **Spent = 0 for everyone** → `raid_loot` is missing or empty in Supabase. Import `data/raid_loot.csv` into the `raid_loot` table (Table Editor → raid_loot → Import from CSV). The app needs `char_id` or `character_name` and `cost` on each row to compute spent.
-- **Earned much lower than official** → Either only a subset of raids/events is in Supabase, or **per-event attendance** is missing. For earned to match the official DKP export (see `docs/DKP-GROUND-TRUTH.md`): (1) Run `pull_raid_attendees.py` and `parse_raid_attendees.py` to create `data/raid_event_attendance.csv`, (2) Import that CSV into the `raid_event_attendance` table. Without it, the app uses raid-level attendance and may over- or under-credit depending on data.
+- **Earned much lower than official** → Either only a subset of raids/events is in Supabase, or **per-event attendance** is missing. For earned to match the official DKP export (see `docs/DKP-GROUND-TRUTH.md`): (1) Run `python scripts/pull_parse_dkp_site/pull_raid_attendees.py` and `python scripts/pull_parse_dkp_site/parse_raid_attendees.py` to create `data/raid_event_attendance.csv`, (2) Import that CSV into the `raid_event_attendance` table. Without it, the app uses raid-level attendance and may over- or under-credit depending on data.
 - In Supabase Table Editor, check row counts: `raid_loot` and `raid_events` should have thousands of rows if you have full history; `raid_event_attendance` should have many rows for per-event earned.
 
 **After importing (or re-importing) raid/attendance/loot data:** Run a full refresh once to build the DKP cache: log in as an officer and click **“Refresh DKP totals”** on the DKP page, or in SQL Editor run `SELECT refresh_dkp_summary();` After that, **new** attendance and loot rows are applied automatically (triggers update the cache on every INSERT). If you edit or delete historical rows, run “Refresh DKP totals” again to correct. The DKP page reads from this cache; if empty it falls back to live computation (slower).
@@ -109,7 +109,7 @@ If the Table Editor importer is awkward, we can add a small script that reads yo
 
 ### Manually adding one raid (if pull_raids.py can't fetch it)
 
-If you're missing a single raid (e.g. due to 403), save it from the browser: open the raid details page, get the **raid ID** from the URL (the number after `raidId=`), then **Save As** → "Webpage, Complete" to `raids/raid_<raidId>.html`. Run `python refresh_raid_index.py` to update `raids_index.csv` from the HTML; then re-run `extract_structured_data.py` if you use the pipeline.
+If you're missing a single raid (e.g. due to 403), save it from the browser: open the raid details page, get the **raid ID** from the URL (the number after `raidId=`), then **Save As** → "Webpage, Complete" to `raids/raid_<raidId>.html`. Run `python scripts/pull_parse_dkp_site/refresh_raid_index.py` to update `raids_index.csv` from the HTML; then re-run `python scripts/pull_parse_dkp_site/extract_structured_data.py` if you use the pipeline.
 
 ---
 
@@ -121,9 +121,9 @@ When you refresh raid data or re-run the pipeline, update the site in two places
 
 Run your usual pipeline so the `data/` CSVs are up to date, for example:
 
-- `python extract_structured_data.py` — rebuilds `raid_events`, `raid_loot`, `raid_attendance`, `raids`, etc. from `raids/*.html`
-- `python parse_raid_attendees.py` — builds `data/raid_event_attendance.csv` from `raids/raid_*_attendees.html`
-- `python build_raid_classifications.py` — if you use raid classifications / Item History
+- `python scripts/pull_parse_dkp_site/extract_structured_data.py` — rebuilds `raid_events`, `raid_loot`, `raid_attendance`, `raids`, etc. from `raids/*.html`
+- `python scripts/pull_parse_dkp_site/parse_raid_attendees.py` — builds `data/raid_event_attendance.csv` from `raids/raid_*_attendees.html`
+- `python scripts/takp_jsons/build_raid_classifications.py` — if you use raid classifications / Item History
 
 (You don’t need to re-run `pull_raids.py` or `pull_raid_attendees.py` unless you’re fetching new raids.)
 

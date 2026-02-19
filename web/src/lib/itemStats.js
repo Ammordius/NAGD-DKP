@@ -1,6 +1,6 @@
 /**
  * Item stats for hover cards. Magelo-style structure (flags, slot, stats, effect/focus with spell ids).
- * Loaded from item_stats.json (built by scripts/build_item_stats.py from TAKP AllaClone + raid_item_sources).
+ * Loaded from item_stats.json (built by scripts/takp_jsons/build_item_stats.py from TAKP AllaClone + raid_item_sources).
  */
 
 const TAKP_ITEM_BASE = 'https://www.takproject.net/allaclone/item.php?id='
@@ -8,7 +8,7 @@ const TAKP_SPELL_BASE = 'https://www.takproject.net/allaclone/spell.php?id='
 
 const cache = new Map()
 
-/** Lazy load item_stats.json (built by scripts/build_item_stats.py). Populates cache. */
+/** Lazy load item_stats.json (built by scripts/takp_jsons/build_item_stats.py). Populates cache. */
 let itemStatsLoadPromise = null
 export function ensureItemStatsLoaded() {
   if (itemStatsLoadPromise == null) {

@@ -16,7 +16,7 @@ import json
 from pathlib import Path
 from collections import defaultdict
 
-# Same as scripts/fix_mob_zones.py: mob (from key) -> zone for entries with no zone
+# Same as scripts/takp_jsons/fix_mob_zones.py: mob (from key) -> zone for entries with no zone
 MOB_ZONES = {
     "Nrinda_of_Ice": "Plane of Water",
     "Pwelon_of_Vapor": "Plane of Water",
@@ -99,7 +99,7 @@ def loot_key(item: dict) -> tuple:
 
 
 def main():
-    base = Path(__file__).resolve().parent.parent
+    base = Path(__file__).resolve().parent.parent.parent  # repo root
     path = base / "data" / "dkp_mob_loot.json"
     if not path.exists():
         print(f"Not found: {path}")

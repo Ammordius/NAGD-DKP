@@ -15,7 +15,7 @@ MARK_OF_SHADOWS_NAME = "Mark of Shadows"
 CANONICAL_MOB_KEY = "Kaas_Thox_Xi_Aten_Ha_Ra|Vex Thal"
 
 def main():
-    base = Path(__file__).resolve().parent.parent
+    base = Path(__file__).resolve().parent.parent.parent  # repo root
     path = base / "data" / "dkp_mob_loot.json"
     if not path.exists():
         print(f"Not found: {path}")

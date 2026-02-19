@@ -27,7 +27,8 @@ import sys
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-DATA_DIR = SCRIPT_DIR / "data"
+ROOT = SCRIPT_DIR.parent.parent  # repo root (script in scripts/pull_parse_dkp_site/)
+DATA_DIR = ROOT / "data"
 PAGE_SIZE = 5000
 
 
@@ -58,9 +59,9 @@ def _load_env_file(path: Path) -> None:
 def load_dotenv() -> None:
     """Load .env from repo root and web so SUPABASE_* or VITE_* are available."""
     for path in (
-        SCRIPT_DIR / ".env",
-        SCRIPT_DIR / "web" / ".env",
-        SCRIPT_DIR / "web" / ".env.local",
+        ROOT / ".env",
+        ROOT / "web" / ".env",
+        ROOT / "web" / ".env.local",
     ):
         if path.exists():
             _load_env_file(path)
@@ -217,7 +218,7 @@ def main() -> int:
     load_dotenv()
 
     ap = argparse.ArgumentParser(description="Import character→main list into Supabase (review or apply).")
-    ap.add_argument("--list", type=Path, default=SCRIPT_DIR / "message (8).txt", help="Tab-separated file: Character, Main")
+    ap.add_argument("--list", type=Path, default=ROOT / "message (8).txt", help="Tab-separated file: Character, Main")
     ap.add_argument("--review-out", type=Path, default=DATA_DIR / "character_main_import_review.json", help="Write review JSON here (default: data/character_main_import_review.json)")
     ap.add_argument("--apply", action="store_true", help="Apply changes to Supabase (upsert characters, accounts; insert character_account)")
     args = ap.parse_args()

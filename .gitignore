@@ -29,3 +29,17 @@ Thumbs.db
 # Scraped data (re-run pipeline after clone)
 raids/
 *.csv
+
+# Item page HTML cache (from fetch_item_pages.py; re-run to refresh)
+data/item_pages/
+
+# Generated / local artifacts (avoid committing; re-run scripts to reproduce)
+build/
+dist/
+logs/
+added_zerodkp_*.json
+audit_zerodkp_rolls.json
+.magelo_dump/
+backup/
+backup-*.tar.gz
+ledger/

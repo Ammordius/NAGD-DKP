@@ -12,7 +12,7 @@ The DKP app uses **elemental_mold_armor.json** so that when a class is selected 
 From repo root:
 
 ```bash
-python scripts/build_elemental_mold_armor.py
+python scripts/takp_jsons/build_elemental_mold_armor.py
 ```
 
 This writes:

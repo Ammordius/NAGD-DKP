@@ -1,6 +1,6 @@
 /**
  * Elemental mold/pattern → class-specific armor mapping.
- * Loaded from elemental_mold_armor.json (built by scripts/build_elemental_mold_armor.py from dkp_elemental_to_magelo.json).
+ * Loaded from elemental_mold_armor.json (built by scripts/takp_jsons/build_elemental_mold_armor.py from dkp_elemental_to_magelo.json).
  * Used with item_stats.json so when a class is selected we show the wearable armor for that class
  * instead of the mold, while keeping DKP/loot context and showing which mold it came from.
  */

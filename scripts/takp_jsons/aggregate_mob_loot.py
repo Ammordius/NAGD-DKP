@@ -36,7 +36,7 @@ def mob_name_from_key(key: str, entry: dict) -> str:
 
 
 def main():
-    base = Path(__file__).resolve().parent.parent
+    base = Path(__file__).resolve().parent.parent.parent  # repo root
     path = base / "data" / "dkp_mob_loot.json"
     if not path.exists():
         print(f"Not found: {path}")

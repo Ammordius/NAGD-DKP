@@ -253,7 +253,7 @@ def main():
     parser.add_argument("--csv", type=str, default="", help="Also write a flattened CSV to this path (e.g. data/item_stats.csv)")
     args = parser.parse_args()
 
-    base = Path(__file__).resolve().parent.parent
+    base = Path(__file__).resolve().parent.parent.parent  # repo root (script in scripts/takp_jsons/)
     mob_loot_path = Path(args.mob_loot) if args.mob_loot else None
     if not mob_loot_path or not mob_loot_path.is_absolute():
         for candidate in [base / "data" / "dkp_mob_loot.json", base / "web" / "public" / "dkp_mob_loot.json"]:

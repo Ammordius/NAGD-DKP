@@ -8,7 +8,7 @@ import csv
 import re
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parent.parent.parent  # repo root
 GROUND_TRUTH = ROOT / "ground_truth.txt"
 ACCOUNTS_CSV = ROOT / "data" / "accounts.csv"
 OUT_SQL = ROOT / "docs" / "supabase-account-display-names.sql"

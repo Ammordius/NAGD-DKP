@@ -25,7 +25,7 @@ import json
 
 
 def main():
-    root = Path(__file__).resolve().parent
+    root = Path(__file__).resolve().parent.parent.parent  # repo root
     data = root / "data"
     seen = set()  # preserve first-seen spelling for consistency
 

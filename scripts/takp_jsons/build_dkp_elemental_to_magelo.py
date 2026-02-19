@@ -160,7 +160,7 @@ def build_canonical(
 
 
 def main() -> None:
-    dkp_dir = Path(__file__).resolve().parent
+    dkp_dir = Path(__file__).resolve().parent.parent.parent  # repo root (input/output files at root)
     pop_path = dkp_dir / "pop_ele_armor.txt"
     molds_path = dkp_dir / "ele dkp armor molds.csv"
     out_path = dkp_dir / "dkp_elemental_to_magelo.json"

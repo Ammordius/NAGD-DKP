@@ -590,7 +590,7 @@ def main() -> None:
     ap.add_argument("--verbose", action="store_true", help="Print parsed lines and matches")
     args = ap.parse_args()
 
-    root = Path(__file__).resolve().parent.parent
+    root = Path(__file__).resolve().parent.parent.parent  # repo root (script in scripts/pull_parse_dkp_site/)
     data_dir = (args.data or root / "data").resolve()
     if not data_dir.is_dir():
         print(f"Data directory not found: {data_dir}")
