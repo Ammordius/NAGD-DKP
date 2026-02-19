@@ -31,7 +31,7 @@ export async function loadAccountActivity(accountId) {
   const [chRes, attRes, lootRes, attDkpRes] = await Promise.all([
     supabase.from('characters').select('char_id, name, class_name, level').in('char_id', charIds),
     fetchAll('raid_attendance', 'raid_id, char_id, character_name', (q) => q.in('char_id', charIds)),
-    fetchAll('raid_loot', 'raid_id, char_id, character_name, item_name, cost', (q) => q.in('char_id', charIds)),
+    fetchAll('raid_loot_with_assignment', 'raid_id, char_id, character_name, item_name, cost', (q) => q.in('char_id', charIds)),
     (async () => {
       const chars = (await supabase.from('characters').select('char_id, name').in('char_id', charIds)).data || []
       const characterKeys = [...new Set([...charIds, ...chars.map((c) => c.name).filter(Boolean)])]
