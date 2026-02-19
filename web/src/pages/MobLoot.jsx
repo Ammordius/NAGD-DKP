@@ -63,17 +63,21 @@ function buildNameToIdFromMobLoot(mobLootData) {
   return map
 }
 
-/** Inline row: item name (link) + one line of stats when loaded. Optional gear score badge. When moldName is set, show "from mold" badge. */
-function InlineItemRow({ name, itemId, showGearScore, moldName }) {
-  const [stats, setStats] = useState(null)
+/** Inline row: item name (link) + one line of stats when loaded. Optional gear score badge. When moldName is set, show "from mold" badge. initialStats avoids flash when parent already has cached stats. */
+function InlineItemRow({ name, itemId, showGearScore, moldName, initialStats }) {
+  const [stats, setStats] = useState(initialStats ?? null)
+  useEffect(() => {
+    if (initialStats != null) setStats((prev) => prev ?? initialStats)
+  }, [initialStats])
   useEffect(() => {
     if (itemId == null) return
     getItemStats(itemId).then(setStats)
   }, [itemId])
+  const resolvedStats = stats ?? initialStats
   const href = itemId != null ? `${TAKP_ITEM_BASE}${itemId}` : null
   const parts = []
-  if (stats) {
-    const { slot, ac, mods = [], resists = [], requiredLevel, effectSpellName, effectSpellId, classes } = stats
+  if (resolvedStats) {
+    const { slot, ac, mods = [], resists = [], requiredLevel, effectSpellName, effectSpellId, classes } = resolvedStats
     if (slot) parts.push(slot)
     if (ac != null) parts.push(`AC: ${ac}`)
     if (effectSpellId != null || effectSpellName) parts.push(`Effect: ${effectSpellName || effectSpellId}`)
@@ -83,8 +87,8 @@ function InlineItemRow({ name, itemId, showGearScore, moldName }) {
     if (classes) parts.push(classes)
   }
   const statsLine = parts.filter(Boolean).join(' · ')
-  const gearScore = stats && showGearScore ? getGearScore(stats) : null
-  const displayName = name || stats?.name || 'Unknown item'
+  const gearScore = resolvedStats && showGearScore ? getGearScore(resolvedStats) : null
+  const displayName = name || resolvedStats?.name || 'Unknown item'
   const itemPageTo = `/items/${encodeURIComponent(displayName)}`
   return (
     <div className="mob-loot-item-row">
@@ -212,9 +216,10 @@ export default function MobLoot() {
   const [itemsShownPerKey, setItemsShownPerKey] = useState({}) // key -> number to show
   const [itemLast3, setItemLast3] = useState({})
   const [mobZoneFromRaids, setMobZoneFromRaids] = useState({})
+  const [itemStatsReady, setItemStatsReady] = useState(false)
 
   useEffect(() => {
-    ensureItemStatsLoaded().catch(() => {})
+    ensureItemStatsLoaded().then(() => setItemStatsReady(true)).catch(() => {})
     ensureElementalArmorLoaded().catch(() => {})
   }, [])
 
@@ -495,16 +500,19 @@ export default function MobLoot() {
     if (filterSlot) {
       list = list.filter(({ stats, moldInfo }) => {
         if (itemHasSlot(stats, filterSlot)) return true
-        if (!stats && moldInfo && elementalSlotMatchesFilter(moldInfo.slot, filterSlot)) return true
+        if (moldInfo && elementalSlotMatchesFilter(moldInfo.slot, filterSlot)) return true
         return false
       })
     }
     if (filterClass) {
-      list = list.filter(({ stats }) => itemUsableByClass(stats, filterClass))
+      list = list.filter(({ stats, moldInfo, displayItemId }) => {
+        if (moldInfo && displayItemId) return true
+        return itemUsableByClass(stats, filterClass)
+      })
     }
     list = [...list].sort((a, b) => getGearScore(b.stats) - getGearScore(a.stats))
     return list
-  }, [nameToId, filterSlot, filterClass])
+  }, [nameToId, filterSlot, filterClass, itemStatsReady])
 
   /** When slot/class filter is on, hide mobs that have no matching items and attach max gear score for sorting. */
   const filteredForDisplay = useMemo(() => {
@@ -703,7 +711,7 @@ export default function MobLoot() {
                                       return (
                                         <tr key={item.item_id || item.name}>
                                           <td style={{ verticalAlign: 'middle', maxWidth: '420px' }}>
-                                            <InlineItemRow name={displayName} itemId={rowItemId} showGearScore moldName={moldName} />
+                                            <InlineItemRow name={displayName} itemId={rowItemId} showGearScore moldName={moldName} initialStats={stats} />
                                           </td>
                                           <td style={{ fontSize: '0.875rem', color: '#a78bfa', verticalAlign: 'middle', whiteSpace: 'nowrap' }}>
                                             {dkpStr}
