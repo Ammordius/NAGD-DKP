@@ -100,6 +100,7 @@ label { display: block; margin-bottom: 0.25rem; font-size: 0.875rem; color: #a1a
 .mob-loot-item-name a:hover { text-decoration: underline; }
 .mob-loot-item-name .mob-loot-item-takp { font-weight: 400; color: #71717a; font-size: 0.75em; }
 .mob-loot-item-name .mob-loot-item-takp:hover { color: #a78bfa; }
+.mob-loot-mold-badge { font-size: 0.7rem; color: #a78bfa; font-weight: 400; margin-left: 0.25rem; }
 .mob-loot-item-stats {
   font-size: 0.75rem;
   color: #a1a1aa;

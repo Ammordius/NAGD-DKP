@@ -7,6 +7,9 @@ import ItemLink from '../components/ItemLink'
 import ItemCard from '../components/ItemCard'
 import { getItemStats } from '../lib/itemStats'
 import { getDkpMobLoot, getRaidItemSources } from '../lib/staticData'
+import { ensureElementalArmorLoaded, getMoldInfo, getArmorIdForMoldAndClass, isElementalMold } from '../lib/elementalArmor'
+
+const CLASS_OPTIONS = ['WAR', 'CLR', 'PAL', 'RNG', 'SHD', 'BRD', 'ROG', 'SHM', 'MNK', 'NEC', 'WIZ', 'MAG', 'ENC', 'BST']
 
 // Build item_name (lowercase) -> item_id from dkp_mob_loot.json
 function buildItemIdMap(mobLoot) {
@@ -151,6 +154,7 @@ export default function ItemPage() {
   const [mobLoot, setMobLoot] = useState(null)
   const [raidItemSources, setRaidItemSources] = useState(null)
   const [itemStats, setItemStats] = useState(null)
+  const [elementalClass, setElementalClass] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -220,6 +224,12 @@ export default function ItemPage() {
   const itemKey = (itemName || '').trim().toLowerCase()
   const takpId = itemIdMap[itemKey] ?? raidNameToId[itemKey]
 
+  const moldInfo = elementalDataReady && takpId != null ? getMoldInfo(takpId) : null
+  const displayArmorId = (takpId != null && elementalClass && moldInfo)
+    ? getArmorIdForMoldAndClass(takpId, elementalClass)
+    : null
+  const showElementalClassPicker = elementalDataReady && takpId != null && isElementalMold(takpId)
+
   useEffect(() => {
     if (takpId == null) {
       setItemStats(null)
@@ -232,6 +242,30 @@ export default function ItemPage() {
     return () => { cancelled = true }
   }, [takpId])
 
+
+  const [elementalDataReady, setElementalDataReady] = useState(false)
+  useEffect(() => {
+    if (takpId == null) return
+    ensureElementalArmorLoaded().then(() => setElementalDataReady(true)).catch(() => {})
+  }, [takpId])
+
+  const [armorStats, setArmorStats] = useState(null)
+  useEffect(() => {
+    if (displayArmorId == null) {
+      setArmorStats(null)
+      return
+    }
+    let cancelled = false
+    getItemStats(displayArmorId).then((stats) => {
+      if (!cancelled) setArmorStats(stats)
+    })
+    return () => { cancelled = true }
+  }, [displayArmorId])
+
+  const displayId = displayArmorId ?? takpId
+  const displayStats = displayArmorId ? armorStats : itemStats
+  const displayName = (displayArmorId && armorStats?.name) ? armorStats.name : itemName
+
   if (loading) return <div className="container">Loading item…</div>
   if (error) return <div className="container"><span className="error">{error}</span> <Link to="/loot">← Loot search</Link></div>
 
@@ -241,19 +275,42 @@ export default function ItemPage() {
       <h1 style={{ marginBottom: '0.5rem' }}>
         {takpId != null ? (
           <ItemLink
-            itemName={itemName}
-            itemId={takpId}
-            externalHref={`https://www.takproject.net/allaclone/item.php?id=${takpId}`}
+            itemName={displayName}
+            itemId={displayId}
+            externalHref={`https://www.takproject.net/allaclone/item.php?id=${displayId}`}
           >
-            {itemName || '—'}
+            {displayName || '—'}
           </ItemLink>
         ) : (
           <span>{itemName || '—'}</span>
         )}
       </h1>
+      {showElementalClassPicker && (
+        <div style={{ marginBottom: '0.75rem' }}>
+          <label>
+            <span className="filter-label" style={{ marginRight: '0.5rem' }}>View armor for class</span>
+            <select
+              className="filter-select"
+              value={elementalClass}
+              onChange={(e) => setElementalClass(e.target.value)}
+              aria-label="Class for elemental armor"
+            >
+              <option value="">— Mold / pattern —</option>
+              {CLASS_OPTIONS.filter((c) => moldInfo?.by_class?.[c]).map((c) => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
+          </label>
+          {displayArmorId && moldInfo && (
+            <p style={{ margin: '0.5rem 0 0', fontSize: '0.875rem', color: '#a78bfa' }}>
+              Crafted from: <strong>{moldInfo.mold_name}</strong>
+            </p>
+          )}
+        </div>
+      )}
       {takpId != null && (
         <div style={{ marginBottom: '1rem' }}>
-          <ItemCard name={itemName} itemId={takpId} stats={itemStats} compact={!itemStats} />
+          <ItemCard name={displayName} itemId={displayId} stats={displayStats} compact={!displayStats} />
         </div>
       )}
 

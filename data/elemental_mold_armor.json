@@ -1,0 +1,303 @@
+{
+  "16362": {
+    "mold_name": "Elemental Chain Coif Pattern",
+    "slot": "head",
+    "armor_type": "chain",
+    "by_class": {
+      "ROG": "9806",
+      "SHM": "9830",
+      "RNG": "9821"
+    }
+  },
+  "16363": {
+    "mold_name": "Timeless Chain Tunic Pattern",
+    "slot": "chest",
+    "armor_type": "chain",
+    "by_class": {
+      "ROG": "32130",
+      "SHM": "32138",
+      "RNG": "32604"
+    }
+  },
+  "16364": {
+    "mold_name": "Elemental Chain Sleeve Pattern",
+    "slot": "arms",
+    "armor_type": "chain",
+    "by_class": {
+      "ROG": "11432",
+      "SHM": "11529",
+      "RNG": "11447"
+    }
+  },
+  "16365": {
+    "mold_name": "Elemental Chain Bracelet Pattern",
+    "slot": "wrists",
+    "armor_type": "chain",
+    "by_class": {
+      "ROG": "11141",
+      "SHM": "11278",
+      "RNG": "11193"
+    }
+  },
+  "16366": {
+    "mold_name": "Elemental Chain Glove Pattern",
+    "slot": "hands",
+    "armor_type": "chain",
+    "by_class": {
+      "ROG": "12598",
+      "SHM": "13579",
+      "RNG": "12816"
+    }
+  },
+  "16367": {
+    "mold_name": "Elemental Chain Pant Pattern",
+    "slot": "legs",
+    "armor_type": "chain",
+    "by_class": {
+      "ROG": "16717",
+      "SHM": "16803",
+      "RNG": "16777"
+    }
+  },
+  "16368": {
+    "mold_name": "Elemental Chain Boot Pattern",
+    "slot": "feet",
+    "armor_type": "chain",
+    "by_class": {
+      "ROG": "19443",
+      "SHM": "20078",
+      "RNG": "19838"
+    }
+  },
+  "16369": {
+    "mold_name": "Elemental Bracer Mold",
+    "slot": "wrists",
+    "armor_type": "plate",
+    "by_class": {
+      "WAR": "11138",
+      "CLR": "11199",
+      "SHD": "11173",
+      "BRD": "11178",
+      "PAL": "11163"
+    }
+  },
+  "16370": {
+    "mold_name": "Elemental Boot Mold",
+    "slot": "feet",
+    "armor_type": "plate",
+    "by_class": {
+      "WAR": "19440",
+      "CLR": "20074",
+      "SHD": "19546",
+      "BRD": "19549",
+      "PAL": "19449"
+    }
+  },
+  "16371": {
+    "mold_name": "Elemental Helm Mold",
+    "slot": "head",
+    "armor_type": "plate",
+    "by_class": {
+      "WAR": "9629",
+      "CLR": "9827",
+      "SHD": "9815",
+      "BRD": "9818",
+      "PAL": "9812"
+    }
+  },
+  "16372": {
+    "mold_name": "Elemental Vambrace Mold",
+    "slot": "arms",
+    "armor_type": "plate",
+    "by_class": {
+      "WAR": "11429",
+      "CLR": "32012",
+      "SHD": "11441",
+      "BRD": "11444",
+      "PAL": "11438"
+    }
+  },
+  "16373": {
+    "mold_name": "Elemental Greaves Mold",
+    "slot": "legs",
+    "armor_type": "plate",
+    "by_class": {
+      "WAR": "16693",
+      "CLR": "16797",
+      "SHD": "16763",
+      "BRD": "16771",
+      "PAL": "16757"
+    }
+  },
+  "16374": {
+    "mold_name": "Elemental Gauntlet Mold",
+    "slot": "hands",
+    "armor_type": "plate",
+    "by_class": {
+      "WAR": "12595",
+      "CLR": "13563",
+      "SHD": "12637",
+      "BRD": "12664",
+      "PAL": "12627"
+    }
+  },
+  "16375": {
+    "mold_name": "Timeless Breastplate Mold",
+    "slot": "chest",
+    "armor_type": "plate",
+    "by_class": {
+      "WAR": "32129",
+      "CLR": "32603",
+      "SHD": "32602",
+      "BRD": "32134",
+      "PAL": "32132"
+    }
+  },
+  "16376": {
+    "mold_name": "Elemental Leather Helm Pattern",
+    "slot": "head",
+    "armor_type": "leather",
+    "by_class": {
+      "MNK": "9809",
+      "DRU": "9833",
+      "BST": "9824"
+    }
+  },
+  "16377": {
+    "mold_name": "Timeless Leather Tunic Pattern",
+    "slot": "chest",
+    "armor_type": "leather",
+    "by_class": {
+      "MNK": "32131",
+      "DRU": "32139",
+      "BST": "32136"
+    }
+  },
+  "16378": {
+    "mold_name": "Elemental Leather Sleeve Pattern",
+    "slot": "arms",
+    "armor_type": "leather",
+    "by_class": {
+      "MNK": "11435",
+      "DRU": "11575",
+      "BST": "11450"
+    }
+  },
+  "16379": {
+    "mold_name": "Elemental Leather Wrist Pattern",
+    "slot": "wrists",
+    "armor_type": "leather",
+    "by_class": {
+      "MNK": "11146",
+      "DRU": "11281",
+      "BST": "11196"
+    }
+  },
+  "16380": {
+    "mold_name": "Elemental Leather Glove Pattern",
+    "slot": "hands",
+    "armor_type": "leather",
+    "by_class": {
+      "MNK": "12624",
+      "DRU": "13603",
+      "BST": "13553"
+    }
+  },
+  "16381": {
+    "mold_name": "Elemental Leather Pant Pattern",
+    "slot": "legs",
+    "armor_type": "leather",
+    "by_class": {
+      "MNK": "16727",
+      "DRU": "16811",
+      "BST": "16787"
+    }
+  },
+  "16382": {
+    "mold_name": "Elemental Leather Boot Pattern",
+    "slot": "feet",
+    "armor_type": "leather",
+    "by_class": {
+      "MNK": "19446",
+      "DRU": "20422",
+      "BST": "20032"
+    }
+  },
+  "16383": {
+    "mold_name": "Elemental Silk Turban Pattern",
+    "slot": "head",
+    "armor_type": "silk",
+    "by_class": {
+      "WIZ": "9950",
+      "MAG": "9944",
+      "NEC": "9947",
+      "ENC": "9836"
+    }
+  },
+  "16384": {
+    "mold_name": "Timeless Silk Robe Pattern",
+    "slot": "chest",
+    "armor_type": "silk",
+    "by_class": {
+      "WIZ": "32143",
+      "MAG": "32141",
+      "NEC": "32142",
+      "ENC": "32140"
+    }
+  },
+  "16385": {
+    "mold_name": "Elemental Silk Sleeve Pattern",
+    "slot": "arms",
+    "armor_type": "silk",
+    "by_class": {
+      "WIZ": "11876",
+      "MAG": "11598",
+      "NEC": "11618",
+      "ENC": "11578"
+    }
+  },
+  "16386": {
+    "mold_name": "Elemental Silk Bracelet Pattern",
+    "slot": "wrists",
+    "armor_type": "silk",
+    "by_class": {
+      "WIZ": "11309",
+      "MAG": "11303",
+      "NEC": "11306",
+      "ENC": "11298"
+    }
+  },
+  "16387": {
+    "mold_name": "Elemental Silk Glove Pattern",
+    "slot": "hands",
+    "armor_type": "silk",
+    "by_class": {
+      "WIZ": "13627",
+      "MAG": "13619",
+      "NEC": "13623",
+      "ENC": "13614"
+    }
+  },
+  "16388": {
+    "mold_name": "Elemental Silk Pant Pattern",
+    "slot": "legs",
+    "armor_type": "silk",
+    "by_class": {
+      "WIZ": "19027",
+      "MAG": "19021",
+      "NEC": "19024",
+      "ENC": "16931"
+    }
+  },
+  "16389": {
+    "mold_name": "Elemental Silk Boot Pattern",
+    "slot": "feet",
+    "armor_type": "silk",
+    "by_class": {
+      "WIZ": "20434",
+      "MAG": "20428",
+      "NEC": "20431",
+      "ENC": "20425"
+    }
+  }
+}

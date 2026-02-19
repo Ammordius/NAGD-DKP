@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 import { createCache } from '../lib/cache'
 import { getDkpMobLoot, getRaidItemSources } from '../lib/staticData'
 import { getItemStats, ensureItemStatsLoaded, getItemStatsCached, getGearScore, itemHasSlot, itemUsableByClass } from '../lib/itemStats'
+import { ensureElementalArmorLoaded, getMoldInfo, getArmorIdForMoldAndClass } from '../lib/elementalArmor'
 
 const ITEMS_PER_PAGE = 20
 
@@ -46,8 +47,8 @@ function buildNameToIdFromMobLoot(mobLootData) {
   return map
 }
 
-/** Inline row: item name (link) + one line of stats when loaded. Optional gear score badge. */
-function InlineItemRow({ name, itemId, showGearScore }) {
+/** Inline row: item name (link) + one line of stats when loaded. Optional gear score badge. When moldName is set, show "from mold" badge. */
+function InlineItemRow({ name, itemId, showGearScore, moldName }) {
   const [stats, setStats] = useState(null)
   useEffect(() => {
     if (itemId == null) return
@@ -67,7 +68,7 @@ function InlineItemRow({ name, itemId, showGearScore }) {
   }
   const statsLine = parts.filter(Boolean).join(' · ')
   const gearScore = stats && showGearScore ? getGearScore(stats) : null
-  const displayName = name || 'Unknown item'
+  const displayName = name || stats?.name || 'Unknown item'
   const itemPageTo = `/items/${encodeURIComponent(displayName)}`
   return (
     <div className="mob-loot-item-row">
@@ -76,6 +77,11 @@ function InlineItemRow({ name, itemId, showGearScore }) {
           <span className="mob-loot-gear-score" title="Gear score (saves + AC + HP/3)">{gearScore}</span>
         )}
         <Link to={itemPageTo}>{displayName}</Link>
+        {moldName && (
+          <span className="mob-loot-mold-badge" title={`Class-specific armor from mold: ${moldName}`}>
+            {' '}(from mold)
+          </span>
+        )}
         {href && (
           <>
             {' '}
@@ -193,6 +199,7 @@ export default function MobLoot() {
 
   useEffect(() => {
     ensureItemStatsLoaded().catch(() => {})
+    ensureElementalArmorLoaded().catch(() => {})
   }, [])
 
   const nameToId = useMemo(() => {
@@ -449,14 +456,23 @@ export default function MobLoot() {
     return list
   }, [entriesGrouped, query])
 
-  /** For a mob's loot list: filter by slot/class and sort by gear score (desc). */
+  /** For a mob's loot list: filter by slot/class and sort by gear score (desc). When class is selected, elemental molds resolve to class-specific armor for display and filtering. */
   const getFilteredAndSortedLoot = useCallback((loot) => {
     if (!loot?.length) return []
     const withStats = loot.map((item) => {
       const name = (item.name || '').trim().toLowerCase()
-      const itemId = item.item_id ?? nameToId[name]
-      const stats = getItemStatsCached(itemId)
-      return { item, itemId, stats }
+      const moldId = item.item_id ?? nameToId[name]
+      const moldInfo = getMoldInfo(moldId)
+      const armorId = filterClass && moldInfo ? getArmorIdForMoldAndClass(moldId, filterClass) : null
+      const statsId = armorId ?? moldId
+      const stats = getItemStatsCached(statsId)
+      return {
+        item,
+        itemId: moldId,
+        stats,
+        moldName: armorId ? moldInfo.mold_name : null,
+        displayItemId: armorId ?? null,
+      }
     })
     let list = withStats
     if (filterSlot) {
@@ -655,16 +671,18 @@ export default function MobLoot() {
                                     <tr><th>Item (sorted by gear score)</th><th>DKP (last 3 / avg)</th></tr>
                                   </thead>
                                   <tbody>
-                                    {visibleLoot.map(({ item, itemId }) => {
+                                    {visibleLoot.map(({ item, itemId, stats, moldName, displayItemId }) => {
                                       const name = item.name || '—'
                                       const last3 = itemLast3[(name || '').trim().toLowerCase()]
                                       const dkpStr = last3?.values?.length
                                         ? (last3.avg != null ? `${last3.values.join(', ')} (avg ${last3.avg})` : last3.values.join(', '))
                                         : '—'
+                                      const displayName = (displayItemId && stats?.name) ? stats.name : name
+                                      const rowItemId = displayItemId ?? itemId
                                       return (
                                         <tr key={item.item_id || item.name}>
                                           <td style={{ verticalAlign: 'middle', maxWidth: '420px' }}>
-                                            <InlineItemRow name={name} itemId={itemId} showGearScore />
+                                            <InlineItemRow name={displayName} itemId={rowItemId} showGearScore moldName={moldName} />
                                           </td>
                                           <td style={{ fontSize: '0.875rem', color: '#a78bfa', verticalAlign: 'middle', whiteSpace: 'nowrap' }}>
                                             {dkpStr}
