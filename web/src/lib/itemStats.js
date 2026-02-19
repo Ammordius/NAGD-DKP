@@ -65,10 +65,11 @@ export function itemHasSlot(stats, slot) {
   return slots.includes(String(slot).toUpperCase())
 }
 
-/** Return whether item is usable by the given class (classes string e.g. "WAR CLR PAL"). */
+/** Return whether item is usable by the given class (classes string e.g. "WAR CLR PAL" or "ALL"). */
 export function itemUsableByClass(stats, cls) {
   if (!stats?.classes || !cls) return true
   const classes = String(stats.classes).toUpperCase().split(/\s+/).filter(Boolean)
+  if (classes.includes('ALL')) return true
   return classes.includes(String(cls).toUpperCase())
 }
 
