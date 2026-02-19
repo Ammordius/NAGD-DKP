@@ -24,7 +24,12 @@ The app loads `/elemental_mold_armor.json` at runtime. Ensure `web/public/elemen
 
 ## Behavior
 
-- **Mob loot (/mobs):** When the **Class** filter is set, any loot row that is an elemental mold (pattern/mold) resolves to the armor item for that class. The row shows the armor name and stats (from `item_stats.json`), a “(from mold)” badge, and the same DKP column. Filtering and gear-score sort use the armor’s stats.
+- **Mob loot (/mobs):** When the **Class** filter is set, any loot row that is an elemental mold (pattern/mold) resolves to the armor item for that class. The row shows the armor name and stats (from `item_stats.json`), a “(from mold)” badge, and the same DKP column. **Slot filter** works for molds even when stats are missing: mold slot (e.g. head, wrists) is mapped to the filter (HEAD, WRIST). Filtering and gear-score sort use the armor’s stats when available.
 - **Item page (/items/...):** For an item that is an elemental mold, a **“View armor for class”** dropdown appears. Choosing a class shows that class’s armor (name, card, link) and “Crafted from: [mold name]”. DKP history and table stay keyed by the mold name.
 
-No change to `item_stats.json` or the rest of the stack: one extra static JSON and a small lib (`elementalArmor.js`) used only where needed.
+## Item stats and gear score
+
+For **gear score and the stats line** to appear on “(from mold)” rows, `item_stats.json` must include the **class-specific armor** item IDs. The build script does this automatically:
+
+- **build_item_stats.py** loads `elemental_mold_armor.json` and adds every `by_class` armor ID to the set of items to fetch. Re-run the script (or build from cache after fetching) so that `item_stats.json` includes those IDs.
+- **fetch_item_pages.py** also includes elemental armor IDs when caching HTML, so a full cache + `--from-cache` build will have stats for molds’ class armor.

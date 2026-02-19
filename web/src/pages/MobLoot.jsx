@@ -14,6 +14,22 @@ const SLOT_OPTIONS = ['HEAD', 'FACE', 'NECK', 'SHOULDERS', 'ARMS', 'BACK', 'CHES
 const CLASS_OPTIONS = ['WAR', 'CLR', 'PAL', 'RNG', 'SHD', 'BRD', 'ROG', 'SHM', 'MNK', 'NEC', 'WIZ', 'MAG', 'ENC', 'BST']
 const TAKP_ITEM_BASE = 'https://www.takproject.net/allaclone/item.php?id='
 
+/** Map elemental_mold_armor slot (e.g. "head", "wrists") to filter slot (HEAD, WRIST). */
+const ELEMENTAL_SLOT_TO_FILTER = {
+  head: 'HEAD',
+  chest: 'CHEST',
+  arms: 'ARMS',
+  legs: 'LEGS',
+  wrists: 'WRIST',
+  feet: 'FEET',
+  hands: 'HANDS',
+}
+function elementalSlotMatchesFilter(moldSlot, filterSlot) {
+  if (!moldSlot || !filterSlot) return false
+  const mapped = ELEMENTAL_SLOT_TO_FILTER[String(moldSlot).toLowerCase()]
+  return mapped === String(filterSlot).toUpperCase()
+}
+
 /** Build item name (lowercase) -> item_id from raid_item_sources (id -> { name }). */
 function buildNameToIdFromRaid(raidSources) {
   const map = {}
@@ -470,13 +486,18 @@ export default function MobLoot() {
         item,
         itemId: moldId,
         stats,
+        moldInfo: moldInfo || null,
         moldName: armorId ? moldInfo.mold_name : null,
         displayItemId: armorId ?? null,
       }
     })
     let list = withStats
     if (filterSlot) {
-      list = list.filter(({ stats }) => itemHasSlot(stats, filterSlot))
+      list = list.filter(({ stats, moldInfo }) => {
+        if (itemHasSlot(stats, filterSlot)) return true
+        if (!stats && moldInfo && elementalSlotMatchesFilter(moldInfo.slot, filterSlot)) return true
+        return false
+      })
     }
     if (filterClass) {
       list = list.filter(({ stats }) => itemUsableByClass(stats, filterClass))

@@ -283,6 +283,23 @@ def main():
 
     items, n_mob, n_raid_added = collect_item_ids(mob_loot_path, raid_sources_path)
     id_to_name = {iid: name for iid, name in items}
+    n_elemental = 0
+    for elem_path in [base / "data" / "elemental_mold_armor.json", base / "web" / "public" / "elemental_mold_armor.json"]:
+        if elem_path.exists():
+            elem_data = json.loads(elem_path.read_text(encoding="utf-8"))
+            for mold_id, info in (elem_data.items() if isinstance(elem_data, dict) else []):
+                for cls, armor_id in (info.get("by_class") or {}).items():
+                    try:
+                        aid = int(armor_id)
+                        if aid not in id_to_name:
+                            id_to_name[aid] = f"Item {armor_id}"
+                            n_elemental += 1
+                    except (ValueError, TypeError):
+                        pass
+            break
+    if n_elemental:
+        print(f"Item IDs: +{n_elemental} from elemental_mold_armor (class-specific armor for mold display)")
+    items = [(iid, id_to_name[iid]) for iid in sorted(id_to_name)]
     print(f"Item IDs: {n_mob} from dkp_mob_loot, +{n_raid_added} from raid_item_sources = {len(items)} total")
 
     result = {}
