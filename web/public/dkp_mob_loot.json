@@ -1,23 +1,25 @@
 {
-  "#Bertoxxulous|": {
-    "mob": "#Bertoxxulous",
+  "Bertoxxulous|Plane of Time": {
+    "mob": "Bertoxxulous",
     "mobs": [
       "Bertoxxulous"
     ],
-    "zone": "",
+    "zone": "Plane of Time",
     "loot": [
       {
         "item_id": 15927,
         "name": "Belt of Temporal Bindings",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
         "item_id": 25995,
         "name": "Boots of Despair",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
@@ -31,7 +33,8 @@
         "item_id": 8977,
         "name": "Collar of Catastrophe",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
@@ -45,28 +48,32 @@
         "item_id": 26092,
         "name": "Greatblade of Chaos",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
         "item_id": 28651,
         "name": "Leggings of Furious Might",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
         "item_id": 26993,
         "name": "Pulsing Onyx Ring",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
         "item_id": 20508,
         "name": "Symbol of Ancient Summoning",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
@@ -88,7 +95,8 @@
         "item_id": 9435,
         "name": "Veil of the Inferno",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       }
     ]
@@ -564,33 +572,37 @@
       }
     ]
   },
-  "Avatar_of_the_Elements|": {
+  "Avatar_of_the_Elements|Plane of Time": {
     "mob": "Avatar_of_the_Elements",
     "mobs": [
       "Avatar_of_the_Elements",
+      "P3 Guardian",
       "Supernatural_Guardian"
     ],
-    "zone": "",
+    "zone": "Plane of Time",
     "loot": [
       {
         "item_id": 5760,
         "name": "Earring of Xaoth Kor",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
         "item_id": 22998,
         "name": "Ethereal Destroyer",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
         "item_id": 26983,
         "name": "Faceguard of Frenzy",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
@@ -604,14 +616,16 @@
         "item_id": 29174,
         "name": "Mask of Strategic Insight",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
         "item_id": 13638,
         "name": "Pauldrons of Purity",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
@@ -620,10 +634,59 @@
         "sources": [
           "dkp"
         ]
+      },
+      {
+        "item_id": null,
+        "name": "Earring of Xaoth Kor",
+        "sources": [
+          "raid_classification"
+        ]
+      },
+      {
+        "item_id": null,
+        "name": "Ethereal Destroyer",
+        "sources": [
+          "raid_classification"
+        ]
+      },
+      {
+        "item_id": null,
+        "name": "Faceguard of Frenzy",
+        "sources": [
+          "raid_classification"
+        ]
+      },
+      {
+        "item_id": null,
+        "name": "Fiery Crystal Guard",
+        "sources": [
+          "raid_classification"
+        ]
+      },
+      {
+        "item_id": null,
+        "name": "Mask of Strategic Insight",
+        "sources": [
+          "raid_classification"
+        ]
+      },
+      {
+        "item_id": null,
+        "name": "Pauldrons of Purity",
+        "sources": [
+          "raid_classification"
+        ]
+      },
+      {
+        "item_id": null,
+        "name": "Timeless Coral Greatsword",
+        "sources": [
+          "raid_classification"
+        ]
       }
     ]
   },
-  "Azobian_the_Darklord|": {
+  "Azobian_the_Darklord|Plane of Fire": {
     "mob": "Azobian_the_Darklord",
     "mobs": [
       "Azobian_the_Darklord",
@@ -631,13 +694,14 @@
       "Javonn_the_Overlord",
       "Reaxnous_the_Chaoslord"
     ],
-    "zone": "",
+    "zone": "Plane of Fire",
     "loot": [
       {
         "item_id": 10240,
         "name": "Band of Elder Understanding",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
@@ -651,7 +715,8 @@
         "item_id": 27648,
         "name": "Fire Marked Rune",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
@@ -702,60 +767,67 @@
       }
     ]
   },
-  "Cazic_Thule|": {
+  "Cazic_Thule|Plane of Time": {
     "mob": "Cazic_Thule",
     "mobs": [
       "Cazic_Thule"
     ],
-    "zone": "",
+    "zone": "Plane of Time",
     "loot": [
       {
         "item_id": 15877,
         "name": "Belt of Tidal Energy",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
         "item_id": 15842,
         "name": "Cloak of Retribution",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
         "item_id": 26980,
         "name": "Earring of Unseen Horrors",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
         "item_id": 28650,
         "name": "Greaves of Furious Might",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
         "item_id": 26984,
         "name": "Mask of Simplicity",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
         "item_id": 27000,
         "name": "Padded Tigerskin Gloves",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
         "item_id": 24999,
         "name": "Staff of Transcendence",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
@@ -777,21 +849,24 @@
         "item_id": 15867,
         "name": "Wand of Impenetrable Force",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
         "item_id": 28666,
         "name": "Wristband of Echoed Thoughts",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
         "item_id": 28665,
         "name": "Zealot's Spiked Bracer",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       }
     ]
@@ -873,33 +948,36 @@
       }
     ]
   },
-  "Earthen_Overseer|": {
+  "Earthen_Overseer|Plane of Time": {
     "mob": "Earthen_Overseer",
     "mobs": [
       "Earthen_Overseer",
       "Windshapen_Warlord_of_Air"
     ],
-    "zone": "",
+    "zone": "Plane of Time",
     "loot": [
       {
         "item_id": 21996,
         "name": "Cloak of Ferocity",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
         "item_id": 28660,
         "name": "Drape of the Unending",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
         "item_id": 27990,
         "name": "Gauntlets of Disruption",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
@@ -1004,18 +1082,19 @@
       }
     ]
   },
-  "Fennin_Ro_the_Tyrant_of_Fire|": {
+  "Fennin_Ro_the_Tyrant_of_Fire|Plane of Fire": {
     "mob": "Fennin_Ro_the_Tyrant_of_Fire",
     "mobs": [
       "Fennin_Ro_the_Tyrant_of_Fire"
     ],
-    "zone": "",
+    "zone": "Plane of Fire",
     "loot": [
       {
         "item_id": 16679,
         "name": "Earring of Eternal Flame",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
@@ -1061,28 +1140,32 @@
         "item_id": 12510,
         "name": "Gleaming Mesh Girdle",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
         "item_id": 12592,
         "name": "Great Mask of Flame",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
         "item_id": 24602,
         "name": "Ifir, Dagger of Fire",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
         "item_id": 14943,
         "name": "Immaculate Vest of the Fire Tyrant",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       }
     ]
@@ -1175,13 +1258,13 @@
       }
     ]
   },
-  "Gutripping_War_Beast|": {
+  "Gutripping_War_Beast|Plane of Time": {
     "mob": "Gutripping_War_Beast",
     "mobs": [
       "Gutripping_War_Beast",
       "War_Shapen_Emissary"
     ],
-    "zone": "",
+    "zone": "Plane of Time",
     "loot": [
       {
         "item_id": 28662,
@@ -1194,14 +1277,16 @@
         "item_id": 21999,
         "name": "Hoop of the Enlightened",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
         "item_id": 26995,
         "name": "Tiny Jade Ring",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       }
     ]
@@ -1243,18 +1328,19 @@
       }
     ]
   },
-  "Innoruuk|": {
+  "Innoruuk|Plane of Time": {
     "mob": "Innoruuk",
     "mobs": [
       "Innoruuk"
     ],
-    "zone": "",
+    "zone": "Plane of Time",
     "loot": [
       {
         "item_id": 27274,
         "name": "Barrier of Freezing Winds",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
@@ -1268,7 +1354,8 @@
         "item_id": 4119,
         "name": "Earring of Celestial Energy",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
@@ -1282,7 +1369,8 @@
         "item_id": 28246,
         "name": "Gloves of Airy Mists",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
@@ -1296,35 +1384,40 @@
         "item_id": 13647,
         "name": "Mantle of Pure Spirit",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
         "item_id": 9289,
         "name": "Necklace of Eternal Visions",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
         "item_id": 20625,
         "name": "Serrated Dart of Energy",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
         "item_id": 13674,
         "name": "Shroud of Survival",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
         "item_id": 24570,
         "name": "Songblade of the Eternal",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
@@ -1477,12 +1570,12 @@
       }
     ]
   },
-  "Quarm|": {
+  "Quarm|Plane of Time": {
     "mob": "Quarm",
     "mobs": [
       "Quarm"
     ],
-    "zone": "",
+    "zone": "Plane of Time",
     "loot": [
       {
         "item_id": 21993,
@@ -1495,49 +1588,56 @@
         "item_id": 16156,
         "name": "Cord of Temporal Weavings",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
         "item_id": 7130,
         "name": "Earring of Influxed Gravity",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
         "item_id": 32100,
         "name": "Earthen Bracer of Fortitude",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
         "item_id": 28649,
         "name": "Ethereal Silk Leggings",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
         "item_id": 22894,
         "name": "Hammer of the Timeweaver",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
         "item_id": 26989,
         "name": "Prismatic Ring of Resistance",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
         "item_id": 28661,
         "name": "Shawl of Eternal Forces",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
@@ -1551,28 +1651,32 @@
         "item_id": 7123,
         "name": "Silver Hoop of Speed",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
         "item_id": 20496,
         "name": "Spool of Woven Time",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
         "item_id": 26987,
         "name": "Stone of Flowing Time",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
         "item_id": 7769,
         "name": "Talisman of the Elements",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
@@ -1611,44 +1715,49 @@
         "item_id": 27280,
         "name": "Whorl of Unnatural Forces",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
         "item_id": 32110,
         "name": "Wristband of Icy Vengeance",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       }
     ]
   },
-  "Rallos_Zek|": {
+  "Rallos_Zek|Plane of Time": {
     "mob": "Rallos_Zek",
     "mobs": [
       "Rallos_Zek"
     ],
-    "zone": "",
+    "zone": "Plane of Time",
     "loot": [
       {
         "item_id": 26990,
         "name": "Band of Primordial Energy",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
         "item_id": 22999,
         "name": "Darkblade of the Warlord",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
         "item_id": 24793,
         "name": "Greatstaff of Power",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
@@ -1662,21 +1771,24 @@
         "item_id": 28659,
         "name": "Pauldrons of Devastation",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
         "item_id": 15824,
         "name": "Platinum Cloak of War",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
         "item_id": 14818,
         "name": "Ring of Thunderous Forces",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
@@ -1690,7 +1802,8 @@
         "item_id": 27298,
         "name": "Shield of Strife",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
@@ -1705,7 +1818,8 @@
         "item_id": 21338,
         "name": "Ton Po's Mystical Pouch",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
@@ -1768,39 +1882,43 @@
       }
     ]
   },
-  "Ralthos_Enrok|": {
+  "Ralthos_Enrok|Plane of Time": {
     "mob": "Ralthos_Enrok",
     "mobs": [
       "Ralthos_Enrok"
     ],
-    "zone": "",
+    "zone": "Plane of Time",
     "loot": [
       {
         "item_id": 22883,
         "name": "Cudgel of Wrecking",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
         "item_id": 28653,
         "name": "Glowing Chains",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
         "item_id": 26985,
         "name": "Veil of Warmth",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
         "item_id": 26899,
         "name": "Wand of the Vortex",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       }
     ]
@@ -1835,81 +1953,91 @@
       }
     ]
   },
-  "Saryrn|": {
+  "Saryrn|Plane of Time": {
     "mob": "Saryrn",
     "mobs": [
       "Saryrn"
     ],
-    "zone": "",
+    "zone": "Plane of Time",
     "loot": [
       {
         "item_id": 28648,
         "name": "Cap of Flowing Time",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
         "item_id": 22986,
         "name": "Edge of Eternity",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
         "item_id": 28664,
         "name": "Girdle of Intense Durability",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
         "item_id": 26996,
         "name": "Gloves of the Unseen",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
         "item_id": 26994,
         "name": "Ring of Evasion",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
         "item_id": 28663,
         "name": "Runewarded Belt",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
         "item_id": 13673,
         "name": "Shroud of Provocation",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
         "item_id": 20898,
         "name": "Symbol of the Planemasters",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
         "item_id": 24699,
         "name": "Time's Antithesis",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
         "item_id": 26981,
         "name": "Veil of Lost Hopes",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       }
     ]
@@ -2000,32 +2128,35 @@
       }
     ]
   },
-  "Tallon_Zek|": {
+  "Tallon_Zek|Plane of Time": {
     "mob": "Tallon_Zek",
     "mobs": [
       "Tallon_Zek"
     ],
-    "zone": "",
+    "zone": "Plane of Time",
     "loot": [
       {
         "item_id": 28654,
         "name": "Amulet of Crystal Dreams",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
         "item_id": 26991,
         "name": "Band of Prismatic Focus",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
         "item_id": 28667,
         "name": "Bracer of Precision",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
@@ -2046,14 +2177,16 @@
         "item_id": 23498,
         "name": "Hopebringer",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
         "item_id": 28658,
         "name": "Mantle of Deadly Precision",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
@@ -2067,37 +2200,41 @@
         "item_id": 28656,
         "name": "Tactician's Shield",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
         "item_id": 26988,
         "name": "Winged Storm Boots",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       }
     ]
   },
-  "Terris_Thule|": {
+  "Terris_Thule|Plane of Time": {
     "mob": "Terris_Thule",
     "mobs": [
       "Terris_Thule"
     ],
-    "zone": "",
+    "zone": "Plane of Time",
     "loot": [
       {
         "item_id": 21995,
         "name": "Armguards of the Brute",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
         "item_id": 21998,
         "name": "Cape of Endless Torment",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
@@ -2111,42 +2248,48 @@
         "item_id": 22890,
         "name": "Cudgel of Venomous Hatred",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
         "item_id": 7125,
         "name": "Earring of Corporeal Essence",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
         "item_id": 21886,
         "name": "Hammer of Hours",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
         "item_id": 26895,
         "name": "Orb of Clinging Death",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
         "item_id": 8774,
         "name": "Talisman of Tainted Energy",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
         "item_id": 29172,
         "name": "Vanazir, Dreamer's Despair",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       }
     ]
@@ -2278,18 +2421,19 @@
       }
     ]
   },
-  "Vallon_Zek|": {
+  "Vallon_Zek|Plane of Time": {
     "mob": "Vallon_Zek",
     "mobs": [
       "Vallon_Zek"
     ],
-    "zone": "",
+    "zone": "Plane of Time",
     "loot": [
       {
         "item_id": 27818,
         "name": "Bow of the Tempest",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
@@ -2303,7 +2447,8 @@
         "item_id": 5594,
         "name": "Earring of Temporal Solstice",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
@@ -2331,7 +2476,8 @@
         "item_id": 20627,
         "name": "Hammer of Holy Vengeance",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
@@ -2366,14 +2512,16 @@
         "item_id": 26740,
         "name": "Shinai of the Ancients",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
         "item_id": 26986,
         "name": "Shoes of Fleeting Fury",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
@@ -2387,7 +2535,8 @@
         "item_id": 21876,
         "name": "Wand of Temporal Power",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       }
     ]
@@ -4552,29 +4701,6 @@
     ],
     "respawn_seconds": 259200
   },
-  "Azobian_the_Darklord|Plane of Fire": {
-    "mob": "Azobian_the_Darklord",
-    "mobs": [
-      "Azobian_the_Darklord"
-    ],
-    "zone": "Plane of Fire",
-    "loot": [
-      {
-        "item_id": 10240,
-        "name": "Band of Elder Understanding",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 27648,
-        "name": "Fire Marked Rune",
-        "sources": [
-          "raid_item_sources"
-        ]
-      }
-    ]
-  },
   "Babnoxis_the_Spider_Queen|Plane of Fire": {
     "mob": "Babnoxis_the_Spider_Queen",
     "mobs": [
@@ -4746,50 +4872,6 @@
       }
     ],
     "respawn_seconds": 86400
-  },
-  "Fennin_Ro_the_Tyrant_of_Fire|Plane of Fire": {
-    "mob": "Fennin_Ro_the_Tyrant_of_Fire",
-    "mobs": [
-      "Fennin_Ro_the_Tyrant_of_Fire"
-    ],
-    "zone": "Plane of Fire",
-    "loot": [
-      {
-        "item_id": 16679,
-        "name": "Earring of Eternal Flame",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 12510,
-        "name": "Gleaming Mesh Girdle",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 12592,
-        "name": "Great Mask of Flame",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 24602,
-        "name": "Ifir, Dagger of Fire",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 14943,
-        "name": "Immaculate Vest of the Fire Tyrant",
-        "sources": [
-          "raid_item_sources"
-        ]
-      }
-    ]
   },
   "General_Druav_Flamesinger|Plane of Fire": {
     "mob": "General_Druav_Flamesinger",
@@ -5561,362 +5643,6 @@
       }
     ]
   },
-  "Avatar_of_the_Elements|Plane of Time": {
-    "mob": "Avatar_of_the_Elements",
-    "mobs": [
-      "Avatar_of_the_Elements",
-      "P3 Guardian"
-    ],
-    "zone": "Plane of Time",
-    "loot": [
-      {
-        "item_id": null,
-        "name": "Earring of Xaoth Kor",
-        "sources": [
-          "raid_classification"
-        ]
-      },
-      {
-        "item_id": 5760,
-        "name": "Earring of Xaoth Kor",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": null,
-        "name": "Ethereal Destroyer",
-        "sources": [
-          "raid_classification"
-        ]
-      },
-      {
-        "item_id": 22998,
-        "name": "Ethereal Destroyer",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": null,
-        "name": "Faceguard of Frenzy",
-        "sources": [
-          "raid_classification"
-        ]
-      },
-      {
-        "item_id": 26983,
-        "name": "Faceguard of Frenzy",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": null,
-        "name": "Fiery Crystal Guard",
-        "sources": [
-          "raid_classification"
-        ]
-      },
-      {
-        "item_id": null,
-        "name": "Mask of Strategic Insight",
-        "sources": [
-          "raid_classification"
-        ]
-      },
-      {
-        "item_id": 29174,
-        "name": "Mask of Strategic Insight",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": null,
-        "name": "Pauldrons of Purity",
-        "sources": [
-          "raid_classification"
-        ]
-      },
-      {
-        "item_id": 13638,
-        "name": "Pauldrons of Purity",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": null,
-        "name": "Timeless Coral Greatsword",
-        "sources": [
-          "raid_classification"
-        ]
-      }
-    ]
-  },
-  "Bertoxxulous|Plane of Time": {
-    "mob": "Bertoxxulous",
-    "mobs": [
-      "Bertoxxulous"
-    ],
-    "zone": "Plane of Time",
-    "loot": [
-      {
-        "item_id": 15927,
-        "name": "Belt of Temporal Bindings",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 25995,
-        "name": "Boots of Despair",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 8977,
-        "name": "Collar of Catastrophe",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 26092,
-        "name": "Greatblade of Chaos",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 28651,
-        "name": "Leggings of Furious Might",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 26993,
-        "name": "Pulsing Onyx Ring",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 20508,
-        "name": "Symbol of Ancient Summoning",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 9435,
-        "name": "Veil of the Inferno",
-        "sources": [
-          "raid_item_sources"
-        ]
-      }
-    ]
-  },
-  "Cazic_Thule|Plane of Time": {
-    "mob": "Cazic_Thule",
-    "mobs": [
-      "Cazic_Thule"
-    ],
-    "zone": "Plane of Time",
-    "loot": [
-      {
-        "item_id": 15877,
-        "name": "Belt of Tidal Energy",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 15842,
-        "name": "Cloak of Retribution",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 26980,
-        "name": "Earring of Unseen Horrors",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 28650,
-        "name": "Greaves of Furious Might",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 26984,
-        "name": "Mask of Simplicity",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 27000,
-        "name": "Padded Tigerskin Gloves",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 24999,
-        "name": "Staff of Transcendence",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 15867,
-        "name": "Wand of Impenetrable Force",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 28666,
-        "name": "Wristband of Echoed Thoughts",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 28665,
-        "name": "Zealot's Spiked Bracer",
-        "sources": [
-          "raid_item_sources"
-        ]
-      }
-    ]
-  },
-  "Earthen_Overseer|Plane of Time": {
-    "mob": "Earthen_Overseer",
-    "mobs": [
-      "Earthen_Overseer"
-    ],
-    "zone": "Plane of Time",
-    "loot": [
-      {
-        "item_id": 21996,
-        "name": "Cloak of Ferocity",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 28660,
-        "name": "Drape of the Unending",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 27990,
-        "name": "Gauntlets of Disruption",
-        "sources": [
-          "raid_item_sources"
-        ]
-      }
-    ]
-  },
-  "Gutripping_War_Beast|Plane of Time": {
-    "mob": "Gutripping_War_Beast",
-    "mobs": [
-      "Gutripping_War_Beast"
-    ],
-    "zone": "Plane of Time",
-    "loot": [
-      {
-        "item_id": 21999,
-        "name": "Hoop of the Enlightened",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 26995,
-        "name": "Tiny Jade Ring",
-        "sources": [
-          "raid_item_sources"
-        ]
-      }
-    ]
-  },
-  "Innoruuk|Plane of Time": {
-    "mob": "Innoruuk",
-    "mobs": [
-      "Innoruuk"
-    ],
-    "zone": "Plane of Time",
-    "loot": [
-      {
-        "item_id": 27274,
-        "name": "Barrier of Freezing Winds",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 4119,
-        "name": "Earring of Celestial Energy",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 28246,
-        "name": "Gloves of Airy Mists",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 13647,
-        "name": "Mantle of Pure Spirit",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 9289,
-        "name": "Necklace of Eternal Visions",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 20625,
-        "name": "Serrated Dart of Energy",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 13674,
-        "name": "Shroud of Survival",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 24570,
-        "name": "Songblade of the Eternal",
-        "sources": [
-          "raid_item_sources"
-        ]
-      }
-    ]
-  },
   "Peregrin_Rockskull|Plane of Time": {
     "mob": "Peregrin_Rockskull",
     "mobs": [
@@ -5941,410 +5667,6 @@
       {
         "item_id": 27998,
         "name": "War Drums of the Rathe",
-        "sources": [
-          "raid_item_sources"
-        ]
-      }
-    ]
-  },
-  "Quarm|Plane of Time": {
-    "mob": "Quarm",
-    "mobs": [
-      "Quarm"
-    ],
-    "zone": "Plane of Time",
-    "loot": [
-      {
-        "item_id": 16156,
-        "name": "Cord of Temporal Weavings",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 7130,
-        "name": "Earring of Influxed Gravity",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 32100,
-        "name": "Earthen Bracer of Fortitude",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 28649,
-        "name": "Ethereal Silk Leggings",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 22894,
-        "name": "Hammer of the Timeweaver",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 26989,
-        "name": "Prismatic Ring of Resistance",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 28661,
-        "name": "Shawl of Eternal Forces",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 7123,
-        "name": "Silver Hoop of Speed",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 20496,
-        "name": "Spool of Woven Time",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 26987,
-        "name": "Stone of Flowing Time",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 7769,
-        "name": "Talisman of the Elements",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 27280,
-        "name": "Whorl of Unnatural Forces",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 32110,
-        "name": "Wristband of Icy Vengeance",
-        "sources": [
-          "raid_item_sources"
-        ]
-      }
-    ]
-  },
-  "Rallos_Zek|Plane of Time": {
-    "mob": "Rallos_Zek",
-    "mobs": [
-      "Rallos_Zek"
-    ],
-    "zone": "Plane of Time",
-    "loot": [
-      {
-        "item_id": 26990,
-        "name": "Band of Primordial Energy",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 22999,
-        "name": "Darkblade of the Warlord",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 24793,
-        "name": "Greatstaff of Power",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 28659,
-        "name": "Pauldrons of Devastation",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 15824,
-        "name": "Platinum Cloak of War",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 14818,
-        "name": "Ring of Thunderous Forces",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 27298,
-        "name": "Shield of Strife",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 21338,
-        "name": "Ton Po's Mystical Pouch",
-        "sources": [
-          "raid_item_sources"
-        ]
-      }
-    ]
-  },
-  "Ralthos_Enrok|Plane of Time": {
-    "mob": "Ralthos_Enrok",
-    "mobs": [
-      "Ralthos_Enrok"
-    ],
-    "zone": "Plane of Time",
-    "loot": [
-      {
-        "item_id": 22883,
-        "name": "Cudgel of Wrecking",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 28653,
-        "name": "Glowing Chains",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 26985,
-        "name": "Veil of Warmth",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 26899,
-        "name": "Wand of the Vortex",
-        "sources": [
-          "raid_item_sources"
-        ]
-      }
-    ]
-  },
-  "Saryrn|Plane of Time": {
-    "mob": "Saryrn",
-    "mobs": [
-      "Saryrn"
-    ],
-    "zone": "Plane of Time",
-    "loot": [
-      {
-        "item_id": 28648,
-        "name": "Cap of Flowing Time",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 22986,
-        "name": "Edge of Eternity",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 28664,
-        "name": "Girdle of Intense Durability",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 26996,
-        "name": "Gloves of the Unseen",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 26994,
-        "name": "Ring of Evasion",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 28663,
-        "name": "Runewarded Belt",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 13673,
-        "name": "Shroud of Provocation",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 20898,
-        "name": "Symbol of the Planemasters",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 24699,
-        "name": "Time's Antithesis",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 26981,
-        "name": "Veil of Lost Hopes",
-        "sources": [
-          "raid_item_sources"
-        ]
-      }
-    ]
-  },
-  "Tallon_Zek|Plane of Time": {
-    "mob": "Tallon_Zek",
-    "mobs": [
-      "Tallon_Zek"
-    ],
-    "zone": "Plane of Time",
-    "loot": [
-      {
-        "item_id": 28654,
-        "name": "Amulet of Crystal Dreams",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 26991,
-        "name": "Band of Prismatic Focus",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 28667,
-        "name": "Bracer of Precision",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 23498,
-        "name": "Hopebringer",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 28658,
-        "name": "Mantle of Deadly Precision",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 28656,
-        "name": "Tactician's Shield",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 26988,
-        "name": "Winged Storm Boots",
-        "sources": [
-          "raid_item_sources"
-        ]
-      }
-    ]
-  },
-  "Terris_Thule|Plane of Time": {
-    "mob": "Terris_Thule",
-    "mobs": [
-      "Terris_Thule"
-    ],
-    "zone": "Plane of Time",
-    "loot": [
-      {
-        "item_id": 21995,
-        "name": "Armguards of the Brute",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 21998,
-        "name": "Cape of Endless Torment",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 22890,
-        "name": "Cudgel of Venomous Hatred",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 7125,
-        "name": "Earring of Corporeal Essence",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 21886,
-        "name": "Hammer of Hours",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 26895,
-        "name": "Orb of Clinging Death",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 8774,
-        "name": "Talisman of Tainted Energy",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 29172,
-        "name": "Vanazir, Dreamer's Despair",
         "sources": [
           "raid_item_sources"
         ]
@@ -6412,57 +5734,6 @@
       {
         "item_id": 26869,
         "name": "Ent Leaf",
-        "sources": [
-          "raid_item_sources"
-        ]
-      }
-    ]
-  },
-  "Vallon_Zek|Plane of Time": {
-    "mob": "Vallon_Zek",
-    "mobs": [
-      "Vallon_Zek"
-    ],
-    "zone": "Plane of Time",
-    "loot": [
-      {
-        "item_id": 27818,
-        "name": "Bow of the Tempest",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 5594,
-        "name": "Earring of Temporal Solstice",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 20627,
-        "name": "Hammer of Holy Vengeance",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 26740,
-        "name": "Shinai of the Ancients",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 26986,
-        "name": "Shoes of Fleeting Fury",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 21876,
-        "name": "Wand of Temporal Power",
         "sources": [
           "raid_item_sources"
         ]
