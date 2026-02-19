@@ -58,12 +58,12 @@ export default function App() {
     <>
       <nav>
         <a href="/">Home</a>
-        <a href="/raids">Raids</a>
         <a href="/dkp">DKP</a>
-        <a href="/loot">Loot search</a>
-        <a href="/loot-recipients">Loot recipients</a>
-        <a href="/mobs">Mob loot</a>
         <a href="/accounts">Accounts</a>
+        <a href="/raids">Raids</a>
+        <a href="/mobs">Raid Items</a>
+        <a href="/loot">Item History</a>
+        <a href="/loot-recipients">Character History</a>
         {session ? (
           <>
             <a href="/profile">Profile</a>

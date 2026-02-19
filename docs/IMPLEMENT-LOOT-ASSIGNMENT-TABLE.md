@@ -64,7 +64,7 @@ This repopulates **character_dkp_spent** and **dkp_summary** from the new layout
 
 The app code is already updated to:
 
-- **Read** from **raid_loot_with_assignment** where assignment is needed (Loot tab, character page, item page, raid detail, Loot search, Account Loot tab).
+- **Read** from **raid_loot_with_assignment** where assignment is needed (Loot tab, character page, item page, raid detail, Item History, Account Loot tab).
 - **Write** loot rows to **raid_loot** (officer insert/update/delete); assignment changes still go through the RPC **update_single_raid_loot_assignment**.
 
 Steps:
@@ -76,7 +76,7 @@ After deploy:
 
 - Officers can add/edit/delete loot and edit assignments from the website.
 - Players can edit assignments for loot owned by their account (Loot tab).
-- Loot search, raid detail, character page, and item page should show assignment as before (they now read from the view).
+- Item History, raid detail, character page, and item page should show assignment as before (they now read from the view).
 
 ---
 

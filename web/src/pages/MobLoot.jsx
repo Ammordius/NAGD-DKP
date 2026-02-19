@@ -596,7 +596,7 @@ export default function MobLoot() {
     setItemsShownPerKey((prev) => ({ ...prev, [key]: (prev[key] || ITEMS_PER_PAGE) + ITEMS_PER_PAGE }))
   }
 
-  if (loading) return <div className="container">Loading mob loot…</div>
+  if (loading) return <div className="container">Loading raid items…</div>
   if (!data) {
     return (
       <div className="container">
@@ -607,7 +607,7 @@ export default function MobLoot() {
 
   return (
     <div className="container">
-      <h1>Loot by mob</h1>
+      <h1>Raid Items</h1>
       <p style={{ color: '#71717a', marginBottom: '1rem' }}>
         DKP loot table per mob. Search by mob or zone; filter by slot and class; items sorted by gear score (saves + AC + HP/3).
       </p>

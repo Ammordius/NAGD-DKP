@@ -29,7 +29,7 @@ label { display: block; margin-bottom: 0.25rem; font-size: 0.875rem; color: #a1a
 .mob-loot-filters .filter-select { min-width: 140px; }
 .mob-loot-gear-score { display: inline-block; margin-right: 0.5rem; padding: 0.15rem 0.4rem; font-size: 0.7rem; font-weight: 600; background: #3730a3; color: #c4b5fd; border-radius: 4px; }
 
-/* Loot search grid: keep cell content from overflowing into adjacent rows */
+/* Item History grid: keep cell content from overflowing into adjacent rows */
 .loot-cell a { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .attendee-list { max-height: 200px; overflow-y: auto; font-size: 0.9rem; display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: flex-start; }

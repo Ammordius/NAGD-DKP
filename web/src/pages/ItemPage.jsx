@@ -267,11 +267,11 @@ export default function ItemPage() {
   const displayName = (displayArmorId && armorStats?.name) ? armorStats.name : itemName
 
   if (loading) return <div className="container">Loading item…</div>
-  if (error) return <div className="container"><span className="error">{error}</span> <Link to="/loot">← Loot search</Link></div>
+  if (error) return <div className="container"><span className="error">{error}</span> <Link to="/loot">← Item History</Link></div>
 
   return (
     <div className="container">
-      <p><Link to="/loot">← Loot search</Link> · <Link to="/mobs">Mob loot</Link></p>
+      <p><Link to="/loot">← Item History</Link> · <Link to="/mobs">Raid Items</Link></p>
       <h1 style={{ marginBottom: '0.5rem' }}>
         {takpId != null ? (
           <ItemLink

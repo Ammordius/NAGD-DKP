@@ -84,7 +84,7 @@ You have two options.
 | raid_event_attendance | `raid_event_attendance.csv` (optional; for per-event DKP earned) |
 | raid_classifications | `raid_classifications.csv` |
 
-**Raid classifications:** Run `python build_raid_classifications.py` (after `extract_structured_data.py`) to generate `data/raid_classifications.csv` from `data/raid_loot.csv`, `data/items_seen_to_mobs.json`, and `data/raid_loot_classification.json` (overrides/aliases, e.g. Plane of Time P1/P3). The script also writes `web/public/item_sources.json` so the Loot search page can show “Drops from”. Import `raid_classifications.csv` into the `raid_classifications` table. For the **Mob loot** page, copy `data/dkp_mob_loot.json` to `web/public/dkp_mob_loot.json`, or run `python build_raid_classifications.py --copy-dkp-mob-loot`.
+**Raid classifications:** Run `python build_raid_classifications.py` (after `extract_structured_data.py`) to generate `data/raid_classifications.csv` from `data/raid_loot.csv`, `data/items_seen_to_mobs.json`, and `data/raid_loot_classification.json` (overrides/aliases, e.g. Plane of Time P1/P3). The script also writes `web/public/item_sources.json` so the Item History page can show “Drops from”. Import `raid_classifications.csv` into the `raid_classifications` table. For the **Raid Items** page, copy `data/dkp_mob_loot.json` to `web/public/dkp_mob_loot.json`, or run `python build_raid_classifications.py --copy-dkp-mob-loot`.
 
 If the importer complains about types (e.g. empty numbers), you can:
 - Leave problematic columns unmapped and fix data later, or
@@ -123,7 +123,7 @@ Run your usual pipeline so the `data/` CSVs are up to date, for example:
 
 - `python extract_structured_data.py` — rebuilds `raid_events`, `raid_loot`, `raid_attendance`, `raids`, etc. from `raids/*.html`
 - `python parse_raid_attendees.py` — builds `data/raid_event_attendance.csv` from `raids/raid_*_attendees.html`
-- `python build_raid_classifications.py` — if you use raid classifications / loot search
+- `python build_raid_classifications.py` — if you use raid classifications / Item History
 
 (You don’t need to re-run `pull_raids.py` or `pull_raid_attendees.py` unless you’re fetching new raids.)
 

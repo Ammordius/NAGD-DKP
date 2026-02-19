@@ -284,7 +284,7 @@ export default function LootSearch() {
 
   return (
     <div className="container">
-      <h1>Loot &amp; DKP by item</h1>
+      <h1>Item History</h1>
       <p style={{ color: '#71717a', marginBottom: '1rem' }}>
         Search by item name. Cost is DKP spent per row. Hover truncated cells for full text.
       </p>

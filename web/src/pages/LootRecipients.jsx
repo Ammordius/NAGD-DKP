@@ -294,7 +294,7 @@ export default function LootRecipients() {
   return (
     <div className="container">
       <p><Link to="/">← Home</Link></p>
-      <h1>Loot recipients</h1>
+      <h1>Character History</h1>
       <p style={{ color: '#a1a1aa', marginBottom: '1rem' }}>
         Characters who received loot {months === 0 ? ' (all time)' : `in the last ${months} month${months !== 1 ? 's' : ''}`}. Loot and DKP spent are for this window. Account DKP total is current.
       </p>
