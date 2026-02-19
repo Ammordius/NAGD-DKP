@@ -1,4 +1,4 @@
-﻿{
+{
   "#Bertoxxulous|": {
     "mob": "#Bertoxxulous",
     "mobs": [
@@ -5457,43 +5457,6 @@
       }
     ]
   },
-  "A_Deadly_Warboar|Plane of Time": {
-    "mob": "A_Deadly_Warboar",
-    "mobs": [
-      "A_Deadly_Warboar"
-    ],
-    "zone": "Plane of Time",
-    "loot": [
-      {
-        "item_id": 21997,
-        "name": "Cloak of Wishes",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 24776,
-        "name": "Dagger of Distraction",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 8782,
-        "name": "Necklace of Celestial Energy",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 21994,
-        "name": "Protective Sleeves",
-        "sources": [
-          "raid_item_sources"
-        ]
-      }
-    ]
-  },
   "A_Monsterous_Mudwalker|Plane of Time": {
     "mob": "A_Monsterous_Mudwalker",
     "mobs": [
@@ -5598,62 +5561,33 @@
       }
     ]
   },
-  "Anar_of_Water|Plane of Time": {
-    "mob": "Anar_of_Water",
-    "mobs": [
-      "Anar_of_Water"
-    ],
-    "zone": "Plane of Time",
-    "loot": [
-      {
-        "item_id": 9444,
-        "name": "Mask of Conceptual Energy",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 25844,
-        "name": "Pulsing Emerald Hoop",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 26992,
-        "name": "Ring of Force",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 28655,
-        "name": "Smooth Onyx Torque",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 28668,
-        "name": "Wristguard of Keen Vision",
-        "sources": [
-          "raid_item_sources"
-        ]
-      }
-    ]
-  },
   "Avatar_of_the_Elements|Plane of Time": {
     "mob": "Avatar_of_the_Elements",
     "mobs": [
-      "Avatar_of_the_Elements"
+      "Avatar_of_the_Elements",
+      "P3 Guardian"
     ],
     "zone": "Plane of Time",
     "loot": [
+      {
+        "item_id": null,
+        "name": "Earring of Xaoth Kor",
+        "sources": [
+          "raid_classification"
+        ]
+      },
       {
         "item_id": 5760,
         "name": "Earring of Xaoth Kor",
         "sources": [
           "raid_item_sources"
+        ]
+      },
+      {
+        "item_id": null,
+        "name": "Ethereal Destroyer",
+        "sources": [
+          "raid_classification"
         ]
       },
       {
@@ -5664,10 +5598,31 @@
         ]
       },
       {
+        "item_id": null,
+        "name": "Faceguard of Frenzy",
+        "sources": [
+          "raid_classification"
+        ]
+      },
+      {
         "item_id": 26983,
         "name": "Faceguard of Frenzy",
         "sources": [
           "raid_item_sources"
+        ]
+      },
+      {
+        "item_id": null,
+        "name": "Fiery Crystal Guard",
+        "sources": [
+          "raid_classification"
+        ]
+      },
+      {
+        "item_id": null,
+        "name": "Mask of Strategic Insight",
+        "sources": [
+          "raid_classification"
         ]
       },
       {
@@ -5678,10 +5633,24 @@
         ]
       },
       {
+        "item_id": null,
+        "name": "Pauldrons of Purity",
+        "sources": [
+          "raid_classification"
+        ]
+      },
+      {
         "item_id": 13638,
         "name": "Pauldrons of Purity",
         "sources": [
           "raid_item_sources"
+        ]
+      },
+      {
+        "item_id": null,
+        "name": "Timeless Coral Greatsword",
+        "sources": [
+          "raid_classification"
         ]
       }
     ]
@@ -13870,6 +13839,7 @@
   "P3|Plane of Time": {
     "mob": "P3",
     "mobs": [
+      "A_Deadly_Warboar",
       "P3"
     ],
     "zone": "Plane of Time",
@@ -13882,6 +13852,13 @@
         ]
       },
       {
+        "item_id": 21997,
+        "name": "Cloak of Wishes",
+        "sources": [
+          "raid_item_sources"
+        ]
+      },
+      {
         "item_id": null,
         "name": "Dagger of Distraction",
         "sources": [
@@ -13889,10 +13866,24 @@
         ]
       },
       {
+        "item_id": 24776,
+        "name": "Dagger of Distraction",
+        "sources": [
+          "raid_item_sources"
+        ]
+      },
+      {
         "item_id": null,
         "name": "Necklace of Celestial Energy",
         "sources": [
           "raid_classification"
+        ]
+      },
+      {
+        "item_id": 8782,
+        "name": "Necklace of Celestial Energy",
+        "sources": [
+          "raid_item_sources"
         ]
       },
       {
@@ -13907,6 +13898,13 @@
         "name": "Protective Sleeves",
         "sources": [
           "raid_classification"
+        ]
+      },
+      {
+        "item_id": 21994,
+        "name": "Protective Sleeves",
+        "sources": [
+          "raid_item_sources"
         ]
       },
       {
@@ -13925,67 +13923,10 @@
       }
     ]
   },
-  "P3 Guardian|Plane of Time": {
-    "mob": "P3 Guardian",
-    "mobs": [
-      "P3 Guardian"
-    ],
-    "zone": "Plane of Time",
-    "loot": [
-      {
-        "item_id": null,
-        "name": "Earring of Xaoth Kor",
-        "sources": [
-          "raid_classification"
-        ]
-      },
-      {
-        "item_id": null,
-        "name": "Ethereal Destroyer",
-        "sources": [
-          "raid_classification"
-        ]
-      },
-      {
-        "item_id": null,
-        "name": "Faceguard of Frenzy",
-        "sources": [
-          "raid_classification"
-        ]
-      },
-      {
-        "item_id": null,
-        "name": "Fiery Crystal Guard",
-        "sources": [
-          "raid_classification"
-        ]
-      },
-      {
-        "item_id": null,
-        "name": "Mask of Strategic Insight",
-        "sources": [
-          "raid_classification"
-        ]
-      },
-      {
-        "item_id": null,
-        "name": "Pauldrons of Purity",
-        "sources": [
-          "raid_classification"
-        ]
-      },
-      {
-        "item_id": null,
-        "name": "Timeless Coral Greatsword",
-        "sources": [
-          "raid_classification"
-        ]
-      }
-    ]
-  },
   "P1|Plane of Time": {
     "mob": "P1",
     "mobs": [
+      "Anar_of_Water",
       "P1"
     ],
     "zone": "Plane of Time",
@@ -13998,10 +13939,24 @@
         ]
       },
       {
+        "item_id": 9444,
+        "name": "Mask of Conceptual Energy",
+        "sources": [
+          "raid_item_sources"
+        ]
+      },
+      {
         "item_id": null,
         "name": "Pulsing Emerald Hoop",
         "sources": [
           "raid_classification"
+        ]
+      },
+      {
+        "item_id": 25844,
+        "name": "Pulsing Emerald Hoop",
+        "sources": [
+          "raid_item_sources"
         ]
       },
       {
@@ -14012,6 +13967,13 @@
         ]
       },
       {
+        "item_id": 26992,
+        "name": "Ring of Force",
+        "sources": [
+          "raid_item_sources"
+        ]
+      },
+      {
         "item_id": null,
         "name": "Smooth Onyx Torque",
         "sources": [
@@ -14019,10 +13981,24 @@
         ]
       },
       {
+        "item_id": 28655,
+        "name": "Smooth Onyx Torque",
+        "sources": [
+          "raid_item_sources"
+        ]
+      },
+      {
         "item_id": null,
         "name": "Wristguard of Keen Vision",
         "sources": [
           "raid_classification"
+        ]
+      },
+      {
+        "item_id": 28668,
+        "name": "Wristguard of Keen Vision",
+        "sources": [
+          "raid_item_sources"
         ]
       }
     ]
