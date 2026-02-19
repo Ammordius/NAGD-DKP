@@ -3,9 +3,14 @@ import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { createCache } from '../lib/cache'
 import { getDkpMobLoot, getRaidItemSources } from '../lib/staticData'
-import { getItemStats } from '../lib/itemStats'
+import { getItemStats, ensureItemStatsLoaded, getItemStatsCached, getGearScore, itemHasSlot, itemUsableByClass } from '../lib/itemStats'
 
 const ITEMS_PER_PAGE = 20
+
+/** EQ slot options for filter (order for dropdown). */
+const SLOT_OPTIONS = ['HEAD', 'FACE', 'NECK', 'SHOULDERS', 'ARMS', 'BACK', 'CHEST', 'WRIST', 'HANDS', 'WAIST', 'LEGS', 'FEET', 'PRIMARY', 'SECONDARY', 'RANGE', 'EAR', 'FINGERS', 'AMMO']
+/** EQ class abbreviations for filter. */
+const CLASS_OPTIONS = ['WAR', 'CLR', 'PAL', 'RNG', 'SHD', 'BRD', 'ROG', 'SHM', 'MNK', 'NEC', 'WIZ', 'MAG', 'ENC', 'BST']
 const TAKP_ITEM_BASE = 'https://www.takproject.net/allaclone/item.php?id='
 
 /** Build item name (lowercase) -> item_id from raid_item_sources (id -> { name }). */
@@ -41,8 +46,8 @@ function buildNameToIdFromMobLoot(mobLootData) {
   return map
 }
 
-/** Inline row: item name (link) + one line of stats when loaded. No card, no sources. */
-function InlineItemRow({ name, itemId }) {
+/** Inline row: item name (link) + one line of stats when loaded. Optional gear score badge. */
+function InlineItemRow({ name, itemId, showGearScore }) {
   const [stats, setStats] = useState(null)
   useEffect(() => {
     if (itemId == null) return
@@ -61,11 +66,15 @@ function InlineItemRow({ name, itemId }) {
     if (classes) parts.push(classes)
   }
   const statsLine = parts.filter(Boolean).join(' · ')
+  const gearScore = stats && showGearScore ? getGearScore(stats) : null
   const displayName = name || 'Unknown item'
   const itemPageTo = `/items/${encodeURIComponent(displayName)}`
   return (
     <div className="mob-loot-item-row">
       <div className="mob-loot-item-name">
+        {gearScore != null && gearScore > 0 && (
+          <span className="mob-loot-gear-score" title="Gear score (saves + AC + HP/3)">{gearScore}</span>
+        )}
         <Link to={itemPageTo}>{displayName}</Link>
         {href && (
           <>
@@ -174,12 +183,17 @@ export default function MobLoot() {
   const [data, setData] = useState(null)
   const [raidItemSources, setRaidItemSources] = useState(null)
   const [query, setQuery] = useState('')
-  const [minAvgDkp, setMinAvgDkp] = useState('')
+  const [filterSlot, setFilterSlot] = useState('')
+  const [filterClass, setFilterClass] = useState('')
   const [loading, setLoading] = useState(true)
   const [expanded, setExpanded] = useState({})
   const [itemsShownPerKey, setItemsShownPerKey] = useState({}) // key -> number to show
   const [itemLast3, setItemLast3] = useState({})
   const [mobZoneFromRaids, setMobZoneFromRaids] = useState({})
+
+  useEffect(() => {
+    ensureItemStatsLoaded().catch(() => {})
+  }, [])
 
   const nameToId = useMemo(() => {
     const fromMobLoot = buildNameToIdFromMobLoot(data)
@@ -421,20 +435,8 @@ export default function MobLoot() {
     }))
   }, [entriesMergedByMobAndZone])
 
-  const entriesWithDkp = useMemo(() => {
-    return entriesGrouped.map((e) => {
-      let totalAvgDkp = 0
-      ;(e.loot || []).forEach((item) => {
-        const name = (item.name || '').trim().toLowerCase()
-        const avg = itemLast3[name]?.avg
-        if (avg != null) totalAvgDkp += parseFloat(avg) || 0
-      })
-      return { ...e, totalAvgDkp }
-    })
-  }, [entriesGrouped, itemLast3])
-
   const filtered = useMemo(() => {
-    let list = entriesWithDkp
+    let list = entriesGrouped
     const q = (query || '').trim().toLowerCase()
     if (q) {
       const mobNames = (e) => (e.mobs?.length ? e.mobs : [e.mob]).filter(Boolean).join(' ').toLowerCase()
@@ -444,12 +446,8 @@ export default function MobLoot() {
           (e.displayZone || '').toLowerCase().includes(q)
       )
     }
-    const min = parseFloat(minAvgDkp)
-    if (!Number.isNaN(min) && min > 0) {
-      list = list.filter((e) => e.totalAvgDkp >= min)
-    }
     return list
-  }, [entriesWithDkp, query, minAvgDkp])
+  }, [entriesGrouped, query])
 
   const byZone = useMemo(() => {
     const groups = {}
@@ -472,7 +470,7 @@ export default function MobLoot() {
       }
     })
     const zoneEntries = Object.entries(groups)
-    const totalDkp = (entries) => entries.reduce((sum, e) => sum + (e.totalAvgDkp || 0), 0)
+    const totalLoot = (entries) => entries.reduce((sum, e) => sum + (e.loot?.length || 0), 0)
     const bottomZones = new Set(['Other / Unknown', '—', ''])
     zoneEntries.sort((a, b) => {
       const [zoneA, entriesA] = a
@@ -485,7 +483,7 @@ export default function MobLoot() {
       if (bottomZones.has(zoneA) && bottomZones.has(zoneB)) return zoneA.localeCompare(zoneB)
       if (bottomZones.has(zoneA)) return 1
       if (bottomZones.has(zoneB)) return -1
-      return totalDkp(entriesB) - totalDkp(entriesA)
+      return totalLoot(entriesB) - totalLoot(entriesA)
     })
     return zoneEntries
   }, [filtered])
@@ -507,15 +505,35 @@ export default function MobLoot() {
     )
   }
 
+  /** For a mob's loot list: filter by slot/class and sort by gear score (desc). */
+  const getFilteredAndSortedLoot = (loot) => {
+    if (!loot?.length) return []
+    const withStats = loot.map((item) => {
+      const name = (item.name || '').trim().toLowerCase()
+      const itemId = item.item_id ?? nameToId[name]
+      const stats = getItemStatsCached(itemId)
+      return { item, itemId, stats }
+    })
+    let list = withStats
+    if (filterSlot) {
+      list = list.filter(({ stats }) => itemHasSlot(stats, filterSlot))
+    }
+    if (filterClass) {
+      list = list.filter(({ stats }) => itemUsableByClass(stats, filterClass))
+    }
+    list = [...list].sort((a, b) => getGearScore(b.stats) - getGearScore(a.stats))
+    return list
+  }
+
   return (
     <div className="container">
       <h1>Loot by mob</h1>
       <p style={{ color: '#71717a', marginBottom: '1rem' }}>
-        DKP loot table per mob. Zones from dkp_mob_loot or inferred from raid names (e.g. Potime → Plane of Time). Search by mob or zone.
+        DKP loot table per mob. Search by mob or zone; filter by slot and class; items sorted by gear score (saves + AC + HP/3).
       </p>
-      <div className="search-bar">
+      <div className="search-bar mob-loot-filters">
         <label>
-          <span style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.875rem', color: '#a1a1aa' }}>Search mob or zone</span>
+          <span className="filter-label">Search mob or zone</span>
           <input
             type="search"
             placeholder="e.g. Vulak or Plane of Time"
@@ -525,17 +543,32 @@ export default function MobLoot() {
           />
         </label>
         <label>
-          <span style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.875rem', color: '#a1a1aa' }}>Min total avg DKP</span>
-          <input
-            type="number"
-            min={0}
-            step={1}
-            placeholder="e.g. 50"
-            value={minAvgDkp}
-            onChange={(e) => setMinAvgDkp(e.target.value)}
-            aria-label="Minimum total average DKP"
-            style={{ maxWidth: '120px' }}
-          />
+          <span className="filter-label">Slot</span>
+          <select
+            className="filter-select"
+            value={filterSlot}
+            onChange={(e) => setFilterSlot(e.target.value)}
+            aria-label="Filter by equipment slot"
+          >
+            <option value="">Any slot</option>
+            {SLOT_OPTIONS.map((s) => (
+              <option key={s} value={s}>{s}</option>
+            ))}
+          </select>
+        </label>
+        <label>
+          <span className="filter-label">Class</span>
+          <select
+            className="filter-select"
+            value={filterClass}
+            onChange={(e) => setFilterClass(e.target.value)}
+            aria-label="Filter by class"
+          >
+            <option value="">Any class</option>
+            {CLASS_OPTIONS.map((c) => (
+              <option key={c} value={c}>{c}</option>
+            ))}
+          </select>
         </label>
       </div>
       <p style={{ color: '#71717a', fontSize: '0.875rem', marginBottom: '1rem' }}>
@@ -549,19 +582,22 @@ export default function MobLoot() {
               <th>Mob</th>
               <th>Zone</th>
               <th>Loot count</th>
-              <th>Total avg DKP</th>
             </tr>
           </thead>
           <tbody>
             {byZone.map(([zoneName, zoneEntries]) => (
               <Fragment key={zoneName}>
                 <tr style={{ backgroundColor: 'rgba(0,0,0,0.25)' }}>
-                  <td colSpan={5} style={{ padding: '0.5rem 0.75rem', fontWeight: 600, color: '#a78bfa', borderBottom: '1px solid #27272a' }}>
+                  <td colSpan={4} style={{ padding: '0.5rem 0.75rem', fontWeight: 600, color: '#a78bfa', borderBottom: '1px solid #27272a' }}>
                     {zoneName}
                   </td>
                 </tr>
                 {zoneEntries.map((e) => {
                   const isOpen = expanded[e.key]
+                  const filteredLoot = getFilteredAndSortedLoot(e.loot)
+                  const limit = itemsShownPerKey[e.key] ?? ITEMS_PER_PAGE
+                  const visibleLoot = filteredLoot.slice(0, limit)
+                  const hasMore = filteredLoot.length > limit
                   return (
                     <Fragment key={e.key}>
                       <tr>
@@ -578,52 +614,52 @@ export default function MobLoot() {
                         </td>
                         <td>{(e.mobs?.length ? e.mobs.join(', ') : (e.mob || '')).replace(/^#/, '')}</td>
                         <td style={{ color: '#a1a1aa' }}>{e.displayZone || '—'}</td>
-                        <td>{e.loot.length}</td>
-                        <td style={{ color: '#a78bfa' }}>{e.totalAvgDkp > 0 ? Number(e.totalAvgDkp).toFixed(1) : '—'}</td>
+                        <td>
+                          {(filterSlot || filterClass) ? `${filteredLoot.length} / ${e.loot.length}` : e.loot.length}
+                        </td>
                       </tr>
                       {isOpen && (
                         <tr key={`${e.key}-exp`}>
-                          <td colSpan={5} style={{ padding: '0.5rem 1rem', verticalAlign: 'top', backgroundColor: 'rgba(0,0,0,0.2)' }}>
-                            {(() => {
-                              const limit = itemsShownPerKey[e.key] ?? ITEMS_PER_PAGE
-                              const visibleLoot = e.loot.slice(0, limit)
-                              const hasMore = e.loot.length > limit
-                              return (
-                                <>
-                                  <table style={{ margin: 0 }}>
-                                    <thead>
-                                      <tr><th>Item</th><th>DKP (last 3 / avg)</th></tr>
-                                    </thead>
-                                    <tbody>
-                                      {visibleLoot.map((item) => {
-                                        const name = item.name || '—'
-                                        const last3 = itemLast3[(name || '').trim().toLowerCase()]
-                                        const dkpStr = last3?.values?.length
-                                          ? (last3.avg != null ? `${last3.values.join(', ')} (avg ${last3.avg})` : last3.values.join(', '))
-                                          : '—'
-                                        return (
-                                          <tr key={item.item_id || item.name}>
-                                            <td style={{ verticalAlign: 'middle', maxWidth: '420px' }}>
-                                              <InlineItemRow name={name} itemId={item.item_id ?? nameToId[(name || '').trim().toLowerCase()]} />
-                                            </td>
-                                            <td style={{ fontSize: '0.875rem', color: '#a78bfa', verticalAlign: 'middle', whiteSpace: 'nowrap' }}>
-                                              {dkpStr}
-                                            </td>
-                                          </tr>
-                                        )
-                                      })}
-                                    </tbody>
-                                  </table>
-                                  {hasMore && (
-                                    <p style={{ margin: '0.5rem 0 0', fontSize: '0.875rem' }}>
-                                      <button type="button" className="btn btn-ghost" onClick={() => showMoreItems(e.key)}>
-                                        Show {Math.min(ITEMS_PER_PAGE, e.loot.length - limit)} more
-                                      </button>
-                                    </p>
-                                  )}
-                                </>
-                              )
-                            })()}
+                          <td colSpan={4} style={{ padding: '0.5rem 1rem', verticalAlign: 'top', backgroundColor: 'rgba(0,0,0,0.2)' }}>
+                            {filteredLoot.length === 0 ? (
+                              <p style={{ color: '#71717a', fontSize: '0.875rem', margin: 0 }}>
+                                No items match the current slot/class filter.
+                              </p>
+                            ) : (
+                              <>
+                                <table style={{ margin: 0 }}>
+                                  <thead>
+                                    <tr><th>Item (sorted by gear score)</th><th>DKP (last 3 / avg)</th></tr>
+                                  </thead>
+                                  <tbody>
+                                    {visibleLoot.map(({ item, itemId }) => {
+                                      const name = item.name || '—'
+                                      const last3 = itemLast3[(name || '').trim().toLowerCase()]
+                                      const dkpStr = last3?.values?.length
+                                        ? (last3.avg != null ? `${last3.values.join(', ')} (avg ${last3.avg})` : last3.values.join(', '))
+                                        : '—'
+                                      return (
+                                        <tr key={item.item_id || item.name}>
+                                          <td style={{ verticalAlign: 'middle', maxWidth: '420px' }}>
+                                            <InlineItemRow name={name} itemId={itemId} showGearScore />
+                                          </td>
+                                          <td style={{ fontSize: '0.875rem', color: '#a78bfa', verticalAlign: 'middle', whiteSpace: 'nowrap' }}>
+                                            {dkpStr}
+                                          </td>
+                                        </tr>
+                                      )
+                                    })}
+                                  </tbody>
+                                </table>
+                                {hasMore && (
+                                  <p style={{ margin: '0.5rem 0 0', fontSize: '0.875rem' }}>
+                                    <button type="button" className="btn btn-ghost" onClick={() => showMoreItems(e.key)}>
+                                      Show {Math.min(ITEMS_PER_PAGE, filteredLoot.length - limit)} more
+                                    </button>
+                                  </p>
+                                )}
+                              </>
+                            )}
                           </td>
                         </tr>
                       )}

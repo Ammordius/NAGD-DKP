@@ -12,6 +12,7 @@ Usage:
 Requires: requests, beautifulsoup4 (see requirements.txt).
 """
 import argparse
+import csv
 import json
 import re
 import time
@@ -55,14 +56,17 @@ def collect_item_ids_from_raid_sources(raid_sources_path: Path) -> dict[int, str
     return seen
 
 
-def collect_item_ids(mob_loot_path: Path, raid_sources_path: Path | None = None) -> list[tuple[int, str]]:
-    """Return unique (item_id, name) from dkp_mob_loot.json and optionally raid_item_sources.json."""
+def collect_item_ids(mob_loot_path: Path, raid_sources_path: Path | None = None) -> tuple[list[tuple[int, str]], int, int]:
+    """Return (unique (item_id, name), count_from_mob_loot, count_added_from_raid_sources)."""
     seen = collect_item_ids_from_mob_loot(mob_loot_path)
+    n_mob = len(seen)
+    n_raid_added = 0
     if raid_sources_path:
         for iid, name in collect_item_ids_from_raid_sources(raid_sources_path).items():
             if iid not in seen:
                 seen[iid] = name
-    return [(iid, seen[iid]) for iid in sorted(seen)]
+                n_raid_added += 1
+    return [(iid, seen[iid]) for iid in sorted(seen)], n_mob, n_raid_added
 
 
 def parse_item_page(html: str, item_id: int, name: str) -> dict | None:
@@ -203,7 +207,38 @@ def parse_item_page(html: str, item_id: int, name: str) -> dict | None:
     if m:
         out["tint"] = "(" + m.group(1).strip() + ")"
 
+    # Gear score: total saves + AC + HP/3 (for filtering/sorting by item power)
+    total_saves = sum((r.get("value") or 0) for r in out.get("resists") or [])
+    ac = out.get("ac") or 0
+    hp = 0
+    for m in out.get("mods") or []:
+        if (m.get("label") or "").strip().upper() == "HP":
+            hp = int(m.get("value") or 0)
+            break
+    out["gearScore"] = total_saves + ac + (hp // 3)
+
     return out if out else None
+
+
+def stats_to_csv_row(item_id: int, name: str, stats: dict) -> dict:
+    """Flatten one item's stats for CSV (slot, ac, flags, mods, resists, effect, focus, level, classes)."""
+    row = {"item_id": item_id, "name": name or ""}
+    if not stats:
+        return row
+    row["slot"] = stats.get("slot") or ""
+    row["ac"] = stats.get("ac") if stats.get("ac") is not None else ""
+    row["flags"] = " | ".join(stats.get("flags") or [])
+    mods = stats.get("mods") or []
+    row["mods"] = ", ".join(f"{m.get('label', '')}: {m.get('value', '')}" for m in mods)
+    resists = stats.get("resists") or []
+    row["resists"] = ", ".join(f"{r.get('label', '')}: {r.get('value', '')}" for r in resists)
+    row["effect"] = stats.get("effectSpellName") or stats.get("effectSpellId") or ""
+    row["focus"] = stats.get("focusSpellName") or stats.get("focusSpellId") or ""
+    row["required_level"] = stats.get("requiredLevel") if stats.get("requiredLevel") is not None else ""
+    row["classes"] = stats.get("classes") or ""
+    row["weight"] = stats.get("weight") if stats.get("weight") is not None else ""
+    row["size"] = stats.get("size") or ""
+    return row
 
 
 def main():
@@ -214,6 +249,8 @@ def main():
     parser.add_argument("--mob-loot", type=str, default="", help="Path to dkp_mob_loot.json (default: data/dkp_mob_loot.json or web/public/dkp_mob_loot.json)")
     parser.add_argument("--raid-sources", type=str, default="", help="Path to raid_item_sources.json (default: raid_item_sources.json or web/public/raid_item_sources.json)")
     parser.add_argument("--no-resume", action="store_true", help="Ignore existing output file; refetch all (default: resume by skipping ids already in file)")
+    parser.add_argument("--from-cache", type=str, default="", help="Build from local HTML cache (e.g. data/item_pages from fetch_item_pages.py); no network")
+    parser.add_argument("--csv", type=str, default="", help="Also write a flattened CSV to this path (e.g. data/item_stats.csv)")
     args = parser.parse_args()
 
     base = Path(__file__).resolve().parent.parent
@@ -235,60 +272,102 @@ def main():
                 break
     if not raid_sources_path or not raid_sources_path.exists():
         raid_sources_path = None  # optional
+    if raid_sources_path:
+        print(f"Using raid_item_sources: {raid_sources_path}")
+    else:
+        print("raid_item_sources.json not found; only dkp_mob_loot items will be included (inline stats may be missing for raid-only items).")
 
     out_path = Path(args.out) if args.out else base / "data" / "item_stats.json"
     if not out_path.is_absolute():
         out_path = base / out_path
 
-    items = collect_item_ids(mob_loot_path, raid_sources_path)
-    total = len(items)
-    if args.limit:
-        items = items[: args.limit]
-    n_items = len(items)
+    items, n_mob, n_raid_added = collect_item_ids(mob_loot_path, raid_sources_path)
+    id_to_name = {iid: name for iid, name in items}
+    print(f"Item IDs: {n_mob} from dkp_mob_loot, +{n_raid_added} from raid_item_sources = {len(items)} total")
 
-    # Resume: load existing output so we can skip already-fetched ids and save as we go
     result = {}
-    if out_path.exists() and not args.no_resume:
-        try:
-            result = json.loads(out_path.read_text(encoding="utf-8"))
-            print(f"Resuming: {len(result)} entries already in {out_path}")
-        except Exception as e:
-            print(f"Could not load existing output: {e}")
-
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    session = requests.Session()
-    session.headers["User-Agent"] = USER_AGENT
-
-    def save():
+    from_cache = (args.from_cache or "").strip()
+    if from_cache:
+        cache_dir = Path(from_cache)
+        if not cache_dir.is_absolute():
+            cache_dir = base / cache_dir
+        if not cache_dir.exists():
+            print(f"Cache dir not found: {cache_dir}")
+            return 1
+        html_files = sorted(cache_dir.glob("*.html"), key=lambda p: int(p.stem) if p.stem.isdigit() else 0)
+        print(f"Building from cache: {cache_dir} ({len(html_files)} HTML files)")
+        for i, path in enumerate(html_files):
+            try:
+                item_id = int(path.stem)
+            except ValueError:
+                continue
+            name = id_to_name.get(item_id, f"Item {item_id}")
+            html = path.read_text(encoding="utf-8")
+            parsed = parse_item_page(html, item_id, name)
+            result[str(item_id)] = parsed if parsed else {}
+            if (i + 1) % 100 == 0 or i + 1 == len(html_files):
+                print(f"  Parsed {i + 1}/{len(html_files)}")
+        out_path.parent.mkdir(parents=True, exist_ok=True)
         with open(out_path, "w", encoding="utf-8") as f:
             json.dump(result, f, indent=2)
-            f.flush()
+        print(f"Wrote {len(result)} entries to {out_path}")
+    else:
+        total = len(items)
+        if args.limit:
+            items = items[: args.limit]
+        n_items = len(items)
+        if out_path.exists() and not args.no_resume:
+            try:
+                result = json.loads(out_path.read_text(encoding="utf-8"))
+                print(f"Resuming: {len(result)} entries already in {out_path}")
+            except Exception as e:
+                print(f"Could not load existing output: {e}")
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        session = requests.Session()
+        session.headers["User-Agent"] = USER_AGENT
 
-    print(f"Fetching up to {n_items} items from TAKP AllaClone, delay={args.delay}s (saving after each)...")
+        def save():
+            with open(out_path, "w", encoding="utf-8") as f:
+                json.dump(result, f, indent=2)
+                f.flush()
 
-    done = 0
-    skipped = 0
-    for i, (item_id, name) in enumerate(items, 1):
-        if str(item_id) in result and not args.no_resume:
-            skipped += 1
-            if i % 25 == 0 or i == n_items:
-                print(f"  [{i}/{n_items}] (skipped {skipped} already done)")
-            continue
-        try:
-            r = session.get(TAKP_ITEM_URL.format(id=item_id), timeout=15)
-            r.raise_for_status()
-            parsed = parse_item_page(r.text, item_id, name)
-            result[str(item_id)] = parsed if parsed else {}
-            done += 1
-            print(f"  [{i}/{n_items}] id={item_id} {name[:40]}{'...' if len(name) > 40 else ''} OK")
-        except Exception as e:
-            result[str(item_id)] = {}
-            print(f"  [{i}/{n_items}] id={item_id} ERROR: {e}")
-        save()
-        if i < n_items:
-            time.sleep(args.delay)
+        print(f"Fetching up to {n_items} items from TAKP AllaClone, delay={args.delay}s (saving after each)...")
+        done = 0
+        skipped = 0
+        for i, (item_id, name) in enumerate(items, 1):
+            if str(item_id) in result and not args.no_resume:
+                skipped += 1
+                if i % 25 == 0 or i == n_items:
+                    print(f"  [{i}/{n_items}] (skipped {skipped} already done)")
+                continue
+            try:
+                r = session.get(TAKP_ITEM_URL.format(id=item_id), timeout=15)
+                r.raise_for_status()
+                parsed = parse_item_page(r.text, item_id, name)
+                result[str(item_id)] = parsed if parsed else {}
+                done += 1
+                print(f"  [{i}/{n_items}] id={item_id} {name[:40]}{'...' if len(name) > 40 else ''} OK")
+            except Exception as e:
+                result[str(item_id)] = {}
+                print(f"  [{i}/{n_items}] id={item_id} ERROR: {e}")
+            save()
+            if i < n_items:
+                time.sleep(args.delay)
+        print(f"Done. {len(result)} entries in {out_path} (wrote after each item).")
 
-    print(f"Done. {len(result)} entries in {out_path} (wrote after each item).")
+    if args.csv:
+        csv_path = Path(args.csv)
+        if not csv_path.is_absolute():
+            csv_path = base / csv_path
+        csv_path.parent.mkdir(parents=True, exist_ok=True)
+        fieldnames = ["item_id", "name", "slot", "ac", "flags", "mods", "resists", "effect", "focus", "required_level", "classes", "weight", "size"]
+        with open(csv_path, "w", encoding="utf-8", newline="") as f:
+            w = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
+            w.writeheader()
+            for iid_str, stats in sorted(result.items(), key=lambda x: int(x[0])):
+                name = id_to_name.get(int(iid_str), f"Item {iid_str}")
+                w.writerow(stats_to_csv_row(int(iid_str), name, stats or {}))
+        print(f"Wrote CSV: {csv_path}")
     return 0
 
 

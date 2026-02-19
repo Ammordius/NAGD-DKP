@@ -24,6 +24,10 @@ label { display: block; margin-bottom: 0.25rem; font-size: 0.875rem; color: #a1a
 .search-bar { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; margin-bottom: 1rem; }
 .search-bar input[type="search"], .search-bar input[type="text"] { max-width: 280px; }
 .filter-select { min-width: 180px; }
+.filter-label { display: block; margin-bottom: 0.25rem; font-size: 0.875rem; color: #a1a1aa; }
+.mob-loot-filters { align-items: flex-end; }
+.mob-loot-filters .filter-select { min-width: 140px; }
+.mob-loot-gear-score { display: inline-block; margin-right: 0.5rem; padding: 0.15rem 0.4rem; font-size: 0.7rem; font-weight: 600; background: #3730a3; color: #c4b5fd; border-radius: 4px; }
 
 /* Loot search grid: keep cell content from overflowing into adjacent rows */
 .loot-cell a { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
