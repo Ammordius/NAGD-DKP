@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, Fragment } from 'react'
+import { useEffect, useState, useMemo, useCallback, Fragment } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { createCache } from '../lib/cache'
@@ -449,16 +449,52 @@ export default function MobLoot() {
     return list
   }, [entriesGrouped, query])
 
+  /** For a mob's loot list: filter by slot/class and sort by gear score (desc). */
+  const getFilteredAndSortedLoot = useCallback((loot) => {
+    if (!loot?.length) return []
+    const withStats = loot.map((item) => {
+      const name = (item.name || '').trim().toLowerCase()
+      const itemId = item.item_id ?? nameToId[name]
+      const stats = getItemStatsCached(itemId)
+      return { item, itemId, stats }
+    })
+    let list = withStats
+    if (filterSlot) {
+      list = list.filter(({ stats }) => itemHasSlot(stats, filterSlot))
+    }
+    if (filterClass) {
+      list = list.filter(({ stats }) => itemUsableByClass(stats, filterClass))
+    }
+    list = [...list].sort((a, b) => getGearScore(b.stats) - getGearScore(a.stats))
+    return list
+  }, [nameToId, filterSlot, filterClass])
+
+  /** When slot/class filter is on, hide mobs that have no matching items and attach max gear score for sorting. */
+  const filteredForDisplay = useMemo(() => {
+    if (!filterSlot && !filterClass) return filtered
+    return filtered
+      .map((e) => {
+        const loot = getFilteredAndSortedLoot(e.loot)
+        if (loot.length === 0) return null
+        const maxGearScore = getGearScore(loot[0].stats) // loot already sorted desc by gear score
+        return { ...e, maxGearScore }
+      })
+      .filter(Boolean)
+  }, [filtered, filterSlot, filterClass, getFilteredAndSortedLoot])
+
   const byZone = useMemo(() => {
     const groups = {}
-    filtered.forEach((e) => {
+    filteredForDisplay.forEach((e) => {
       const z = (e.displayZone || '').trim() || 'Other / Unknown'
       if (!groups[z]) groups[z] = []
       groups[z].push(e)
     })
     const zoneOrderSet = new Set(ZONE_ORDER)
+    const sortByGearScore = (a, b) => (b.maxGearScore ?? 0) - (a.maxGearScore ?? 0) || (a.mob || '').localeCompare(b.mob || '')
     Object.keys(groups).forEach((z) => {
-      if (z === 'Plane of Time') {
+      if (filterSlot || filterClass) {
+        groups[z].sort(sortByGearScore)
+      } else if (z === 'Plane of Time') {
         groups[z].sort((a, b) => {
           const ka = mobSortKeyForPlaneOfTime(a)
           const kb = mobSortKeyForPlaneOfTime(b)
@@ -486,7 +522,7 @@ export default function MobLoot() {
       return totalLoot(entriesB) - totalLoot(entriesA)
     })
     return zoneEntries
-  }, [filtered])
+  }, [filteredForDisplay, filterSlot, filterClass])
 
   const toggle = (key) => {
     setExpanded((prev) => ({ ...prev, [key]: !prev[key] }))
@@ -503,26 +539,6 @@ export default function MobLoot() {
         <p className="error">Could not load dkp_mob_loot.json. Copy data/dkp_mob_loot.json to web/public/ or run the build script with --copy-dkp-mob-loot.</p>
       </div>
     )
-  }
-
-  /** For a mob's loot list: filter by slot/class and sort by gear score (desc). */
-  const getFilteredAndSortedLoot = (loot) => {
-    if (!loot?.length) return []
-    const withStats = loot.map((item) => {
-      const name = (item.name || '').trim().toLowerCase()
-      const itemId = item.item_id ?? nameToId[name]
-      const stats = getItemStatsCached(itemId)
-      return { item, itemId, stats }
-    })
-    let list = withStats
-    if (filterSlot) {
-      list = list.filter(({ stats }) => itemHasSlot(stats, filterSlot))
-    }
-    if (filterClass) {
-      list = list.filter(({ stats }) => itemUsableByClass(stats, filterClass))
-    }
-    list = [...list].sort((a, b) => getGearScore(b.stats) - getGearScore(a.stats))
-    return list
   }
 
   return (
@@ -572,7 +588,7 @@ export default function MobLoot() {
         </label>
       </div>
       <p style={{ color: '#71717a', fontSize: '0.875rem', marginBottom: '1rem' }}>
-        {filtered.length} mob{filtered.length !== 1 ? 's' : ''} (grouped by zone)
+        {filteredForDisplay.length} mob{filteredForDisplay.length !== 1 ? 's' : ''} (grouped by zone)
       </p>
       <div className="card">
         <table>
