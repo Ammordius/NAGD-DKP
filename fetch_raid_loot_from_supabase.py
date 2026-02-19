@@ -83,7 +83,7 @@ def main() -> int:
 
     if args.count_only:
         # Lightweight count for CI: skip Magelo pull if no new loot (count unchanged)
-        resp = client.table("raid_loot").select("*", count="exact").limit(0).execute()
+        resp = client.table("raid_loot").select("id", count="exact").limit(0).execute()
         count = getattr(resp, "count", None)
         if count is None:
             count = getattr(resp, "total", None)
@@ -93,10 +93,11 @@ def main() -> int:
         print(count)
         return 0
 
+    # Use view so CSV has id + assignment columns (raid_loot no longer has assignment columns after migration)
     all_rows: list[dict] = []
     offset = 0
     while True:
-        resp = client.table("raid_loot").select("*").range(offset, offset + PAGE_SIZE - 1).execute()
+        resp = client.table("raid_loot_with_assignment").select("*").range(offset, offset + PAGE_SIZE - 1).execute()
         rows = resp.data or []
         if not rows:
             break
@@ -108,7 +109,7 @@ def main() -> int:
     if not all_rows:
         print("No raid_loot rows in Supabase.", file=sys.stderr)
         args.out.parent.mkdir(parents=True, exist_ok=True)
-        # Write header-only so assign script sees id column
+        # Write header-only so assign script sees id and assignment columns (view has same shape)
         fieldnames = ["id", "raid_id", "event_id", "item_name", "char_id", "character_name", "cost",
                       "assigned_char_id", "assigned_character_name", "assigned_via_magelo"]
         with open(args.out, "w", encoding="utf-8", newline="") as f:

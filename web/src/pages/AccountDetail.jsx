@@ -129,7 +129,7 @@ export default function AccountDetail({ isOfficer, profile, session }) {
         Promise.all([
           supabase.from('characters').select('char_id, name, class_name, level').in('char_id', charIds),
           fetchAll('raid_attendance', 'raid_id, char_id, character_name', (q) => q.in('char_id', charIds)),
-          fetchAll('raid_loot', 'id, raid_id, char_id, character_name, item_name, cost, assigned_char_id, assigned_character_name', (q) => q.in('char_id', charIds)),
+          fetchAll('raid_loot_with_assignment', 'id, raid_id, char_id, character_name, item_name, cost, assigned_char_id, assigned_character_name', (q) => q.in('char_id', charIds)),
           supabase.from('characters').select('char_id, name').in('char_id', charIds).then((cr) => {
             const ch = cr.data || []
             const characterKeys = [...new Set([...charIds, ...ch.map((c) => c.name).filter(Boolean)])]

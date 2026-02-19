@@ -15,7 +15,7 @@ async function fetchRaidDetail(raidId) {
   const [r, e, l, a, ea] = await Promise.all([
     supabase.from('raids').select('raid_id, raid_name, date_iso, date, attendees').eq('raid_id', raidId).single(),
     supabase.from('raid_events').select('id, raid_id, event_id, event_order, event_name, dkp_value, attendee_count, event_time').eq('raid_id', raidId).order('event_order'),
-    supabase.from('raid_loot').select('id, raid_id, event_id, item_name, char_id, character_name, cost, assigned_char_id, assigned_character_name').eq('raid_id', raidId),
+    supabase.from('raid_loot_with_assignment').select('id, raid_id, event_id, item_name, char_id, character_name, cost, assigned_char_id, assigned_character_name').eq('raid_id', raidId),
     supabase.from('raid_attendance').select('id, raid_id, char_id, character_name').eq('raid_id', raidId).order('character_name'),
     supabase.from('raid_event_attendance').select('event_id, char_id, character_name').eq('raid_id', raidId),
   ])

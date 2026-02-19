@@ -85,8 +85,8 @@ export default function CharacterPage() {
   useEffect(() => {
     if (!displayName && !charId) return
     const promises = []
-    if (charId) promises.push(supabase.from('raid_loot').select('raid_id, item_name, cost, character_name, assigned_char_id, assigned_character_name').eq('assigned_char_id', charId))
-    if (displayName) promises.push(supabase.from('raid_loot').select('raid_id, item_name, cost, character_name, assigned_char_id, assigned_character_name').ilike('assigned_character_name', displayName))
+    if (charId) promises.push(supabase.from('raid_loot_with_assignment').select('raid_id, item_name, cost, character_name, assigned_char_id, assigned_character_name').eq('assigned_char_id', charId))
+    if (displayName) promises.push(supabase.from('raid_loot_with_assignment').select('raid_id, item_name, cost, character_name, assigned_char_id, assigned_character_name').ilike('assigned_character_name', displayName))
     Promise.all(promises).then((results) => {
       const seen = new Set()
       const merged = []

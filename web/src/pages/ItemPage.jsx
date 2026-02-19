@@ -164,7 +164,7 @@ export default function ItemPage() {
     // Case-insensitive item match so "Earring" and "earring" show the same page
     const escaped = (itemName || '').replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_')
     Promise.all([
-      supabase.from('raid_loot').select('id, raid_id, event_id, item_name, char_id, character_name, cost, assigned_char_id, assigned_character_name').ilike('item_name', escaped).limit(500),
+      supabase.from('raid_loot_with_assignment').select('id, raid_id, event_id, item_name, char_id, character_name, cost, assigned_char_id, assigned_character_name').ilike('item_name', escaped).limit(500),
       getDkpMobLoot(),
       getRaidItemSources(),
     ]).then(([lootRes, mobJson, raidJson]) => {

@@ -131,7 +131,7 @@ export default function LootSearch() {
       // Background: fetch only new rows (id > maxLootId)
       const maxId = cached.maxLootId ?? 0
       supabase
-        .from('raid_loot')
+        .from('raid_loot_with_assignment')
         .select('id, raid_id, event_id, item_name, character_name, char_id, cost, assigned_char_id, assigned_character_name')
         .gt('id', maxId)
         .order('id', { ascending: true })
@@ -164,7 +164,7 @@ export default function LootSearch() {
       for (let from = 0; from < MAX_LOOT_PAGES * PAGE; from += PAGE) {
         const to = from + PAGE - 1
         const { data, error } = await supabase
-          .from('raid_loot')
+          .from('raid_loot_with_assignment')
           .select('id, raid_id, event_id, item_name, character_name, char_id, cost, assigned_char_id, assigned_character_name')
           .order('id', { ascending: false })
           .range(from, to)

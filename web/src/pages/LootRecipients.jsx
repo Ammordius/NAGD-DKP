@@ -112,7 +112,7 @@ export default function LootRecipients() {
       const allLoot = []
       const run = (offset) => {
         const slice = raidList.slice(offset, offset + CHUNK)
-        return supabase.from('raid_loot').select('raid_id, char_id, character_name, assigned_char_id, assigned_character_name, item_name, cost').in('raid_id', slice).then((lRes) => {
+        return supabase.from('raid_loot_with_assignment').select('raid_id, char_id, character_name, assigned_char_id, assigned_character_name, item_name, cost').in('raid_id', slice).then((lRes) => {
           if (lRes.error) return Promise.reject(lRes.error)
           allLoot.push(...(lRes.data || []))
           if (offset + CHUNK >= raidList.length) return allLoot

@@ -363,7 +363,7 @@ export default function Officer({ isOfficer }) {
     const [r, e, l, a, ea] = await Promise.all([
       supabase.from('raids').select('*').eq('raid_id', selectedRaidId).single(),
       supabase.from('raid_events').select('*').eq('raid_id', selectedRaidId).order('event_order'),
-      supabase.from('raid_loot').select('*').eq('raid_id', selectedRaidId),
+      supabase.from('raid_loot_with_assignment').select('*').eq('raid_id', selectedRaidId),
       supabase.from('raid_attendance').select('*').eq('raid_id', selectedRaidId).order('character_name'),
       supabase.from('raid_event_attendance').select('event_id, char_id, character_name').eq('raid_id', selectedRaidId),
     ])
