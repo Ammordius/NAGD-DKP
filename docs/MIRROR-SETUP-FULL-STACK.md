@@ -60,7 +60,7 @@ Run these in the Supabase **SQL Editor** (New query → paste → Run). Order ma
 |------|-------------|
 | **`docs/supabase-loot-to-character.sql`** | If you want loot-to-character assignment (Magelo) and the `update_raid_loot_assignments` RPC. Required for the **Loot-to-character** CI workflow. |
 | **`docs/supabase-loot-assignment-table.sql`** | Loot assignment split (loot_assignment table + RPC). Run if you use the split schema; then run **`docs/supabase-github-worker-role.sql`** for CI. |
-| **`docs/supabase-github-worker-role.sql`** | For GitHub Actions: creates `github_worker` role (SELECT on all tables, EXECUTE on `update_raid_loot_assignments` / `refresh_after_bulk_loot_assignment`, INSERT/DELETE on `character_loot_assignment_counts`, UPDATE on `characters`). Run after **loot-assignment-table** SQL. CI must use the Dashboard **service_role** key (REST API does not accept custom JWTs); the worker role is for direct DB use only. |
+| **`docs/supabase-github-worker-role.sql`** | Optional: creates `github_worker` role for direct DB use (e.g. future tooling). **CI uses the Supabase API secret** (service_role key from Dashboard → API), not a custom role. Run after **loot-assignment-table** SQL if you use the split schema. |
 | **`docs/supabase-officer-audit-log.sql`** | If you want the officer audit log table (may already be in schema; run only if the table or policies are missing). |
 | **`docs/supabase-create-my-account-rpc.sql`** | If the schema doesn’t already define `create_my_account` / account-claiming (usually already in main schema). |
 | **`docs/supabase-anon-read-policies.sql`** | Only if you need to re-apply anon read policies (main schema already includes anon read; use only if you changed RLS). |
@@ -104,17 +104,16 @@ If you have (or generate) CSVs in the repo’s `data/` directory:
 
 ## Step 5: GitHub repo secrets (for CI)
 
-CI needs to talk to **your** Supabase project. In your **mirror** repo go to **Settings** → **Secrets and variables** → **Actions** and add:
+CI needs to talk to **your** Supabase project using the **API secret** from Supabase. In your **mirror** repo go to **Settings** → **Secrets and variables** → **Actions** and add:
 
 | Secret | Value | Used by |
 |--------|--------|--------|
-| **`SUPABASE_URL`** | Your Supabase **Project URL** (Settings → API) | DB backup, Loot-to-character |
-| **`SUPABASE_ANON_KEY`** | Your Supabase **anon** key (Settings → API) | Same workflows (scripts can fall back to anon) |
-| **`SUPABASE_SERVICE_ROLE_KEY`** | Your Supabase **service_role** key (Dashboard → Project Settings → API → service_role secret) | Same workflows |
+| **`SUPABASE_URL`** | Your Supabase **Project URL** | DB backup, Loot-to-character |
+| **`SUPABASE_SERVICE_ROLE_KEY`** | Your Supabase **API secret** (service_role key) | Same workflows |
 
-Without these, the **DB backup** and **Loot-to-character** workflows will skip or fail. The **SQL Ledger** workflow only uses backup artifacts and does not call Supabase.
+**Where to get the API secret:** In Supabase go to **Project Settings** → **API**. Under "Project API keys" use the **service_role** key (labeled "secret" — the long key that bypasses RLS). Copy that value and paste it into GitHub as **`SUPABASE_SERVICE_ROLE_KEY`**. Do not use a custom JWT or any other token; the REST API only accepts this built-in key.
 
-**Use the service_role key:** Supabase’s REST API accepts only the built-in **anon** and **service_role** keys. Set **`SUPABASE_SERVICE_ROLE_KEY`** to the **service_role** value from the Dashboard (not a custom JWT). Custom JWTs return 401 when used as the API key.
+Without these secrets, the **DB backup** and **Loot-to-character** workflows will skip or fail. The **SQL Ledger** workflow only uses backup artifacts and does not call Supabase.
 
 ## Step 6: Enable GitHub Pages (for SQL Ledger)
 
@@ -190,7 +189,7 @@ All three workflows use the **same** repo and the **same** Supabase project (you
 - [ ] **docs/supabase-schema.sql** run in SQL Editor.
 - [ ] Optional: **docs/supabase-loot-to-character.sql** (and any other optional SQL) run.
 - [ ] Data loaded: from backup artifact (Option A) or from **data/** CSVs (Option B), in correct import order.
-- [ ] GitHub Actions secrets set: **SUPABASE_URL**, **SUPABASE_ANON_KEY**, **SUPABASE_SERVICE_ROLE_KEY** (use Dashboard service_role key; see Step 5).
+- [ ] GitHub Actions secrets set: **SUPABASE_URL**, **SUPABASE_SERVICE_ROLE_KEY** (use API secret from Supabase → Project Settings → API; see Step 5).
 - [ ] GitHub Pages enabled (Source: GitHub Actions).
 - [ ] Web app deployed (e.g. Vercel) with **VITE_SUPABASE_URL** and **VITE_SUPABASE_ANON_KEY** for the mirror.
 - [ ] First user created and set to officer; **refresh_dkp_summary** and **refresh_all_raid_attendance_totals** run once.

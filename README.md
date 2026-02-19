@@ -2,7 +2,8 @@
 
 Guild DKP site: roster + raid data, Supabase backend, React frontend. Deploy to Vercel.
 
-See **[docs/SETUP-WALKTHROUGH.md](docs/SETUP-WALKTHROUGH.md)** for full setup (Supabase, import, run locally, deploy).
+See **[docs/SETUP-WALKTHROUGH.md](docs/SETUP-WALKTHROUGH.md)** for full setup (Supabase, import, run locally, deploy).  
+To run a **full-stack mirror** (own DB, same CI, data from backup or CSVs): **[docs/MIRROR-SETUP-FULL-STACK.md](docs/MIRROR-SETUP-FULL-STACK.md)**.
 
 ## Push to GitHub and deploy (Vercel)
 
