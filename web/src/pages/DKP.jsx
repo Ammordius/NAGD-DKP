@@ -114,8 +114,8 @@ export default function DKP({ isOfficer }) {
               <th style={{ color: 'var(--balance-green, #22c55e)' }}>Balance</th>
               <th>Earned</th>
               <th>Spent</th>
-              <th title="Raid attendance % (DKP earned / total DKP in period)">RA % 30d</th>
-              <th title="Raid attendance % (DKP earned / total DKP in period)">RA % 60d</th>
+              <th title="DKP earned / total DKP in period; % = share in period">30d</th>
+              <th title="DKP earned / total DKP in period; % = share in period">60d</th>
             </tr>
           </thead>
           <tbody>
@@ -124,16 +124,16 @@ export default function DKP({ isOfficer }) {
               const total60 = periodTotals['60d'] || 0
               const e30 = r.earned_30d != null ? Math.round(r.earned_30d) : 0
               const e60 = r.earned_60d != null ? Math.round(r.earned_60d) : 0
-              const raPct30 = total30 > 0 ? Math.round((e30 / total30) * 100) : '—'
-              const raPct60 = total60 > 0 ? Math.round((e60 / total60) * 100) : '—'
+              const cell30 = total30 > 0 ? `${e30} / ${total30} (${Math.round((e30 / total30) * 100)}%)` : '—'
+              const cell60 = total60 > 0 ? `${e60} / ${total60} (${Math.round((e60 / total60) * 100)}%)` : '—'
               return (
                 <tr key={r.account_id + i}>
                   <td><Link to={`/accounts/${r.account_id}`}>{r.name}</Link></td>
                   <td style={{ color: 'var(--balance-green, #22c55e)', fontWeight: 'bold' }}>{Number(r.balance)}</td>
                   <td>{Number(r.earned)}</td>
                   <td>{Number(r.spent)}</td>
-                  <td>{raPct30}</td>
-                  <td>{raPct60}</td>
+                  <td>{cell30}</td>
+                  <td>{cell60}</td>
                 </tr>
               )
             })}
