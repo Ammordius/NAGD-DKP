@@ -8,8 +8,9 @@ on:
   workflow_dispatch:
     inputs:
       artifact_name:
-        description: 'Backup artifact name (e.g. supabase-backup-2025-02-19 or supabase-backup-weekly-2025-W07). Pick from Actions → DB backup → Artifacts.'
+        description: "Use 'latest' for most recent backup, or paste a name from the list shown in the first step (e.g. supabase-backup-2026-02-20)"
         required: true
+        default: latest
       include_profiles:
         description: 'Restore profiles table (wipes existing; usually leave unchecked)'
         required: false
@@ -23,17 +24,54 @@ concurrency:
 jobs:
   restore:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read   # list backup artifacts
     env:
       SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: List backup artifacts
+        id: list
+        run: |
+          echo "## Available backup artifacts (DB backup workflow)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          ARTIFACTS=$(gh api "repos/${{ github.repository }}/actions/artifacts?per_page=100" \
+            --jq '[.artifacts[] | select(.name | startswith("supabase-backup")) | select(.expired == false) | {name: .name, updated: .updated_at}] | sort_by(.updated) | reverse' 2>/dev/null) || ARTIFACTS='[]'
+          echo "$ARTIFACTS" | jq -r '.[] | "- **\(.name)** (\(.updated | split("T")[0]))"' >> $GITHUB_STEP_SUMMARY
+          LATEST=$(echo "$ARTIFACTS" | jq -r '.[0].name // empty')
+          if [ -z "$LATEST" ]; then
+            echo "No backup artifacts found." >> $GITHUB_STEP_SUMMARY
+            echo "latest_name=" >> $GITHUB_OUTPUT
+          else
+            echo "latest_name=$LATEST" >> $GITHUB_OUTPUT
+            echo "Using **$LATEST** when artifact_name is 'latest'." >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "Artifacts listed above. Copy a name into the workflow input to restore from that backup."
+
+      - name: Resolve artifact name
+        id: resolve
+        run: |
+          if [ "${{ inputs.artifact_name }}" = "latest" ]; then
+            NAME="${{ steps.list.outputs.latest_name }}"
+            if [ -z "$NAME" ]; then
+              echo "::error::No backup artifacts found. Run 'DB backup (on change)' first or choose an existing artifact."
+              exit 1
+            fi
+            echo "resolved_name=$NAME" >> $GITHUB_OUTPUT
+            echo "Restoring from latest: $NAME"
+          else
+            echo "resolved_name=${{ inputs.artifact_name }}" >> $GITHUB_OUTPUT
+            echo "Restoring from: ${{ inputs.artifact_name }}"
+          fi
+
       - name: Download backup artifact
         uses: dawidd6/action-download-artifact@v6
         with:
           workflow: db-backup.yml
-          name: ${{ inputs.artifact_name }}
+          name: ${{ steps.resolve.outputs.resolved_name }}
           path: restore-artifact
           if_no_artifact_found: fail
 

@@ -38,17 +38,17 @@ Restore uses a **direct Postgres connection** (not the REST API). Add this secre
 1. Go to **Actions** → **DB restore from backup**.
 2. Click **Run workflow**.
 3. Choose **Branch** (usually `main`).
-4. **Artifact name** – Enter the exact name of the backup artifact you want, e.g.:
-   - `supabase-backup-2025-02-19` (daily)
-   - `supabase-backup-weekly-2025-W07` (weekly)
-   - `supabase-backup-monthly-2025-02` (monthly)  
-   To see available names: **Actions** → **DB backup (on change)** → open a run → **Artifacts**.
+4. **Artifact name** – Either:
+   - Leave as **`latest`** (default) to restore from the most recent backup artifact, or
+   - Paste a specific name (e.g. `supabase-backup-2026-02-20`). The first step of the job lists all available backup artifacts in the run summary—if you want an older backup, run once with `latest`, open the run, copy a name from the "List backup artifacts" step, then re-run with that name.
 5. **Include profiles** – Leave unchecked unless you intend to overwrite the `profiles` table (auth-related). Default is to restore only DKP data tables and skip `profiles`.
 6. Click **Run workflow**.
 
 The job will:
 
-- Download the chosen artifact from the backup workflow.
+- **List backup artifacts** – Fetches backup artifact names from the repo and shows them in the step summary (so you can copy a name for a future run).
+- Resolve **latest** to the most recent artifact name, or use the name you entered.
+- Download the chosen artifact from the DB backup workflow.
 - Extract the `backup/` directory of CSVs.
 - Truncate the relevant tables (see `docs/supabase-restore-truncate.sql`).
 - Load each CSV into Supabase via Postgres `COPY`.
