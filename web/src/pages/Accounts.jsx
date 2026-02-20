@@ -2,8 +2,9 @@ import { useEffect, useState, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { createCache } from '../lib/cache'
+import { fetchAll } from '../lib/accountData'
 
-const CACHE_KEY = 'accounts_list_v1'
+const CACHE_KEY = 'accounts_list_v2'
 const CACHE_TTL = 10 * 60 * 1000
 const MAGELO_BASE = 'https://www.takproject.net/magelo/character.php?char='
 
@@ -21,14 +22,23 @@ export default function Accounts() {
       setLoading(false)
     }
 
-    const limit = 10000
     Promise.all([
-      supabase.from('accounts').select('account_id, toon_count, display_name').limit(limit),
-      supabase.from('character_account').select('account_id, char_id').limit(limit),
-      supabase.from('characters').select('char_id, name, class_name, level').limit(limit),
+      fetchAll('accounts', 'account_id, toon_count, display_name'),
+      fetchAll('character_account', 'account_id, char_id'),
+      fetchAll('characters', 'char_id, name, class_name, level'),
     ]).then(([a, ca, ch]) => {
       if (a.error) {
         setError(a.error.message)
+        setLoading(false)
+        return
+      }
+      if (ca.error) {
+        setError(ca.error.message)
+        setLoading(false)
+        return
+      }
+      if (ch.error) {
+        setError(ch.error.message)
         setLoading(false)
         return
       }
