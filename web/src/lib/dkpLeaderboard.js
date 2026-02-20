@@ -112,6 +112,9 @@ function isActiveRow(r, activeKeysSet, cutoffDate) {
 
 function dedupeByCharacterName(list) {
   const byName = {}
+  /** Same person can appear twice in dkp_summary: character_key=char_id and character_key=name. Don't sum those. */
+  const isNameKey = (row) =>
+    row.char_id && row.name && String(row.char_id).trim().toLowerCase() === String(row.name).trim().toLowerCase()
   list.forEach((r) => {
     const key = (r.name || r.char_id || '').toString().trim().toLowerCase()
     if (!key) return
@@ -120,10 +123,17 @@ function dedupeByCharacterName(list) {
       return
     }
     const m = byName[key]
+    const mNameKey = isNameKey(m)
+    const rNameKey = isNameKey(r)
+    if (mNameKey && !rNameKey) {
+      byName[key] = { ...r }
+      return
+    }
+    if (!mNameKey && rNameKey) return
     m.earned += r.earned
     m.spent += r.spent
-    m.earned_30d += r.earned_30d ?? 0
-    m.earned_60d += r.earned_60d ?? 0
+    m.earned_30d = (m.earned_30d ?? 0) + (r.earned_30d ?? 0)
+    m.earned_60d = (m.earned_60d ?? 0) + (r.earned_60d ?? 0)
     if (r.last_activity_date && (!m.last_activity_date || (r.last_activity_date > m.last_activity_date))) {
       m.last_activity_date = r.last_activity_date
     }
@@ -161,12 +171,13 @@ export function processApiPayload(payload) {
     last_activity_date: r.last_activity_date || null,
   }))
   list = dedupeByCharacterName(list)
-  list = list.filter((r) => isActiveRow(r, activeSet, cutoff))
   applyAdjustmentsAndBalance(list, adjustmentsMap)
   const caData = payload.character_account ?? []
   const accData = payload.accounts ?? []
   const charData = payload.characters ?? []
+  // Account total = all characters (incl. inactive). Same payload, no extra egress; leaderboard still active-only.
   const accountList = buildAccountLeaderboard(list, caData, accData, charData)
+  list = list.filter((r) => isActiveRow(r, activeSet, cutoff))
   const summaryUpdatedAt = rows[0]?.updated_at ?? null
   return { list, accountList, activeKeys, periodTotals: pt, caData, accData, charData, summaryUpdatedAt }
 }
