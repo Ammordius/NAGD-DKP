@@ -38,18 +38,29 @@ jobs:
         run: |
           echo "## Available backup artifacts (DB backup workflow)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          ARTIFACTS=$(gh api "repos/${{ github.repository }}/actions/artifacts?per_page=100" \
-            --jq '[.artifacts[] | select(.name | startswith("supabase-backup")) | select(.expired == false) | {name: .name, updated: .updated_at}] | sort_by(.updated) | reverse' 2>/dev/null) || ARTIFACTS='[]'
-          echo "$ARTIFACTS" | jq -r '.[] | "- **\(.name)** (\(.updated | split("T")[0]))"' >> $GITHUB_STEP_SUMMARY
-          LATEST=$(echo "$ARTIFACTS" | jq -r '.[0].name // empty')
+          # Backup workflow only uploads when data changed; find most recent run that has an artifact
+          RUN_IDS=$(gh api "repos/${{ github.repository }}/actions/workflows/db-backup.yml/runs?per_page=20&status=completed" --jq '.workflow_runs[].id')
+          LATEST=""
+          for RUN_ID in $RUN_IDS; do
+            ARTIFACTS=$(gh api "repos/${{ github.repository }}/actions/runs/$RUN_ID/artifacts" --jq '[.artifacts[] | select(.name | startswith("supabase-backup")) | .name]')
+            NAMES=$(echo "$ARTIFACTS" | jq -r '.[]')
+            if [ -n "$NAMES" ]; then
+              for N in $NAMES; do
+                echo "- **$N**" >> $GITHUB_STEP_SUMMARY
+                if [ -z "$LATEST" ]; then LATEST="$N"; fi
+              done
+              break
+            fi
+          done
           if [ -z "$LATEST" ]; then
-            echo "No backup artifacts found." >> $GITHUB_STEP_SUMMARY
+            echo "No backup artifacts found. Run **DB backup (on change)** when data has changed (it only uploads when raid_loot count changes)." >> $GITHUB_STEP_SUMMARY
             echo "latest_name=" >> $GITHUB_OUTPUT
           else
             echo "latest_name=$LATEST" >> $GITHUB_OUTPUT
+            echo "" >> $GITHUB_STEP_SUMMARY
             echo "Using **$LATEST** when artifact_name is 'latest'." >> $GITHUB_STEP_SUMMARY
           fi
-          echo "Artifacts listed above. Copy a name into the workflow input to restore from that backup."
+          echo "Artifacts listed above. Copy a name to restore from that backup, or use 'latest' for the most recent."
 
       - name: Resolve artifact name
         id: resolve
