@@ -35,6 +35,8 @@ jobs:
 
       - name: List backup artifacts
         id: list
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           echo "## Available backup artifacts (DB backup workflow)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
