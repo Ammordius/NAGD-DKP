@@ -1,5 +1,5 @@
 # Restore Supabase from a GitHub backup artifact (e.g. after a bad migration).
-# Manual run only. Requires SUPABASE_DB_URL and artifact from DB backup workflow.
+# Manual run only. Uses SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY (same as DB backup).
 # See docs/CI-DB-BACKUP.md and docs/CI-DB-RESTORE.md.
 
 name: DB restore from backup
@@ -11,11 +11,6 @@ on:
         description: "Use 'latest' for most recent backup, or paste a name from the list shown in the first step (e.g. supabase-backup-2026-02-20)"
         required: true
         default: latest
-      include_profiles:
-        description: 'Restore profiles table (wipes existing; usually leave unchecked)'
-        required: false
-        type: boolean
-        default: false
 
 concurrency:
   group: db-restore
@@ -28,10 +23,21 @@ jobs:
       contents: read
       actions: read   # list backup artifacts
     env:
-      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Check Supabase secrets
+        run: |
+          if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
+            echo "::error::Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in Settings → Secrets and variables → Actions (same as DB backup workflow). See docs/CI-DB-RESTORE.md"
+            exit 1
+          fi
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
 
       - name: List backup artifacts
         id: list
@@ -103,15 +109,13 @@ jobs:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: pip install psycopg2-binary
+        run: pip install -r requirements.txt
 
       - name: Restore database
-        run: |
-          python scripts/restore_supabase_from_backup.py \
-            --backup-dir backup \
-            ${{ inputs.include_profiles && '--include-profiles' || '' }}
+        run: python scripts/restore_supabase_from_backup.py --backup-dir backup
         env:
-          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
 
       - name: Restore summary
         if: success()
