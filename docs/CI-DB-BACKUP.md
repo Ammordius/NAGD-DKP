@@ -96,9 +96,9 @@ With the tiered strategy above, you use a small fraction of that.
 
 ## Restore from a backup
 
-1. In **Actions** → select the workflow run → **Artifacts**, download the `.tar.gz` you need (rolling, weekly, or monthly).
-2. Decompress: `tar xzf backup-YYYY-MM-DD.tar.gz` → you get a `backup/` directory with one CSV per table (e.g. `raids.csv`, `raid_loot.csv`).
-3. Restore: re-import into Supabase. Use **Table Editor** → select table → **Import data from CSV** for each file, or use `docs/supabase-reset-and-import.sql` then import CSVs in the order listed there. CSV is the standard format Supabase’s importer expects.
+**Automated (GitHub Actions):** Use the **DB restore from backup** workflow to download an artifact and restore into Supabase. You need secret **`SUPABASE_DB_URL`** (direct Postgres URI). See **[docs/CI-DB-RESTORE.md](CI-DB-RESTORE.md)** for setup and steps.
+
+**Manual:** In **Actions** → select the workflow run → **Artifacts**, download the `.tar.gz` you need (rolling, weekly, or monthly). Decompress: `tar xzf backup-YYYY-MM-DD.tar.gz` → you get a `backup/` directory with one CSV per table. Re-import into Supabase via **Table Editor** → **Import data from CSV** for each file, or use `docs/supabase-reset-and-import.sql` then import CSVs in the order listed there.
 
 ---
 

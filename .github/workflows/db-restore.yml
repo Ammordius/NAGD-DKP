@@ -1,0 +1,67 @@
+# Restore Supabase from a GitHub backup artifact (e.g. after a bad migration).
+# Manual run only. Requires SUPABASE_DB_URL and artifact from DB backup workflow.
+# See docs/CI-DB-BACKUP.md and docs/CI-DB-RESTORE.md.
+
+name: DB restore from backup
+
+on:
+  workflow_dispatch:
+    inputs:
+      artifact_name:
+        description: 'Backup artifact name (e.g. supabase-backup-2025-02-19 or supabase-backup-weekly-2025-W07). Pick from Actions → DB backup → Artifacts.'
+        required: true
+      include_profiles:
+        description: 'Restore profiles table (wipes existing; usually leave unchecked)'
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  group: db-restore
+  cancel-in-progress: false
+
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download backup artifact
+        uses: dawidd6/action-download-artifact@v6
+        with:
+          workflow: db-backup.yml
+          name: ${{ inputs.artifact_name }}
+          path: restore-artifact
+          if_no_artifact_found: fail
+
+      - name: Extract backup
+        run: |
+          cd restore-artifact
+          tar xzf backup-*.tar.gz
+          ls -la backup/
+          mv backup ..
+          cd ..
+          ls -la backup/
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install psycopg2-binary
+
+      - name: Restore database
+        run: |
+          python scripts/restore_supabase_from_backup.py \
+            --backup-dir backup \
+            ${{ inputs.include_profiles && '--include-profiles' || '' }}
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+
+      - name: Restore summary
+        if: success()
+        run: echo "Restore completed. Run refresh_dkp_summary() and refresh_all_raid_attendance_totals() in Supabase SQL Editor if needed."
