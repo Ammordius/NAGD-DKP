@@ -21,6 +21,7 @@ import sys
 from pathlib import Path
 
 BATCH_SIZE = 500
+PROGRESS_EVERY = 10  # log progress every N batches (every 5000 rows with BATCH_SIZE=500)
 
 # DKP data tables only (never profiles or auth)
 RESTORE_TABLE_ORDER = [
@@ -66,6 +67,7 @@ TABLE_KEY_COLUMN: dict[str, str] = {
 def delete_all_rows(client, table: str, key_col: str) -> None:
     """Delete all rows from table via REST API in batches."""
     total = 0
+    batches = 0
     while True:
         resp = (
             client.table(table)
@@ -79,8 +81,11 @@ def delete_all_rows(client, table: str, key_col: str) -> None:
         keys = [r[key_col] for r in rows]
         client.table(table).delete().in_(key_col, keys).execute()
         total += len(keys)
+        batches += 1
+        if batches % PROGRESS_EVERY == 0:
+            print(f"  Clearing {table}... {total} rows so far", flush=True)
     if total:
-        print(f"  Cleared {table}: {total} rows")
+        print(f"  Cleared {table}: {total} rows", flush=True)
 
 
 def clear_tables(client) -> None:
@@ -100,6 +105,7 @@ def load_csv_api(client, table: str, csv_path: Path) -> int:
         fieldnames = reader.fieldnames or []
         rows: list[dict] = []
         count = 0
+        batches = 0
         for row in reader:
             # Coerce for API: keep nulls, stringify numbers if needed for Supabase
             out = {}
@@ -116,6 +122,9 @@ def load_csv_api(client, table: str, csv_path: Path) -> int:
                 client.table(table).insert(rows).execute()
                 count += len(rows)
                 rows = []
+                batches += 1
+                if batches % PROGRESS_EVERY == 0:
+                    print(f"  Loading {table}... {count} rows so far", flush=True)
         if rows:
             client.table(table).insert(rows).execute()
             count += len(rows)

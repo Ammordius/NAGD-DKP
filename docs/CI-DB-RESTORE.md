@@ -39,6 +39,19 @@ The job will:
 - Clear existing rows in **DKP data tables only** via the API (child tables first). Profiles and auth are never touched.
 - Insert rows from each CSV into those tables via the API (same credentials as backup).
 
+### How long it takes
+
+Restore time is driven by **total row count** and **API latency** (GitHub runner ↔ Supabase). The script does about **6 API calls per 1,000 rows** (clear: 2 calls per 500 rows; load: 1 call per 500 rows). At ~200–300 ms per call, that’s about **1–2 minutes per 100k rows**.
+
+| Total rows (all tables) | Typical run time |
+|-------------------------|------------------|
+| ~50k                    | 1–3 min          |
+| ~100k–150k              | 3–6 min          |
+| ~200k–300k              | 6–12 min         |
+| ~500k+                  | 15–25 min        |
+
+Progress is logged every 5,000 rows so you can see it moving. If the same line hasn’t changed for 15+ minutes, the run may be stuck.
+
 After a successful restore, run in **Supabase SQL Editor** if you use the DKP cache:
 
 ```sql
