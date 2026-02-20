@@ -110,10 +110,10 @@ export default function DKP({ isOfficer }) {
         <table>
           <thead>
             <tr>
-              <th>{colLabel}</th>
-              <th style={{ color: 'var(--balance-green, #22c55e)', fontWeight: 'bold' }}>Balance</th>
-              <th>Earned</th>
-              <th>Spent</th>
+              <th style={{ textDecoration: 'underline' }}>{colLabel}</th>
+              <th style={{ color: 'var(--balance-green, #22c55e)', fontWeight: 'bold', textDecoration: 'underline' }}>Balance</th>
+              <th style={{ textDecoration: 'underline' }}>Earned</th>
+              <th style={{ textDecoration: 'underline' }}>Spent</th>
               <th title="DKP earned / total DKP in period; % = share in period">30d</th>
               <th title="DKP earned / total DKP in period; % = share in period">60d</th>
             </tr>
