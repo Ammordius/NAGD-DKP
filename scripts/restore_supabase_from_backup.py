@@ -21,7 +21,8 @@ import sys
 from pathlib import Path
 
 BATCH_SIZE = 500
-PROGRESS_EVERY = 10  # log progress every N batches (every 5000 rows with BATCH_SIZE=500)
+DELETE_BATCH_SIZE = 100  # smaller for .in_() so API doesn't truncate; ensures full clear
+PROGRESS_EVERY = 10  # log progress every N batches
 
 # DKP data tables only (never profiles or auth)
 RESTORE_TABLE_ORDER = [
@@ -42,6 +43,9 @@ RESTORE_TABLE_ORDER = [
     "active_raiders",
     "officer_audit_log",
 ]
+
+# Do not clear: profiles references accounts; clearing would FK-fail. Load accounts via upsert.
+CLEAR_SKIP = frozenset({"accounts"})
 
 # For delete-all via API: column to use for batch delete (first column of PK for composites)
 TABLE_KEY_COLUMN: dict[str, str] = {
@@ -65,14 +69,14 @@ TABLE_KEY_COLUMN: dict[str, str] = {
 
 
 def delete_all_rows(client, table: str, key_col: str) -> None:
-    """Delete all rows from table via REST API in batches."""
+    """Delete all rows from table via REST API in small batches (API can truncate large .in_())."""
     total = 0
     batches = 0
     while True:
         resp = (
             client.table(table)
             .select(key_col)
-            .limit(BATCH_SIZE)
+            .limit(DELETE_BATCH_SIZE)
             .execute()
         )
         rows = resp.data or []
@@ -89,8 +93,11 @@ def delete_all_rows(client, table: str, key_col: str) -> None:
 
 
 def clear_tables(client) -> None:
-    """Clear DKP data tables only (child first). Never touches profiles or auth."""
+    """Clear DKP data tables only (child first). Skip accounts (profiles references them)."""
     for table in reversed(RESTORE_TABLE_ORDER):
+        if table in CLEAR_SKIP:
+            print(f"  Skip clear {table} (referenced by profiles)", flush=True)
+            continue
         key_col = TABLE_KEY_COLUMN.get(table, "id")
         try:
             delete_all_rows(client, table, key_col)
@@ -98,8 +105,22 @@ def clear_tables(client) -> None:
             print(f"  {table}: clear warning - {e}", file=sys.stderr)
 
 
-def load_csv_api(client, table: str, csv_path: Path) -> int:
-    """Load one CSV into table via REST API insert. Returns row count."""
+def _row_from_csv_row(fieldnames: list[str], row: dict) -> dict:
+    """Coerce CSV row to API-friendly dict."""
+    out = {}
+    for k in fieldnames:
+        v = row.get(k, "")
+        if v == "" or v is None:
+            out[k] = None
+        elif k == "id" and v.isdigit():
+            out[k] = int(v)
+        else:
+            out[k] = v
+    return out
+
+
+def load_csv_api(client, table: str, csv_path: Path, *, upsert_on: str | None = None) -> int:
+    """Load one CSV via REST API. If upsert_on is set (e.g. 'account_id'), use upsert for that table."""
     with open(csv_path, "r", encoding="utf-8", newline="") as f:
         reader = csv.DictReader(f)
         fieldnames = reader.fieldnames or []
@@ -107,26 +128,22 @@ def load_csv_api(client, table: str, csv_path: Path) -> int:
         count = 0
         batches = 0
         for row in reader:
-            # Coerce for API: keep nulls, stringify numbers if needed for Supabase
-            out = {}
-            for k in fieldnames:
-                v = row.get(k, "")
-                if v == "" or v is None:
-                    out[k] = None
-                elif k in ("id",) and v.isdigit():
-                    out[k] = int(v)
-                else:
-                    out[k] = v
-            rows.append(out)
+            rows.append(_row_from_csv_row(fieldnames, row))
             if len(rows) >= BATCH_SIZE:
-                client.table(table).insert(rows).execute()
+                if upsert_on:
+                    client.table(table).upsert(rows, on_conflict=upsert_on).execute()
+                else:
+                    client.table(table).insert(rows).execute()
                 count += len(rows)
                 rows = []
                 batches += 1
                 if batches % PROGRESS_EVERY == 0:
                     print(f"  Loading {table}... {count} rows so far", flush=True)
         if rows:
-            client.table(table).insert(rows).execute()
+            if upsert_on:
+                client.table(table).upsert(rows, on_conflict=upsert_on).execute()
+            else:
+                client.table(table).insert(rows).execute()
             count += len(rows)
     return count
 
@@ -178,7 +195,9 @@ def main() -> int:
             print(f"Skip {table} (no {csv_path})")
             continue
         try:
-            n = load_csv_api(client, table, csv_path)
+            # accounts: we didn't clear (profiles references them); upsert to avoid duplicate key
+            upsert_col = "account_id" if table == "accounts" else None
+            n = load_csv_api(client, table, csv_path, upsert_on=upsert_col)
             total += n
             print(f"{table}: {n} rows")
         except Exception as e:
