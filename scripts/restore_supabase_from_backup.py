@@ -21,7 +21,8 @@ import sys
 from pathlib import Path
 
 BATCH_SIZE = 500
-DELETE_BATCH_SIZE = 100  # smaller for .in_() so API doesn't truncate; ensures full clear
+DELETE_BATCH_SIZE = 250  # balance speed vs .in_() limit; on timeout we retry in tiny chunks
+DELETE_BATCH_SIZE_FALLBACK = 25  # when statement timeout hits, delete in small chunks
 PROGRESS_EVERY = 10  # log progress every N batches
 
 # DKP data tables only (never profiles or auth)
@@ -71,8 +72,19 @@ TABLE_KEY_COLUMN: dict[str, str] = {
 }
 
 
+def _is_statement_timeout(err: Exception) -> bool:
+    s = str(err).lower()
+    if "statement timeout" in s or "57014" in s:
+        return True
+    if hasattr(err, "code") and getattr(err, "code", None) == "57014":
+        return True
+    if isinstance(err, dict):
+        return err.get("code") == "57014" or "statement timeout" in str(err.get("message", "")).lower()
+    return False
+
+
 def delete_all_rows(client, table: str, key_col: str) -> None:
-    """Delete all rows from table via REST API in small batches (API can truncate large .in_())."""
+    """Delete all rows via REST API. Uses smaller batches on statement timeout."""
     total = 0
     batches = 0
     while True:
@@ -86,13 +98,28 @@ def delete_all_rows(client, table: str, key_col: str) -> None:
         if not rows:
             break
         keys = [r[key_col] for r in rows]
-        client.table(table).delete().in_(key_col, keys).execute()
+        try:
+            client.table(table).delete().in_(key_col, keys).execute()
+        except Exception as e:
+            if _is_statement_timeout(e):
+                print(f"  Statement timeout on {table}, deleting in chunks of {DELETE_BATCH_SIZE_FALLBACK}...", flush=True)
+                for i in range(0, len(keys), DELETE_BATCH_SIZE_FALLBACK):
+                    chunk = keys[i : i + DELETE_BATCH_SIZE_FALLBACK]
+                    client.table(table).delete().in_(key_col, chunk).execute()
+            else:
+                raise
         total += len(keys)
         batches += 1
         if batches % PROGRESS_EVERY == 0:
             print(f"  Clearing {table}... {total} rows so far", flush=True)
     if total:
         print(f"  Cleared {table}: {total} rows", flush=True)
+
+
+def truncate_via_rpc(client) -> None:
+    """Clear DKP data tables via truncate_dkp_for_restore() RPC (in main schema). Raises if RPC missing."""
+    client.rpc("truncate_dkp_for_restore").execute()
+    print("  Cleared DKP tables via truncate_dkp_for_restore() RPC.", flush=True)
 
 
 def clear_tables(client) -> None:
@@ -161,6 +188,11 @@ def main() -> int:
         required=True,
         help="Directory containing table CSVs (e.g. backup/)",
     )
+    ap.add_argument(
+        "--load-only",
+        action="store_true",
+        help="Skip clear phase (only load from CSVs; tables must already be empty or you will get duplicates)",
+    )
     args = ap.parse_args()
 
     url = (os.environ.get("SUPABASE_URL") or "").strip()
@@ -188,27 +220,37 @@ def main() -> int:
         print(f"Not a directory: {backup_dir}", file=sys.stderr)
         return 1
 
-    print("Clearing DKP data tables only (child first); profiles and auth are never touched...")
-    clear_tables(client)
+    if not args.load_only:
+        print("Clearing DKP data tables via truncate_dkp_for_restore() RPC...", flush=True)
+        truncate_via_rpc(client)
+    else:
+        print("Load-only mode: skipping clear.", flush=True)
+
+    print("Enabling fast load (DKP triggers deferred until end)...", flush=True)
+    client.rpc("begin_restore_load").execute()
 
     total = 0
-    for table in RESTORE_TABLE_ORDER:
-        if table in LOAD_SKIP_TRIGGER_POPULATED:
-            print(f"Skip load {table} (repopulated by triggers from raid_events/raid_event_attendance)")
-            continue
-        csv_path = backup_dir / f"{table}.csv"
-        if not csv_path.is_file():
-            print(f"Skip {table} (no {csv_path})")
-            continue
-        try:
-            # accounts: we didn't clear (profiles references them); upsert to avoid duplicate key
-            upsert_col = "account_id" if table == "accounts" else None
-            n = load_csv_api(client, table, csv_path, upsert_on=upsert_col)
-            total += n
-            print(f"{table}: {n} rows")
-        except Exception as e:
-            print(f"{table}: error - {e}", file=sys.stderr)
-            return 1
+    try:
+        for table in RESTORE_TABLE_ORDER:
+            if table in LOAD_SKIP_TRIGGER_POPULATED:
+                print(f"Skip load {table} (repopulated by triggers from raid_events/raid_event_attendance)")
+                continue
+            csv_path = backup_dir / f"{table}.csv"
+            if not csv_path.is_file():
+                print(f"Skip {table} (no {csv_path})")
+                continue
+            try:
+                # accounts: we didn't clear (profiles references them); upsert to avoid duplicate key
+                upsert_col = "account_id" if table == "accounts" else None
+                n = load_csv_api(client, table, csv_path, upsert_on=upsert_col)
+                total += n
+                print(f"{table}: {n} rows")
+            except Exception as e:
+                print(f"{table}: error - {e}", file=sys.stderr)
+                raise
+    finally:
+        print("Refreshing DKP summary and raid totals...", flush=True)
+        client.rpc("end_restore_load").execute()
 
     print(f"Restore done. Total rows: {total}")
     return 0

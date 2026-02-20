@@ -22,35 +22,34 @@ Add both in **Settings → Secrets and variables → Actions**. The backup workf
 
 ## Running a restore (GitHub Actions)
 
+### How restore clears tables
+
+The restore script **always uses the `truncate_dkp_for_restore()` RPC** (defined in **`docs/supabase-schema.sql`**) to clear DKP data tables. Truncate is one fast call; then the job loads from CSV. No manual SQL step.
+
+**Load-only:** To skip the clear phase (e.g. you already truncated in Supabase), run the workflow with **Truncate already run in Supabase (load only)** set to **true**.
+
+### Run a restore
+
 1. Go to **Actions** → **DB restore from backup**.
 2. Click **Run workflow**.
 3. Choose **Branch** (usually `main`).
-4. **Artifact name** – Either:
-   - Leave as **`latest`** (default) to restore from the most recent backup artifact, or
-   - Paste a specific name (e.g. `supabase-backup-2026-02-20`). The first step of the job lists all available backup artifacts in the run summary—if you want an older backup, run once with `latest`, open the run, copy a name from the "List backup artifacts" step, then re-run with that name.
-5. Click **Run workflow**.
+4. **Artifact name** – `latest` or paste a name from the list shown in the first step.
+5. Leave **Truncate already run in Supabase (load only)** **unchecked**.
+6. Click **Run workflow**.
 
 The job will:
 
-- **List backup artifacts** – Fetches backup artifact names from the repo and shows them in the step summary (so you can copy a name for a future run).
-- Resolve **latest** to the most recent artifact name, or use the name you entered.
-- Download the chosen artifact from the DB backup workflow.
-- Extract the `backup/` directory of CSVs.
-- Clear existing rows in **DKP data tables only** via the API (child tables first). Profiles and auth are never touched.
-- Insert rows from each CSV into those tables via the API (same credentials as backup).
+- **List backup artifacts** – Fetches backup artifact names and shows them in the step summary.
+- Resolve **latest** or use the name you entered.
+- Download the chosen artifact and extract the `backup/` directory of CSVs.
+- **Clear** DKP data tables via `truncate_dkp_for_restore()` RPC (in main schema), call **begin_restore_load()** so DKP triggers skip during insert, **insert** rows from each CSV via the API, then **end_restore_load()** to refresh DKP summary and raid totals once.
 
 ### How long it takes
 
-Restore time is driven by **total row count** and **API latency** (GitHub runner ↔ Supabase). The script does about **6 API calls per 1,000 rows** (clear: 2 calls per 500 rows; load: 1 call per 500 rows). At ~200–300 ms per call, that’s about **1–2 minutes per 100k rows**.
+- **Load only** (after running the truncate SQL in Supabase): about **1–2 minutes per 100k rows** for the load phase only → **~5–12 minutes** for ~330k rows.
+- **Normal restore** (RPC truncate + load): clear is one fast RPC call; load about **1–2 min per 100k rows** → **~5–12 minutes** for ~330k rows.
 
-| Total rows (all tables) | Typical run time |
-|-------------------------|------------------|
-| ~50k                    | 1–3 min          |
-| ~100k–150k              | 3–6 min          |
-| ~200k–300k              | 6–12 min         |
-| ~500k+                  | 15–25 min        |
-
-Progress is logged every 5,000 rows so you can see it moving. If the same line hasn’t changed for 15+ minutes, the run may be stuck.
+Progress is logged every 5,000 rows. If the same line hasn’t changed for 15+ minutes, the run may be stuck.
 
 After a successful restore, run in **Supabase SQL Editor** if you use the DKP cache:
 
@@ -60,6 +59,16 @@ SELECT refresh_all_raid_attendance_totals();
 ```
 
 Or use the **Refresh DKP totals** button on the DKP page (officers only).
+
+### Reclaim space after restore (if DB size grew)
+
+Restore does many DELETEs then INSERTs; PostgreSQL keeps dead row versions until **VACUUM** runs. If your database size grew (e.g. doubled), run in SQL Editor to reclaim space and update stats:
+
+```sql
+VACUUM ANALYZE;
+```
+
+This runs on the whole database and may take a minute. Supabase also runs autovacuum, but a manual run right after a restore can bring size back down quickly. For a one-time aggressive reclaim (rewrites tables, brief lock), you can run `VACUUM FULL ANALYZE;` during low traffic—otherwise `VACUUM ANALYZE;` is enough.
 
 ## Running restore locally
 

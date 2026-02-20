@@ -496,6 +496,7 @@ $$;
 CREATE OR REPLACE FUNCTION public.trigger_refresh_dkp_summary()
 RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 BEGIN
+  IF restore_load_in_progress() THEN RETURN NULL; END IF;
   PERFORM refresh_dkp_summary_internal();
   RETURN NULL;
 END;
@@ -565,10 +566,73 @@ BEGIN
 END;
 $$;
 
+-- RPC for restore: truncate DKP data tables in one call (used by restore script via client.rpc).
+-- Does not truncate accounts (profiles references them). Does not touch profiles or auth.
+CREATE OR REPLACE FUNCTION public.truncate_dkp_for_restore()
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  TRUNCATE TABLE raid_attendance_dkp;
+  TRUNCATE TABLE raid_dkp_totals;
+  TRUNCATE TABLE raid_event_attendance RESTART IDENTITY CASCADE;
+  TRUNCATE TABLE raid_loot RESTART IDENTITY CASCADE;
+  TRUNCATE TABLE raid_attendance RESTART IDENTITY CASCADE;
+  TRUNCATE TABLE raid_events RESTART IDENTITY CASCADE;
+  TRUNCATE TABLE raid_classifications CASCADE;
+  TRUNCATE TABLE raids RESTART IDENTITY CASCADE;
+  TRUNCATE TABLE character_account CASCADE;
+  TRUNCATE TABLE characters CASCADE;
+  -- do not truncate accounts (profiles references them)
+  TRUNCATE TABLE dkp_summary;
+  TRUNCATE TABLE dkp_adjustments;
+  TRUNCATE TABLE dkp_period_totals;
+  TRUNCATE TABLE active_raiders;
+  TRUNCATE TABLE officer_audit_log;
+END;
+$$;
+COMMENT ON FUNCTION public.truncate_dkp_for_restore() IS 'Truncate DKP data tables for restore; used by restore script via API. Does not truncate accounts.';
+GRANT EXECUTE ON FUNCTION public.truncate_dkp_for_restore() TO service_role;
+GRANT EXECUTE ON FUNCTION public.truncate_dkp_for_restore() TO authenticated;
+
+-- Restore load mode: when true, DKP triggers no-op so bulk insert is fast; restore script calls end_restore_load() to clear and run refresh.
+CREATE TABLE IF NOT EXISTS public.restore_in_progress (id int PRIMARY KEY DEFAULT 1, in_progress boolean NOT NULL DEFAULT false);
+INSERT INTO public.restore_in_progress (id, in_progress) VALUES (1, false) ON CONFLICT (id) DO NOTHING;
+
+CREATE OR REPLACE FUNCTION public.restore_load_in_progress()
+RETURNS boolean LANGUAGE sql STABLE SET search_path = public AS $$
+  SELECT in_progress FROM restore_in_progress WHERE id = 1 LIMIT 1;
+$$;
+
+CREATE OR REPLACE FUNCTION public.begin_restore_load()
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  INSERT INTO restore_in_progress (id, in_progress) VALUES (1, true) ON CONFLICT (id) DO UPDATE SET in_progress = true;
+END;
+$$;
+COMMENT ON FUNCTION public.begin_restore_load() IS 'Signal start of bulk restore load; DKP triggers skip work until end_restore_load().';
+GRANT EXECUTE ON FUNCTION public.begin_restore_load() TO service_role;
+GRANT EXECUTE ON FUNCTION public.begin_restore_load() TO authenticated;
+
+CREATE OR REPLACE FUNCTION public.end_restore_load()
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  UPDATE restore_in_progress SET in_progress = false WHERE id = 1;
+  PERFORM refresh_dkp_summary();
+  PERFORM refresh_all_raid_attendance_totals();
+END;
+$$;
+COMMENT ON FUNCTION public.end_restore_load() IS 'Signal end of bulk restore load; re-enables triggers and runs full DKP/raid totals refresh.';
+GRANT EXECUTE ON FUNCTION public.end_restore_load() TO service_role;
+GRANT EXECUTE ON FUNCTION public.end_restore_load() TO authenticated;
+
 -- Trigger: when raid_events change, refresh totals for affected raid(s).
 CREATE OR REPLACE FUNCTION public.trigger_refresh_raid_totals_after_events()
 RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 BEGIN
+  IF restore_load_in_progress() THEN IF TG_OP = 'DELETE' THEN RETURN OLD; ELSE RETURN NEW; END IF; END IF;
   IF TG_OP = 'DELETE' THEN
     PERFORM refresh_raid_attendance_totals(OLD.raid_id);
     RETURN OLD;
@@ -590,6 +654,7 @@ CREATE TRIGGER refresh_raid_totals_after_events_del AFTER DELETE ON raid_events 
 CREATE OR REPLACE FUNCTION public.trigger_refresh_raid_totals_after_event_attendance()
 RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 BEGIN
+  IF restore_load_in_progress() THEN IF TG_OP = 'DELETE' THEN RETURN OLD; ELSE RETURN NEW; END IF; END IF;
   IF TG_OP = 'DELETE' THEN
     PERFORM refresh_raid_attendance_totals(OLD.raid_id);
     RETURN OLD;
@@ -614,6 +679,7 @@ CREATE TRIGGER refresh_raid_totals_after_event_attendance_del AFTER DELETE ON ra
 CREATE OR REPLACE FUNCTION public.trigger_delta_event_attendance()
 RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 BEGIN
+  IF restore_load_in_progress() THEN RETURN NULL; END IF;
   INSERT INTO dkp_summary (character_key, character_name, earned, spent, last_activity_date, updated_at)
   WITH delta AS (
     SELECT
@@ -639,6 +705,7 @@ $$;
 CREATE OR REPLACE FUNCTION public.trigger_delta_attendance()
 RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 BEGIN
+  IF restore_load_in_progress() THEN RETURN NULL; END IF;
   INSERT INTO dkp_summary (character_key, character_name, earned, spent, last_activity_date, updated_at)
   WITH delta AS (
     SELECT
@@ -664,6 +731,7 @@ $$;
 CREATE OR REPLACE FUNCTION public.trigger_delta_loot()
 RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 BEGIN
+  IF restore_load_in_progress() THEN RETURN NULL; END IF;
   INSERT INTO dkp_summary (character_key, character_name, earned, spent, last_activity_date, updated_at)
   WITH delta AS (
     SELECT
