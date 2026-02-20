@@ -157,6 +157,7 @@ export default function ItemPage() {
   const [elementalClass, setElementalClass] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [elementalDataReady, setElementalDataReady] = useState(false)
 
   useEffect(() => {
     if (!itemName) {
@@ -242,8 +243,6 @@ export default function ItemPage() {
     return () => { cancelled = true }
   }, [takpId])
 
-
-  const [elementalDataReady, setElementalDataReady] = useState(false)
   useEffect(() => {
     if (takpId == null) return
     ensureElementalArmorLoaded().then(() => setElementalDataReady(true)).catch(() => {})
