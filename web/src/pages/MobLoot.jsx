@@ -468,10 +468,12 @@ export default function MobLoot() {
     const q = (query || '').trim().toLowerCase()
     if (q) {
       const mobNames = (e) => (e.mobs?.length ? e.mobs : [e.mob]).filter(Boolean).join(' ').toLowerCase()
+      const itemNames = (e) => (e.loot || []).map((item) => (item.name || '').trim().toLowerCase()).filter(Boolean).join(' ')
       list = list.filter(
         (e) =>
           mobNames(e).includes(q) ||
-          (e.displayZone || '').toLowerCase().includes(q)
+          (e.displayZone || '').toLowerCase().includes(q) ||
+          itemNames(e).includes(q)
       )
     }
     return list
@@ -609,17 +611,17 @@ export default function MobLoot() {
     <div className="container">
       <h1>Raid Items</h1>
       <p style={{ color: '#71717a', marginBottom: '1rem' }}>
-        DKP loot table per mob. Search by mob or zone; filter by slot and class; items sorted by gear score (saves + AC + HP/3).
+        DKP loot table per mob. Search by item, mob, or zone; filter by slot and class; items sorted by gear score (saves + AC + HP/3).
       </p>
       <div className="search-bar mob-loot-filters">
         <label>
-          <span className="filter-label">Search mob or zone</span>
+          <span className="filter-label">Search item, mob, or zone</span>
           <input
             type="search"
-            placeholder="e.g. Vulak or Plane of Time"
+            placeholder="e.g. Vulak, Plane of Time, or item name"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            aria-label="Search mob or zone"
+            aria-label="Search by item, mob, or zone"
           />
         </label>
         <label>
