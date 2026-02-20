@@ -1,18 +1,60 @@
 /**
- * Shared processing for /api/get-dkp payload.
+ * DKP leaderboard data: fetched from Supabase (authenticated) so RLS allows read.
  * Used by DKP page, LootRecipients, and AccountDetail so DKP totals are a single source of truth (same cache everywhere).
  */
 import { useMemo } from 'react'
 import useSWR from 'swr'
+import { supabase } from './supabase'
 
 export const ACTIVE_DAYS = 120
-export const DKP_API_URL = '/api/get-dkp'
+/** SWR key for DKP payload (authenticated Supabase fetch). */
+export const DKP_DATA_KEY = 'dkp-payload'
+const PAGE_SIZE = 1000
 const DEDUPING_INTERVAL_MS = 60 * 1000
 
-async function defaultDkpFetcher(url) {
-  const res = await fetch(url)
-  if (!res.ok) throw new Error(res.statusText || 'Failed to fetch DKP')
-  return res.json()
+async function fetchAll(supabaseClient, table, select) {
+  const all = []
+  let from = 0
+  while (true) {
+    const to = from + PAGE_SIZE - 1
+    const { data, error } = await supabaseClient.from(table).select(select).range(from, to)
+    if (error) throw new Error(error.message || `Failed to fetch ${table}`)
+    const rows = data ?? []
+    all.push(...rows)
+    if (rows.length < PAGE_SIZE) break
+    from += PAGE_SIZE
+  }
+  return all
+}
+
+/** Fetch same payload as former /api/get-dkp using authenticated Supabase client (required after requiring sign-in). */
+export async function fetchDkpPayloadFromSupabase() {
+  const [summary, adjRes, activeRaiders, periodRes, charAccount, accounts, characters] = await Promise.all([
+    fetchAll(supabase, 'dkp_summary', 'character_key, character_name, earned, spent, earned_30d, earned_60d, last_activity_date, updated_at'),
+    supabase.from('dkp_adjustments').select('character_name, earned_delta, spent_delta').limit(1000),
+    fetchAll(supabase, 'active_raiders', 'character_key'),
+    supabase.from('dkp_period_totals').select('period, total_dkp'),
+    fetchAll(supabase, 'character_account', 'char_id, account_id'),
+    fetchAll(supabase, 'accounts', 'account_id, toon_names, display_name'),
+    fetchAll(supabase, 'characters', 'char_id, name, class_name'),
+  ])
+  if (adjRes.error) throw new Error(adjRes.error.message || 'Failed to fetch dkp_adjustments')
+  if (periodRes.error) throw new Error(periodRes.error.message || 'Failed to fetch dkp_period_totals')
+  const adjustments = adjRes.data ?? []
+  const periodTotals = periodRes.data ?? []
+  return {
+    dkp_summary: summary,
+    dkp_adjustments: adjustments,
+    active_raiders: activeRaiders,
+    dkp_period_totals: periodTotals,
+    character_account: charAccount,
+    accounts,
+    characters,
+  }
+}
+
+async function defaultDkpFetcher() {
+  return fetchDkpPayloadFromSupabase()
 }
 
 function applyAdjustmentsAndBalance(list, adjustmentsMap) {
@@ -130,27 +172,29 @@ export function processApiPayload(payload) {
 }
 
 /**
- * Fetch /api/get-dkp and return account_id -> balance (same as DKP page Account table).
+ * Fetch DKP payload (from Supabase, authenticated) and return account_id -> balance (same as DKP page Account table).
  */
 export async function fetchAccountDkpBalances() {
-  const res = await fetch(DKP_API_URL)
-  if (!res.ok) return {}
-  const payload = await res.json()
-  const processed = processApiPayload(payload)
-  if (!processed?.accountList?.length) return {}
-  const map = {}
-  processed.accountList.forEach((a) => {
-    if (a.account_id != null && a.account_id !== '') map[String(a.account_id)] = Number(a.balance) || 0
-  })
-  return map
+  try {
+    const payload = await fetchDkpPayloadFromSupabase()
+    const processed = processApiPayload(payload)
+    if (!processed?.accountList?.length) return {}
+    const map = {}
+    processed.accountList.forEach((a) => {
+      if (a.account_id != null && a.account_id !== '') map[String(a.account_id)] = Number(a.balance) || 0
+    })
+    return map
+  } catch {
+    return {}
+  }
 }
 
 /**
- * Shared hook: one SWR cache for /api/get-dkp. Use everywhere that shows DKP totals so result and cache are identical.
+ * Shared hook: one SWR cache for DKP payload (authenticated Supabase). Use everywhere that shows DKP totals so result and cache are identical.
  * Returns processed payload (list, accountList, etc.) and accountBalanceByAccountId for account-level balance.
  */
 export function useDkpData(fetcher = defaultDkpFetcher) {
-  const { data: apiData, error, isLoading, mutate } = useSWR(DKP_API_URL, fetcher, {
+  const { data: apiData, error, isLoading, mutate } = useSWR(DKP_DATA_KEY, fetcher, {
     dedupingInterval: DEDUPING_INTERVAL_MS,
     revalidateOnFocus: false,
   })

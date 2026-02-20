@@ -54,6 +54,16 @@ export default function App() {
 
   const isOfficer = profile?.role === 'officer'
 
+  // Require sign-in for all data; only /login is public (anon = handshake only).
+  function RequireAuth({ children }) {
+    if (!session) {
+      const path = typeof window !== 'undefined' ? window.location.pathname + window.location.search : ''
+      const redirect = path ? encodeURIComponent(path) : ''
+      return <Navigate to={redirect ? `/login?redirect=${redirect}` : '/login'} replace />
+    }
+    return children
+  }
+
   return (
     <>
       <nav>
@@ -83,20 +93,20 @@ export default function App() {
       </nav>
       <Routes>
         <Route path="/login" element={<Login />} />
-        <Route path="/" element={<Dashboard isOfficer={isOfficer} />} />
-        <Route path="/raids" element={<Raids isOfficer={isOfficer} />} />
-        <Route path="/raids/:raidId" element={<RaidDetail isOfficer={isOfficer} />} />
-        <Route path="/dkp" element={<DKP isOfficer={isOfficer} />} />
-        <Route path="/officer" element={session ? <Officer isOfficer={isOfficer} /> : <Navigate to="/login?redirect=%2Fofficer" replace />} />
-        <Route path="/officer/dkp-changelog" element={session ? <DkpChangelog isOfficer={isOfficer} /> : <Navigate to="/login?redirect=%2Fofficer%2Fdkp-changelog" replace />} />
-        <Route path="/loot" element={<LootSearch />} />
-        <Route path="/loot-recipients" element={<LootRecipients />} />
-        <Route path="/mobs" element={<MobLoot />} />
-        <Route path="/accounts" element={<Accounts />} />
-        <Route path="/accounts/:accountId" element={<AccountDetail isOfficer={isOfficer} profile={profile} session={session} />} />
-        <Route path="/profile" element={session ? <Profile profile={profile} onProfileUpdate={() => session?.user?.id && fetchProfile(session.user.id)} /> : <Navigate to="/login?redirect=%2Fprofile" replace />} />
-        <Route path="/items/:itemNameEncoded" element={<ItemPage />} />
-        <Route path="/characters/:charKey" element={<CharacterPage />} />
+        <Route path="/" element={<RequireAuth><Dashboard isOfficer={isOfficer} /></RequireAuth>} />
+        <Route path="/raids" element={<RequireAuth><Raids isOfficer={isOfficer} /></RequireAuth>} />
+        <Route path="/raids/:raidId" element={<RequireAuth><RaidDetail isOfficer={isOfficer} /></RequireAuth>} />
+        <Route path="/dkp" element={<RequireAuth><DKP isOfficer={isOfficer} /></RequireAuth>} />
+        <Route path="/officer" element={<RequireAuth><Officer isOfficer={isOfficer} /></RequireAuth>} />
+        <Route path="/officer/dkp-changelog" element={<RequireAuth><DkpChangelog isOfficer={isOfficer} /></RequireAuth>} />
+        <Route path="/loot" element={<RequireAuth><LootSearch /></RequireAuth>} />
+        <Route path="/loot-recipients" element={<RequireAuth><LootRecipients /></RequireAuth>} />
+        <Route path="/mobs" element={<RequireAuth><MobLoot /></RequireAuth>} />
+        <Route path="/accounts" element={<RequireAuth><Accounts /></RequireAuth>} />
+        <Route path="/accounts/:accountId" element={<RequireAuth><AccountDetail isOfficer={isOfficer} profile={profile} session={session} /></RequireAuth>} />
+        <Route path="/profile" element={<RequireAuth><Profile profile={profile} onProfileUpdate={() => session?.user?.id && fetchProfile(session.user.id)} /></RequireAuth>} />
+        <Route path="/items/:itemNameEncoded" element={<RequireAuth><ItemPage /></RequireAuth>} />
+        <Route path="/characters/:charKey" element={<RequireAuth><CharacterPage /></RequireAuth>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
       <Analytics />

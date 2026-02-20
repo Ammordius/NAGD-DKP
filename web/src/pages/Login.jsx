@@ -67,14 +67,21 @@ export default function Login() {
             {loading ? '…' : isSignUp ? 'Sign up' : 'Sign in'}
           </button>
         </form>
-        <button
-          type="button"
-          className="btn btn-ghost"
-          style={{ marginTop: '1rem', width: '100%' }}
-          onClick={() => { setIsSignUp((v) => !v); setError(''); }}
-        >
-          {isSignUp ? 'Already have an account? Sign in' : 'Need an account? Sign up'}
-        </button>
+        {import.meta.env.VITE_ALLOW_SIGNUP !== 'false' && (
+          <button
+            type="button"
+            className="btn btn-ghost"
+            style={{ marginTop: '1rem', width: '100%' }}
+            onClick={() => { setIsSignUp((v) => !v); setError(''); }}
+          >
+            {isSignUp ? 'Already have an account? Sign in' : 'Need an account? Sign up'}
+          </button>
+        )}
+        {import.meta.env.VITE_ALLOW_SIGNUP === 'false' && (
+          <p style={{ marginTop: '1rem', color: '#71717a', fontSize: '0.9rem' }}>
+            New users must be invited by an officer.
+          </p>
+        )}
       </div>
     </div>
   )

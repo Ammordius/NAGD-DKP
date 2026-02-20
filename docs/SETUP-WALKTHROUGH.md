@@ -54,6 +54,8 @@ Follow these steps in order. Everything is done in the browser and in this repo.
    - **Project URL** → you’ll use as `VITE_SUPABASE_URL`
    - **anon public** key → you’ll use as `VITE_SUPABASE_ANON_KEY`
 
+5. **Auth:** Data is only available when signed in. Existing users can sign in as before. Optionally, to limit new sign-ups later, you can turn off “Enable email signups” in **Authentication** → **Providers** → **Email** (existing users are unaffected). See **[docs/AUTH-AND-EGRESS-PROTECTION.md](AUTH-AND-EGRESS-PROTECTION.md)**.
+
 ---
 
 ## Part 4: Import your data (CSVs)

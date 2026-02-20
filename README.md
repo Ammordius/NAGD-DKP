@@ -1,8 +1,9 @@
 # DKP
 
-Guild DKP site: roster + raid data, Supabase backend, React frontend. Deploy to Vercel.
+Guild DKP site: roster + raid data, Supabase backend, React frontend. Deploy to Vercel. **Data requires sign-in**; roles are anon (handshake), user, and officer (manually assigned).
 
 See **[docs/SETUP-WALKTHROUGH.md](docs/SETUP-WALKTHROUGH.md)** for full setup (Supabase, import, run locally, deploy).  
+See **[docs/AUTH-AND-EGRESS-PROTECTION.md](docs/AUTH-AND-EGRESS-PROTECTION.md)** for requiring login, disabling sign-ups, and limiting egress.  
 To run a **full-stack mirror** (own DB, same CI, data from backup or CSVs): **[docs/MIRROR-SETUP-FULL-STACK.md](docs/MIRROR-SETUP-FULL-STACK.md)**.
 
 ## Push to GitHub and deploy (Vercel)

@@ -822,37 +822,24 @@ CREATE POLICY "Officer audit log select" ON officer_audit_log FOR SELECT USING (
 DROP POLICY IF EXISTS "Officer audit log insert" ON officer_audit_log;
 CREATE POLICY "Officer audit log insert" ON officer_audit_log FOR INSERT WITH CHECK (public.is_officer());
 
--- Data tables: anon can read (public browse without login; claim/add chars and officer tools still require login)
+-- Data tables: no anon read. Only authenticated users (and officers) can read (see "Authenticated read" policies above).
+-- Anon key is used only for auth handshake and sign-in; all data access requires a signed-in user.
+-- Drop anon read policies if present (so reapplying this full schema gives correct permissions).
 DROP POLICY IF EXISTS "Anon read characters" ON characters;
-CREATE POLICY "Anon read characters" ON characters FOR SELECT TO anon USING (true);
 DROP POLICY IF EXISTS "Anon read accounts" ON accounts;
-CREATE POLICY "Anon read accounts" ON accounts FOR SELECT TO anon USING (true);
 DROP POLICY IF EXISTS "Anon read character_account" ON character_account;
-CREATE POLICY "Anon read character_account" ON character_account FOR SELECT TO anon USING (true);
 DROP POLICY IF EXISTS "Anon read raids" ON raids;
-CREATE POLICY "Anon read raids" ON raids FOR SELECT TO anon USING (true);
 DROP POLICY IF EXISTS "Anon read raid_events" ON raid_events;
-CREATE POLICY "Anon read raid_events" ON raid_events FOR SELECT TO anon USING (true);
 DROP POLICY IF EXISTS "Anon read raid_loot" ON raid_loot;
-CREATE POLICY "Anon read raid_loot" ON raid_loot FOR SELECT TO anon USING (true);
 DROP POLICY IF EXISTS "Anon read raid_attendance" ON raid_attendance;
-CREATE POLICY "Anon read raid_attendance" ON raid_attendance FOR SELECT TO anon USING (true);
 DROP POLICY IF EXISTS "Anon read raid_event_attendance" ON raid_event_attendance;
-CREATE POLICY "Anon read raid_event_attendance" ON raid_event_attendance FOR SELECT TO anon USING (true);
 DROP POLICY IF EXISTS "Anon read raid_classifications" ON raid_classifications;
-CREATE POLICY "Anon read raid_classifications" ON raid_classifications FOR SELECT TO anon USING (true);
 DROP POLICY IF EXISTS "Anon read dkp_adjustments" ON dkp_adjustments;
-CREATE POLICY "Anon read dkp_adjustments" ON dkp_adjustments FOR SELECT TO anon USING (true);
 DROP POLICY IF EXISTS "Anon read dkp_summary" ON dkp_summary;
-CREATE POLICY "Anon read dkp_summary" ON dkp_summary FOR SELECT TO anon USING (true);
 DROP POLICY IF EXISTS "Anon read dkp_period_totals" ON dkp_period_totals;
-CREATE POLICY "Anon read dkp_period_totals" ON dkp_period_totals FOR SELECT TO anon USING (true);
 DROP POLICY IF EXISTS "Anon read active_raiders" ON active_raiders;
-CREATE POLICY "Anon read active_raiders" ON active_raiders FOR SELECT TO anon USING (true);
 DROP POLICY IF EXISTS "Anon read raid_dkp_totals" ON raid_dkp_totals;
-CREATE POLICY "Anon read raid_dkp_totals" ON raid_dkp_totals FOR SELECT TO anon USING (true);
 DROP POLICY IF EXISTS "Anon read raid_attendance_dkp" ON raid_attendance_dkp;
-CREATE POLICY "Anon read raid_attendance_dkp" ON raid_attendance_dkp FOR SELECT TO anon USING (true);
 
 -- 5) First officer: run after creating your user in Supabase Auth (replace YOUR_USER_UUID)
 -- INSERT INTO profiles (id, email, role) VALUES ('YOUR_USER_UUID', 'your@email.com', 'officer')

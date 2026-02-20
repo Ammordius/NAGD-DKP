@@ -1,5 +1,8 @@
--- Allow unauthenticated (anon) users to read public DKP data so the site can be browsed without logging in.
--- Run this in Supabase SQL Editor after the main schema. Login is still required to claim accounts, add characters, and for officers to input raids.
+-- DEPRECATED: Data now requires sign-in. Do not run this file.
+-- Previously this allowed anon read for public browsing. To restore that (not recommended if you want to protect egress), you would re-add the policies below.
+-- To require auth (current design): use docs/supabase-schema.sql as-is (no anon read). For existing DBs that had anon read, run docs/supabase-require-auth-remove-anon-read.sql to drop anon policies.
+--
+-- Legacy content (do not run):
 
 DROP POLICY IF EXISTS "Anon read characters" ON characters;
 CREATE POLICY "Anon read characters" ON characters FOR SELECT TO anon USING (true);

@@ -1,8 +1,8 @@
 /**
- * Vercel serverless proxy for DKP leaderboard data.
- * Fetches from Supabase with selective columns only (no select('*')) and returns
- * Cache-Control: public, s-maxage=300, stale-while-revalidate=600 so Vercel Edge
- * caches for 5 minutes and serves stale while revalidating for 10 minutes.
+ * Legacy Vercel serverless proxy for DKP leaderboard data.
+ * The app now fetches DKP data from Supabase client-side with the user's session (required after requiring sign-in).
+ * This API uses the anon key and will return empty/errors once anon read policies are removed.
+ * Kept only for backwards compatibility; new deployments do not need to call this.
  *
  * Env (Vercel): SUPABASE_URL, SUPABASE_ANON_KEY (or reuse VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY)
  */
