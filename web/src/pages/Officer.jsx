@@ -597,19 +597,22 @@ export default function Officer({ isOfficer }) {
       }
     }
 
-    // Delta vs other tics in this raid: who was in a previous tic but missing from this one?
-    const currentTicCharIds = new Set(matched.map((m) => String(m.char_id)))
-    const seenPrev = new Set()
+    // Delta vs other tics in this raid: account-based so toon swaps are not shown as missing/new
+    const currentTicAccountKeys = new Set(matched.map((m) => String(charIdToAccountId[m.char_id] ?? m.char_id)))
+    const seenPrevAccount = new Set()
     const missingFromThisTic = []
     eventAttendance.forEach((row) => {
       const cid = String(row.char_id ?? '').trim()
-      if (!cid || seenPrev.has(cid)) return
-      if (currentTicCharIds.has(cid)) return
-      seenPrev.add(cid)
+      if (!cid) return
+      const accountKey = String(charIdToAccountId[row.char_id] ?? row.char_id)
+      if (currentTicAccountKeys.has(accountKey)) return // account still present this tic (swapped toon) — don't show as missing
+      if (seenPrevAccount.has(accountKey)) return
+      seenPrevAccount.add(accountKey)
       missingFromThisTic.push(row.character_name || row.char_id || cid)
     })
     missingFromThisTic.sort((a, b) => String(a).localeCompare(b))
-    const newThisTic = events.length === 0 ? matched.map((m) => m.character_name) : matched.filter((m) => !eventAttendance.some((r) => String(r.char_id) === String(m.char_id))).map((m) => m.character_name)
+    const prevTicAccountKeys = new Set(eventAttendance.map((r) => String(charIdToAccountId[r.char_id] ?? r.char_id)))
+    const newThisTic = events.length === 0 ? matched.map((m) => m.character_name) : matched.filter((m) => !prevTicAccountKeys.has(String(charIdToAccountId[m.char_id] ?? m.char_id))).map((m) => m.character_name)
 
     const charIdToName = {}
     characters.forEach((c) => { if (c?.char_id && c?.name) charIdToName[String(c.char_id)] = c.name })
