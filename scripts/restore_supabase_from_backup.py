@@ -47,6 +47,9 @@ RESTORE_TABLE_ORDER = [
 # Do not clear: profiles references accounts; clearing would FK-fail. Load accounts via upsert.
 CLEAR_SKIP = frozenset({"accounts"})
 
+# Repopulated by DB triggers when we load raid_events/raid_event_attendance; skip CSV load to avoid duplicate key.
+LOAD_SKIP_TRIGGER_POPULATED = frozenset({"raid_dkp_totals", "raid_attendance_dkp"})
+
 # For delete-all via API: column to use for batch delete (first column of PK for composites)
 TABLE_KEY_COLUMN: dict[str, str] = {
     "characters": "char_id",
@@ -190,6 +193,9 @@ def main() -> int:
 
     total = 0
     for table in RESTORE_TABLE_ORDER:
+        if table in LOAD_SKIP_TRIGGER_POPULATED:
+            print(f"Skip load {table} (repopulated by triggers from raid_events/raid_event_attendance)")
+            continue
         csv_path = backup_dir / f"{table}.csv"
         if not csv_path.is_file():
             print(f"Skip {table} (no {csv_path})")
