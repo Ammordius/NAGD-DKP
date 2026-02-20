@@ -175,11 +175,17 @@ export function processApiPayload(payload) {
   const caData = payload.character_account ?? []
   const accData = payload.accounts ?? []
   const charData = payload.characters ?? []
-  // Account total = all characters (incl. inactive). Same payload, no extra egress; leaderboard still active-only.
-  const accountList = buildAccountLeaderboard(list, caData, accData, charData)
+  // Full account totals (incl. inactive) for account detail / balance lookups.
+  const accountListFull = buildAccountLeaderboard(list, caData, accData, charData)
+  const fullAccountBalances = {}
+  accountListFull.forEach((a) => {
+    if (a.account_id != null && a.account_id !== '') fullAccountBalances[String(a.account_id)] = Number(a.balance) || 0
+  })
+  // Main page: only active raiders and only accounts that have at least one active raider.
   list = list.filter((r) => isActiveRow(r, activeSet, cutoff))
+  const accountList = buildAccountLeaderboard(list, caData, accData, charData)
   const summaryUpdatedAt = rows[0]?.updated_at ?? null
-  return { list, accountList, activeKeys, periodTotals: pt, caData, accData, charData, summaryUpdatedAt }
+  return { list, accountList, fullAccountBalances, activeKeys, periodTotals: pt, caData, accData, charData, summaryUpdatedAt }
 }
 
 /**
@@ -189,12 +195,7 @@ export async function fetchAccountDkpBalances() {
   try {
     const payload = await fetchDkpPayloadFromSupabase()
     const processed = processApiPayload(payload)
-    if (!processed?.accountList?.length) return {}
-    const map = {}
-    processed.accountList.forEach((a) => {
-      if (a.account_id != null && a.account_id !== '') map[String(a.account_id)] = Number(a.balance) || 0
-    })
-    return map
+    return processed?.fullAccountBalances ?? {}
   } catch {
     return {}
   }
@@ -210,14 +211,7 @@ export function useDkpData(fetcher = defaultDkpFetcher) {
     revalidateOnFocus: false,
   })
   const processed = useMemo(() => (apiData ? processApiPayload(apiData) : null), [apiData])
-  const accountBalanceByAccountId = useMemo(() => {
-    if (!processed?.accountList) return {}
-    const m = {}
-    processed.accountList.forEach((a) => {
-      if (a.account_id != null && a.account_id !== '') m[String(a.account_id)] = Number(a.balance) || 0
-    })
-    return m
-  }, [processed])
+  const accountBalanceByAccountId = useMemo(() => processed?.fullAccountBalances ?? {}, [processed])
   return {
     ...processed,
     list: processed?.list ?? [],
