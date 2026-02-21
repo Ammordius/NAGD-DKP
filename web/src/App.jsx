@@ -68,16 +68,16 @@ export default function App() {
   return (
     <>
       <nav>
-        <a href="/">Home</a>
-        <a href="/dkp">DKP</a>
-        <a href="/accounts">Accounts</a>
-        <a href="/raids">Raids</a>
-        <a href="/mobs">Raid Items</a>
-        <a href="/loot">Item History</a>
-        <a href="/loot-recipients">Character History</a>
+        <Link to="/">Home</Link>
+        <Link to="/dkp">DKP</Link>
+        <Link to="/accounts">Accounts</Link>
+        <Link to="/raids">Raids</Link>
+        <Link to="/mobs">Raid Items</Link>
+        <Link to="/loot">Item History</Link>
+        <Link to="/loot-recipients">Character History</Link>
         {session ? (
           <>
-            <a href="/profile">Profile</a>
+            <Link to="/profile">Profile</Link>
             {isOfficer && <Link to="/officer" style={{ color: '#fbbf24' }}>Officer</Link>}
             {isOfficer && <Link to="/officer/dkp-changelog">DKP changelog</Link>}
             {isOfficer && <Link to="/officer/claim-cooldowns">Admin</Link>}
@@ -90,7 +90,7 @@ export default function App() {
             </button>
           </>
         ) : (
-          <a href="/login">Sign in</a>
+          <Link to="/login">Sign in</Link>
         )}
       </nav>
       <Routes>
