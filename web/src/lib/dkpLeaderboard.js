@@ -118,7 +118,7 @@ function canonicalCharacterKey(nameOrId) {
 
 function dedupeByCharacterName(list) {
   const byName = {}
-  /** Same person can appear twice in dkp_summary: character_key=char_id and character_key=name. Don't sum those. */
+  /** Same person can appear twice in dkp_summary: character_key=char_id and character_key=name. Don't sum those - keep the char_id row only. */
   const isNameKey = (row) =>
     row.char_id && row.name && String(row.char_id).trim().toLowerCase() === String(row.name).trim().toLowerCase()
   list.forEach((r) => {
@@ -135,6 +135,7 @@ function dedupeByCharacterName(list) {
       byName[key] = { ...r }
       return
     }
+    // Incoming row is name-key duplicate: do not add its earned/spent.
     if (!mNameKey && rNameKey) return
     m.earned += r.earned
     m.spent += r.spent
