@@ -118,12 +118,17 @@ export default function DKP({ isOfficer }) {
   const filteredLeaderboard = useMemo(() => {
     if (!accountSearch.trim()) return accountLeaderboard
     const q = accountSearch.trim().toLowerCase()
+    const toonNamesByAccount = {}
+    ;(apiData?.accounts ?? []).forEach((acc) => {
+      toonNamesByAccount[acc.account_id] = (acc.toon_names || '').toLowerCase()
+    })
     return accountLeaderboard.filter((r) => {
       if ((r.account_id || '').toLowerCase().includes(q)) return true
       if ((r.name || '').toLowerCase().includes(q)) return true
+      if ((toonNamesByAccount[r.account_id] || '').includes(q)) return true
       return false
     })
-  }, [accountLeaderboard, accountSearch])
+  }, [accountLeaderboard, accountSearch, apiData?.accounts])
   const showList = filteredLeaderboard
   const colLabel = 'Account'
 
@@ -145,7 +150,7 @@ export default function DKP({ isOfficer }) {
       <div style={{ marginBottom: '1rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
         <input
           type="search"
-          placeholder="Search by account or display name…"
+          placeholder="Search by account, display name, or toon name…"
           value={accountSearch}
           onChange={(e) => setAccountSearch(e.target.value)}
           style={{
