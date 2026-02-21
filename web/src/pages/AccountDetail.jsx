@@ -232,10 +232,14 @@ export default function AccountDetail({ isOfficer, profile, session }) {
       return
     }
     setClaimLoading(true)
-    const { error: updErr } = await supabase.from('profiles').update({ account_id: accountId }).eq('id', user.id)
+    setError('')
+    const { error: rpcErr } = await supabase.rpc('claim_account', { p_account_id: accountId })
     setClaimLoading(false)
-    if (updErr) setError(updErr.message)
-    else setMyAccountId(accountId)
+    if (rpcErr) {
+      setError(rpcErr.message)
+      return
+    }
+    setMyAccountId(accountId)
   }
 
   async function handleAddCharacter() {
@@ -284,9 +288,23 @@ export default function AccountDetail({ isOfficer, profile, session }) {
         {!isMyAccount && (
           session ? (
             !myAccountId && (
-              <button type="button" className="btn btn-ghost" style={{ marginLeft: '0.5rem', fontSize: '0.875rem' }} onClick={handleClaimAccount} disabled={claimLoading}>
-                {claimLoading ? 'Claiming...' : 'Claim this account'}
-              </button>
+              (() => {
+                const cooldownUntil = profile?.unclaim_cooldown_until ? new Date(profile.unclaim_cooldown_until) : null
+                const onCooldown = cooldownUntil && cooldownUntil > new Date()
+                return (
+                  <span style={{ marginLeft: '0.5rem' }}>
+                    {onCooldown ? (
+                      <span style={{ color: '#f59e0b', fontSize: '0.875rem' }}>
+                        You can claim again after {cooldownUntil.toLocaleString()}. An officer can remove this cooldown.
+                      </span>
+                    ) : (
+                      <button type="button" className="btn btn-ghost" style={{ fontSize: '0.875rem' }} onClick={handleClaimAccount} disabled={claimLoading}>
+                        {claimLoading ? 'Claiming...' : 'Claim this account'}
+                      </button>
+                    )}
+                  </span>
+                )
+              })()
             )
           ) : (
             <Link to={`/login?redirect=${encodeURIComponent(`/accounts/${accountId}`)}`} className="btn btn-ghost" style={{ marginLeft: '0.5rem', fontSize: '0.875rem' }}>

@@ -16,6 +16,7 @@ import CharacterPage from './pages/CharacterPage'
 import LootRecipients from './pages/LootRecipients'
 import Officer from './pages/Officer'
 import DkpChangelog from './pages/DkpChangelog'
+import OfficerClaimCooldowns from './pages/OfficerClaimCooldowns'
 import Profile from './pages/Profile'
 
 export default function App() {
@@ -39,7 +40,7 @@ export default function App() {
   }, [])
 
   async function fetchProfile(userId) {
-    const { data } = await supabase.from('profiles').select('role, account_id').eq('id', userId).single()
+    const { data } = await supabase.from('profiles').select('role, account_id, unclaim_cooldown_until').eq('id', userId).single()
     setProfile(data)
     setLoading(false)
   }
@@ -79,6 +80,7 @@ export default function App() {
             <a href="/profile">Profile</a>
             {isOfficer && <Link to="/officer" style={{ color: '#fbbf24' }}>Officer</Link>}
             {isOfficer && <Link to="/officer/dkp-changelog">DKP changelog</Link>}
+            {isOfficer && <Link to="/officer/claim-cooldowns">Admin</Link>}
             <span className="role">{profile?.role === 'officer' ? 'Officer' : 'Player'}</span>
             <button
               className="btn btn-ghost"
@@ -99,6 +101,7 @@ export default function App() {
         <Route path="/dkp" element={<RequireAuth><DKP isOfficer={isOfficer} /></RequireAuth>} />
         <Route path="/officer" element={<RequireAuth><Officer isOfficer={isOfficer} /></RequireAuth>} />
         <Route path="/officer/dkp-changelog" element={<RequireAuth><DkpChangelog isOfficer={isOfficer} /></RequireAuth>} />
+        <Route path="/officer/claim-cooldowns" element={<RequireAuth><OfficerClaimCooldowns isOfficer={isOfficer} /></RequireAuth>} />
         <Route path="/loot" element={<RequireAuth><LootSearch /></RequireAuth>} />
         <Route path="/loot-recipients" element={<RequireAuth><LootRecipients /></RequireAuth>} />
         <Route path="/mobs" element={<RequireAuth><MobLoot /></RequireAuth>} />

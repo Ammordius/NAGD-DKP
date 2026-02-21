@@ -170,6 +170,10 @@ ALTER TABLE accounts ADD COLUMN IF NOT EXISTS display_name TEXT;
 ALTER TABLE accounts ADD COLUMN IF NOT EXISTS inactive BOOLEAN NOT NULL DEFAULT false;
 COMMENT ON COLUMN accounts.inactive IS 'When true: account is hidden from DKP leaderboard and Accounts list; loot and tics still show on raid/character views.';
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS account_id TEXT REFERENCES accounts(account_id);
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS unclaim_cooldown_until TIMESTAMPTZ;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS unclaim_count INTEGER NOT NULL DEFAULT 0;
+COMMENT ON COLUMN profiles.unclaim_cooldown_until IS 'After unclaiming an account, user cannot claim again until this time. 1st unclaim: 10 min, 2nd: 1 day, 3rd+: 7 days. Officers can reset via reset_claim_cooldown.';
+COMMENT ON COLUMN profiles.unclaim_count IS 'Number of times this user has unclaimed an account; used to tier cooldown duration.';
 
 -- Parse raids.date_iso to DATE safely (handles YYYY-MM-DD, YYYY-MM-DDThh:mm:ss, empty/null). Returns NULL if not parseable.
 CREATE OR REPLACE FUNCTION public.raid_date_parsed(iso_text TEXT)
@@ -436,15 +440,19 @@ DECLARE
   v_existing_id text;
   v_new_account_id text;
   v_display text;
+  v_cooldown_until timestamptz;
 BEGIN
   v_uid := auth.uid();
   IF v_uid IS NULL THEN
     RAISE EXCEPTION 'Not authenticated';
   END IF;
 
-  SELECT account_id INTO v_existing_id FROM public.profiles WHERE id = v_uid;
+  SELECT account_id, unclaim_cooldown_until INTO v_existing_id, v_cooldown_until FROM public.profiles WHERE id = v_uid;
   IF v_existing_id IS NOT NULL AND trim(v_existing_id) <> '' THEN
     RAISE EXCEPTION 'You already have an account. Unclaim it first if you want to create a different one.';
+  END IF;
+  IF NOT public.is_officer() AND v_cooldown_until IS NOT NULL AND v_cooldown_until > now() THEN
+    RAISE EXCEPTION 'You cannot claim or create an account until % (cooldown after unclaiming). An officer can remove this cooldown.', v_cooldown_until;
   END IF;
 
   v_display := trim(coalesce(p_display_name, ''));
@@ -491,6 +499,93 @@ BEGIN
   VALUES (v_new_account_id, v_display, 0, NULL, NULL);
 
   RETURN v_new_account_id;
+END;
+$$;
+
+-- RPC: unclaim current user's account and set cooldown before they can claim again.
+-- Cooldown: 1st unclaim 10 min, 2nd 1 day, 3rd+ 7 days. Officers never get a cooldown.
+CREATE OR REPLACE FUNCTION public.unclaim_account()
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_uid uuid;
+  v_count integer;
+  v_until timestamptz;
+BEGIN
+  v_uid := auth.uid();
+  IF v_uid IS NULL THEN
+    RAISE EXCEPTION 'Not authenticated';
+  END IF;
+
+  IF public.is_officer() THEN
+    UPDATE public.profiles SET account_id = NULL, updated_at = now() WHERE id = v_uid;
+    RETURN;
+  END IF;
+
+  SELECT COALESCE(unclaim_count, 0) + 1 INTO v_count FROM public.profiles WHERE id = v_uid;
+  v_until := now() + CASE
+    WHEN v_count <= 1 THEN interval '10 minutes'
+    WHEN v_count = 2 THEN interval '1 day'
+    ELSE interval '7 days'
+  END;
+
+  UPDATE public.profiles
+  SET account_id = NULL, updated_at = now(), unclaim_count = v_count, unclaim_cooldown_until = v_until
+  WHERE id = v_uid;
+END;
+$$;
+
+-- RPC: claim an account for the current user. Fails if user is on cooldown (unclaim_cooldown_until > now()). Officers bypass cooldown.
+CREATE OR REPLACE FUNCTION public.claim_account(p_account_id text)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_uid uuid;
+  v_until timestamptz;
+BEGIN
+  v_uid := auth.uid();
+  IF v_uid IS NULL THEN
+    RAISE EXCEPTION 'Not authenticated';
+  END IF;
+
+  IF NOT public.is_officer() THEN
+    SELECT unclaim_cooldown_until INTO v_until FROM public.profiles WHERE id = v_uid;
+    IF v_until IS NOT NULL AND v_until > now() THEN
+      RAISE EXCEPTION 'You cannot claim an account until % (cooldown after unclaiming). An officer can remove this cooldown.', v_until;
+    END IF;
+  END IF;
+
+  UPDATE public.profiles SET account_id = trim(p_account_id), updated_at = now() WHERE id = v_uid;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Profile not found';
+  END IF;
+END;
+$$;
+
+-- RPC: officer-only. Clear unclaim cooldown for a profile so they can claim again immediately.
+CREATE OR REPLACE FUNCTION public.reset_claim_cooldown(p_profile_id uuid)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  IF auth.uid() IS NULL THEN
+    RAISE EXCEPTION 'Not authenticated';
+  END IF;
+  IF NOT public.is_officer() THEN
+    RAISE EXCEPTION 'Only officers can reset claim cooldown';
+  END IF;
+
+  UPDATE public.profiles
+  SET unclaim_cooldown_until = NULL, unclaim_count = 0, updated_at = now()
+  WHERE id = p_profile_id;
 END;
 $$;
 

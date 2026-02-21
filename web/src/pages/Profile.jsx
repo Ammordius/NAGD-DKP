@@ -55,15 +55,10 @@ export default function Profile({ profile, onProfileUpdate }) {
   async function handleUnclaim() {
     setError('')
     setUnclaimLoading(true)
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) {
-      setUnclaimLoading(false)
-      return
-    }
-    const { error: updErr } = await supabase.from('profiles').update({ account_id: null }).eq('id', user.id)
+    const { error: rpcErr } = await supabase.rpc('unclaim_account')
     setUnclaimLoading(false)
-    if (updErr) {
-      setError(updErr.message)
+    if (rpcErr) {
+      setError(rpcErr.message)
       return
     }
     setClaimedAccount(null)
@@ -133,9 +128,22 @@ export default function Profile({ profile, onProfileUpdate }) {
             </button>
           </>
         ) : (
-          <p style={{ color: '#71717a' }}>
-            You have not claimed an account. Go to an account page and click "Claim this account" to link it to your profile.
-          </p>
+          <>
+            <p style={{ color: '#71717a', marginBottom: profile?.unclaim_cooldown_until ? '0.5rem' : 0 }}>
+              You have not claimed an account. Go to an account page and click "Claim this account" to link it to your profile.
+            </p>
+            {profile?.unclaim_cooldown_until && (() => {
+              const until = new Date(profile.unclaim_cooldown_until)
+              if (until > new Date()) {
+                return (
+                  <p style={{ color: '#f59e0b', fontSize: '0.875rem' }}>
+                    You can claim again after {until.toLocaleString()} (cooldown after unclaiming). An officer can remove this cooldown.
+                  </p>
+                )
+              }
+              return null
+            })()}
+          </>
         )}
       </div>
 
