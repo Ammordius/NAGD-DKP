@@ -62,6 +62,24 @@ async function fetchByChunkedIn(table, select, column, values) {
 
 /** SWR deduplication: 60s so revisiting the same account shows cached data without full reload. */
 const ACCOUNT_DEDUPING_INTERVAL_MS = 60_000
+const ACCOUNT_CACHE_KEY = 'account-detail-cache'
+
+function getAccountDetailFromSession(accountId) {
+  if (!accountId) return undefined
+  try {
+    const raw = sessionStorage.getItem(`${ACCOUNT_CACHE_KEY}-${accountId}`)
+    return raw ? JSON.parse(raw) : undefined
+  } catch {
+    return undefined
+  }
+}
+
+function setAccountDetailInSession(accountId, data) {
+  if (!accountId || !data) return
+  try {
+    sessionStorage.setItem(`${ACCOUNT_CACHE_KEY}-${accountId}`, JSON.stringify(data))
+  } catch (_) { /* ignore */ }
+}
 
 async function fetchAccountDetail(accountId) {
   const accRes = await supabase.from('accounts').select('account_id, toon_names, display_name, toon_count').eq('account_id', accountId).single()
@@ -140,17 +158,24 @@ export default function AccountDetail({ isOfficer, profile, session }) {
   const { accountId } = useParams()
   const navigate = useNavigate()
   const { getAccountDisplayName } = useCharToAccountMap()
+  const cacheKey = accountId ? `account-detail-${accountId}` : null
+  const fallbackData = cacheKey ? getAccountDetailFromSession(accountId) : undefined
   const { data: swrData, error: swrError, isLoading, mutate } = useSWR(
-    accountId ? `account-detail-${accountId}` : null,
+    cacheKey,
     () => fetchAccountDetail(accountId),
-    { dedupingInterval: ACCOUNT_DEDUPING_INTERVAL_MS, revalidateOnFocus: false }
+    {
+      fallbackData,
+      dedupingInterval: ACCOUNT_DEDUPING_INTERVAL_MS,
+      revalidateOnFocus: false,
+      onSuccess: (data) => { if (accountId && data) setAccountDetailInSession(accountId, data) },
+    }
   )
   const account = swrData?.account ?? null
   const characters = swrData?.characters ?? []
   const raids = swrData?.raids ?? {}
   const activityByRaid = swrData?.activityByRaid ?? []
   const dkpByCharacterKey = swrData?.dkpByCharacterKey ?? { earned: {}, spent: {} }
-  const loading = isLoading
+  const loading = isLoading && !swrData
   const error = swrError?.message ?? ''
   const [tab, setTab] = useState('activity')
   const [activityPage, setActivityPage] = useState(1)
@@ -181,8 +206,6 @@ export default function AccountDetail({ isOfficer, profile, session }) {
         setMyAccountId(data?.account_id ?? null)
       })
     })
-  }, [accountId, profile])
-
   }, [accountId, profile])
 
   const displayName = account?.display_name?.trim() || account?.toon_names?.split(',')[0]?.trim() || accountId
