@@ -167,6 +167,9 @@ export function processApiPayload(payload) {
   })
   const pt = { '30d': 0, '60d': 0 }
   ;(payload.dkp_period_totals ?? []).forEach((row) => { pt[row.period] = Math.round(Number(row.total_dkp) || 0) })
+  const charData = payload.characters ?? []
+  const charIdToName = {}
+  charData.forEach((c) => { if (c.name) charIdToName[String(c.char_id)] = c.name })
   let list = rows.map((r) => ({
     char_id: r.character_key,
     name: r.character_name || r.character_key,
@@ -176,11 +179,18 @@ export function processApiPayload(payload) {
     earned_60d: Math.round(Number(r.earned_60d) || 0),
     last_activity_date: r.last_activity_date || null,
   }))
+  // Resolve char_id to character name so char_id rows and name-key rows dedupe (same canonical key).
+  if (charData.length) {
+    list = list.map((r) => {
+      const resolvedName = charIdToName[String(r.char_id)]
+      if (resolvedName) return { ...r, name: resolvedName }
+      return r
+    })
+  }
   list = dedupeByCharacterName(list)
   applyAdjustmentsAndBalance(list, adjustmentsMap)
   const caData = payload.character_account ?? []
   const accData = payload.accounts ?? []
-  const charData = payload.characters ?? []
   const inactiveAccountIds = new Set((accData || []).filter((a) => a.inactive === true).map((a) => String(a.account_id)))
   const charToAccount = {}
   ;(caData || []).forEach((r) => { charToAccount[String(r.char_id)] = r.account_id })
