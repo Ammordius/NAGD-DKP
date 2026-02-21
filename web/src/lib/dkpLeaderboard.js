@@ -205,11 +205,21 @@ export function processApiPayload(payload) {
     })
   }
   const getAccountForRow = (r) => charToAccount[String(r.char_id)] ?? nameToAccount[String(r.name || '')] ?? null
-  // Full account totals (incl. inactive) for account detail / balance lookups.
+  // Full account totals (all toons on account) for account detail, DKP page table, and balance lookups.
   const accountListFull = buildAccountLeaderboard(list, caData, accData, charData)
   const fullAccountBalances = {}
+  const fullAccountTotals = {}
   accountListFull.forEach((a) => {
-    if (a.account_id != null && a.account_id !== '') fullAccountBalances[String(a.account_id)] = Number(a.balance) || 0
+    if (a.account_id == null || a.account_id === '') return
+    const id = String(a.account_id)
+    fullAccountBalances[id] = Number(a.balance) || 0
+    fullAccountTotals[id] = {
+      earned: Number(a.earned) || 0,
+      spent: Number(a.spent) || 0,
+      balance: Number(a.balance) || 0,
+      earned_30d: Number(a.earned_30d) || 0,
+      earned_60d: Number(a.earned_60d) || 0,
+    }
   })
   // Main page: only active raiders, only non-inactive accounts, and only accounts that have at least one active raider.
   list = list.filter((r) => {
@@ -220,7 +230,7 @@ export function processApiPayload(payload) {
   })
   const accountList = buildAccountLeaderboard(list, caData, accData, charData)
   const summaryUpdatedAt = rows[0]?.updated_at ?? null
-  return { list, accountList, fullAccountBalances, activeKeys, periodTotals: pt, caData, accData, charData, summaryUpdatedAt }
+  return { list, accountList, fullAccountBalances, fullAccountTotals, activeKeys, periodTotals: pt, caData, accData, charData, summaryUpdatedAt }
 }
 
 /**
@@ -247,6 +257,7 @@ export function useDkpData(fetcher = defaultDkpFetcher) {
   })
   const processed = useMemo(() => (apiData ? processApiPayload(apiData) : null), [apiData])
   const accountBalanceByAccountId = useMemo(() => processed?.fullAccountBalances ?? {}, [processed])
+  const accountTotalsByAccountId = useMemo(() => processed?.fullAccountTotals ?? {}, [processed])
   return {
     ...processed,
     list: processed?.list ?? [],
@@ -255,6 +266,7 @@ export function useDkpData(fetcher = defaultDkpFetcher) {
     periodTotals: processed?.periodTotals ?? { '30d': 0, '60d': 0 },
     summaryUpdatedAt: processed?.summaryUpdatedAt ?? null,
     accountBalanceByAccountId,
+    accountTotalsByAccountId,
     apiData,
     error: error?.message ?? null,
     isLoading,

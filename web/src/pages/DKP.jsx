@@ -7,6 +7,7 @@ export default function DKP({ isOfficer }) {
   const {
     list: leaderboard,
     accountList: accountLeaderboard,
+    accountTotalsByAccountId,
     periodTotals,
     summaryUpdatedAt,
     isLoading,
@@ -123,18 +124,22 @@ export default function DKP({ isOfficer }) {
           </thead>
           <tbody>
             {showList.slice(0, 200).map((r, i) => {
+              const full = accountTotalsByAccountId?.[r.account_id]
+              const balance = full != null ? full.balance : Number(r.balance)
+              const earned = full != null ? full.earned : Number(r.earned)
+              const spent = full != null ? full.spent : Number(r.spent)
               const total30 = periodTotals['30d'] || 0
               const total60 = periodTotals['60d'] || 0
-              const e30 = r.earned_30d != null ? Math.round(r.earned_30d) : 0
-              const e60 = r.earned_60d != null ? Math.round(r.earned_60d) : 0
+              const e30 = full != null ? full.earned_30d : (r.earned_30d != null ? Math.round(r.earned_30d) : 0)
+              const e60 = full != null ? full.earned_60d : (r.earned_60d != null ? Math.round(r.earned_60d) : 0)
               const cell30 = total30 > 0 ? `${e30} / ${total30} (${Math.round((e30 / total30) * 100)}%)` : '—'
               const cell60 = total60 > 0 ? `${e60} / ${total60} (${Math.round((e60 / total60) * 100)}%)` : '—'
               return (
                 <tr key={r.account_id + i}>
                   <td><Link to={`/accounts/${r.account_id}`}>{r.name}</Link></td>
-                  <td style={{ color: 'var(--balance-green, #22c55e)', fontWeight: 'bold' }}>{Number(r.balance)}</td>
-                  <td>{Number(r.earned)}</td>
-                  <td>{Number(r.spent)}</td>
+                  <td style={{ color: 'var(--balance-green, #22c55e)', fontWeight: 'bold' }}>{balance}</td>
+                  <td>{earned}</td>
+                  <td>{spent}</td>
                   <td>{cell30}</td>
                   <td>{cell60}</td>
                 </tr>
