@@ -110,13 +110,19 @@ function isActiveRow(r, activeKeysSet, cutoffDate) {
   return d >= cutoffDate
 }
 
+/** Normalize display name to a canonical key so "Foo" and "(*) Foo" dedupe to one row (avoids applying dkp_adjustments twice). */
+function canonicalCharacterKey(nameOrId) {
+  const s = (nameOrId || '').toString().trim().replace(/^\(\*\)\s*/, '').trim().toLowerCase()
+  return s || ''
+}
+
 function dedupeByCharacterName(list) {
   const byName = {}
   /** Same person can appear twice in dkp_summary: character_key=char_id and character_key=name. Don't sum those. */
   const isNameKey = (row) =>
     row.char_id && row.name && String(row.char_id).trim().toLowerCase() === String(row.name).trim().toLowerCase()
   list.forEach((r) => {
-    const key = (r.name || r.char_id || '').toString().trim().toLowerCase()
+    const key = canonicalCharacterKey(r.name || r.char_id)
     if (!key) return
     if (!byName[key]) {
       byName[key] = { ...r }
