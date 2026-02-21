@@ -11,6 +11,11 @@ on:
         description: "Use 'latest' for most recent backup, or paste a name from the list shown in the first step (e.g. supabase-backup-2026-02-20)"
         required: true
         default: latest
+      load_only:
+        description: "Truncate already run in Supabase (load only; much faster). Run docs/supabase-restore-truncate.sql in SQL Editor first."
+        required: false
+        type: boolean
+        default: false
 
 concurrency:
   group: db-restore
@@ -112,11 +117,14 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Restore database
-        run: python scripts/restore_supabase_from_backup.py --backup-dir backup
+        run: python scripts/restore_supabase_from_backup.py --backup-dir backup ${{ inputs.load_only && '--load-only' || '' }}
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
 
       - name: Restore summary
         if: success()
-        run: echo "Restore completed. Run refresh_dkp_summary() and refresh_all_raid_attendance_totals() in Supabase SQL Editor if needed."
+        run: |
+          echo "Restore completed."
+          echo "- Run refresh_dkp_summary() and refresh_all_raid_attendance_totals() in Supabase SQL Editor if needed."
+          echo "- To repopulate loot assignments (assigned_char_id / assigned_character_name), run **Actions → Loot-to-character assignment** (Run workflow). See docs/CI-DB-RESTORE.md."

@@ -16,6 +16,12 @@ on:
     # Once daily at 18:00 UTC (after TAKP Magelo export is typically updated)
     - cron: '0 18 * * *'
   workflow_dispatch:
+    inputs:
+      overwrite_assignments:
+        description: "Overwrite all assignments (recompute from Magelo; use after DB restore or to fix missing assignments)"
+        required: false
+        type: boolean
+        default: false
 
 concurrency:
   group: loot-to-character
@@ -84,7 +90,8 @@ jobs:
             r = csv.DictReader(f)
             rows = list(r)
           n_with = sum(1 for row in rows if (row.get('assigned_char_id') or '').strip() or (row.get('assigned_character_name') or '').strip())
-          print(f'Fetched CSV: {len(rows)} rows, {n_with} with existing assignment (to be preserved)')
+          overwrite = '${{ inputs.overwrite_assignments }}' == 'true'
+          print(f'Fetched CSV: {len(rows)} rows, {n_with} with existing assignment' + (' (will overwrite all from Magelo)' if overwrite else ' (to be preserved)'))
           "
 
       - name: Download Magelo dumps from TAKP
@@ -109,14 +116,16 @@ jobs:
       - name: Run loot-to-character assignment
         if: ${{ env.SUPABASE_URL != '' && (env.SUPABASE_SERVICE_ROLE_KEY != '' || env.SUPABASE_ANON_KEY != '') && steps.check.outputs.new_loot == 'true' }}
         run: |
-          # Do not use --clear-assignments: preserve existing manual/UI assignments from Supabase CSV.
+          # When overwrite_assignments input is true, use --clear-assignments to recompute all from Magelo (e.g. after DB restore).
+          # Otherwise preserve existing manual/UI assignments from Supabase CSV.
           python assign_loot_to_characters.py \
             --character-file .magelo_dump/TAKP_character.txt \
             --inventory-file .magelo_dump/TAKP_character_inventory.txt \
             --elemental-armor-json data/elemental_armor.json \
             --dkp-elemental-json dkp_elemental_to_magelo.json \
             --out-raid-loot data/raid_loot.csv \
-            --out-counts data/character_loot_assignment_counts.csv
+            --out-counts data/character_loot_assignment_counts.csv \
+            ${{ inputs.overwrite_assignments == 'true' && '--clear-assignments' || '' }}
 
       - name: Push assignments to Supabase (update by id, no duplicates)
         if: ${{ env.SUPABASE_URL != '' && (env.SUPABASE_SERVICE_ROLE_KEY != '' || env.SUPABASE_ANON_KEY != '') && steps.check.outputs.new_loot == 'true' }}
