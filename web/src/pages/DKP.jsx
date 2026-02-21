@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useDkpData, ACTIVE_DAYS } from '../lib/dkpLeaderboard'
+import { usePersistedState } from '../lib/usePersistedState'
 
 export default function DKP({ isOfficer }) {
   const {
@@ -35,7 +36,7 @@ export default function DKP({ isOfficer }) {
     setRefreshing(false)
   }, [mutate])
 
-  const [accountSearch, setAccountSearch] = useState('')
+  const [accountSearch, setAccountSearch] = usePersistedState('/dkp:accountSearch', '')
   const filteredLeaderboard = useMemo(() => {
     if (!accountSearch.trim()) return accountLeaderboard
     const q = accountSearch.trim().toLowerCase()

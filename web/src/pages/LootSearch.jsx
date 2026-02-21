@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo, useRef } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { usePersistedState } from '../lib/usePersistedState'
 import { useCharToAccountMap } from '../lib/useCharToAccountMap'
 import AssignedLootDisclaimer from '../components/AssignedLootDisclaimer'
 import ItemLink from '../components/ItemLink'
@@ -109,9 +110,9 @@ export default function LootSearch() {
   const [raidToMobs, setRaidToMobs] = useState({})
   const [itemSources, setItemSources] = useState(null)
   const [mobLoot, setMobLoot] = useState(null)
-  const [itemQuery, setItemQuery] = useState('')
-  const [sortBy, setSortBy] = useState('date')
-  const [sortDesc, setSortDesc] = useState(true)
+  const [itemQuery, setItemQuery] = usePersistedState('/loot:itemQuery', '')
+  const [sortBy, setSortBy] = usePersistedState('/loot:sortBy', 'date')
+  const [sortDesc, setSortDesc] = usePersistedState('/loot:sortDesc', true)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 

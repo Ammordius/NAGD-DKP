@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useCharToAccountMap } from '../lib/useCharToAccountMap'
+import { usePersistedState } from '../lib/usePersistedState'
 import AssignedLootDisclaimer from '../components/AssignedLootDisclaimer'
 import ItemLink from '../components/ItemLink'
 import { getDkpMobLoot, getRaidItemSources } from '../lib/staticData'
@@ -48,9 +49,9 @@ const LOOT_COLLAPSE_THRESHOLD = 5
 
 export default function LootRecipients() {
   const { getAccountId } = useCharToAccountMap()
-  const [months, setMonths] = useState(6)
-  const [classFilter, setClassFilter] = useState('')
-  const [sortBy, setSortBy] = useState('accountDkpTotal') // 'accountDkpTotal' | 'dkpSpentToon' | 'lastLootFirst'
+  const [months, setMonths] = usePersistedState('/loot-recipients:months', 6)
+  const [classFilter, setClassFilter] = usePersistedState('/loot-recipients:classFilter', '')
+  const [sortBy, setSortBy] = usePersistedState('/loot-recipients:sortBy', 'accountDkpTotal') // 'accountDkpTotal' | 'dkpSpentToon' | 'lastLootFirst'
   const [loot, setLoot] = useState([])
   const [raids, setRaids] = useState({})
   const [characters, setCharacters] = useState([])

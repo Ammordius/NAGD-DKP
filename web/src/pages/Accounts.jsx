@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { createCache } from '../lib/cache'
 import { fetchAll } from '../lib/accountData'
+import { usePersistedState } from '../lib/usePersistedState'
 
 const CACHE_KEY = 'accounts_list_v2'
 const CACHE_TTL = 10 * 60 * 1000
@@ -12,7 +13,7 @@ export default function Accounts() {
   const [accounts, setAccounts] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [search, setSearch] = useState('')
+  const [search, setSearch] = usePersistedState('/accounts:search', '')
 
   useEffect(() => {
     const cache = createCache(CACHE_KEY, CACHE_TTL)

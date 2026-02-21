@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useMemo } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useDkpData, ACTIVE_DAYS } from '../lib/dkpLeaderboard'
+import { usePersistedState } from '../lib/usePersistedState'
 
 const MAX_MARK_INACTIVE_MATCHES = 80
 
@@ -14,9 +15,9 @@ export default function OfficerClaimCooldowns({ isOfficer }) {
 
   const { apiData, mutate } = useDkpData()
   const [activeRaiders, setActiveRaiders] = useState([])
-  const [activeAddKey, setActiveAddKey] = useState('')
+  const [activeAddKey, setActiveAddKey] = usePersistedState('/officer/claim-cooldowns:activeAddKey', '')
   const [activeMutating, setActiveMutating] = useState(false)
-  const [inactiveSearchQuery, setInactiveSearchQuery] = useState('')
+  const [inactiveSearchQuery, setInactiveSearchQuery] = usePersistedState('/officer/claim-cooldowns:inactiveSearchQuery', '')
 
   useEffect(() => {
     if (apiData?.active_raiders?.length !== undefined) {

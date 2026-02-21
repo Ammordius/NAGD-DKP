@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo, useCallback, Fragment } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { usePersistedState } from '../lib/usePersistedState'
 import { createCache } from '../lib/cache'
 import { getDkpMobLoot, getRaidItemSources } from '../lib/staticData'
 import { getItemStats, ensureItemStatsLoaded, getItemStatsCached, getGearScore, itemHasSlot, itemUsableByClass } from '../lib/itemStats'
@@ -208,9 +209,9 @@ function normalizeMobKey(mob) {
 export default function MobLoot() {
   const [data, setData] = useState(null)
   const [raidItemSources, setRaidItemSources] = useState(null)
-  const [query, setQuery] = useState('')
-  const [filterSlot, setFilterSlot] = useState('')
-  const [filterClass, setFilterClass] = useState('')
+  const [query, setQuery] = usePersistedState('/mobs:query', '')
+  const [filterSlot, setFilterSlot] = usePersistedState('/mobs:filterSlot', '')
+  const [filterClass, setFilterClass] = usePersistedState('/mobs:filterClass', '')
   const [loading, setLoading] = useState(true)
   const [expanded, setExpanded] = useState({})
   const [itemsShownPerKey, setItemsShownPerKey] = useState({}) // key -> number to show
