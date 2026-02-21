@@ -335,7 +335,7 @@ export default function RaidDetail({ isOfficer }) {
       character_name: char.name,
     })
     if (attErr) {
-      setMutationError(attErr.message)
+      setMutationError(attErr?.code === '23505' ? 'That character is already on this tic (duplicate blocked).' : attErr.message)
       setMutating(false)
       return
     }

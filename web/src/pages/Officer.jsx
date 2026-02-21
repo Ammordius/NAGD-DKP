@@ -425,7 +425,7 @@ export default function Officer({ isOfficer }) {
       character_name: char.name,
     })
     if (attErr) {
-      setError(attErr.message)
+      setError(attErr?.code === '23505' ? 'That character is already on this tic (duplicate blocked).' : attErr.message)
       setMutating(false)
       return
     }
@@ -578,7 +578,7 @@ export default function Officer({ isOfficer }) {
         }))
       )
       if (attErr) {
-        setError(attErr.message)
+        setError(attErr?.code === '23505' ? 'One or more characters are already on a tic (duplicate blocked).' : attErr.message)
         setMutating(false)
         return
       }

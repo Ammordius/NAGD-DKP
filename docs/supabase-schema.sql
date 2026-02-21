@@ -193,6 +193,13 @@ CREATE INDEX IF NOT EXISTS idx_raid_attendance_raid ON raid_attendance(raid_id);
 CREATE INDEX IF NOT EXISTS idx_raid_attendance_char ON raid_attendance(char_id);
 CREATE INDEX IF NOT EXISTS idx_raid_event_attendance_raid ON raid_event_attendance(raid_id);
 CREATE INDEX IF NOT EXISTS idx_raid_event_attendance_char ON raid_event_attendance(char_id);
+-- Prevent same character being added to the same tic twice (see docs/fix_duplicate_tic_attendance_and_prevent.sql)
+CREATE UNIQUE INDEX IF NOT EXISTS uq_raid_event_attendance_raid_event_char_id
+  ON raid_event_attendance (raid_id, event_id, char_id)
+  WHERE char_id IS NOT NULL AND trim(char_id::text) <> '';
+CREATE UNIQUE INDEX IF NOT EXISTS uq_raid_event_attendance_raid_event_character_name
+  ON raid_event_attendance (raid_id, event_id, character_name)
+  WHERE character_name IS NOT NULL AND trim(character_name) <> '';
 CREATE INDEX IF NOT EXISTS idx_raid_attendance_dkp_character ON raid_attendance_dkp(character_key);
 CREATE INDEX IF NOT EXISTS idx_raid_attendance_dkp_raid ON raid_attendance_dkp(raid_id);
 CREATE INDEX IF NOT EXISTS idx_raid_classifications_raid ON raid_classifications(raid_id);
