@@ -23,7 +23,7 @@ export default function Accounts() {
     }
 
     Promise.all([
-      fetchAll('accounts', 'account_id, toon_count, display_name'),
+      fetchAll('accounts', 'account_id, toon_count, display_name, inactive'),
       fetchAll('character_account', 'account_id, char_id'),
       fetchAll('characters', 'char_id, name, class_name, level'),
     ]).then(([a, ca, ch]) => {
@@ -49,7 +49,7 @@ export default function Accounts() {
         if (!byAccount[row.account_id]) byAccount[row.account_id] = []
         byAccount[row.account_id].push(row.char_id)
       })
-      const accList = (a.data || []).map((acc) => ({
+      const accList = (a.data || []).filter((acc) => !acc.inactive).map((acc) => ({
         account_id: acc.account_id,
         toon_count: acc.toon_count,
         display_name: acc.display_name,

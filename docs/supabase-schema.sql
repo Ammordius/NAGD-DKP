@@ -167,6 +167,8 @@ ALTER TABLE dkp_summary ADD COLUMN IF NOT EXISTS last_activity_date DATE;
 ALTER TABLE dkp_summary ADD COLUMN IF NOT EXISTS earned_30d INTEGER;
 ALTER TABLE dkp_summary ADD COLUMN IF NOT EXISTS earned_60d INTEGER;
 ALTER TABLE accounts ADD COLUMN IF NOT EXISTS display_name TEXT;
+ALTER TABLE accounts ADD COLUMN IF NOT EXISTS inactive BOOLEAN NOT NULL DEFAULT false;
+COMMENT ON COLUMN accounts.inactive IS 'When true: account is hidden from DKP leaderboard and Accounts list; loot and tics still show on raid/character views.';
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS account_id TEXT REFERENCES accounts(account_id);
 
 -- Parse raids.date_iso to DATE safely (handles YYYY-MM-DD, YYYY-MM-DDThh:mm:ss, empty/null). Returns NULL if not parseable.
@@ -616,10 +618,37 @@ COMMENT ON FUNCTION public.begin_restore_load() IS 'Signal start of bulk restore
 GRANT EXECUTE ON FUNCTION public.begin_restore_load() TO service_role;
 GRANT EXECUTE ON FUNCTION public.begin_restore_load() TO authenticated;
 
+-- Fix serial sequences after restore: backup CSVs include explicit id values, so the sequence
+-- stays at 1 and the next insert would duplicate. Call this after loading tables with id columns.
+CREATE OR REPLACE FUNCTION public.fix_serial_sequences_for_restore()
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  r RECORD;
+  seq_name text;
+  max_id bigint;
+BEGIN
+  FOR r IN (SELECT t.relname AS tablename, a.attname AS columnname
+            FROM pg_class t
+            JOIN pg_attribute a ON a.attrelid = t.oid
+            WHERE t.relkind = 'r' AND t.relnamespace = (SELECT oid FROM pg_namespace WHERE nspname = 'public')
+            AND a.attname = 'id' AND a.attnum > 0 AND NOT a.attisdropped
+            AND t.relname IN ('raid_events', 'raid_loot', 'raid_attendance', 'raid_event_attendance', 'officer_audit_log'))
+  LOOP
+    seq_name := pg_get_serial_sequence(quote_ident(r.tablename), r.columnname);
+    IF seq_name IS NOT NULL THEN
+      EXECUTE format('SELECT COALESCE(max(id), 1) FROM %I', r.tablename) INTO max_id;
+      EXECUTE format('SELECT setval(%L, %s)', seq_name, max_id);
+    END IF;
+  END LOOP;
+END;
+$$;
+COMMENT ON FUNCTION public.fix_serial_sequences_for_restore() IS 'Set serial sequences to max(id) for tables restored from CSV with explicit id; prevents duplicate key on next insert.';
+
 CREATE OR REPLACE FUNCTION public.end_restore_load()
 RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 BEGIN
   UPDATE restore_in_progress SET in_progress = false WHERE id = 1;
+  PERFORM fix_serial_sequences_for_restore();
   PERFORM refresh_dkp_summary();
   PERFORM refresh_all_raid_attendance_totals();
 END;
@@ -627,6 +656,8 @@ $$;
 COMMENT ON FUNCTION public.end_restore_load() IS 'Signal end of bulk restore load; re-enables triggers and runs full DKP/raid totals refresh.';
 GRANT EXECUTE ON FUNCTION public.end_restore_load() TO service_role;
 GRANT EXECUTE ON FUNCTION public.end_restore_load() TO authenticated;
+GRANT EXECUTE ON FUNCTION public.fix_serial_sequences_for_restore() TO service_role;
+GRANT EXECUTE ON FUNCTION public.fix_serial_sequences_for_restore() TO authenticated;
 
 -- Trigger: when raid_events change, refresh totals for affected raid(s).
 CREATE OR REPLACE FUNCTION public.trigger_refresh_raid_totals_after_events()
@@ -844,6 +875,9 @@ DROP POLICY IF EXISTS "Authenticated read characters" ON characters;
 CREATE POLICY "Authenticated read characters" ON characters FOR SELECT TO authenticated USING (true);
 DROP POLICY IF EXISTS "Authenticated read accounts" ON accounts;
 CREATE POLICY "Authenticated read accounts" ON accounts FOR SELECT TO authenticated USING (true);
+DROP POLICY IF EXISTS "Officers update accounts" ON accounts;
+CREATE POLICY "Officers update accounts" ON accounts FOR UPDATE TO authenticated
+  USING (public.is_officer()) WITH CHECK (public.is_officer());
 DROP POLICY IF EXISTS "Authenticated read character_account" ON character_account;
 CREATE POLICY "Authenticated read character_account" ON character_account FOR SELECT TO authenticated USING (true);
 DROP POLICY IF EXISTS "Officers manage character_account" ON character_account;

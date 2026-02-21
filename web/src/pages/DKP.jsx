@@ -13,6 +13,7 @@ export default function DKP({ isOfficer }) {
     isLoading,
     error: hookError,
     mutate,
+    apiData,
   } = useDkpData()
   const [refreshing, setRefreshing] = useState(false)
   const [activeRaiders, setActiveRaiders] = useState([])
@@ -68,6 +69,36 @@ export default function DKP({ isOfficer }) {
       return
     }
     setActiveRaiders((prev) => prev.filter((k) => k !== key))
+    await mutate()
+  }, [mutate])
+
+  const inactiveAccounts = (apiData?.accounts ?? []).filter((a) => a.inactive === true)
+  const [inactiveAccountId, setInactiveAccountId] = useState('')
+
+  const handleMarkAccountInactive = useCallback(async () => {
+    const id = inactiveAccountId.trim()
+    if (!id) return
+    setActiveMutating(true)
+    setMutationError('')
+    const { error: e } = await supabase.from('accounts').update({ inactive: true }).eq('account_id', id)
+    setActiveMutating(false)
+    if (e) {
+      setMutationError(e.message)
+      return
+    }
+    setInactiveAccountId('')
+    await mutate()
+  }, [inactiveAccountId, mutate])
+
+  const handleRestoreAccount = useCallback(async (accountId) => {
+    setActiveMutating(true)
+    setMutationError('')
+    const { error: e } = await supabase.from('accounts').update({ inactive: false }).eq('account_id', accountId)
+    setActiveMutating(false)
+    if (e) {
+      setMutationError(e.message)
+      return
+    }
     await mutate()
   }, [mutate])
 
@@ -173,6 +204,45 @@ export default function DKP({ isOfficer }) {
                 ))}
                 {activeRaiders.length === 0 && <li style={{ color: '#71717a' }}>None added yet. Add character names or char_ids to always show them.</li>}
               </ul>
+              <hr style={{ margin: '1rem 0', borderColor: '#3f3f46' }} />
+              <p style={{ color: '#71717a', fontSize: '0.9rem', marginTop: 0 }}>
+                Inactive accounts are hidden from the DKP leaderboard and the Accounts list. Their loot and attendance still appear on raid and character pages.
+              </p>
+              <div style={{ marginBottom: '0.75rem' }}>
+                <strong>Mark account inactive</strong>
+                <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.35rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                  <select
+                    value={inactiveAccountId}
+                    onChange={(e) => setInactiveAccountId(e.target.value)}
+                    style={{ padding: '0.35rem 0.5rem', minWidth: '14rem', background: '#18181b', color: '#fafafa', border: '1px solid #3f3f46', borderRadius: '4px' }}
+                  >
+                    <option value="">Choose an account…</option>
+                    {accountLeaderboard.map((acc) => (
+                      <option key={acc.account_id} value={acc.account_id}>{acc.name} ({acc.account_id})</option>
+                    ))}
+                  </select>
+                  <button type="button" onClick={handleMarkAccountInactive} disabled={activeMutating || !inactiveAccountId}>
+                    Mark inactive
+                  </button>
+                </div>
+              </div>
+              {inactiveAccounts.length > 0 && (
+                <div>
+                  <strong>Inactive accounts</strong>
+                  <ul style={{ listStyle: 'none', paddingLeft: 0, margin: '0.35rem 0 0' }}>
+                    {inactiveAccounts.map((acc) => {
+                      const label = (acc.display_name || '').trim() || (acc.toon_names || '').split(',')[0]?.trim() || acc.account_id
+                      return (
+                        <li key={acc.account_id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
+                          <span>{label}</span>
+                          <span style={{ color: '#71717a', fontSize: '0.85rem' }}><code>{acc.account_id}</code></span>
+                          <button type="button" onClick={() => handleRestoreAccount(acc.account_id)} disabled={activeMutating} style={{ fontSize: '0.85rem' }}>Restore</button>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                </div>
+              )}
             </>
           )}
         </div>

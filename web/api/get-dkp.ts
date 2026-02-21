@@ -51,7 +51,7 @@ export default {
         fetchAll(supabase, 'active_raiders', 'character_key'),
         supabase.from('dkp_period_totals').select('period, total_dkp'),
         fetchAll(supabase, 'character_account', 'char_id, account_id'),
-        fetchAll(supabase, 'accounts', 'account_id, toon_names, display_name'),
+        fetchAll(supabase, 'accounts', 'account_id, toon_names, display_name, inactive'),
         fetchAll(supabase, 'characters', 'char_id, name, class_name'),
       ])
 

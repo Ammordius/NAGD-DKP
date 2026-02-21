@@ -35,7 +35,7 @@ export async function fetchDkpPayloadFromSupabase() {
     fetchAll(supabase, 'active_raiders', 'character_key'),
     supabase.from('dkp_period_totals').select('period, total_dkp'),
     fetchAll(supabase, 'character_account', 'char_id, account_id'),
-    fetchAll(supabase, 'accounts', 'account_id, toon_names, display_name'),
+    fetchAll(supabase, 'accounts', 'account_id, toon_names, display_name, inactive'),
     fetchAll(supabase, 'characters', 'char_id, name, class_name'),
   ])
   if (adjRes.error) throw new Error(adjRes.error.message || 'Failed to fetch dkp_adjustments')
@@ -175,14 +175,32 @@ export function processApiPayload(payload) {
   const caData = payload.character_account ?? []
   const accData = payload.accounts ?? []
   const charData = payload.characters ?? []
+  const inactiveAccountIds = new Set((accData || []).filter((a) => a.inactive === true).map((a) => String(a.account_id)))
+  const charToAccount = {}
+  ;(caData || []).forEach((r) => { charToAccount[String(r.char_id)] = r.account_id })
+  const nameToAccount = {}
+  if (charData?.length) {
+    const charIdToName = {}
+    charData.forEach((c) => { if (c.name) charIdToName[String(c.char_id)] = c.name })
+    ;(caData || []).forEach((r) => {
+      const name = charIdToName[String(r.char_id)]
+      if (name) nameToAccount[name] = r.account_id
+    })
+  }
+  const getAccountForRow = (r) => charToAccount[String(r.char_id)] ?? nameToAccount[String(r.name || '')] ?? null
   // Full account totals (incl. inactive) for account detail / balance lookups.
   const accountListFull = buildAccountLeaderboard(list, caData, accData, charData)
   const fullAccountBalances = {}
   accountListFull.forEach((a) => {
     if (a.account_id != null && a.account_id !== '') fullAccountBalances[String(a.account_id)] = Number(a.balance) || 0
   })
-  // Main page: only active raiders and only accounts that have at least one active raider.
-  list = list.filter((r) => isActiveRow(r, activeSet, cutoff))
+  // Main page: only active raiders, only non-inactive accounts, and only accounts that have at least one active raider.
+  list = list.filter((r) => {
+    if (!isActiveRow(r, activeSet, cutoff)) return false
+    const aid = getAccountForRow(r)
+    if (aid != null && inactiveAccountIds.has(String(aid))) return false
+    return true
+  })
   const accountList = buildAccountLeaderboard(list, caData, accData, charData)
   const summaryUpdatedAt = rows[0]?.updated_at ?? null
   return { list, accountList, fullAccountBalances, activeKeys, periodTotals: pt, caData, accData, charData, summaryUpdatedAt }
