@@ -79,15 +79,11 @@ export default function DKP({ isOfficer }) {
 
   const markInactiveMatches = useMemo(() => {
     const q = (inactiveSearchQuery || '').trim().toLowerCase()
-    if (!q) return activeAccounts.slice(0, MAX_MARK_INACTIVE_MATCHES)
+    if (!q) return []
     const matches = activeAccounts.filter((acc) => {
-      const label = (acc.display_name || '').trim() || (acc.toon_names || '').split(',')[0]?.trim() || ''
-      return (
-        (acc.account_id || '').toLowerCase().includes(q) ||
-        (acc.display_name || '').toLowerCase().includes(q) ||
-        (acc.toon_names || '').toLowerCase().includes(q) ||
-        label.toLowerCase().includes(q)
-      )
+      if ((acc.account_id || '').toLowerCase().includes(q)) return true
+      if ((acc.display_name || '').toLowerCase().includes(q)) return true
+      return (acc.toon_names || '').toLowerCase().includes(q)
     })
     return matches.slice(0, MAX_MARK_INACTIVE_MATCHES)
   }, [activeAccounts, inactiveSearchQuery])
@@ -118,7 +114,17 @@ export default function DKP({ isOfficer }) {
     await mutate()
   }, [mutate])
 
-  const showList = accountLeaderboard
+  const [accountSearch, setAccountSearch] = useState('')
+  const filteredLeaderboard = useMemo(() => {
+    if (!accountSearch.trim()) return accountLeaderboard
+    const q = accountSearch.trim().toLowerCase()
+    return accountLeaderboard.filter((r) => {
+      if ((r.account_id || '').toLowerCase().includes(q)) return true
+      if ((r.name || '').toLowerCase().includes(q)) return true
+      return false
+    })
+  }, [accountLeaderboard, accountSearch])
+  const showList = filteredLeaderboard
   const colLabel = 'Account'
 
   if (loading && !showList.length) return <div className="container">Loading DKP…</div>
@@ -137,16 +143,41 @@ export default function DKP({ isOfficer }) {
         )}
       </p>
       <div style={{ marginBottom: '1rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+        <input
+          type="search"
+          placeholder="Search by account or display name…"
+          value={accountSearch}
+          onChange={(e) => setAccountSearch(e.target.value)}
+          style={{
+            width: '100%',
+            maxWidth: '28rem',
+            padding: '0.5rem 0.75rem',
+            fontSize: '1rem',
+            border: '1px solid #3f3f46',
+            borderRadius: '6px',
+            background: '#18181b',
+            color: '#fafafa',
+          }}
+          aria-label="Search accounts on leaderboard"
+        />
+        {accountSearch.trim() && (
+          <span style={{ color: '#71717a', fontSize: '0.875rem' }}>
+            {filteredLeaderboard.length} account{filteredLeaderboard.length !== 1 ? 's' : ''}
+          </span>
+        )}
         {isOfficer && (
           <button type="button" onClick={handleRefreshTotals} disabled={refreshing} style={{ marginLeft: 'auto' }}>
             {refreshing ? 'Refreshing…' : 'Refresh DKP totals'}
           </button>
         )}
       </div>
-      {showList.length === 0 && (
+      {accountLeaderboard.length === 0 && (
         <p style={{ color: '#f59e0b', marginBottom: '1rem' }}>
           No DKP data. Make sure you’re logged in and the app is using the same Supabase project where you imported the CSVs (check Vercel env: VITE_SUPABASE_URL).
         </p>
+      )}
+      {accountLeaderboard.length > 0 && showList.length === 0 && (
+        <p style={{ color: '#71717a', marginBottom: '1rem' }}>No accounts match your search.</p>
       )}
       {showList.length > 0 && showList.every((r) => Number(r.spent) === 0) && (
         <p style={{ color: '#f59e0b', marginBottom: '1rem' }}>
@@ -227,7 +258,7 @@ export default function DKP({ isOfficer }) {
               <div style={{ marginBottom: '0.75rem' }}>
                 <strong>Mark account inactive</strong>
                 <p style={{ color: '#71717a', fontSize: '0.85rem', margin: '0.25rem 0 0.35rem 0' }}>
-                  All accounts (not only those on the leaderboard). Search by name or account ID to hide from DKP and Accounts list.
+                  Search by display name, toon names, or account ID. No list until you search.
                 </p>
                 <input
                   type="search"
@@ -237,44 +268,40 @@ export default function DKP({ isOfficer }) {
                   style={{
                     width: '100%',
                     maxWidth: '28rem',
-                    padding: '0.35rem 0.5rem',
+                    padding: '0.5rem 0.75rem',
+                    fontSize: '1rem',
                     marginTop: '0.35rem',
                     background: '#18181b',
                     color: '#fafafa',
                     border: '1px solid #3f3f46',
-                    borderRadius: '4px',
+                    borderRadius: '6px',
                   }}
                   aria-label="Search accounts to mark inactive"
                 />
-                <ul style={{ listStyle: 'none', paddingLeft: 0, margin: '0.5rem 0 0', maxHeight: '12rem', overflowY: 'auto' }}>
-                  {markInactiveMatches.length === 0 && (
-                    <li style={{ color: '#71717a', fontSize: '0.9rem' }}>
-                      {inactiveSearchQuery.trim() ? 'No matching accounts.' : 'No active accounts to list.'}
-                    </li>
-                  )}
-                  {markInactiveMatches.map((acc) => {
-                    const label = (acc.display_name || '').trim() || (acc.toon_names || '').split(',')[0]?.trim() || acc.account_id
-                    return (
-                      <li key={acc.account_id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem', flexWrap: 'wrap' }}>
-                        <span>{label}</span>
-                        <span style={{ color: '#71717a', fontSize: '0.85rem' }}><code>{acc.account_id}</code></span>
-                        <button type="button" onClick={() => handleMarkAccountInactive(acc.account_id)} disabled={activeMutating} style={{ fontSize: '0.85rem' }}>
-                          Mark inactive
-                        </button>
+                {inactiveSearchQuery.trim() && (
+                  <ul style={{ listStyle: 'none', paddingLeft: 0, margin: '0.5rem 0 0', maxHeight: '12rem', overflowY: 'auto' }}>
+                    {markInactiveMatches.length === 0 && (
+                      <li style={{ color: '#71717a', fontSize: '0.9rem' }}>No matching accounts.</li>
+                    )}
+                    {markInactiveMatches.map((acc) => {
+                      const label = (acc.display_name || '').trim() || (acc.toon_names || '').split(',')[0]?.trim() || acc.account_id
+                      return (
+                        <li key={acc.account_id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem', flexWrap: 'wrap' }}>
+                          <span>{label}</span>
+                          <span style={{ color: '#71717a', fontSize: '0.85rem' }}><code>{acc.account_id}</code></span>
+                          <button type="button" onClick={() => handleMarkAccountInactive(acc.account_id)} disabled={activeMutating} style={{ fontSize: '0.85rem' }}>
+                            Mark inactive
+                          </button>
+                        </li>
+                      )
+                    })}
+                    {markInactiveMatches.length >= MAX_MARK_INACTIVE_MATCHES && (
+                      <li style={{ color: '#71717a', fontSize: '0.85rem', marginTop: '0.25rem' }}>
+                        Showing first {MAX_MARK_INACTIVE_MATCHES} matches. Narrow your search for more.
                       </li>
-                    )
-                  })}
-                  {activeAccounts.length > MAX_MARK_INACTIVE_MATCHES && !inactiveSearchQuery.trim() && (
-                    <li style={{ color: '#71717a', fontSize: '0.85rem', marginTop: '0.25rem' }}>
-                      Showing first {MAX_MARK_INACTIVE_MATCHES} of {activeAccounts.length}. Type to search.
-                    </li>
-                  )}
-                  {inactiveSearchQuery.trim() && markInactiveMatches.length >= MAX_MARK_INACTIVE_MATCHES && (
-                    <li style={{ color: '#71717a', fontSize: '0.85rem', marginTop: '0.25rem' }}>
-                      Showing first {MAX_MARK_INACTIVE_MATCHES} matches. Narrow your search for more.
-                    </li>
-                  )}
-                </ul>
+                    )}
+                  </ul>
+                )}
               </div>
               {inactiveAccounts.length > 0 && (
                 <div>
