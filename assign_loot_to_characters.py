@@ -97,10 +97,18 @@ LOOT_TO_MAGELO_EQUIVALENTS: dict[str, list[str]] = {
 
 
 def normalize_item_name(s: str) -> str:
-    """Lowercase, strip, collapse spaces for matching."""
+    """Lowercase, strip, collapse spaces, ignore apostrophes and normalize hyphens for matching.
+    So 'Serpent of vindication' and 'Serpent of Vindication' match; 'Akkirus' Mask' matches 'Akkirus Mask'."""
     if not s:
         return ""
-    return " ".join(re.split(r"\s+", s.strip().lower()))
+    s = s.strip()
+    # Ignore apostrophe-like characters so "Akkirus' Mask" and "Lightbringer's Earring" match Magelo variants
+    for c in ("'", "'", "`", "\u2019", "\u2018"):
+        s = s.replace(c, "")
+    # Treat hyphen as space so "Something-X" matches "Something X"
+    s = s.replace("-", " ")
+    s = " ".join(re.split(r"\s+", s.lower()))
+    return s
 
 
 def parse_elemental_loot_slot_and_armor(item_name: str) -> tuple[Optional[str], Optional[list[int]]]:
