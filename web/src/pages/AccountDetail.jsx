@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
+import useSWR from 'swr'
 import { supabase } from '../lib/supabase'
 import { useCharToAccountMap } from '../lib/useCharToAccountMap'
 import AssignedLootDisclaimer from '../components/AssignedLootDisclaimer'
@@ -59,20 +60,100 @@ async function fetchByChunkedIn(table, select, column, values) {
   return { data: all, error: null }
 }
 
+/** SWR deduplication: 60s so revisiting the same account shows cached data without full reload. */
+const ACCOUNT_DEDUPING_INTERVAL_MS = 60_000
+
+async function fetchAccountDetail(accountId) {
+  const accRes = await supabase.from('accounts').select('account_id, toon_names, display_name, toon_count').eq('account_id', accountId).single()
+  if (accRes.error || !accRes.data) throw new Error(accRes.error?.message || 'Account not found')
+  const caRes = await supabase.from('character_account').select('char_id').eq('account_id', accountId)
+  const charIds = (caRes.data || []).map((r) => r.char_id).filter(Boolean)
+  if (charIds.length === 0) {
+    return { account: accRes.data, characters: [], raids: {}, activityByRaid: [], dkpByCharacterKey: { earned: {}, spent: {} } }
+  }
+  const [chRes, attRes, lootRes, attDkpRes] = await Promise.all([
+    supabase.from('characters').select('char_id, name, class_name, level').in('char_id', charIds),
+    fetchAll('raid_attendance', 'raid_id, char_id, character_name', (q) => q.in('char_id', charIds)),
+    fetchAll('raid_loot_with_assignment', 'id, raid_id, char_id, character_name, item_name, cost, assigned_char_id, assigned_character_name', (q) => q.in('char_id', charIds)),
+    (async () => {
+      const cr = await supabase.from('characters').select('char_id, name').in('char_id', charIds)
+      const ch = cr.data || []
+      const characterKeys = [...new Set([...charIds, ...ch.map((c) => c.name).filter(Boolean)])]
+      if (characterKeys.length === 0) return { data: [] }
+      return fetchAll('raid_attendance_dkp', 'raid_id, character_key, dkp_earned', (q) => q.in('character_key', characterKeys), { order: { column: 'raid_id', ascending: true } })
+    })(),
+  ])
+  const chars = (chRes.data || []).map((c) => ({ ...c, displayName: c.name || c.char_id }))
+  const attDkp = attDkpRes?.error ? [] : (attDkpRes?.data || [])
+  const earnedByKey = {}
+  attDkp.forEach((row) => {
+    const k = (row.character_key || '').trim()
+    if (k) earnedByKey[k] = (earnedByKey[k] || 0) + parseFloat(row.dkp_earned || 0)
+  })
+  const spentByKey = {}
+  ;(lootRes.data || []).forEach((row) => {
+    const k = (row.assigned_character_name || row.assigned_char_id || '').trim()
+    if (k) spentByKey[k] = (spentByKey[k] || 0) + parseFloat(row.cost || 0)
+  })
+  const dkpByCharacterKey = { earned: earnedByKey, spent: spentByKey }
+  const raidIds = new Set([
+    ...(attRes.data || []).map((r) => r.raid_id),
+    ...(lootRes.data || []).map((r) => r.raid_id),
+    ...attDkp.map((r) => r.raid_id),
+  ])
+  if (raidIds.size === 0) {
+    return { account: accRes.data, characters: chars, raids: {}, activityByRaid: [], dkpByCharacterKey }
+  }
+  const raidList = [...raidIds]
+  const [rRes, totalsRes] = await Promise.all([
+    fetchByChunkedIn('raids', 'raid_id, raid_name, date_iso', 'raid_id', raidList),
+    fetchByChunkedIn('raid_dkp_totals', 'raid_id, total_dkp', 'raid_id', raidList),
+  ])
+  if (rRes?.error) throw new Error(rRes.error?.message || 'Failed to load raids')
+  if (totalsRes?.error) throw new Error(totalsRes.error?.message || 'Failed to load raid totals')
+  const rMap = {}
+  ;(rRes.data || []).forEach((row) => { rMap[row.raid_id] = row })
+  const totalRaidDkp = {}
+  ;(totalsRes.data || []).forEach((row) => { totalRaidDkp[row.raid_id] = parseFloat(row.total_dkp || 0) })
+  const dkpByRaid = {}
+  attDkp.forEach((row) => {
+    if (!dkpByRaid[row.raid_id]) dkpByRaid[row.raid_id] = 0
+    dkpByRaid[row.raid_id] += parseFloat(row.dkp_earned || 0)
+  })
+  const lootByRaid = {}
+  ;(lootRes.data || []).forEach((row) => {
+    if (!lootByRaid[row.raid_id]) lootByRaid[row.raid_id] = []
+    lootByRaid[row.raid_id].push(row)
+  })
+  const activityByRaid = raidList.map((raidId) => ({
+    raid_id: raidId,
+    date: (rMap[raidId]?.date_iso || '').slice(0, 10),
+    raid_name: rMap[raidId]?.raid_name || raidId,
+    dkpEarned: dkpByRaid[raidId] ?? 0,
+    dkpRaidTotal: totalRaidDkp[raidId] ?? 0,
+    items: lootByRaid[raidId] || [],
+  })).sort((a, b) => (b.date || '').localeCompare(a.date || ''))
+  return { account: accRes.data, characters: chars, raids: rMap, activityByRaid, dkpByCharacterKey }
+}
+
 export default function AccountDetail({ isOfficer, profile, session }) {
   const { accountId } = useParams()
   const navigate = useNavigate()
   const { getAccountDisplayName } = useCharToAccountMap()
+  const { data: swrData, error: swrError, isLoading, mutate } = useSWR(
+    accountId ? `account-detail-${accountId}` : null,
+    () => fetchAccountDetail(accountId),
+    { dedupingInterval: ACCOUNT_DEDUPING_INTERVAL_MS, revalidateOnFocus: false }
+  )
+  const account = swrData?.account ?? null
+  const characters = swrData?.characters ?? []
+  const raids = swrData?.raids ?? {}
+  const activityByRaid = swrData?.activityByRaid ?? []
+  const dkpByCharacterKey = swrData?.dkpByCharacterKey ?? { earned: {}, spent: {} }
+  const loading = isLoading
+  const error = swrError?.message ?? ''
   const [tab, setTab] = useState('activity')
   const [activityPage, setActivityPage] = useState(1)
-  const [account, setAccount] = useState(null)
-  const [characters, setCharacters] = useState([])
-  const [raids, setRaids] = useState({})
-  const [activityByRaid, setActivityByRaid] = useState([])
-  const [dkpByCharacterKey, setDkpByCharacterKey] = useState({ earned: {}, spent: {} })
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
-  const [refreshKey, setRefreshKey] = useState(0)
   const [addCharOpen, setAddCharOpen] = useState(false)
   const [addCharInput, setAddCharInput] = useState('')
   const [addCharIdInput, setAddCharIdInput] = useState('')
@@ -100,126 +181,9 @@ export default function AccountDetail({ isOfficer, profile, session }) {
         setMyAccountId(data?.account_id ?? null)
       })
     })
-  }, [accountId, profile, refreshKey])
+  }, [accountId, profile])
 
-  useEffect(() => {
-    if (!accountId) {
-      setLoading(false)
-      return
-    }
-    setLoading(true)
-    setError('')
-    supabase.from('accounts').select('account_id, toon_names, display_name, toon_count').eq('account_id', accountId).single().then((accRes) => {
-      if (accRes.error || !accRes.data) {
-        setError(accRes.error?.message || 'Account not found')
-        setLoading(false)
-        return
-      }
-      setAccount(accRes.data)
-      supabase.from('character_account').select('char_id').eq('account_id', accountId).then((caRes) => {
-        const charIds = (caRes.data || []).map((r) => r.char_id).filter(Boolean)
-        if (charIds.length === 0) {
-          setCharacters([])
-          setActivityByRaid([])
-          setRaids({})
-          setDkpByCharacterKey({ earned: {}, spent: {} })
-          setLoading(false)
-          return
-        }
-        Promise.all([
-          supabase.from('characters').select('char_id, name, class_name, level').in('char_id', charIds),
-          fetchAll('raid_attendance', 'raid_id, char_id, character_name', (q) => q.in('char_id', charIds)),
-          fetchAll('raid_loot_with_assignment', 'id, raid_id, char_id, character_name, item_name, cost, assigned_char_id, assigned_character_name', (q) => q.in('char_id', charIds)),
-          supabase.from('characters').select('char_id, name').in('char_id', charIds).then((cr) => {
-            const ch = cr.data || []
-            const characterKeys = [...new Set([...charIds, ...ch.map((c) => c.name).filter(Boolean)])]
-            if (characterKeys.length === 0) return { data: [] }
-            return fetchAll('raid_attendance_dkp', 'raid_id, character_key, dkp_earned', (q) => q.in('character_key', characterKeys), { order: { column: 'raid_id', ascending: true } })
-          }),
-        ]).then(([chRes, attRes, lootRes, attDkpRes]) => {
-          const chars = (chRes.data || []).map((c) => ({ ...c, displayName: c.name || c.char_id }))
-          setCharacters(chars)
-          const attDkp = (attDkpRes?.error ? [] : (attDkpRes?.data || []))
-          const earnedByKey = {}
-          attDkp.forEach((row) => {
-            const k = (row.character_key || '').trim()
-            if (k) earnedByKey[k] = (earnedByKey[k] || 0) + parseFloat(row.dkp_earned || 0)
-          })
-          const spentByKey = {}
-          ;(lootRes.data || []).forEach((row) => {
-            const k = (row.assigned_character_name || row.assigned_char_id || '').trim()
-            if (k) spentByKey[k] = (spentByKey[k] || 0) + parseFloat(row.cost || 0)
-          })
-          setDkpByCharacterKey({ earned: earnedByKey, spent: spentByKey })
-          const raidIds = new Set([
-            ...(attRes.data || []).map((r) => r.raid_id),
-            ...(lootRes.data || []).map((r) => r.raid_id),
-            ...attDkp.map((r) => r.raid_id),
-          ])
-          if (raidIds.size === 0) {
-            setRaids({})
-            setActivityByRaid([])
-            setLoading(false)
-            return
-          }
-          const raidList = [...raidIds]
-          Promise.all([
-            fetchByChunkedIn('raids', 'raid_id, raid_name, date_iso', 'raid_id', raidList),
-            fetchByChunkedIn('raid_dkp_totals', 'raid_id, total_dkp', 'raid_id', raidList),
-          ]).then(([rRes, totalsRes]) => {
-            if (rRes?.error) {
-              setError(rRes.error?.message || 'Failed to load raids')
-              setLoading(false)
-              return
-            }
-            if (totalsRes?.error) {
-              setError(totalsRes.error?.message || 'Failed to load raid totals')
-              setLoading(false)
-              return
-            }
-            const rMap = {}
-            ;(rRes.data || []).forEach((row) => { rMap[row.raid_id] = row })
-            setRaids(rMap)
-            const totalRaidDkp = {}
-            ;(totalsRes.data || []).forEach((row) => { totalRaidDkp[row.raid_id] = parseFloat(row.total_dkp || 0) })
-            const dkpByRaid = {}
-            attDkp.forEach((row) => {
-              if (!dkpByRaid[row.raid_id]) dkpByRaid[row.raid_id] = 0
-              dkpByRaid[row.raid_id] += parseFloat(row.dkp_earned || 0)
-            })
-            const lootByRaid = {}
-            ;(lootRes.data || []).forEach((row) => {
-              if (!lootByRaid[row.raid_id]) lootByRaid[row.raid_id] = []
-              lootByRaid[row.raid_id].push(row)
-            })
-            const activity = raidList.map((raidId) => ({
-              raid_id: raidId,
-              date: (rMap[raidId]?.date_iso || '').slice(0, 10),
-              raid_name: rMap[raidId]?.raid_name || raidId,
-              dkpEarned: dkpByRaid[raidId] ?? 0,
-              dkpRaidTotal: totalRaidDkp[raidId] ?? 0,
-              items: lootByRaid[raidId] || [],
-            })).sort((a, b) => (b.date || '').localeCompare(a.date || ''))
-            setActivityByRaid(activity)
-            setActivityPage(1)
-            setLoading(false)
-          }).catch((err) => {
-            setError(err?.message || 'Failed to load raid data')
-            setLoading(false)
-          })
-        }).catch((err) => {
-          setError(err?.message || 'Failed to load activity')
-          setLoading(false)
-        })
-      }).catch((err) => {
-        setError(err?.message || 'Failed to load characters')
-        setLoading(false)
-      })
-    }).catch((err) => {
-      setError(err?.message || 'Failed to load account')
-      setLoading(false)
-    })
-  }, [accountId, refreshKey])
+  }, [accountId, profile])
 
   const displayName = account?.display_name?.trim() || account?.toon_names?.split(',')[0]?.trim() || accountId
 
@@ -263,7 +227,7 @@ export default function AccountDetail({ isOfficer, profile, session }) {
     setAddCharOpen(false)
     setAddCharInput('')
     setAddCharIdInput('')
-    setRefreshKey((k) => k + 1)
+    mutate()
   }
 
   const itemIdMap = useMemo(() => buildItemIdMap(mobLoot), [mobLoot])
@@ -448,7 +412,7 @@ export default function AccountDetail({ isOfficer, profile, session }) {
                                   .then(({ error }) => {
                                     setSavingLootId(null)
                                     if (error) setLootAssignError(error.message)
-                                    else setRefreshKey((k) => k + 1)
+                                    else mutate()
                                   })
                               } else {
                                 const c = characters.find((ch) => (ch.char_id || ch.name) === val)
@@ -458,7 +422,7 @@ export default function AccountDetail({ isOfficer, profile, session }) {
                                   .then(({ error }) => {
                                     setSavingLootId(null)
                                     if (error) setLootAssignError(error.message)
-                                    else setRefreshKey((k) => k + 1)
+                                    else mutate()
                                   })
                               }
                             }}
