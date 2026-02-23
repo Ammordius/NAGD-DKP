@@ -4,6 +4,7 @@ import useSWR from 'swr'
 import { supabase } from '../lib/supabase'
 import { useCharToAccountMap } from '../lib/useCharToAccountMap'
 import AssignedLootDisclaimer from '../components/AssignedLootDisclaimer'
+import DkpSiteDisclaimer from '../components/DkpSiteDisclaimer'
 import ItemLink from '../components/ItemLink'
 import { getDkpMobLoot } from '../lib/staticData'
 import { useDkpData } from '../lib/dkpLeaderboard'
@@ -263,6 +264,7 @@ export default function AccountDetail({ isOfficer, profile, session }) {
     <div className="container">
       <p><Link to="/accounts">← Accounts</Link></p>
       <h1>{displayName}</h1>
+      <DkpSiteDisclaimer />
       <p style={{ color: '#a1a1aa', marginBottom: '1rem' }}>
         Account <code>{accountId}</code>
         {account.toon_count != null && <span style={{ marginLeft: '0.5rem' }}>({account.toon_count} toons)</span>}

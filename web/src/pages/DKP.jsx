@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useDkpData, ACTIVE_DAYS } from '../lib/dkpLeaderboard'
 import { usePersistedState } from '../lib/usePersistedState'
+import DkpSiteDisclaimer from '../components/DkpSiteDisclaimer'
 
 export default function DKP({ isOfficer }) {
   const {
@@ -60,6 +61,7 @@ export default function DKP({ isOfficer }) {
   return (
     <div className="container">
       <h1>DKP Leaderboard</h1>
+      <DkpSiteDisclaimer />
       <p style={{ color: '#71717a' }}>
         One row per account (one human). Earned (raid attendance × event DKP) minus spent (loot); all characters on the same account are combined.
         {usingCache && summaryUpdatedAt && (
