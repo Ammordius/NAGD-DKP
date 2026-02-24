@@ -135,8 +135,16 @@ function dedupeByCharacterName(list) {
       byName[key] = { ...r }
       return
     }
-    // Incoming row is name-key duplicate: do not add its earned/spent.
-    if (!mNameKey && rNameKey) return
+    // Incoming row is name-key duplicate: do not add earned/spent (same raids may be on both keys).
+    // Still add earned_30d/earned_60d so period columns are correct when the two keys have different raids.
+    if (!mNameKey && rNameKey) {
+      m.earned_30d = (m.earned_30d ?? 0) + (r.earned_30d ?? 0)
+      m.earned_60d = (m.earned_60d ?? 0) + (r.earned_60d ?? 0)
+      if (r.last_activity_date && (!m.last_activity_date || (r.last_activity_date > m.last_activity_date))) {
+        m.last_activity_date = r.last_activity_date
+      }
+      return
+    }
     m.earned += r.earned
     m.spent += r.spent
     m.earned_30d = (m.earned_30d ?? 0) + (r.earned_30d ?? 0)
