@@ -4,9 +4,10 @@ Pull past raids list from GamerLaunch Rapid Raid, then fetch each raid's details
 
 1) Fetches https://azureguardtakp.gamerlaunch.com/rapid_raid/raids.php?mode=past&gid=547766&ts=3:1
 2) Discovers raid_pool and pagination (1611 raids, 20 per page)
-3) Iterates all pages to collect (raid_pool, raidId, raid_name, date)
-4) Fetches each raid_details.php page and saves HTML to raids/raid_{raidId}.html
-5) Writes raids_index.csv with one row per raid (raid_id, raid_name, date, attendees, url)
+3) Iterates list pages to collect (raid_pool, raidId, raid_name, date) — or use --raid-ids to skip full scrape
+4) Optionally filter by --since-date (YYYY-MM-DD); only raids on or after this date are fetched (data accurate as of 2026-02-24)
+5) Fetches each raid_details.php page and saves HTML to raids/raid_{raidId}.html
+6) Writes raids_index.csv with one row per raid (raid_id, raid_name, date, attendees, url)
 
 Uses cookies.txt (same as roster/linked-toons scripts). Polite rate limit.
 """
@@ -18,6 +19,7 @@ import re
 import sys
 import time
 import random
+from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 from urllib.parse import urlencode, urlparse
@@ -52,6 +54,25 @@ def polite_sleep(base_sleep: float, jitter: float) -> None:
         return
     extra = random.uniform(0, jitter) if jitter > 0 else 0.0
     time.sleep(base_sleep + extra)
+
+
+def parse_date_to_iso(date_str: str) -> str:
+    """Parse 'Fri Feb 13, 2026 2:00 am' or similar -> '2026-02-13'. Returns '' if unparseable."""
+    if not date_str or not str(date_str).strip():
+        return ""
+    s = str(date_str).strip()
+    for fmt, max_len in (
+        ("%a %b %d, %Y %I:%M %p", 30),
+        ("%a %b %d, %Y", 17),
+        ("%Y-%m-%d", 10),
+    ):
+        try:
+            part = s[:max_len] if len(s) > max_len else s
+            dt = datetime.strptime(part, fmt)
+            return dt.strftime("%Y-%m-%d")
+        except ValueError:
+            continue
+    return ""
 
 
 def extract_raid_pool_from_html(html: str) -> Optional[str]:
@@ -162,6 +183,8 @@ def main():
     ap.add_argument("--index", type=str, default="raids_index.csv", help="Output CSV index of raids")
     ap.add_argument("--limit-pages", type=int, default=0, help="Max list pages to fetch (0 = all)")
     ap.add_argument("--limit-raids", type=int, default=0, help="Max raid details to fetch (0 = all)")
+    ap.add_argument("--since-date", type=str, default="", help="Only fetch raids on or after this date (YYYY-MM-DD). Use 2026-02-24 for data-accurate cutoff.")
+    ap.add_argument("--raid-ids", type=str, default="", help="Comma-separated raid IDs only (e.g. 1598692,1598705). Skips full list scrape; fetches only these details (needs first page for raid_pool).")
     ap.add_argument("--timeout", type=int, default=30, help="Request timeout")
     args = ap.parse_args()
 
@@ -213,33 +236,52 @@ def main():
     print(f"Pagination: last paging_page = {last_page}")
 
     all_raids: List[dict] = []
-    all_raids.extend(parse_raids_from_list_page(html0, raid_pool, gid))
-    print(f"Page 0: {len(all_raids)} raids")
+    if args.raid_ids:
+        # Only fetch these raid IDs; do not scrape the full past raids list.
+        raid_ids_raw = [x.strip() for x in args.raid_ids.split(",") if x.strip()]
+        all_raids = [
+            {"raid_id": rid, "raid_pool": raid_pool, "raid_name": "", "date": "", "gid": gid}
+            for rid in raid_ids_raw
+        ]
+        print(f"Raid-IDs mode: fetching only {len(all_raids)} raid(s): {raid_ids_raw}")
+    else:
+        all_raids.extend(parse_raids_from_list_page(html0, raid_pool, gid))
+        print(f"Page 0: {len(all_raids)} raids")
 
     polite_sleep(args.sleep, args.jitter)
 
-    # Step 2: Remaining list pages
-    pages_to_fetch = list(range(1, last_page + 1))
-    if args.limit_pages:
-        pages_to_fetch = pages_to_fetch[: args.limit_pages]
-    for p in pages_to_fetch:
-        url = build_list_page_url(raid_pool, gid, p)
-        try:
-            r = session.get(url, timeout=args.timeout)
-            r.raise_for_status()
-        except Exception as e:
-            print(f"List page {p} failed: {e}", file=sys.stderr)
-            continue
-        rows = parse_raids_from_list_page(r.text, raid_pool, gid)
-        all_raids.extend(rows)
-        print(f"Page {p}: {len(rows)} raids (total {len(all_raids)})")
-        polite_sleep(args.sleep, args.jitter)
+    # Step 2: Remaining list pages (skip when --raid-ids)
+    if not args.raid_ids:
+        pages_to_fetch = list(range(1, last_page + 1))
+        if args.limit_pages:
+            pages_to_fetch = pages_to_fetch[: args.limit_pages]
+        for p in pages_to_fetch:
+            url = build_list_page_url(raid_pool, gid, p)
+            try:
+                r = session.get(url, timeout=args.timeout)
+                r.raise_for_status()
+            except Exception as e:
+                print(f"List page {p} failed: {e}", file=sys.stderr)
+                continue
+            rows = parse_raids_from_list_page(r.text, raid_pool, gid)
+            all_raids.extend(rows)
+            print(f"Page {p}: {len(rows)} raids (total {len(all_raids)})")
+            polite_sleep(args.sleep, args.jitter)
 
     # Dedupe by raid_id (same raid can appear on multiple pages in theory)
     by_id: Dict[str, dict] = {r["raid_id"]: r for r in all_raids}
     all_raids = list(by_id.values())
-    all_raids.sort(key=lambda x: (x["date"], x["raid_id"]), reverse=True)
+    all_raids.sort(key=lambda x: (x.get("date") or "", x["raid_id"]), reverse=True)
     print(f"Total unique raids: {len(all_raids)}")
+
+    # Filter by --since-date (only when we have list dates; skip for --raid-ids)
+    if args.since_date and not args.raid_ids:
+        since = args.since_date.strip()
+        if since:
+            for r in all_raids:
+                r["date_iso"] = parse_date_to_iso(r.get("date") or "")
+            all_raids = [r for r in all_raids if (r.get("date_iso") or "") >= since]
+            print(f"After --since-date {since}: {len(all_raids)} raids")
 
     # Step 3: Fetch each raid details page
     out_dir = Path(args.out_dir)

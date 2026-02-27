@@ -34,7 +34,7 @@
 						!function(r){function o(e){if(t[e])return t[e].exports;var n=t[e]={exports:{},id:e,loaded:!1};return r[e].call(n.exports,n,n.exports,o),n.loaded=!0,n.exports}var t={};return o.m=r,o.c=t,o.p="",o(0)}([function(r,o,t){"use strict";var e=t(1).Rollbar,n=t(2);_rollbarConfig.rollbarJsUrl=_rollbarConfig.rollbarJsUrl||"https://d37gvrvc0wt4s1.cloudfront.net/js/v1.8/rollbar.min.js";var a=e.init(window,_rollbarConfig),i=n(a,_rollbarConfig);a.loadFull(window,document,!_rollbarConfig.async,_rollbarConfig,i)},function(r,o){"use strict";function t(r){return function(){try{return r.apply(this,arguments)}catch(o){try{console.error("[Rollbar]: Internal error",o)}catch(t){}}}}function e(r,o,t){window._rollbarWrappedError&&(t[4]||(t[4]=window._rollbarWrappedError),t[5]||(t[5]=window._rollbarWrappedError._rollbarContext),window._rollbarWrappedError=null),r.uncaughtError.apply(r,t),o&&o.apply(window,t)}function n(r){var o=function(){var o=Array.prototype.slice.call(arguments,0);e(r,r._rollbarOldOnError,o)};return o.belongsToShim=!0,o}function a(r){this.shimId=++s,this.notifier=null,this.parentShim=r,this._rollbarOldOnError=null}function i(r){var o=a;return t(function(){if(this.notifier)return this.notifier[r].apply(this.notifier,arguments);var t=this,e="scope"===r;e&&(t=new o(this));var n=Array.prototype.slice.call(arguments,0),a={shim:t,method:r,args:n,ts:new Date};return window._rollbarShimQueue.push(a),e?t:void 0})}function l(r,o){if(o.hasOwnProperty&&o.hasOwnProperty("addEventListener")){var t=o.addEventListener;o.addEventListener=function(o,e,n){t.call(this,o,r.wrap(e),n)};var e=o.removeEventListener;o.removeEventListener=function(r,o,t){e.call(this,r,o&&o._wrapped?o._wrapped:o,t)}}}var s=0;a.init=function(r,o){var e=o.globalAlias||"Rollbar";if("object"==typeof r[e])return r[e];r._rollbarShimQueue=[],r._rollbarWrappedError=null,o=o||{};var i=new a;return t(function(){if(i.configure(o),o.captureUncaught){i._rollbarOldOnError=r.onerror,r.onerror=n(i);var t,a,s="EventTarget,Window,Node,ApplicationCache,AudioTrackList,ChannelMergerNode,CryptoOperation,EventSource,FileReader,HTMLUnknownElement,IDBDatabase,IDBRequest,IDBTransaction,KeyOperation,MediaController,MessagePort,ModalWindow,Notification,SVGElementInstance,Screen,TextTrack,TextTrackCue,TextTrackList,WebSocket,WebSocketWorker,Worker,XMLHttpRequest,XMLHttpRequestEventTarget,XMLHttpRequestUpload".split(",");for(t=0;t<s.length;++t)a=s[t],r[a]&&r[a].prototype&&l(i,r[a].prototype)}return r[e]=i,i})()},a.prototype.loadFull=function(r,o,e,n,a){var i=function(){var o;if(void 0===r._rollbarPayloadQueue){var t,e,n,i;for(o=new Error("rollbar.js did not load");t=r._rollbarShimQueue.shift();)for(n=t.args,i=0;i<n.length;++i)if(e=n[i],"function"==typeof e){e(o);break}}"function"==typeof a&&a(o)},l=!1,s=o.createElement("script"),u=o.getElementsByTagName("script")[0],p=u.parentNode;s.crossOrigin="",s.src=n.rollbarJsUrl,s.async=!e,s.onload=s.onreadystatechange=t(function(){if(!(l||this.readyState&&"loaded"!==this.readyState&&"complete"!==this.readyState)){s.onload=s.onreadystatechange=null;try{p.removeChild(s)}catch(r){}l=!0,i()}}),p.insertBefore(s,u)},a.prototype.wrap=function(r,o){try{var t;if(t="function"==typeof o?o:function(){return o||{}},"function"!=typeof r)return r;if(r._isWrap)return r;if(!r._wrapped){r._wrapped=function(){try{return r.apply(this,arguments)}catch(o){throw o._rollbarContext=t()||{},o._rollbarContext._wrappedSource=r.toString(),window._rollbarWrappedError=o,o}},r._wrapped._isWrap=!0;for(var e in r)r.hasOwnProperty(e)&&(r._wrapped[e]=r[e])}return r._wrapped}catch(n){return r}};for(var u="log,debug,info,warn,warning,error,critical,global,configure,scope,uncaughtError".split(","),p=0;p<u.length;++p)a.prototype[u[p]]=i(u[p]);r.exports={Rollbar:a,_rollbarWindowOnError:e}},function(r,o){"use strict";r.exports=function(r,o){return function(t){if(!t&&!window._rollbarInitialized){var e=window.RollbarNotifier,n=o||{},a=n.globalAlias||"Rollbar",i=window.Rollbar.init(n,r);i._processShimQueue(window._rollbarShimQueue||[]),window[a]=i,window._rollbarInitialized=!0,e.processPayloads()}}}}]);
 						// End Rollbar Snippet
 					</script><script>
-			var cookie_host_name = '.gamerlaunch.com';var style_version = 5;var user_status=1;rightWidgets = 0;
+			var cookie_host_name = '.gamerlaunch.com';var style_version = 5;var user_status=0;rightWidgets = 0;
 			// these are current EMs for major breakpoints
 			var base_font_px    = 16;var lap_em          = 40.063;var lap_px          = lap_em * base_font_px;
 			var desk_em         = 64.063;var desk_px         = desk_em * base_font_px;var wall_em         = 90.063;
@@ -62,8 +62,8 @@
 			ga('require', 'linkid', 'linkid.js');
 			ga('require', 'displayfeatures');
 			ga('set', 'contentGroup1', 'guild');ga('set', 'contentGroup2', 'profile');ga('set', 'contentGroup3', 'Everquest');ga('set', 'contentGroup5', 'Subscription');
-			ga('set', 'dimension1', 'Plan2');ga('set', 'dimension4', 'SiteMember');ga('set', 'dimension6', '5');
-			ga('set', 'metric1', '5061');ga('set', 'metric3', '2012');ga('set', 'metric4', '4');ga('set', 'metric5', '6');ga('set', 'metric2', '3224');ga('set', 'metric6', '2017');ga('set', 'metric7', '4');ga('set', 'metric8', '17');
+			ga('set', 'dimension1', 'Plan2');ga('set', 'dimension4', 'Visitor');ga('set', 'dimension6', '5');
+			ga('set', 'metric2', '3230');ga('set', 'metric6', '2017');ga('set', 'metric7', '4');ga('set', 'metric8', '17');
 			ga('send', 'pageview');
 		</script>
 		<!-- Begin comScore Tag -->
@@ -102,147 +102,10 @@
 		<div id="global_nav_over_wrap">
 			
 			<div id="global_nav_wrap">
-				<nav id="topnav" class="global-nav"><ul class="admin_top_nav"></ul><ul id="admin_nav" class="nav-list"><li id="notification_activity_nav_link_li"><a href="#" class="adminBar notifier" title="Activity Feed"><span class="fa fa-globe nav-icon"></span> Activity<span class="streamCt" id="notification_count_new">2</span></a><ul class="navgroup" id="notification-activity-nav" style="display:none;"><li class="divider"></li><li class="profile" style="overflow-y:scroll;overflow-x:hidden;max-height:400px;"><div id="notification_stream"><div class="chat_item">
-        								<div class="chat_container_them">
-											<a href="/users/index.php?gl_user=3486094&amp;gid=547766"><img src="https://www.gravatar.com/avatar/b1b210fcfb628733507c15d872ca0765?d=identicon&s=130" width="130"  ></a>
-										</div>
-										<div class="chat_bubble_them">
-											<div class="chat_message">Jyslia created a new raid <a href="http://Azureguardtakp.gamerlaunch.com//rapid_raid/raid_details.php?raid_pool=562569&raidId=1598643&gid=547766">Shei (non DKP)</a></div>
-											<span class="chat_name"><a href="/users/index.php?gl_user=3486094&amp;gid=547766">Jyslia</a></span>
-											<span class="chat_timesent moment-in-time" id="time_sent_94509134" data-moment-in-time="Fri, 13 Feb 2026 08:00:04 -0500" data-moment-type="relative"></span>
-										</div>																											
-										<div class="chat_clearer"></div>
-									</div><div class="chat_item">
-        								<div class="chat_container_them">
-											<a href="/users/index.php?gl_user=3486094&amp;gid=547766"><img src="https://www.gravatar.com/avatar/b1b210fcfb628733507c15d872ca0765?d=identicon&s=130" width="130"  ></a>
-										</div>
-										<div class="chat_bubble_them">
-											<div class="chat_message">Jyslia created a new raid <a href="http://Azureguardtakp.gamerlaunch.com//rapid_raid/raid_details.php?raid_pool=562569&raidId=1598642&gid=547766">Shei (non DKP)</a></div>
-											<span class="chat_name"><a href="/users/index.php?gl_user=3486094&amp;gid=547766">Jyslia</a></span>
-											<span class="chat_timesent moment-in-time" id="time_sent_94509132" data-moment-in-time="Fri, 13 Feb 2026 07:54:57 -0500" data-moment-type="relative"></span>
-										</div>																											
-										<div class="chat_clearer"></div>
-									</div><div class="chat_item">
-        								<div class="chat_container_them">
-											<a href="/users/index.php?gl_user=3486094&amp;gid=547766"><img src="https://www.gravatar.com/avatar/b1b210fcfb628733507c15d872ca0765?d=identicon&s=130" width="130"  ></a>
-										</div>
-										<div class="chat_bubble_them">
-											<div class="chat_message">Jyslia created a new raid <a href="http://Azureguardtakp.gamerlaunch.com//rapid_raid/raid_details.php?raid_pool=562569&raidId=1598641&gid=547766">Water Minis + Cursed/Emp</a></div>
-											<span class="chat_name"><a href="/users/index.php?gl_user=3486094&amp;gid=547766">Jyslia</a></span>
-											<span class="chat_timesent moment-in-time" id="time_sent_94508543" data-moment-in-time="Thu, 12 Feb 2026 07:37:08 -0500" data-moment-type="relative"></span>
-										</div>																											
-										<div class="chat_clearer"></div>
-									</div><div class="chat_item">
-        								<div class="chat_container_them">
-											<a href="/users/index.php?gl_user=3486094&amp;gid=547766"><img src="https://www.gravatar.com/avatar/b1b210fcfb628733507c15d872ca0765?d=identicon&s=130" width="130"  ></a>
-										</div>
-										<div class="chat_bubble_them">
-											<div class="chat_message">Jyslia created a new raid <a href="http://Azureguardtakp.gamerlaunch.com//rapid_raid/raid_details.php?raid_pool=562569&raidId=1598629&gid=547766">VT</a></div>
-											<span class="chat_name"><a href="/users/index.php?gl_user=3486094&amp;gid=547766">Jyslia</a></span>
-											<span class="chat_timesent moment-in-time" id="time_sent_94506826" data-moment-in-time="Mon, 09 Feb 2026 20:59:17 -0500" data-moment-type="relative"></span>
-										</div>																											
-										<div class="chat_clearer"></div>
-									</div><div class="chat_item">
-        								<div class="chat_container_them">
-											<a href="/users/index.php?gl_user=3486094&amp;gid=547766"><img src="https://www.gravatar.com/avatar/b1b210fcfb628733507c15d872ca0765?d=identicon&s=130" width="130"  ></a>
-										</div>
-										<div class="chat_bubble_them">
-											<div class="chat_message">Jyslia created a new raid <a href="http://Azureguardtakp.gamerlaunch.com//rapid_raid/raid_details.php?raid_pool=562569&raidId=1598621&gid=547766">Time Day 2</a></div>
-											<span class="chat_name"><a href="/users/index.php?gl_user=3486094&amp;gid=547766">Jyslia</a></span>
-											<span class="chat_timesent moment-in-time" id="time_sent_94504445" data-moment-in-time="Thu, 05 Feb 2026 18:40:17 -0500" data-moment-type="relative"></span>
-										</div>																											
-										<div class="chat_clearer"></div>
-									</div><div class="chat_item">
-        								<div class="chat_container_them">
-											<a href="/users/index.php?gl_user=3486094&amp;gid=547766"><img src="https://www.gravatar.com/avatar/b1b210fcfb628733507c15d872ca0765?d=identicon&s=130" width="130"  ></a>
-										</div>
-										<div class="chat_bubble_them">
-											<div class="chat_message">Jyslia created a new raid <a href="http://Azureguardtakp.gamerlaunch.com//rapid_raid/raid_details.php?raid_pool=562569&raidId=1598617&gid=547766">Time Day 1</a></div>
-											<span class="chat_name"><a href="/users/index.php?gl_user=3486094&amp;gid=547766">Jyslia</a></span>
-											<span class="chat_timesent moment-in-time" id="time_sent_94503219" data-moment-in-time="Tue, 03 Feb 2026 18:31:18 -0500" data-moment-type="relative"></span>
-										</div>																											
-										<div class="chat_clearer"></div>
-									</div><div class="chat_item">
-        								<div class="chat_container_them">
-											<a href="/users/index.php?gl_user=3486094&amp;gid=547766"><img src="https://www.gravatar.com/avatar/b1b210fcfb628733507c15d872ca0765?d=identicon&s=130" width="130"  ></a>
-										</div>
-										<div class="chat_bubble_them">
-											<div class="chat_message">Jyslia created a new raid <a href="http://Azureguardtakp.gamerlaunch.com//rapid_raid/raid_details.php?raid_pool=562569&raidId=1598605&gid=547766">Xegony</a></div>
-											<span class="chat_name"><a href="/users/index.php?gl_user=3486094&amp;gid=547766">Jyslia</a></span>
-											<span class="chat_timesent moment-in-time" id="time_sent_94502297" data-moment-in-time="Mon, 02 Feb 2026 09:32:51 -0500" data-moment-type="relative"></span>
-										</div>																											
-										<div class="chat_clearer"></div>
-									</div><div class="chat_item">
-        								<div class="chat_container_them">
-											<a href="/users/index.php?gl_user=3486094&amp;gid=547766"><img src="https://www.gravatar.com/avatar/b1b210fcfb628733507c15d872ca0765?d=identicon&s=130" width="130"  ></a>
-										</div>
-										<div class="chat_bubble_them">
-											<div class="chat_message">Jyslia created a new raid <a href="http://Azureguardtakp.gamerlaunch.com//rapid_raid/raid_details.php?raid_pool=562569&raidId=1598594&gid=547766">Vex Thal</a></div>
-											<span class="chat_name"><a href="/users/index.php?gl_user=3486094&amp;gid=547766">Jyslia</a></span>
-											<span class="chat_timesent moment-in-time" id="time_sent_94500553" data-moment-in-time="Thu, 29 Jan 2026 19:20:17 -0500" data-moment-type="relative"></span>
-										</div>																											
-										<div class="chat_clearer"></div>
-									</div><div class="chat_item">
-        								<div class="chat_container_them">
-											<a href="/users/index.php?gl_user=3486094&amp;gid=547766"><img src="https://www.gravatar.com/avatar/b1b210fcfb628733507c15d872ca0765?d=identicon&s=130" width="130"  ></a>
-										</div>
-										<div class="chat_bubble_them">
-											<div class="chat_message">Jyslia created a new raid <a href="http://Azureguardtakp.gamerlaunch.com//rapid_raid/raid_details.php?raid_pool=562569&raidId=1598589&gid=547766">PoEA + MAoE</a></div>
-											<span class="chat_name"><a href="/users/index.php?gl_user=3486094&amp;gid=547766">Jyslia</a></span>
-											<span class="chat_timesent moment-in-time" id="time_sent_94499241" data-moment-in-time="Tue, 27 Jan 2026 18:27:03 -0500" data-moment-type="relative"></span>
-										</div>																											
-										<div class="chat_clearer"></div>
-									</div><div class="chat_item">
-        								<div class="chat_container_them">
-											<a href="/users/index.php?gl_user=3486094&amp;gid=547766"><img src="https://www.gravatar.com/avatar/b1b210fcfb628733507c15d872ca0765?d=identicon&s=130" width="130"  ></a>
-										</div>
-										<div class="chat_bubble_them">
-											<div class="chat_message">Jyslia created a new raid <a href="http://Azureguardtakp.gamerlaunch.com//rapid_raid/raid_details.php?raid_pool=562569&raidId=1598583&gid=547766">Hohon/LMM + Tantisala, 2x earth rings</a></div>
-											<span class="chat_name"><a href="/users/index.php?gl_user=3486094&amp;gid=547766">Jyslia</a></span>
-											<span class="chat_timesent moment-in-time" id="time_sent_94498385" data-moment-in-time="Mon, 26 Jan 2026 10:29:01 -0500" data-moment-type="relative"></span>
-										</div>																											
-										<div class="chat_clearer"></div>
-									</div><div class="chat_item">
-        								<div class="chat_container_them">
-											<a href="/users/index.php?gl_user=3486094&amp;gid=547766"><img src="https://www.gravatar.com/avatar/b1b210fcfb628733507c15d872ca0765?d=identicon&s=130" width="130"  ></a>
-										</div>
-										<div class="chat_bubble_them">
-											<div class="chat_message">Jyslia created a new raid <a href="http://Azureguardtakp.gamerlaunch.com//rapid_raid/raid_details.php?raid_pool=562569&raidId=1598579&gid=547766">Time Day 2</a></div>
-											<span class="chat_name"><a href="/users/index.php?gl_user=3486094&amp;gid=547766">Jyslia</a></span>
-											<span class="chat_timesent moment-in-time" id="time_sent_94496138" data-moment-in-time="Thu, 22 Jan 2026 20:16:18 -0500" data-moment-type="relative"></span>
-										</div>																											
-										<div class="chat_clearer"></div>
-									</div><div class="chat_item">
-        								<div class="chat_container_them">
-											<a href="/users/index.php?gl_user=3486094&amp;gid=547766"><img src="https://www.gravatar.com/avatar/b1b210fcfb628733507c15d872ca0765?d=identicon&s=130" width="130"  ></a>
-										</div>
-										<div class="chat_bubble_them">
-											<div class="chat_message">Jyslia created a new raid <a href="http://Azureguardtakp.gamerlaunch.com//rapid_raid/raid_details.php?raid_pool=562569&raidId=1598572&gid=547766">Time Day 1</a></div>
-											<span class="chat_name"><a href="/users/index.php?gl_user=3486094&amp;gid=547766">Jyslia</a></span>
-											<span class="chat_timesent moment-in-time" id="time_sent_94494294" data-moment-in-time="Tue, 20 Jan 2026 18:40:27 -0500" data-moment-type="relative"></span>
-										</div>																											
-										<div class="chat_clearer"></div>
-									</div></div></li><li class="divider"></li>
-								<li class="profile" style="text-align:center;"><a href="/user/2759679?gid=547766">View Full Activity Feed</a></li></ul></li><li id="profile_nav_link_li">
-								<a class="adminBar notifier" href="#" id="profile_nav_img" title="Profile, PM and Account Info"><i class="fa fa-user nav-icon"></i> ammordius<span class="streamCt" id="pm_count_new" style="display:none;">0</span></a>
-	                            <ul class="navgroup" id="user_profile_nav" style="display:none;">
-	                                <li class="profile">
-                                		<a href="/user/2759679?gid=547766">
-										<img src="https://www.gravatar.com/avatar/c4f52c1d8eaf266052c5eb7c7d7a7431?d=identicon&s=30" width="30"  style="width:39px;height:39px;border-radius:50%;">
-												<div style="display:inline-block;">
-													<strong style="max-width:95%;overflow:hidden;display:inline-block;" class="profile-name">ammordius</strong><br>
-													<span class="mute">View your profile</span>
-												</div>
-												<div class="clear"></div>
-										</a>
-									</li>                                    					
-									<li>
-										<a href="/communication/communication.php?gid=547766" title="View PMs"><div class="dropdown-icon"><span class="fa fa-envelope"></span></div> View PMs  - 8 Unread</span></a>
-									</li>
-									<li class="divider"></li>
-									<li><span class="non_mobile"></span><a href="/users/characters/character_detail.php?char=22007284&amp;gid=547766&amp;gl_user=2759679&amp;action=logout&amp;destination=%2Fusers%2Fcharacters%2Fcharacter_detail.php%3Fchar%3D22007284%26gid%3D547766" title="Logout of site"><div class="dropdown-icon"><span class="fa fa-power-off"></span></div> Logout</a></li>
-								</ul>
-	                        </li></ul>
+				<nav id="topnav" class="global-nav"><ul class="admin_top_nav"></ul><ul id="admin_nav" class="nav-list"><li class="notifier">
+							<a href="/recruiting/login.php?destination=%2Fusers%2Fcharacters%2Fcharacter_detail.php%3Fchar%3D22007284%26gid%3D547766&amp;gid=547766" title="Login to this Site" class="adminBar">Login</a>
+						</li><li class="notifier" style="padding-top:8px;"><span class="adminBar">or</span></li>
+						<li><a href="/recruiting/app_application.php?destination=%2Fusers%2Fcharacters%2Fcharacter_detail.php%3Fchar%3D22007284%26gid%3D547766&amp;gid=547766" title="Register for an Account" class="adminBar">Register</a></li></ul>
 						<div style="clear:both;"></div>
 					</nav>
 				<div style="clear:both;"></div>
@@ -265,7 +128,7 @@
 						</ul>
 						<section class="top-bar-section">
 					    	<ul class="left">
-					      		<li class=""><a class="guildNavLink " href="/index.php?gid=547766" target="_self">Home</a></li><li class=""><a class="guildNavLink " href="/forums/index.php?gid=547766" target="_self">Forums</a></li><li class="has-dropdown"><a class="guildNavLink " href="/roster/?roster_mode=members&gid=547766" target="_self">Guild Roster</a><ul class="dropdown"><li class="" data-options="mobile_show_parent_link: false"><a href="/roster/?roster_mode=members&amp;gid=547766">Members</a> </li><li class="" data-options="mobile_show_parent_link: false"><a href="/roster/ingame.php?roster_mode=characters&guild_game_id=441145&amp;gid=547766">Characters</a> </li></ul></li><li class="has-dropdown"><a class="guildNavLink " href="/rapid_raid/raids.php?gid=547766" target="_self">Rapid Raid</a><ul class="dropdown"><li class="has-dropdown" data-options="mobile_show_parent_link: false"><a href="/rapid_raid/raids.php?gid=547766">DestinyDKP</a> <ul class="dropdown"><li class="" data-options="mobile_show_parent_link: false"><a href="/rapid_raid/my/?raid_pool=620005&amp;gid=547766">DestinyDKP Dashboard</a> </li><li class="has-dropdown" data-options="mobile_show_parent_link: false"><a href="/rapid_raid/members.php?raid_pool=620005&amp;gid=547766">Standings</a> <ul class="dropdown"><li class="" data-options="mobile_show_parent_link: false"><a href="/rapid_raid/leaderboard.php?raid_pool=620005&amp;gid=547766">Leaderboard</a> </li><li class="" data-options="mobile_show_parent_link: false"><a href="/rapid_raid/adjustments.php?raid_pool=620005&amp;gid=547766">Adjustments</a> </li><li class="" data-options="mobile_show_parent_link: false"><a href="/rapid_raid/imports/import_dkp.php?raid_pool=620005&amp;gid=547766">Imported DestinyDKP</a> </li><li class="" data-options="mobile_show_parent_link: false"><a href="/rapid_raid/members.php?raid_pool=620005&amp;gid=547766">Current DestinyDKP</a> </li></ul></li><li class="has-dropdown" data-options="mobile_show_parent_link: false"><a href="/rapid_raid/raids.php?raid_pool=620005&amp;gid=547766">Raids</a> <ul class="dropdown"><li class="" data-options="mobile_show_parent_link: false"><a href="/rapid_raid/raids.php?raid_pool=620005&amp;gid=547766">Upcoming</a> </li><li class="" data-options="mobile_show_parent_link: false"><a href="/rapid_raid/raids.php?mode=past&raid_pool=620005&amp;gid=547766">Past</a> </li><li class="" data-options="mobile_show_parent_link: false"><a href="/rapid_raid/add_raid.php?raid_pool=620005&amp;gid=547766">Create New</a> </li></ul></li><li class="has-dropdown" data-options="mobile_show_parent_link: false"><a href="/rapid_raid/event_list.php?raid_pool=620005&amp;gid=547766">Events</a> <ul class="dropdown"><li class="" data-options="mobile_show_parent_link: false"><a href="/rapid_raid/event_list.php?raid_pool=620005&amp;gid=547766">Recent</a> </li></ul></li><li class="has-dropdown" data-options="mobile_show_parent_link: false"><a href="/rapid_raid/items.php?raid_pool=620005&amp;gid=547766">Items</a> <ul class="dropdown"><li class="" data-options="mobile_show_parent_link: false"><a href="/rapid_raid/items.php?raid_pool=620005&amp;gid=547766">Recent</a> </li><li class="" data-options="mobile_show_parent_link: false"><a href="/rapid_raid/item_prices.php?raid_pool=620005&amp;gid=547766">Prices</a> </li></ul></li><li class="has-dropdown" data-options="mobile_show_parent_link: false"><a href="/rapid_raid/item_report.php?raid_pool=620005&amp;gid=547766">Reports</a> <ul class="dropdown"><li class="" data-options="mobile_show_parent_link: false"><a href="/rapid_raid/reports/attendance_detail.php?raid_pool=620005&amp;gid=547766">Global Attendance</a> </li><li class="" data-options="mobile_show_parent_link: false"><a href="/rapid_raid/reports/events.php?raid_pool=620005&amp;gid=547766">Event Attendance</a> </li><li class="" data-options="mobile_show_parent_link: false"><a href="/rapid_raid/gear_report.php?raid_pool=620005&amp;gid=547766">Item Ownership</a> </li><li class="" data-options="mobile_show_parent_link: false"><a href="/rapid_raid/event_report.php?raid_pool=620005&amp;gid=547766">Item Event Report</a> </li></ul></li></ul></li><li class="has-dropdown" data-options="mobile_show_parent_link: false"><a href="/rapid_raid/raids.php?gid=547766">NAGD Pool commenced 1 Jan 2018</a> <ul class="dropdown"><li class="" data-options="mobile_show_parent_link: false"><a href="/rapid_raid/my/?raid_pool=562569&amp;gid=547766">NAGD Pool commenced 1 Jan 2018 Dashboard</a> </li><li class="has-dropdown" data-options="mobile_show_parent_link: false"><a href="/rapid_raid/members.php?raid_pool=562569&amp;gid=547766">Standings</a> <ul class="dropdown"><li class="" data-options="mobile_show_parent_link: false"><a href="/rapid_raid/leaderboard.php?raid_pool=562569&amp;gid=547766">Leaderboard</a> </li><li class="" data-options="mobile_show_parent_link: false"><a href="/rapid_raid/adjustments.php?raid_pool=562569&amp;gid=547766">Adjustments</a> </li><li class="" data-options="mobile_show_parent_link: false"><a href="/rapid_raid/imports/import_dkp.php?raid_pool=562569&amp;gid=547766">Imported DKP</a> </li><li class="" data-options="mobile_show_parent_link: false"><a href="/rapid_raid/members.php?raid_pool=562569&amp;gid=547766">Current DKP</a> </li></ul></li><li class="has-dropdown" data-options="mobile_show_parent_link: false"><a href="/rapid_raid/raids.php?raid_pool=562569&amp;gid=547766">Raids</a> <ul class="dropdown"><li class="" data-options="mobile_show_parent_link: false"><a href="/rapid_raid/my/signups.php?raid_pool=562569&amp;gid=547766">Your Signups</a> </li><li class="" data-options="mobile_show_parent_link: false"><a href="/rapid_raid/raids.php?raid_pool=562569&amp;gid=547766">Upcoming</a> </li><li class="" data-options="mobile_show_parent_link: false"><a href="/rapid_raid/raids.php?mode=past&raid_pool=562569&amp;gid=547766">Past</a> </li><li class="" data-options="mobile_show_parent_link: false"><a href="/rapid_raid/add_raid.php?raid_pool=562569&amp;gid=547766">Create New</a> </li></ul></li><li class="has-dropdown" data-options="mobile_show_parent_link: false"><a href="/rapid_raid/event_list.php?raid_pool=562569&amp;gid=547766">Events</a> <ul class="dropdown"><li class="" data-options="mobile_show_parent_link: false"><a href="/rapid_raid/event_list.php?raid_pool=562569&amp;gid=547766">Recent</a> </li></ul></li><li class="has-dropdown" data-options="mobile_show_parent_link: false"><a href="/rapid_raid/items.php?raid_pool=562569&amp;gid=547766">Items</a> <ul class="dropdown"><li class="" data-options="mobile_show_parent_link: false"><a href="/rapid_raid/items.php?raid_pool=562569&amp;gid=547766">Recent</a> </li><li class="" data-options="mobile_show_parent_link: false"><a href="/rapid_raid/item_prices.php?raid_pool=562569&amp;gid=547766">Prices</a> </li></ul></li><li class="has-dropdown" data-options="mobile_show_parent_link: false"><a href="/rapid_raid/item_report.php?raid_pool=562569&amp;gid=547766">Reports</a> <ul class="dropdown"><li class="" data-options="mobile_show_parent_link: false"><a href="/rapid_raid/reports/attendance_detail.php?raid_pool=562569&amp;gid=547766">Global Attendance</a> </li><li class="" data-options="mobile_show_parent_link: false"><a href="/rapid_raid/reports/events.php?raid_pool=562569&amp;gid=547766">Event Attendance</a> </li><li class="" data-options="mobile_show_parent_link: false"><a href="/rapid_raid/gear_report.php?raid_pool=562569&amp;gid=547766">Item Ownership</a> </li><li class="" data-options="mobile_show_parent_link: false"><a href="/rapid_raid/event_report.php?raid_pool=562569&amp;gid=547766">Item Event Report</a> </li><li class="" data-options="mobile_show_parent_link: false"><a href="/rapid_raid/analytics/signups.php?raid_pool=562569&amp;gid=547766">Signup Report</a> </li></ul></li></ul></li><li class="" data-options="mobile_show_parent_link: false"><a href="/rapid_raid/help/index.php?ts=9:1&amp;gid=547766">Help</a> </li></ul></li><li class=""><a class="guildNavLink " href="/calendar/calendar.php?gid=547766" target="_self">Calendar</a></li><li class="has-dropdown"><a class="guildNavLink " href="/gallery/gallery.php?gid=547766" target="_self">Gallery</a><ul class="dropdown"><li class="" data-options="mobile_show_parent_link: false"><a href="/gallery/gallery.php?gid=547766">Gallery</a> </li><li class="" data-options="mobile_show_parent_link: false"><a href="/gallery/library.php?gid=547766">File Library</a> </li></ul></li>
+					      		<li class=""><a class="guildNavLink " href="/index.php?gid=547766" target="_self">Home</a></li><li class=""><a class="guildNavLink " href="/forums/index.php?gid=547766" target="_self">Forums</a></li>
 					    	</ul>
 					    	<div style="clear:both;"></div>
 					  </section>
@@ -337,7 +200,7 @@
 								</div>
 								<div class="column-auto-wall column-auto-desk column-auto-lap column-auto-hand">
 									<div style="padding-left:10px;">
-										<h2 style="line-height:2rem;">Grimdahl</h2><div class="interactions" style="padding-top:5px;"><a href="/communication/communication.php?mode=compose&messageTo=Grimdahl&amp;gid=547766" class="button standard small"><i class="fa fa-envelope fa-fw"></i> Send PM</a></div>	</div>
+										<h2 style="line-height:2rem;">Grimdahl</h2>	</div>
 		             			</div>
 							</div>
 						</div>
@@ -393,7 +256,7 @@
                                             <li><a class="" href ="/user/1365198/esports/teams?gid=547766">eSports</a></li>
 											<li><a class="" href="/users/blog/1365198?gl_user=1365198&amp;gid=547766">Blog</a></li>
 											<li><a class="" href="/user/1365198/achievements/?gid=547766">Awards</a></li>	</ul>
-									</div><div class="interactions"><a href="/communication/communication.php?mode=compose&messageTo=Grimdahl&amp;gid=547766" class="button standard small"><i class="fa fa-envelope fa-fw"></i> Send PM</a></div><div id="socialpanel">
+									</div><div id="socialpanel">
 										<ul id="social_nav"></ul>				
 									</div>
 								</nav>
@@ -513,7 +376,7 @@
 							</div>
 						</div>
 						<div class="row">
-							<div class="column-6-wall column-6-desk column-6-lap column-12-hand micro">2:19 PM GMT -5 You: 7:19 PM GMT 0</div>
+							<div class="column-6-wall column-6-desk column-6-lap column-12-hand micro">5:16 PM GMT -5 You: 5:16 PM GMT -5</div>
 						</div>
 					</div>
 				</div>
@@ -740,22 +603,7 @@
                         _gaq.push(['_trackEvent', 'Flexbox', 'Not Available', 'Top',true]);
                       }
                     }(document.body));
-                    </script><script type="text/javascript">
-					var DISPLAY_ALL_TUTORIALS = 0;
-					var CURRENT_TUT_BITMASK = 1;
-					var TUT_BITMASK = {
-						SITEINTRO: 1, // 2^0
-						WIDGETS: 2, // 2^1
-						STYLE: 4, // 2^2
-						STYLE2: 8, // 2^3
-						//OTHER2: 16 // 2^4
-					};
-
-					if (!(CURRENT_TUT_BITMASK & TUT_BITMASK["SITEINTRO"]) || DISPLAY_ALL_TUTORIALS == 1)
-					{
-						startSiteIntro();
-					}
-				</script>		
+                    </script>		
 		<!-- Quantcast Tag -->
 		<script type="text/javascript">
 			<!-- Quantcast Tag -->            
@@ -778,5 +626,5 @@
         </script>   
         <noscript> <div style="display:none;"> <img src="//pixel.quantserve.com/pixel?a.1=p-qEwZYqw48ca-M&a.2=p-08C2tN1gz3kHY" border="0" height="1" width="1" alt="Quantcast"/> </div> </noscript>
         <!-- End Quantcast tag -->
-        <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'9cd6ad81be3ba468',t:'MTc3MTAxMDM3MA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+        <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'9d09214ffd558f48',t:'MTc3MTUzOTQwMg=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>

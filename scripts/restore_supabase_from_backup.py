@@ -226,8 +226,20 @@ def main() -> int:
     else:
         print("Load-only mode: skipping clear.", flush=True)
 
-    print("Enabling fast load (DKP triggers deferred until end)...", flush=True)
-    client.rpc("begin_restore_load").execute()
+    fast_load_enabled = False
+    try:
+        print("Enabling fast load (DKP triggers deferred until end)...", flush=True)
+        client.rpc("begin_restore_load").execute()
+        fast_load_enabled = True
+    except Exception as e:
+        code = ""
+        if getattr(e, "args", None) and isinstance(e.args[0], dict):
+            code = e.args[0].get("code", "")
+        msg = str(e).lower()
+        if code == "PGRST202" or "could not find the function" in msg or "begin_restore_load" in msg:
+            print("  begin_restore_load() not in schema (run latest docs/supabase-schema.sql); load will run with triggers on.", flush=True)
+        else:
+            raise
 
     total = 0
     try:
@@ -249,8 +261,16 @@ def main() -> int:
                 print(f"{table}: error - {e}", file=sys.stderr)
                 raise
     finally:
-        print("Refreshing DKP summary and raid totals...", flush=True)
-        client.rpc("end_restore_load").execute()
+        if fast_load_enabled:
+            print("Refreshing DKP summary and raid totals...", flush=True)
+            client.rpc("end_restore_load").execute()
+        else:
+            print("Refreshing DKP summary and raid totals (no fast-load RPC)...", flush=True)
+            try:
+                client.rpc("refresh_dkp_summary").execute()
+                client.rpc("refresh_all_raid_attendance_totals").execute()
+            except Exception as e:
+                print(f"  Refresh warning: {e}", file=sys.stderr)
 
     print(f"Restore done. Total rows: {total}")
     return 0

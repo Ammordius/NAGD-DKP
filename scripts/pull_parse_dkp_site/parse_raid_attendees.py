@@ -13,37 +13,80 @@ import argparse
 import re
 import sys
 from pathlib import Path
-from typing import List, Tuple
+from typing import List, Tuple, Union
 
 import pandas as pd
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, Tag
+
+
+def _attendees_from_table(table_or_html: Union[Tag, str]) -> List[Tuple[str, str]]:
+    """
+    Extract (char_id, character_name) from a section table.
+    Accepts either a BeautifulSoup Tag (outer table element) or HTML string.
+    Uses the outer table so nested tables (one per attendee) are all included.
+    """
+    attendees: List[Tuple[str, str]] = []
+    if isinstance(table_or_html, Tag):
+        root = table_or_html
+    else:
+        table_soup = BeautifulSoup(table_or_html, "lxml")
+        root = table_soup.find("table") or table_soup.find("tbody") or table_soup
+    if not root:
+        return attendees
+    link_re = re.compile(r"character_dkp\.php.*?char=(\d*)", re.IGNORECASE)
+    for td in root.find_all("td"):
+        # Prefer character_dkp link if present
+        char_a = td.find("a", href=link_re)
+        if char_a:
+            href = char_a.get("href", "")
+            m = re.search(r"char=(\d*)", href.replace("&amp;", "&"))
+            cid = (m.group(1) if m else "").strip()
+            name = (char_a.get_text() or "").strip()
+            if name:
+                attendees.append((cid, name))
+            continue
+        # No link: treat cell text as name (inactive raiders often shown as plain text)
+        raw = (td.get_text() or "").strip()
+        # Drop optional leading drop-cap letter (e.g. "<b>A</b> Barlu" -> "Barlu")
+        name = re.sub(r"^[A-Za-z]\s+", "", raw).strip() or raw
+        if name and len(name) > 1:
+            attendees.append(("", name))
+    return attendees
 
 
 def parse_attendees_html(html: str, raid_id: str) -> List[Tuple[str, List[Tuple[str, str]]]]:
     """
     Parse one raid_details_attendees.php HTML.
     Returns list of (event_name, [(char_id, character_name), ...]) in document order.
+    Collects from ALL tables inside each section div (GamerLaunch often nests one table per attendee).
     """
     soup = BeautifulSoup(html, "lxml")
     content = soup.find("div", id="contentItem")
     if not content:
         return []
-    text = str(content)
-    sections = []
-    # Pattern: <b>Event Name  - N Attendees</b> then <div ... class='data1'><table>...
-    part_re = re.compile(r"<b>([^<]+?)\s*-\s*\d+\s*Attendees</b>\s*<div[^>]*class=['\"]data1['\"][^>]*><table[^>]*>(.*?)</table>\s*</div>", re.DOTALL | re.IGNORECASE)
-    for m in part_re.finditer(text):
+    sections: List[Tuple[str, List[Tuple[str, str]]]] = []
+    event_heading_re = re.compile(r"^\s*(.+?)\s*-\s*\d+\s*Attendees\s*$", re.IGNORECASE)
+    for b in content.find_all("b"):
+        text = (b.get_text() or "").strip()
+        m = event_heading_re.match(text)
+        if not m:
+            continue
         event_name = m.group(1).strip()
-        table_html = m.group(2)
-        # Extract character_dkp links: char= can be empty (char=&amp;), name is link text
-        link_re = re.compile(r"character_dkp\.php\?(?:[^>]*&)?char=(\d*)(?:&|&amp;|[^>]*)[^>]*>([^<]*)</a>", re.IGNORECASE)
-        attendees = []
-        for lm in link_re.finditer(table_html):
-            cid = (lm.group(1) or "").strip()
-            name = (lm.group(2) or "").strip()
-            if name:
-                attendees.append((cid, name))
-        sections.append((event_name, attendees))
+        next_div = b.find_next("div", class_=re.compile(r"\bdata1\b"))
+        if not next_div:
+            continue
+        # Collect from every table in this div (nested tables = one attendee per inner table).
+        all_attendees: List[Tuple[str, str]] = []
+        seen: set[Tuple[str, str]] = set()
+        for table in next_div.find_all("table"):
+            for cid, cname in _attendees_from_table(table):
+                key = (cid or "", (cname or "").strip())
+                if key in seen:
+                    continue
+                seen.add(key)
+                all_attendees.append((cid, cname))
+        if all_attendees:
+            sections.append((event_name, all_attendees))
     return sections
 
 
@@ -94,6 +137,10 @@ def main() -> None:
             name_to_cid[(rid, name)] = cid
             if name_norm != name:
                 name_to_cid[(rid, name_norm)] = cid
+            # Inactive raiders can be listed as "((*) Name" (no link on site)
+            name_norm2 = re.sub(r"^\(\(\*\)\s*", "", name).strip()
+            if name_norm2 != name:
+                name_to_cid[(rid, name_norm2)] = cid
 
     out_rows = []
     def _raid_key(p: Path) -> int:
@@ -119,7 +166,12 @@ def main() -> None:
             event_id, _ = raid_event_list[i]
             for char_id, character_name in attendees:
                 if not char_id and character_name and name_to_cid:
-                    char_id = name_to_cid.get((raid_id, character_name)) or name_to_cid.get((raid_id, character_name.strip()))
+                    norm = re.sub(r"^\(\(\*\)\s*", "", character_name).strip()
+                    char_id = (
+                        name_to_cid.get((raid_id, character_name))
+                        or name_to_cid.get((raid_id, character_name.strip()))
+                        or name_to_cid.get((raid_id, norm))
+                    )
                 out_rows.append({
                     "raid_id": raid_id,
                     "event_id": event_id,

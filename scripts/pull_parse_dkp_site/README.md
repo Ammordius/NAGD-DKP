@@ -18,3 +18,26 @@ python scripts/pull_parse_dkp_site/extract_structured_data.py
 python scripts/pull_parse_dkp_site/pull_raids.py
 # etc.
 ```
+
+## Raids from 2026-02-24 onward (no full scrape)
+
+Data is considered accurate **as of 2026-02-24**. Going forward only pull raids on or after that date.
+
+**Local run (recommended)** — use the Makefile from repo root. Cookie stays in `cookies.txt` (gitignored); never use GitHub secrets for login.
+
+```bash
+# One-time: pull only 2/25 and 2/27 raids, then upload
+make pull-raids-ids RAID_IDS=1598692,1598705
+make pull-attendees
+make upload-raids
+
+# Or pull all raids since 2/24 (first 5 list pages), then upload
+make pull-raids
+make pull-attendees
+make upload-raids
+
+# Full sync in one go
+make sync-raids
+```
+
+Prereqs: create `cookies.txt` with your GamerLaunch Cookie header (one line); add `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` to `.env` or `web/.env`. See `Makefile` in repo root for all targets.

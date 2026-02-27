@@ -18,9 +18,15 @@ from __future__ import annotations
 
 import os
 import sys
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent.parent  # repo root
+
+# Batch size for delete-by-id to avoid statement timeout on large tables
+DELETE_BATCH_SIZE = 200
+DELETE_RETRIES = 3
+DELETE_RETRY_DELAY_SEC = 2
 
 
 def _load_env(path: Path) -> None:
@@ -43,6 +49,50 @@ def _load_env(path: Path) -> None:
     ):
         if not os.environ.get(plain) and os.environ.get(vite):
             os.environ[plain] = os.environ[vite]
+
+
+def _delete_raid_from_table(client, table: str, raid_id: str) -> int | None:
+    """Delete all rows for raid_id from table. Uses batched delete by id to avoid timeout. Returns total deleted or None on failure."""
+    total = 0
+    try:
+        # Try batched delete by primary key "id" (common in Supabase)
+        while True:
+            r = client.table(table).select("id").eq("raid_id", raid_id).limit(DELETE_BATCH_SIZE).execute()
+            rows = (r.data or []) if hasattr(r, "data") else []
+            if not rows:
+                return total
+            ids = [row["id"] for row in rows if row.get("id") is not None]
+            if not ids:
+                return total
+            client.table(table).delete().in_("id", ids).execute()
+            total += len(ids)
+    except Exception:
+        # Fallback: single delete with retries (may timeout on large tables)
+        for attempt in range(DELETE_RETRIES):
+            try:
+                client.table(table).delete().eq("raid_id", raid_id).execute()
+                return total  # count unknown; assume success
+            except Exception as e:
+                if attempt < DELETE_RETRIES - 1:
+                    time.sleep(DELETE_RETRY_DELAY_SEC)
+                else:
+                    print(f"Warning: delete {table}: {e}", file=sys.stderr)
+                    return None
+    return total
+
+
+def _delete_raid_via_rpc(client, raid_id: str) -> bool:
+    """Delete all data for one raid via RPC (server-side). Returns True if RPC exists and succeeded."""
+    try:
+        client.rpc("delete_raid_for_reupload", {"p_raid_id": raid_id}).execute()
+        return True
+    except Exception as e:
+        # RPC might not exist yet (function not deployed)
+        err = str(e).lower()
+        if "function" in err and "does not exist" in err:
+            return False
+        print(f"Warning: delete_raid_for_reupload RPC failed: {e}", file=sys.stderr)
+        return False
 
 
 def main() -> int:
@@ -76,8 +126,34 @@ def main() -> int:
     attendees = parsed["attendees"]
 
     print(f"Parsed raid {raid_id}: {len(events)} events, {len(loot)} loot rows, {len(attendees)} attendees")
+    if loot:
+        print("Loot rows to upload:")
+        for r in loot:
+            print(
+                f"  event_id={r['event_id']} "
+                f"item={r.get('item_name')!r} "
+                f"char_id={r.get('char_id')!r} "
+                f"character_name={r.get('character_name')!r} "
+                f"cost={r.get('cost')!r}"
+            )
 
+    # Dry run: show per-event attendees and loot, but do not touch Supabase.
     if not args.apply:
+        attendees_file = raids_dir / f"raid_{raid_id}_attendees.html"
+        if attendees_file.exists() and events:
+            try:
+                from parse_raid_attendees import parse_attendees_html
+
+                att_html = attendees_file.read_text(encoding="utf-8")
+                sections = parse_attendees_html(att_html, raid_id)
+                event_ids = [e["event_id"] for e in events]
+                print("Per-event attendees from HTML (dry run, no account dedupe):")
+                for i, (event_name, att_list) in enumerate(sections):
+                    eid = event_ids[i] if i < len(event_ids) else "?"
+                    names = [name for _, name in att_list]
+                    print(f"  #{i+1} event_id={eid} name={event_name!r}: {len(names)} attendees -> {names}")
+            except Exception as e:
+                print(f"Warning: could not parse attendees HTML for dry run: {e}", file=sys.stderr)
         print("Dry run. Re-run with --apply to upload to Supabase.")
         return 0
 
@@ -98,14 +174,18 @@ def main() -> int:
 
     client = create_client(url, key)
 
-    # Delete existing data for this raid so we can re-import cleanly
-    for table in ("raid_loot", "raid_attendance", "raid_event_attendance", "raid_events"):
-        try:
-            client.table(table).delete().eq("raid_id", raid_id).execute()
-        except Exception as e:
-            print(f"Warning: delete {table}: {e}", file=sys.stderr)
+    # Delete existing data for this raid: try RPC first (one server-side call), else batched table deletes via API.
+    if _delete_raid_via_rpc(client, raid_id):
+        print("Deleted raid data via delete_raid_for_reupload RPC")
+    else:
+        for table in ("raid_event_attendance", "raid_loot", "raid_attendance", "raid_events"):
+            deleted = _delete_raid_from_table(client, table, raid_id)
+            if deleted is not None:
+                print(f"Deleted {deleted} row(s) from {table}")
+            elif table == "raid_event_attendance":
+                print("Tip: deploy docs/delete_raid_for_reupload_rpc.sql in Supabase SQL Editor to delete via API and avoid timeouts.", file=sys.stderr)
 
-    # Insert raid_events (columns: raid_id, event_id, event_order, event_name, dkp_value, attendee_count, event_time)
+    # Insert raid_events
     if events:
         rows = [
             {
@@ -178,7 +258,13 @@ def main() -> int:
         att_html = attendees_file.read_text(encoding="utf-8")
         sections = parse_attendees_html(att_html, raid_id)
         event_ids = [e["event_id"] for e in events]
+        print("Per-event attendees from HTML (raw, before dedupe):")
+        for i, (event_name, att_list) in enumerate(sections):
+            eid = event_ids[i] if i < len(event_ids) else "?"
+            names = [name for _, name in att_list]
+            print(f"  #{i+1} event_id={eid} name={event_name!r}: {len(names)} attendees -> {names}")
         rea_rows = []
+        event_debug: dict[str, list[tuple[str | None, str | None]]] = {}
         for i, (_, att_list) in enumerate(sections):
             if i >= len(event_ids):
                 break
@@ -188,17 +274,34 @@ def main() -> int:
                 cid = (cid or "").strip()
                 cname = (cname or "").strip() or None
                 account_id = char_to_account.get(cid) if cid else None
-                account_key = str(account_id) if account_id else (cid or "")
+                # Dedupe priority: account_id (when known) > char_id > character_name.
+                if account_id:
+                    account_key = f"acct:{account_id}"
+                elif cid:
+                    account_key = f"char:{cid}"
+                elif cname:
+                    account_key = f"name:{cname.lower()}"
+                else:
+                    account_key = ""
                 if account_key in seen_account_key:
                     continue
                 seen_account_key.add(account_key)
-                rea_rows.append({
+                row = {
                     "raid_id": raid_id,
                     "event_id": event_id,
                     "char_id": cid or None,
                     "character_name": cname,
-                })
+                }
+                rea_rows.append(row)
+                event_debug.setdefault(event_id, []).append((row["char_id"], row["character_name"]))
+        if event_debug:
+            print("Per-event attendees after account dedupe (rows to insert):")
+            for eid in event_ids:
+                rows = event_debug.get(eid, [])
+                names = [name for _, name in rows]
+                print(f"  event_id={eid}: {len(rows)} rows -> {names}")
         if rea_rows:
+            # Plain insert; we delete existing rows for this raid before re-inserting.
             client.table("raid_event_attendance").insert(rea_rows).execute()
             print(f"Inserted {len(rea_rows)} raid_event_attendance (one per account per tic)")
 

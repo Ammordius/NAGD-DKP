@@ -137,6 +137,8 @@ def build_raid_row(
         detail_file = raids_dir / f"raid_{raid_id}.html"
         if detail_file.exists():
             try:
+                if str(SCRIPT_DIR) not in sys.path:
+                    sys.path.insert(0, str(SCRIPT_DIR))
                 from pull_raids import parse_raid_detail_meta
                 meta = parse_raid_detail_meta(detail_file.read_text(encoding="utf-8"))
                 raid_name = (meta.get("raid_name") or "").strip()
@@ -214,6 +216,7 @@ def main() -> int:
     )
     ap.add_argument("--raids-dir", type=Path, default=ROOT / "raids", help="Directory with raid_*.html files")
     ap.add_argument("--index", type=Path, default=ROOT / "raids_index.csv", help="raids_index.csv for metadata")
+    ap.add_argument("--raid-ids", type=str, default="", help="Comma-separated raid IDs to upload (default: all discovered)")
     ap.add_argument("--dry-run", action="store_true", help="Only list what would be uploaded")
     ap.add_argument("--apply", action="store_true", help="Insert missing raids into Supabase")
     args = ap.parse_args()
@@ -224,6 +227,12 @@ def main() -> int:
         return 1
 
     saved_ids = discover_saved_raid_ids(raids_dir)
+    if args.raid_ids:
+        only_ids = {x.strip() for x in args.raid_ids.split(",") if x.strip()}
+        saved_ids = saved_ids & only_ids
+        if not saved_ids:
+            print(f"No saved raid files for --raid-ids {args.raid_ids}", file=sys.stderr)
+            return 0
     if not saved_ids:
         print("No saved raid files found in", raids_dir)
         return 0

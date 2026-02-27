@@ -199,20 +199,28 @@ def parse_raid_html(html: str, raid_id: str) -> dict:
                     })
 
     # Raid-level attendees: <a name='attendees'> then table with links to character_dkp.php?char=
+    # Also include inactive raiders shown as plain text (no link), e.g. "((*) Name"
     attendees_anchor = soup.find("a", attrs={"name": "attendees"})
     if attendees_anchor:
         container = attendees_anchor.find_parent("div", class_="contentItem")
         if container:
             table = container.find("table")
             if table:
-                for a in table.find_all("a", href=re.compile(r"character_dkp\.php.*char=")):
-                    name = a.get_text(strip=True)
-                    if not name:
-                        continue
-                    href = a.get("href", "")
-                    m = re.search(r"char=(\d+)", href.replace("&amp;", "&"))
-                    cid = m.group(1) if m else ""
-                    attendees.append({"raid_id": raid_id, "char_id": cid, "character_name": name})
+                link_re = re.compile(r"character_dkp\.php.*char=", re.IGNORECASE)
+                for td in table.find_all("td"):
+                    a = td.find("a", href=link_re)
+                    if a:
+                        name = a.get_text(strip=True)
+                        if not name:
+                            continue
+                        href = a.get("href", "")
+                        m = re.search(r"char=(\d*)", href.replace("&amp;", "&"))
+                        cid = (m.group(1) if m else "").strip()
+                        attendees.append({"raid_id": raid_id, "char_id": cid, "character_name": name})
+                    else:
+                        raw = td.get_text(strip=True)
+                        if raw and len(raw) > 1:
+                            attendees.append({"raid_id": raid_id, "char_id": "", "character_name": raw})
 
     return {"events": events, "loot": loot, "attendees": attendees}
 
@@ -221,7 +229,8 @@ def build_raid_parsed(raids_dir: Path, out_events: Path, out_loot: Path, out_att
     all_events: List[dict] = []
     all_loot: List[dict] = []
     all_attendees: List[dict] = []
-    html_files = sorted(raids_dir.glob("raid_*.html"), key=lambda p: int(p.stem.replace("raid_", "") or "0"))
+    html_files = [p for p in raids_dir.glob("raid_*.html") if "_attendees" not in p.stem]
+    html_files.sort(key=lambda p: int(p.stem.replace("raid_", "") or "0"))
     if limit:
         html_files = html_files[:limit]
     for i, path in enumerate(html_files):
