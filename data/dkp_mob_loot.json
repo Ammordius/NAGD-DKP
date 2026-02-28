@@ -140,7 +140,22 @@
     "mob": "A_Deadly_Warboar",
     "mobs": [
       "A_Deadly_Warboar",
-      "P3"
+      "A_Ferocious_Warboar",
+      "A_Needletusk_Warboar",
+      "Champion_of_Torment",
+      "Dark_Knight_of_Terris",
+      "Deathbringer_Blackheart",
+      "Deathbringer_Rianit",
+      "Deathbringer_Skullsmash",
+      "Dersool_Fal`Giersnaol",
+      "Dreamwarp",
+      "Herlsoakian",
+      "Kraksmaal_Fir`Dethsin",
+      "P3",
+      "Sinrunal_Gorgedreal",
+      "Undead_Squad_Leader",
+      "Xeroan_Xi`Geruonask",
+      "Xerskel_Gerodnsal"
     ],
     "zone": "Plane of Time",
     "loot": [
@@ -169,7 +184,7 @@
         ]
       },
       {
-        "item_id": null,
+        "item_id": 32605,
         "name": "Ossein of Limitless Time",
         "sources": [
           "raid_classification"
@@ -181,13 +196,6 @@
         "sources": [
           "raid_classification",
           "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": null,
-        "name": "Time Phased Quintessence",
-        "sources": [
-          "raid_classification"
         ]
       },
       {
