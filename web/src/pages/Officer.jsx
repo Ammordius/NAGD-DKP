@@ -3,6 +3,7 @@ import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { getDkpMobLoot } from '../lib/staticData'
 import { logOfficerAudit } from '../lib/officerAudit'
+import { formatAccountCharacter, formatAccountCharacters } from '../lib/formatAccountCharacter'
 
 // --- Parsing ---
 
@@ -1404,7 +1405,7 @@ export default function Officer({ isOfficer }) {
                               ).flatMap((group) =>
                                 group.names.map((name, i) => {
                                   const charId = group.charIds[i]
-                                  const label = group.accountDisplayName ? `${group.accountDisplayName} (${name})` : name
+                                  const label = formatAccountCharacter(group.accountDisplayName, name)
                                   const to = group.accountId ? `/accounts/${group.accountId}` : `/characters/${encodeURIComponent(name || '')}`
                                   return (
                                     <span key={charId ?? name} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', marginRight: '0.5rem' }}>
@@ -1472,9 +1473,7 @@ export default function Officer({ isOfficer }) {
             <h3 style={{ marginTop: '1.25rem' }}>Attendees</h3>
             <div className="attendee-list">
               {attendance.length > 0 ? groupAttendeesByAccount(attendance, getAccountId, getAccountDisplayName).map((group) => {
-                const label = group.accountDisplayName
-                  ? `${group.accountDisplayName} (${group.names.join(', ')})`
-                  : group.names[0] || '—'
+                const label = formatAccountCharacters(group.accountDisplayName, group.names)
                 const to = group.accountId
                   ? `/accounts/${group.accountId}`
                   : `/characters/${encodeURIComponent(group.names[0] || '')}`

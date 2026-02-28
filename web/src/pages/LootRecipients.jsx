@@ -7,6 +7,7 @@ import AssignedLootDisclaimer from '../components/AssignedLootDisclaimer'
 import ItemLink from '../components/ItemLink'
 import { getDkpMobLoot, getRaidItemSources } from '../lib/staticData'
 import { useDkpData } from '../lib/dkpLeaderboard'
+import { formatAccountCharacter } from '../lib/formatAccountCharacter'
 
 function buildItemIdMap(mobLoot) {
   const map = {}
@@ -364,7 +365,14 @@ export default function LootRecipients() {
                   <tr key={r.character_key}>
                     <td>
                       {accountTo ? (
-                        <><Link to={accountTo}>{r.account_display_name || r.account_id}</Link> (<Link to={characterTo}>{r.character_name}</Link>)</>
+                        (() => {
+                          const label = formatAccountCharacter(r.account_display_name || r.account_id, r.character_name)
+                          const same = (r.account_display_name || r.account_id || '').trim() === (r.character_name || '').trim()
+                          if (same) {
+                            return <Link to={accountTo}>{label}</Link>
+                          }
+                          return <><Link to={accountTo}>{r.account_display_name || r.account_id}</Link> (<Link to={characterTo}>{r.character_name}</Link>)</>
+                        })()
                       ) : (
                         <Link to={characterTo}>{r.character_name}</Link>
                       )}

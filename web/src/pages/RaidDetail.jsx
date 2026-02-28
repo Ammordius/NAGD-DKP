@@ -7,6 +7,7 @@ import { logOfficerAudit } from '../lib/officerAudit'
 import AssignedLootDisclaimer from '../components/AssignedLootDisclaimer'
 import ItemLink from '../components/ItemLink'
 import { getDkpMobLoot } from '../lib/staticData'
+import { formatAccountCharacter, formatAccountCharacters } from '../lib/formatAccountCharacter'
 
 /** SWR deduplication: 60s so revisiting the same raid or multiple components don't each hit the DB. */
 const RAID_DEDUPING_INTERVAL_MS = 60_000
@@ -488,7 +489,7 @@ export default function RaidDetail({ isOfficer }) {
                           ).flatMap((group) =>
                             group.names.map((name, i) => {
                               const charId = group.charIds[i]
-                              const label = group.accountDisplayName ? `${group.accountDisplayName} (${name})` : name
+                              const label = formatAccountCharacter(group.accountDisplayName, name)
                               const to = group.accountId ? `/accounts/${group.accountId}` : `/characters/${encodeURIComponent(name || '')}`
                               return (
                                 <span key={charId ?? name} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', marginRight: '0.5rem' }}>
@@ -601,7 +602,7 @@ export default function RaidDetail({ isOfficer }) {
                       const charName = row.character_name || row.char_id || '—'
                       const accountId = getAccountId(row.character_name || row.char_id)
                       const accountName = getAccountDisplayName?.(row.character_name || row.char_id)
-                      const label = accountName ? `${accountName} (${charName})` : charName
+                      const label = formatAccountCharacter(accountName, charName)
                       const to = accountId ? `/accounts/${accountId}` : `/characters/${encodeURIComponent(charName)}`
                       return <Link to={to}>{label}</Link>
                     })()}
@@ -647,9 +648,7 @@ export default function RaidDetail({ isOfficer }) {
       <div className="card">
         <div className="attendee-list">
           {displayAttendanceByAccount.map((group) => {
-            const label = group.accountDisplayName
-              ? `${group.accountDisplayName} (${group.names.join(', ')})`
-              : group.names[0] || '—'
+            const label = formatAccountCharacters(group.accountDisplayName, group.names)
             const to = group.accountId
               ? `/accounts/${group.accountId}`
               : `/characters/${encodeURIComponent(group.names[0] || '')}`
@@ -668,7 +667,7 @@ export default function RaidDetail({ isOfficer }) {
                 const name = a.character_name || a.char_id || ''
                 const accountId = a.accountId ?? getAccountId(a.character_name || a.char_id)
                 const accountName = getAccountDisplayName?.(a.character_name || a.char_id)
-                const label = accountName ? `${accountName} (${name})` : name
+                const label = formatAccountCharacter(accountName, name)
                 const to = accountId ? `/accounts/${accountId}` : `/characters/${encodeURIComponent(name)}`
                 return <Link key={accountId || a.char_id || a.character_name} to={to}>{label}</Link>
               })}

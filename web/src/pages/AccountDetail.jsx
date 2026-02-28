@@ -8,6 +8,7 @@ import DkpSiteDisclaimer from '../components/DkpSiteDisclaimer'
 import ItemLink from '../components/ItemLink'
 import { getDkpMobLoot } from '../lib/staticData'
 import { useDkpData } from '../lib/dkpLeaderboard'
+import { formatAccountCharacter } from '../lib/formatAccountCharacter'
 
 const MAGELO_BASE = 'https://www.takproject.net/magelo/character.php?char='
 
@@ -423,7 +424,8 @@ export default function AccountDetail({ isOfficer, profile, session }) {
                         {(() => {
                           const charName = row.character_name || row.char_id || '—'
                           const accountName = getAccountDisplayName?.(row.character_name || row.char_id)
-                          return accountName ? `${accountName} (${charName})` : charName
+                          const label = formatAccountCharacter(accountName, charName)
+                          return label
                         })()}
                       </td>
                       <td style={{ padding: '0.5rem 0.75rem' }}>

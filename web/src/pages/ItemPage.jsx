@@ -8,6 +8,7 @@ import ItemCard from '../components/ItemCard'
 import { getItemStats } from '../lib/itemStats'
 import { getDkpMobLoot, getRaidItemSources } from '../lib/staticData'
 import { ensureElementalArmorLoaded, getMoldInfo, getArmorIdForMoldAndClass, isElementalMold } from '../lib/elementalArmor'
+import { formatAccountCharacter } from '../lib/formatAccountCharacter'
 
 const CLASS_OPTIONS = ['WAR', 'CLR', 'PAL', 'RNG', 'SHD', 'BRD', 'ROG', 'SHM', 'MNK', 'NEC', 'WIZ', 'MAG', 'ENC', 'BST']
 
@@ -351,7 +352,7 @@ export default function ItemPage() {
                     const charName = row.character_name || row.char_id || '—'
                     const accountId = getAccountId(row.character_name || row.char_id)
                     const accountName = getAccountDisplayName?.(row.character_name || row.char_id)
-                    const label = accountName ? `${accountName} (${charName})` : charName
+                    const label = formatAccountCharacter(accountName, charName)
                     const to = accountId ? `/accounts/${accountId}` : `/characters/${encodeURIComponent(charName)}`
                     return <Link to={to}>{label}</Link>
                   })()}
