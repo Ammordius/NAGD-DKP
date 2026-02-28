@@ -93,6 +93,14 @@ Result:
 - **account_dkp_summary**: only that raid’s accounts are updated → **fast**.
 - **dkp_summary**: full rebuild every time → correct but **heavier**. Acceptable for single-raid edits; if we ever want to avoid it we’d need delta triggers to maintain earned_30d/earned_60d or a per-character refresh.
 
+### 5.1 Loot and assignment (spent → account_dkp_summary)
+
+When an officer **adds loot** (Officer.jsx with character), **edits loot cost**, or **deletes loot** (Officer.jsx or RaidDetail.jsx), the app calls `refresh_account_dkp_summary_for_raid(raid_id, p_extra_account_ids)` with the assignee’s account (or the loot row’s character’s account) so **spent** in **account_dkp_summary** updates immediately.
+
+When a user **assigns or unassigns** an item (AccountDetail.jsx via `update_single_raid_loot_assignment`), the app calls `refresh_account_dkp_summary_for_raid(raid_id, [prevAssigneeAccountId, newAssigneeAccountId])` so both the account that lost the item and the account that gained it get correct **spent** and the leaderboard shows the right DKP total (earned − spent).
+
+Without these calls, adding or assigning loot would not update **account_dkp_summary.spent**, so the leaderboard would show stale totals (e.g. 24 instead of 1 after a 23 DKP spend).
+
 ---
 
 ## 6. Upload backend (upload_raid_detail_to_supabase.py)
@@ -128,6 +136,10 @@ So after a delete we do a **full** account summary refresh. That is correct (eve
 | Add tic (website) | INSERT by app | Trigger per raid ✓ | App: full refresh ✓ | App: per-raid refresh ✓ |
 | Add attendee (website) | INSERT by app | Trigger per raid ✓ | App: full refresh ✓ | App: per-raid refresh ✓ |
 | Remove attendee (website) | DELETE by app | Trigger per raid ✓ | Trigger full + app full ✓ | App: per-raid + extra_account_ids ✓ |
+| Add loot (Officer, with character) | INSERT by app | — | App: full refresh ✓ | App: per-raid + recipient account ✓ |
+| Assign / unassign loot (AccountDetail) | RPC → loot_assignment | — | Trigger (character_dkp_spent) ✓ | App: per-raid + prev/new assignee accounts ✓ |
+| Edit loot cost (Officer / RaidDetail) | UPDATE by app | — | Trigger full ✓ | App: per-raid + assignee account ✓ |
+| Delete loot (Officer / RaidDetail) | DELETE by app | — | Trigger full ✓ | App: per-raid + assignee account ✓ |
 | Upload one raid (script) | INSERT by script | Triggers fire ✓ | App: full refresh ✓ | **Should use per-raid** (see fix below) |
 | Bulk restore | INSERT with begin_restore_load | end_restore_load ✓ | end_restore_load ✓ | end_restore_load ✓ |
 | Delete raid for reupload | RPC DELETE | RPC refresh_raid_attendance_totals ✓ | RPC full ✓ | RPC full ✓ |

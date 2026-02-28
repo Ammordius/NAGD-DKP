@@ -162,7 +162,7 @@ async function fetchAccountDetail(accountId) {
 export default function AccountDetail({ isOfficer, profile, session }) {
   const { accountId } = useParams()
   const navigate = useNavigate()
-  const { getAccountDisplayName } = useCharToAccountMap()
+  const { getAccountId, getAccountDisplayName } = useCharToAccountMap()
   const cacheKey = accountId ? `account-detail-${accountId}` : null
   const fallbackData = cacheKey ? getAccountDetailFromSession(accountId) : undefined
   const { data: swrData, error: swrError, isLoading, mutate } = useSWR(
@@ -437,22 +437,38 @@ export default function AccountDetail({ isOfficer, profile, session }) {
                               const val = e.target.value
                               setLootAssignError('')
                               setSavingLootId(row.id)
+                              const raidId = row.raid_id || row._raid_id
+                              const prevAccountId = (currentCharId || currentCharName) ? getAccountId(currentCharId || currentCharName) : null
+                              const nextAccountId = val === '' ? null : accountId
+                              const extraIds = [...new Set([prevAccountId, nextAccountId].filter(Boolean))].map(String)
                               if (val === '') {
                                 supabase.rpc('update_single_raid_loot_assignment', { p_loot_id: row.id, p_assigned_char_id: null, p_assigned_character_name: null })
-                                  .then(({ error }) => {
+                                  .then(async ({ error }) => {
                                     setSavingLootId(null)
                                     if (error) setLootAssignError(error.message)
-                                    else mutate()
+                                    else {
+                                      if (raidId && extraIds.length > 0) {
+                                        await supabase.rpc('refresh_account_dkp_summary_for_raid', { p_raid_id: raidId, p_extra_account_ids: extraIds })
+                                        try { sessionStorage.removeItem('dkp_leaderboard_v2') } catch (_) {}
+                                      }
+                                      mutate()
+                                    }
                                   })
                               } else {
                                 const c = characters.find((ch) => (ch.char_id || ch.name) === val)
                                 const cid = c?.char_id || val
                                 const cname = c?.name || c?.displayName || val
                                 supabase.rpc('update_single_raid_loot_assignment', { p_loot_id: row.id, p_assigned_char_id: cid, p_assigned_character_name: cname })
-                                  .then(({ error }) => {
+                                  .then(async ({ error }) => {
                                     setSavingLootId(null)
                                     if (error) setLootAssignError(error.message)
-                                    else mutate()
+                                    else {
+                                      if (raidId && extraIds.length > 0) {
+                                        await supabase.rpc('refresh_account_dkp_summary_for_raid', { p_raid_id: raidId, p_extra_account_ids: extraIds })
+                                        try { sessionStorage.removeItem('dkp_leaderboard_v2') } catch (_) {}
+                                      }
+                                      mutate()
+                                    }
                                   })
                               }
                             }}

@@ -293,6 +293,11 @@ export default function RaidDetail({ isOfficer }) {
         delta: { r: raidId, l: row.id, i: row.item_name, c: val },
       })
       setEditingLootId(null)
+      const accountId = getAccountId(row.assigned_character_name || row.assigned_char_id || row.character_name || row.char_id)
+      if (accountId) {
+        await supabase.rpc('refresh_account_dkp_summary_for_raid', { p_raid_id: raidId, p_extra_account_ids: [String(accountId)] })
+        try { sessionStorage.removeItem('dkp_leaderboard_v2') } catch (_) {}
+      }
       mutate()
     }
   }
@@ -301,6 +306,7 @@ export default function RaidDetail({ isOfficer }) {
     const msg = `Are you sure you want to remove this loot?\n\n"${row.item_name || 'Item'}" from ${row.character_name || 'character'}\n\nThis cannot be undone.`
     if (!window.confirm(msg)) return
     setMutating(true)
+    const accountId = getAccountId(row.assigned_character_name || row.assigned_char_id || row.character_name || row.char_id)
     const { error: err } = await supabase.from('raid_loot').delete().eq('id', row.id)
     setMutating(false)
     if (err) setMutationError(err.message)
@@ -311,6 +317,10 @@ export default function RaidDetail({ isOfficer }) {
         target_id: String(row.id),
         delta: { r: raidId, l: row.id, i: row.item_name, c: row.character_name, cost: row.cost },
       })
+      if (accountId) {
+        await supabase.rpc('refresh_account_dkp_summary_for_raid', { p_raid_id: raidId, p_extra_account_ids: [String(accountId)] })
+        try { sessionStorage.removeItem('dkp_leaderboard_v2') } catch (_) {}
+      }
       mutate()
     }
   }
