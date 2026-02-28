@@ -8,6 +8,7 @@
 -- Do not truncate accounts (profiles references them). Restore script will upsert accounts.
 
 -- Child tables first, then parent. RESTART IDENTITY resets serials.
+TRUNCATE TABLE raid_attendance_dkp_by_account;
 TRUNCATE TABLE raid_attendance_dkp;
 TRUNCATE TABLE raid_dkp_totals;
 TRUNCATE TABLE raid_event_attendance RESTART IDENTITY CASCADE;
@@ -19,8 +20,10 @@ TRUNCATE TABLE raids RESTART IDENTITY CASCADE;
 TRUNCATE TABLE character_account CASCADE;
 TRUNCATE TABLE characters CASCADE;
 -- TRUNCATE TABLE accounts CASCADE;  -- skip: profiles references accounts
+TRUNCATE TABLE account_dkp_summary;
 TRUNCATE TABLE dkp_summary;
 TRUNCATE TABLE dkp_adjustments;
 TRUNCATE TABLE dkp_period_totals;
 TRUNCATE TABLE active_raiders;
+TRUNCATE TABLE active_accounts;
 TRUNCATE TABLE officer_audit_log;

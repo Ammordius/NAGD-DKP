@@ -291,6 +291,7 @@ def main() -> int:
                     "event_id": event_id,
                     "char_id": cid or None,
                     "character_name": cname,
+                    "account_id": account_id or None,
                 }
                 rea_rows.append(row)
                 event_debug.setdefault(event_id, []).append((row["char_id"], row["character_name"]))
@@ -311,6 +312,13 @@ def main() -> int:
         print("refresh_dkp_summary() completed.")
     except Exception as e:
         print(f"Warning: refresh_dkp_summary: {e}", file=sys.stderr)
+    try:
+        client.rpc("refresh_account_dkp_summary").execute()
+        print("refresh_account_dkp_summary() completed.")
+    except Exception as e:
+        err = str(e).lower()
+        if "does not exist" not in err and "function" not in err:
+            print(f"Warning: refresh_account_dkp_summary: {e}", file=sys.stderr)
 
     print("Done. Reload the raid in the Officer page to see tics, loot, and attendance.")
     return 0

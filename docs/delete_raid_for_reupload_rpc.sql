@@ -20,7 +20,11 @@ BEGIN
   DELETE FROM raid_loot          WHERE raid_id = trim(p_raid_id);
   DELETE FROM raid_attendance    WHERE raid_id = trim(p_raid_id);
   DELETE FROM raid_events        WHERE raid_id = trim(p_raid_id);
+  PERFORM refresh_dkp_summary_internal();
   PERFORM refresh_raid_attendance_totals(trim(p_raid_id));
+  IF EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'public' AND p.proname = 'refresh_account_dkp_summary_internal') THEN
+    PERFORM refresh_account_dkp_summary_internal();
+  END IF;
 END;
 $$;
 

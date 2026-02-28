@@ -37,19 +37,22 @@ RESTORE_TABLE_ORDER = [
     "raid_event_attendance",
     "raid_dkp_totals",
     "raid_attendance_dkp",
+    "raid_attendance_dkp_by_account",
     "raid_classifications",
     "dkp_adjustments",
     "dkp_summary",
+    "account_dkp_summary",
     "dkp_period_totals",
     "active_raiders",
+    "active_accounts",
     "officer_audit_log",
 ]
 
 # Do not clear: profiles references accounts; clearing would FK-fail. Load accounts via upsert.
 CLEAR_SKIP = frozenset({"accounts"})
 
-# Repopulated by DB triggers when we load raid_events/raid_event_attendance; skip CSV load to avoid duplicate key.
-LOAD_SKIP_TRIGGER_POPULATED = frozenset({"raid_dkp_totals", "raid_attendance_dkp"})
+# Repopulated by DB triggers/refresh when we load raid_events/raid_event_attendance; skip CSV load to avoid duplicate key.
+LOAD_SKIP_TRIGGER_POPULATED = frozenset({"raid_dkp_totals", "raid_attendance_dkp", "raid_attendance_dkp_by_account", "account_dkp_summary"})
 
 # For delete-all via API: column to use for batch delete (first column of PK for composites)
 TABLE_KEY_COLUMN: dict[str, str] = {
@@ -63,11 +66,14 @@ TABLE_KEY_COLUMN: dict[str, str] = {
     "raid_event_attendance": "id",
     "raid_dkp_totals": "raid_id",
     "raid_attendance_dkp": "raid_id",
+    "raid_attendance_dkp_by_account": "raid_id",
     "raid_classifications": "raid_id",
     "dkp_adjustments": "character_name",
     "dkp_summary": "character_key",
+    "account_dkp_summary": "account_id",
     "dkp_period_totals": "period",
     "active_raiders": "character_key",
+    "active_accounts": "account_id",
     "officer_audit_log": "id",
 }
 
@@ -269,6 +275,10 @@ def main() -> int:
             try:
                 client.rpc("refresh_dkp_summary").execute()
                 client.rpc("refresh_all_raid_attendance_totals").execute()
+                try:
+                    client.rpc("refresh_account_dkp_summary").execute()
+                except Exception:
+                    pass
             except Exception as e:
                 print(f"  Refresh warning: {e}", file=sys.stderr)
 

@@ -90,10 +90,11 @@ async function fetchAccountDetail(accountId) {
   if (charIds.length === 0) {
     return { account: accRes.data, characters: [], raids: {}, activityByRaid: [], dkpByCharacterKey: { earned: {}, spent: {} } }
   }
-  const [chRes, attRes, lootRes, attDkpRes] = await Promise.all([
+  const [chRes, attRes, lootRes, attDkpByAccountRes, attDkpRes] = await Promise.all([
     supabase.from('characters').select('char_id, name, class_name, level').in('char_id', charIds),
     fetchAll('raid_attendance', 'raid_id, char_id, character_name', (q) => q.in('char_id', charIds)),
     fetchAll('raid_loot_with_assignment', 'id, raid_id, char_id, character_name, item_name, cost, assigned_char_id, assigned_character_name', (q) => q.in('char_id', charIds)),
+    fetchAll('raid_attendance_dkp_by_account', 'raid_id, account_id, dkp_earned', (q) => q.eq('account_id', accountId), { order: { column: 'raid_id', ascending: true } }),
     (async () => {
       const cr = await supabase.from('characters').select('char_id, name').in('char_id', charIds)
       const ch = cr.data || []
@@ -103,7 +104,9 @@ async function fetchAccountDetail(accountId) {
     })(),
   ])
   const chars = (chRes.data || []).map((c) => ({ ...c, displayName: c.name || c.char_id }))
-  const attDkp = attDkpRes?.error ? [] : (attDkpRes?.data || [])
+  const attDkp = !attDkpByAccountRes.error && attDkpByAccountRes.data?.length > 0
+    ? attDkpByAccountRes.data.map((r) => ({ raid_id: r.raid_id, character_key: r.account_id, dkp_earned: r.dkp_earned }))
+    : (attDkpRes?.error ? [] : (attDkpRes?.data || []))
   const earnedByKey = {}
   attDkp.forEach((row) => {
     const k = (row.character_key || '').trim()

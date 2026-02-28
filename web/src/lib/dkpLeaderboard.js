@@ -29,10 +29,12 @@ async function fetchAll(supabaseClient, table, select) {
 
 /** Fetch same payload as former /api/get-dkp using authenticated Supabase client (required after requiring sign-in). */
 export async function fetchDkpPayloadFromSupabase() {
-  const [summary, adjRes, activeRaiders, periodRes, charAccount, accounts, characters] = await Promise.all([
+  const [summary, accountSummaryRes, adjRes, activeRaiders, activeAccountsRes, periodRes, charAccount, accounts, characters] = await Promise.all([
     fetchAll(supabase, 'dkp_summary', 'character_key, character_name, earned, spent, earned_30d, earned_60d, last_activity_date, updated_at'),
-    supabase.from('dkp_adjustments').select('character_name, earned_delta, spent_delta').limit(1000),
+    supabase.from('account_dkp_summary').select('account_id, display_name, earned, spent, earned_30d, earned_60d, last_activity_date, updated_at'),
+    supabase.from('dkp_adjustments').select('character_name, account_id, earned_delta, spent_delta').limit(1000),
     fetchAll(supabase, 'active_raiders', 'character_key'),
+    supabase.from('active_accounts').select('account_id'),
     supabase.from('dkp_period_totals').select('period, total_dkp'),
     fetchAll(supabase, 'character_account', 'char_id, account_id'),
     fetchAll(supabase, 'accounts', 'account_id, toon_names, display_name, inactive'),
@@ -40,12 +42,16 @@ export async function fetchDkpPayloadFromSupabase() {
   ])
   if (adjRes.error) throw new Error(adjRes.error.message || 'Failed to fetch dkp_adjustments')
   if (periodRes.error) throw new Error(periodRes.error.message || 'Failed to fetch dkp_period_totals')
+  const accountSummary = accountSummaryRes?.error ? [] : (accountSummaryRes?.data ?? [])
+  const activeAccounts = activeAccountsRes?.error ? [] : (activeAccountsRes?.data ?? [])
   const adjustments = adjRes.data ?? []
   const periodTotals = periodRes.data ?? []
   return {
     dkp_summary: summary,
+    account_dkp_summary: accountSummary,
     dkp_adjustments: adjustments,
     active_raiders: activeRaiders,
+    active_accounts: activeAccounts,
     dkp_period_totals: periodTotals,
     character_account: charAccount,
     accounts,
@@ -67,6 +73,65 @@ function applyAdjustmentsAndBalance(list, adjustmentsMap) {
     r.balance = r.earned - r.spent
   })
   list.sort((a, b) => b.balance - a.balance)
+}
+
+/** Build account leaderboard from account_dkp_summary (account-scoped DKP). Adjustments by account_id or character_name. */
+function buildAccountLeaderboardFromAccountSummary(accountSummary, adjustments, activeAccountIds, inactiveAccountIds, accData, caData, charData) {
+  const accountNames = {}
+  ;(accData || []).forEach((r) => {
+    const display = (r.display_name || '').trim()
+    const first = (r.toon_names || '').split(',')[0]?.trim() || r.account_id
+    accountNames[r.account_id] = display || first
+  })
+  const characterNameToAccountId = {}
+  if (charData?.length && caData?.length) {
+    const charIdToName = {}
+    charData.forEach((c) => { if (c.name) charIdToName[String(c.char_id)] = c.name })
+    caData.forEach((r) => {
+      const name = charIdToName[String(r.char_id)]
+      if (name) characterNameToAccountId[name.trim()] = String(r.account_id)
+    })
+  }
+  const adjustmentsByAccount = {}
+  ;(adjustments || []).forEach((row) => {
+    const aid = row.account_id ? String(row.account_id).trim() : null
+    const cname = (row.character_name || '').trim()
+    const key = aid || (cname && characterNameToAccountId[cname]) || null
+    if (!key) return
+    if (!adjustmentsByAccount[key]) adjustmentsByAccount[key] = { earned_delta: 0, spent_delta: 0 }
+    adjustmentsByAccount[key].earned_delta += Math.round(Number(row.earned_delta) || 0)
+    adjustmentsByAccount[key].spent_delta += Math.round(Number(row.spent_delta) || 0)
+  })
+  const activeSet = new Set((activeAccountIds || []).map((id) => String(id)))
+  const cutoff = new Date()
+  cutoff.setDate(cutoff.getDate() - ACTIVE_DAYS)
+  cutoff.setHours(0, 0, 0, 0)
+  let list = (accountSummary || []).map((r) => {
+    const aid = String(r.account_id)
+    const adj = adjustmentsByAccount[aid]
+    const earned = Math.round(Number(r.earned) || 0) + (adj ? adj.earned_delta : 0)
+    const spent = Math.round(Number(r.spent) || 0) + (adj ? adj.spent_delta : 0)
+    const balance = earned - spent
+    const lastActivity = r.last_activity_date || null
+    const isActive = activeSet.has(aid) || (cutoff && lastActivity && new Date(lastActivity) >= cutoff)
+    return {
+      account_id: aid,
+      name: accountNames[aid] || r.display_name || aid,
+      earned,
+      spent,
+      balance,
+      earned_30d: Math.round(Number(r.earned_30d) || 0),
+      earned_60d: Math.round(Number(r.earned_60d) || 0),
+      last_activity_date: lastActivity,
+      isActive,
+    }
+  })
+  list = list.filter((r) => {
+    if (inactiveAccountIds.has(r.account_id)) return false
+    return r.isActive
+  })
+  list.sort((a, b) => b.balance - a.balance)
+  return list
 }
 
 export function buildAccountLeaderboard(list, caData, accData, charData) {
@@ -160,8 +225,52 @@ function dedupeByCharacterName(list) {
 /**
  * Process /api/get-dkp response into leaderboard list and account list (with adjustments applied).
  * Returns { list, accountList, activeKeys, periodTotals, caData, accData, charData, summaryUpdatedAt } or null.
+ * When account_dkp_summary is present, uses account-scoped data; otherwise falls back to character-based aggregation.
  */
 export function processApiPayload(payload) {
+  const pt = { '30d': 0, '60d': 0 }
+  ;(payload.dkp_period_totals ?? []).forEach((row) => { pt[row.period] = Math.round(Number(row.total_dkp) || 0) })
+  const accData = payload.accounts ?? []
+  const inactiveAccountIds = new Set((accData || []).filter((a) => a.inactive === true).map((a) => String(a.account_id)))
+
+  if (payload.account_dkp_summary?.length > 0) {
+    const activeAccountIds = (payload.active_accounts ?? []).map((x) => x.account_id).filter(Boolean)
+    const accountList = buildAccountLeaderboardFromAccountSummary(
+      payload.account_dkp_summary,
+      payload.dkp_adjustments,
+      activeAccountIds,
+      inactiveAccountIds,
+      accData,
+      payload.character_account ?? [],
+      payload.characters ?? []
+    )
+    const fullAccountBalances = {}
+    const fullAccountTotals = {}
+    accountList.forEach((a) => {
+      fullAccountBalances[a.account_id] = Number(a.balance) || 0
+      fullAccountTotals[a.account_id] = {
+        earned: Number(a.earned) || 0,
+        spent: Number(a.spent) || 0,
+        balance: Number(a.balance) || 0,
+        earned_30d: Number(a.earned_30d) || 0,
+        earned_60d: Number(a.earned_60d) || 0,
+      }
+    })
+    const summaryUpdatedAt = payload.account_dkp_summary[0]?.updated_at ?? null
+    return {
+      list: [],
+      accountList,
+      fullAccountBalances,
+      fullAccountTotals,
+      activeKeys: activeAccountIds,
+      periodTotals: pt,
+      caData: payload.character_account ?? [],
+      accData,
+      charData: payload.characters ?? [],
+      summaryUpdatedAt,
+    }
+  }
+
   if (!payload?.dkp_summary?.length) return null
   const rows = payload.dkp_summary
   const activeKeys = (payload.active_raiders ?? []).map((x) => String(x.character_key))
@@ -174,8 +283,6 @@ export function processApiPayload(payload) {
     const n = (row.character_name || '').trim()
     if (n) adjustmentsMap[n] = { earned_delta: Number(row.earned_delta) || 0, spent_delta: Number(row.spent_delta) || 0 }
   })
-  const pt = { '30d': 0, '60d': 0 }
-  ;(payload.dkp_period_totals ?? []).forEach((row) => { pt[row.period] = Math.round(Number(row.total_dkp) || 0) })
   const charData = payload.characters ?? []
   const charIdToName = {}
   charData.forEach((c) => { if (c.name) charIdToName[String(c.char_id)] = c.name })
@@ -199,16 +306,14 @@ export function processApiPayload(payload) {
   list = dedupeByCharacterName(list)
   applyAdjustmentsAndBalance(list, adjustmentsMap)
   const caData = payload.character_account ?? []
-  const accData = payload.accounts ?? []
-  const inactiveAccountIds = new Set((accData || []).filter((a) => a.inactive === true).map((a) => String(a.account_id)))
   const charToAccount = {}
   ;(caData || []).forEach((r) => { charToAccount[String(r.char_id)] = r.account_id })
   const nameToAccount = {}
   if (charData?.length) {
-    const charIdToName = {}
-    charData.forEach((c) => { if (c.name) charIdToName[String(c.char_id)] = c.name })
+    const charIdToNameInner = {}
+    charData.forEach((c) => { if (c.name) charIdToNameInner[String(c.char_id)] = c.name })
     ;(caData || []).forEach((r) => {
-      const name = charIdToName[String(r.char_id)]
+      const name = charIdToNameInner[String(r.char_id)]
       if (name) nameToAccount[name] = r.account_id
     })
   }

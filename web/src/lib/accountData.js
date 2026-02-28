@@ -19,7 +19,7 @@ export async function fetchAll(table, select = '*', filter, opts) {
   return { data: all, error: null }
 }
 
-/** Load characters and activity for an account (same logic as AccountDetail). Uses raid_attendance_dkp + raid_dkp_totals so we do not query per-tic data. */
+/** Load characters and activity for an account (same logic as AccountDetail). Prefers raid_attendance_dkp_by_account when present; else uses raid_attendance_dkp by character. */
 export async function loadAccountActivity(accountId) {
   const accRes = await supabase.from('accounts').select('account_id, toon_names, display_name, toon_count').eq('account_id', accountId).single()
   if (accRes.error || !accRes.data) return { error: accRes.error?.message || 'Account not found', characters: [], activityByRaid: [] }
@@ -28,10 +28,11 @@ export async function loadAccountActivity(accountId) {
   const charIds = (caRes.data || []).map((r) => r.char_id).filter(Boolean)
   if (charIds.length === 0) return { account: accRes.data, characters: [], activityByRaid: [] }
 
-  const [chRes, attRes, lootRes, attDkpRes] = await Promise.all([
+  const [chRes, attRes, lootRes, attDkpByAccountRes, attDkpRes] = await Promise.all([
     supabase.from('characters').select('char_id, name, class_name, level').in('char_id', charIds),
     fetchAll('raid_attendance', 'raid_id, char_id, character_name', (q) => q.in('char_id', charIds)),
     fetchAll('raid_loot_with_assignment', 'raid_id, char_id, character_name, item_name, cost', (q) => q.in('char_id', charIds)),
+    fetchAll('raid_attendance_dkp_by_account', 'raid_id, account_id, dkp_earned', (q) => q.eq('account_id', accountId), { order: { column: 'raid_id', ascending: true } }),
     (async () => {
       const chars = (await supabase.from('characters').select('char_id, name').in('char_id', charIds)).data || []
       const characterKeys = [...new Set([...charIds, ...chars.map((c) => c.name).filter(Boolean)])]
@@ -40,7 +41,9 @@ export async function loadAccountActivity(accountId) {
     })(),
   ])
   const chars = (chRes.data || []).map((c) => ({ ...c, displayName: c.name || c.char_id }))
-  const attDkp = (attDkpRes.error ? [] : (attDkpRes.data || []))
+  const attDkp = !attDkpByAccountRes.error && attDkpByAccountRes.data?.length > 0
+    ? attDkpByAccountRes.data.map((r) => ({ raid_id: r.raid_id, character_key: r.account_id, dkp_earned: r.dkp_earned }))
+    : (attDkpRes.error ? [] : (attDkpRes.data || []))
 
   const raidIds = new Set([
     ...(attRes.data || []).map((r) => r.raid_id),

@@ -291,23 +291,35 @@ def run_audit(
     characters = fetch_all(client, "characters", "char_id, name")
     name_to_aid = build_name_to_account_id(accounts, ca_list, characters)
 
-    # DB totals per account: sum dkp_summary (character_key can be char_id or character_name)
+    # DB totals per account: prefer account_dkp_summary when present; else sum dkp_summary by character_account
     dkp_rows = fetch_all(client, "dkp_summary", "character_key, earned, spent")
+    account_summary: list[dict[str, Any]] = []
+    try:
+        account_summary = fetch_all(client, "account_dkp_summary", "account_id, earned, spent")
+    except Exception:
+        pass
     db_earned_by_account = {}
     db_spent_by_account = {}
-    key_to_aid: dict[str, str] = dict(name_to_aid)  # name -> account_id
-    for r in ca_list:
-        cid = _norm(r.get("char_id", ""))
-        aid = _norm(r.get("account_id", ""))
-        if cid and aid:
-            key_to_aid[cid] = aid
-    for r in dkp_rows:
-        key = _norm(r.get("character_key", ""))
-        aid = key_to_aid.get(key)
-        if not aid:
-            continue
-        db_earned_by_account[aid] = db_earned_by_account.get(aid, 0) + int(r.get("earned") or 0)
-        db_spent_by_account[aid] = db_spent_by_account.get(aid, 0) + int(r.get("spent") or 0)
+    if account_summary:
+        for r in account_summary:
+            aid = _norm(r.get("account_id", ""))
+            if aid:
+                db_earned_by_account[aid] = int(r.get("earned") or 0)
+                db_spent_by_account[aid] = int(r.get("spent") or 0)
+    else:
+        key_to_aid: dict[str, str] = dict(name_to_aid)
+        for r in ca_list:
+            cid = _norm(r.get("char_id", ""))
+            aid = _norm(r.get("account_id", ""))
+            if cid and aid:
+                key_to_aid[cid] = aid
+        for r in dkp_rows:
+            key = _norm(r.get("character_key", ""))
+            aid = key_to_aid.get(key)
+            if not aid:
+                continue
+            db_earned_by_account[aid] = db_earned_by_account.get(aid, 0) + int(r.get("earned") or 0)
+            db_spent_by_account[aid] = db_spent_by_account.get(aid, 0) + int(r.get("spent") or 0)
 
     mismatches: list[dict[str, Any]] = []
     matched = 0
