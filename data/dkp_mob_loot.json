@@ -199,10 +199,42 @@
         ]
       },
       {
-        "item_id": null,
+        "item_id": 26789,
         "name": "Time Traveler's Abandoned Notebook",
         "sources": [
           "raid_classification"
+        ]
+      },
+      {
+        "item_id": 16367,
+        "name": "Elemental Chain Pant Pattern",
+        "sources": [
+          "dkp",
+          "elemental_armor"
+        ]
+      },
+      {
+        "item_id": 16373,
+        "name": "Elemental Greaves Mold",
+        "sources": [
+          "dkp",
+          "elemental_armor"
+        ]
+      },
+      {
+        "item_id": 16381,
+        "name": "Elemental Leather Pant Pattern",
+        "sources": [
+          "dkp",
+          "elemental_armor"
+        ]
+      },
+      {
+        "item_id": 16388,
+        "name": "Elemental Silk Pant Pattern",
+        "sources": [
+          "dkp",
+          "elemental_armor"
         ]
       }
     ]
