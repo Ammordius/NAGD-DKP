@@ -357,6 +357,7 @@ export default function RaidDetail({ isOfficer }) {
     setAddToTicResult(char.name)
     setAddToTicCharQuery('')
     await supabase.rpc('refresh_dkp_summary')
+    await supabase.rpc('refresh_account_dkp_summary_for_raid', { p_raid_id: raidId })
     try { sessionStorage.removeItem('dkp_leaderboard_v2') } catch (_) {}
     const { count } = await supabase.from('raid_attendance').select('raid_id', { count: 'exact', head: true }).eq('raid_id', raidId)
     if (count != null) await supabase.from('raids').update({ attendees: String(count) }).eq('raid_id', raidId)
@@ -366,6 +367,7 @@ export default function RaidDetail({ isOfficer }) {
 
   const handleRemoveAttendeeFromTic = async (eventId, charId, charName) => {
     if (!raidId || !window.confirm(`Remove ${charName || charId} from this tic?`)) return
+    const removedAccountId = getAccountId(charId) || getAccountId(charName)
     setMutating(true)
     await supabase.from('raid_event_attendance').delete().eq('raid_id', raidId).eq('event_id', eventId).eq('char_id', charId)
     const { data: remainingEventAtt } = await supabase.from('raid_event_attendance').select('char_id').eq('raid_id', raidId)
@@ -382,6 +384,10 @@ export default function RaidDetail({ isOfficer }) {
     const { count } = await supabase.from('raid_attendance').select('raid_id', { count: 'exact', head: true }).eq('raid_id', raidId)
     if (count != null) await supabase.from('raids').update({ attendees: String(count) }).eq('raid_id', raidId)
     await supabase.rpc('refresh_dkp_summary')
+    await supabase.rpc('refresh_account_dkp_summary_for_raid', {
+      p_raid_id: raidId,
+      p_extra_account_ids: removedAccountId ? [String(removedAccountId)] : [],
+    })
     try { sessionStorage.removeItem('dkp_leaderboard_v2') } catch (_) {}
     mutate()
     setMutating(false)

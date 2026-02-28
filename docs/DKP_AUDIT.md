@@ -9,6 +9,8 @@ When officers add characters to a DKP tic (either via **Add attendee to tic** or
 - Adding a character to a tic gives DKP to that character's account (if linked in `character_account`).
 - The DKP leaderboard and account detail pages show account-level totals; the "Credited" and "Added to tic" messages in the Officer UI refer to the character, but the balance that updates is the account's.
 
+**Refresh:** After each tic/attendee change, the app calls `refresh_dkp_summary()` and **`refresh_account_dkp_summary_for_raid(raid_id)`**, which updates `account_dkp_summary` only for accounts that have attendance in that raid (plus the removed account when removing an attendee). No full refresh over all raids. If you deployed before this change, run **docs/fix_refresh_dkp_summary_includes_account_summary.sql** in Supabase to create `refresh_account_dkp_summary_for_raid`.
+
 So when we add characters to a tic, we are using account migration and the messages are still meaningful (character name for clarity; DKP applies to the account).
 
 ## Why it works in the browser / pull-raids but not “direct” to members
