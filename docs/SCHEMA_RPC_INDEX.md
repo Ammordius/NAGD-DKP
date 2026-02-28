@@ -6,7 +6,7 @@ Single index of **all public RPCs/functions** and **one-off SQL** in this repo: 
 
 1. **docs/supabase-schema.sql** — core tables, triggers, DKP summary (character), restore, profiles, accounts, raid totals
 2. **docs/supabase-account-dkp-schema.sql** — account_dkp_summary, account-scoped refresh, end_restore_load/truncate overrides
-3. **docs/supabase-officer-raids.sql** — is_officer, delete_raid, RLS for officer-managed tables
+3. **docs/supabase-officer-raids.sql** — is_officer, delete_raid, delete_tic, RLS for officer-managed tables
 4. **docs/supabase-loot-assignment-table.sql** — loot_assignment table, update_single_raid_loot_assignment, get_character_dkp_spent, refresh_character_dkp_spent (if using loot_assignment flow)
 
 ---
@@ -22,12 +22,13 @@ Single index of **all public RPCs/functions** and **one-off SQL** in this repo: 
 | **unclaim_account** | supabase-schema.sql | — | Profile.jsx |
 | **reset_claim_cooldown** | supabase-schema.sql | — | OfficerClaimCooldowns.jsx |
 | **delete_raid** | supabase-officer-raids.sql | — | Officer.jsx (permanent delete raid + tics) |
+| **delete_tic** | supabase-officer-raids.sql | — | Officer.jsx (remove one tic + attendance; avoids timeout) |
 | **delete_raid_for_reupload** | — | **delete_raid_for_reupload_rpc.sql** | upload_raid_detail_to_supabase.py |
 | **refresh_dkp_summary** | supabase-schema.sql | — | Officer.jsx, RaidDetail.jsx, DKP.jsx, upload script, restore, dedupe, zerodkp |
-| **refresh_dkp_summary_internal** | supabase-schema.sql | — | Triggers, delete_raid, delete_raid_for_reupload, end_restore_load |
+| **refresh_dkp_summary_internal** | supabase-schema.sql | — | Triggers, delete_raid, delete_tic, delete_raid_for_reupload, end_restore_load |
 | **refresh_account_dkp_summary** | supabase-account-dkp-schema.sql | — | DKP.jsx, upload script (fallback), restore_supabase_from_backup.py |
 | **refresh_account_dkp_summary_internal** | supabase-account-dkp-schema.sql | — | end_restore_load, delete_raid (if present), delete_raid_for_reupload |
-| **refresh_account_dkp_summary_for_raid** | supabase-account-dkp-schema.sql | fix_refresh_dkp_summary_includes_account_summary.sql (for DBs without account schema) | Officer.jsx, RaidDetail.jsx, upload_raid_detail_to_supabase.py |
+| **refresh_account_dkp_summary_for_raid** | supabase-account-dkp-schema.sql | fix_refresh_dkp_summary_includes_account_summary.sql (for DBs without account schema) | Officer.jsx, RaidDetail.jsx, upload_raid_detail_to_supabase.py, delete_tic |
 | **refresh_raid_attendance_totals** | supabase-schema.sql (base); supabase-account-dkp-schema.sql (account version) | — | Triggers, delete_raid_for_reupload |
 | **refresh_all_raid_attendance_totals** | supabase-schema.sql | — | end_restore_load, restore script |
 | **truncate_dkp_for_restore** | supabase-schema.sql; supabase-account-dkp-schema.sql (extends) | supabase-restore-truncate-rpc.sql (standalone) | restore_supabase_from_backup.py |

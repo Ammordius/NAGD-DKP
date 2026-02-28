@@ -114,3 +114,51 @@ BEGIN
   ALTER TABLE raid_loot ENABLE TRIGGER full_refresh_dkp_after_loot_change;
 END;
 $$;
+
+-- Delete one tic (event) and its attendance. Officer only.
+-- Disables refresh triggers during delete, then runs one refresh so the operation completes without statement timeout.
+CREATE OR REPLACE FUNCTION public.delete_tic(p_raid_id TEXT, p_event_id TEXT, p_extra_account_ids TEXT[] DEFAULT '{}')
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  IF NOT public.is_officer() THEN
+    RAISE EXCEPTION 'Only officers can delete tics';
+  END IF;
+
+  SET LOCAL statement_timeout = '120s';
+
+  ALTER TABLE raid_event_attendance DISABLE TRIGGER full_refresh_dkp_after_event_attendance_change;
+  ALTER TABLE raid_event_attendance DISABLE TRIGGER refresh_raid_totals_after_event_attendance_del;
+
+  DELETE FROM raid_event_attendance WHERE raid_id = p_raid_id AND event_id = p_event_id;
+  DELETE FROM raid_events WHERE raid_id = p_raid_id AND event_id = p_event_id;
+
+  DELETE FROM raid_attendance ra
+  WHERE ra.raid_id = p_raid_id
+    AND NOT EXISTS (
+      SELECT 1 FROM raid_event_attendance rea
+      WHERE rea.raid_id = ra.raid_id AND rea.char_id = ra.char_id
+    );
+
+  UPDATE raids
+  SET attendees = (SELECT count(*)::text FROM raid_attendance WHERE raid_id = p_raid_id)
+  WHERE raid_id = p_raid_id;
+
+  ALTER TABLE raid_event_attendance ENABLE TRIGGER refresh_raid_totals_after_event_attendance_del;
+  ALTER TABLE raid_event_attendance ENABLE TRIGGER full_refresh_dkp_after_event_attendance_change;
+
+  PERFORM refresh_raid_attendance_totals(p_raid_id);
+  PERFORM refresh_dkp_summary_internal();
+  IF EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'public' AND p.proname = 'refresh_account_dkp_summary_for_raid') THEN
+    PERFORM refresh_account_dkp_summary_for_raid(p_raid_id, p_extra_account_ids);
+  ELSIF EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'public' AND p.proname = 'refresh_account_dkp_summary_internal') THEN
+    PERFORM refresh_account_dkp_summary_internal();
+  END IF;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.delete_tic(TEXT, TEXT, TEXT[]) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.delete_tic(TEXT, TEXT, TEXT[]) TO service_role;

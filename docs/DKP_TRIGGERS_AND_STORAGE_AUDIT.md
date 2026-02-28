@@ -138,7 +138,7 @@ So after a delete we do a **full** account summary refresh. That is correct (eve
 | Add tic (website) | INSERT by app | Trigger per raid ✓ | App: full refresh ✓ | App: per-raid refresh ✓ |
 | Add attendee (website) | INSERT by app | Trigger per raid ✓ | App: full refresh ✓ | App: per-raid refresh ✓ |
 | Remove attendee (website) | DELETE by app | Trigger per raid ✓ | Trigger full + app full ✓ | App: per-raid + extra_account_ids ✓ |
-| **Delete tic (Officer)** | DELETE raid_event_attendance then raid_events | Trigger per raid ✓ | App: full refresh ✓ | App: per-raid + accounts that were on tic (or full refresh if lookup empty) ✓ |
+| **Delete tic (Officer)** | RPC **delete_tic** (disables triggers, deletes, then one refresh) | — | App calls **delete_tic(raid_id, event_id, account_ids)** so all work runs in one RPC with 120s timeout; DKP and account totals update. |
 | Add loot (Officer, with character) | INSERT by app | — | App: full refresh ✓ | App: per-raid + recipient account ✓ |
 | Assign / unassign loot (AccountDetail) | RPC → loot_assignment | — | Trigger (character_dkp_spent) ✓ | App: per-raid + prev/new assignee accounts ✓ |
 | Edit loot cost (Officer / RaidDetail) | UPDATE by app | — | Trigger full ✓ | App: per-raid + assignee account ✓ |

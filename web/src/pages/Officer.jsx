@@ -978,8 +978,12 @@ export default function Officer({ isOfficer }) {
       attendeesOnTic.map((r) => charIdToAccountId[String(r.char_id)] ?? charIdToAccountId[r.char_id]).filter(Boolean)
     )].map(String)
     setMutating(true)
-    await supabase.from('raid_event_attendance').delete().eq('raid_id', selectedRaidId).eq('event_id', eventId)
-    const { error: err } = await supabase.from('raid_events').delete().eq('raid_id', selectedRaidId).eq('event_id', eventId)
+    setError(null)
+    const { error: err } = await supabase.rpc('delete_tic', {
+      p_raid_id: selectedRaidId,
+      p_event_id: eventId,
+      p_extra_account_ids: accountIdsOnTic,
+    })
     if (err) {
       setMutating(false)
       setError(err.message)
@@ -991,26 +995,6 @@ export default function Officer({ isOfficer }) {
       target_id: eventId,
       delta: { r: selectedRaidId, e: eventId },
     })
-    // Remove from raid_attendance anyone who is no longer in any remaining event (they were only on the deleted tic).
-    const { data: remainingEventAtt } = await supabase.from('raid_event_attendance').select('char_id').eq('raid_id', selectedRaidId)
-    const charIdsStillInEvents = new Set((remainingEventAtt || []).map((r) => String(r.char_id ?? '')).filter(Boolean))
-    const { data: raidAtt } = await supabase.from('raid_attendance').select('char_id').eq('raid_id', selectedRaidId)
-    for (const row of raidAtt || []) {
-      const cid = String(row.char_id ?? '').trim()
-      if (cid && !charIdsStillInEvents.has(cid)) {
-        await supabase.from('raid_attendance').delete().eq('raid_id', selectedRaidId).eq('char_id', row.char_id)
-      }
-    }
-    const { count } = await supabase.from('raid_attendance').select('*', { count: 'exact', head: true }).eq('raid_id', selectedRaidId)
-    if (count != null) await supabase.from('raids').update({ attendees: String(count) }).eq('raid_id', selectedRaidId)
-    if (attendeesOnTic.length > 0 && accountIdsOnTic.length === 0) {
-      await supabase.rpc('refresh_account_dkp_summary')
-    } else {
-      await supabase.rpc('refresh_account_dkp_summary_for_raid', {
-        p_raid_id: selectedRaidId,
-        p_extra_account_ids: accountIdsOnTic,
-      })
-    }
     try { sessionStorage.removeItem('dkp_leaderboard_v2') } catch (_) {}
     loadSelectedRaid()
     globalMutate(DKP_DATA_KEY)
