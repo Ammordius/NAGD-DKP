@@ -75,7 +75,10 @@ function applyAdjustmentsAndBalance(list, adjustmentsMap) {
   list.sort((a, b) => b.balance - a.balance)
 }
 
-/** Build account leaderboard from account_dkp_summary (account-scoped DKP). Adjustments by account_id or character_name. */
+/**
+ * Build account leaderboard from account_dkp_summary (account-scoped DKP). Adjustments by account_id or character_name.
+ * Returns { accountList, fullAccountBalances, fullAccountTotals } so account detail pages can show true DKP for inactive accounts too.
+ */
 function buildAccountLeaderboardFromAccountSummary(accountSummary, adjustments, activeAccountIds, inactiveAccountIds, accData, caData, charData) {
   const accountNames = {}
   ;(accData || []).forEach((r) => {
@@ -106,7 +109,7 @@ function buildAccountLeaderboardFromAccountSummary(accountSummary, adjustments, 
   const cutoff = new Date()
   cutoff.setDate(cutoff.getDate() - ACTIVE_DAYS)
   cutoff.setHours(0, 0, 0, 0)
-  let list = (accountSummary || []).map((r) => {
+  const fullList = (accountSummary || []).map((r) => {
     const aid = String(r.account_id)
     const adj = adjustmentsByAccount[aid]
     const earned = Math.round(Number(r.earned) || 0) + (adj ? adj.earned_delta : 0)
@@ -126,12 +129,24 @@ function buildAccountLeaderboardFromAccountSummary(accountSummary, adjustments, 
       isActive,
     }
   })
-  list = list.filter((r) => {
+  const fullAccountBalances = {}
+  const fullAccountTotals = {}
+  fullList.forEach((a) => {
+    fullAccountBalances[a.account_id] = Number(a.balance) || 0
+    fullAccountTotals[a.account_id] = {
+      earned: Number(a.earned) || 0,
+      spent: Number(a.spent) || 0,
+      balance: Number(a.balance) || 0,
+      earned_30d: Number(a.earned_30d) || 0,
+      earned_60d: Number(a.earned_60d) || 0,
+    }
+  })
+  const accountList = fullList.filter((r) => {
     if (inactiveAccountIds.has(r.account_id)) return false
     return r.isActive
   })
-  list.sort((a, b) => b.balance - a.balance)
-  return list
+  accountList.sort((a, b) => b.balance - a.balance)
+  return { accountList, fullAccountBalances, fullAccountTotals }
 }
 
 export function buildAccountLeaderboard(list, caData, accData, charData) {
@@ -235,7 +250,7 @@ export function processApiPayload(payload) {
 
   if (payload.account_dkp_summary?.length > 0) {
     const activeAccountIds = (payload.active_accounts ?? []).map((x) => x.account_id).filter(Boolean)
-    const accountList = buildAccountLeaderboardFromAccountSummary(
+    const { accountList, fullAccountBalances, fullAccountTotals } = buildAccountLeaderboardFromAccountSummary(
       payload.account_dkp_summary,
       payload.dkp_adjustments,
       activeAccountIds,
@@ -244,18 +259,6 @@ export function processApiPayload(payload) {
       payload.character_account ?? [],
       payload.characters ?? []
     )
-    const fullAccountBalances = {}
-    const fullAccountTotals = {}
-    accountList.forEach((a) => {
-      fullAccountBalances[a.account_id] = Number(a.balance) || 0
-      fullAccountTotals[a.account_id] = {
-        earned: Number(a.earned) || 0,
-        spent: Number(a.spent) || 0,
-        balance: Number(a.balance) || 0,
-        earned_30d: Number(a.earned_30d) || 0,
-        earned_60d: Number(a.earned_60d) || 0,
-      }
-    })
     const summaryUpdatedAt = payload.account_dkp_summary[0]?.updated_at ?? null
     return {
       list: [],
