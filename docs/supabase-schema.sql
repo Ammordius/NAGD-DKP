@@ -798,12 +798,35 @@ BEGIN
 END;
 $$;
 
+-- Statement-level DELETE: refresh each affected raid once (avoids timeout when deleting a tic with many rows).
+CREATE OR REPLACE FUNCTION public.trigger_refresh_raid_totals_after_event_attendance_del_stmt()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  r RECORD;
+BEGIN
+  IF restore_load_in_progress() THEN RETURN NULL; END IF;
+  FOR r IN SELECT DISTINCT raid_id FROM deleted_rows
+  LOOP
+    PERFORM refresh_raid_attendance_totals(r.raid_id);
+  END LOOP;
+  RETURN NULL;
+END;
+$$;
+
 DROP TRIGGER IF EXISTS refresh_raid_totals_after_event_attendance_ins ON raid_event_attendance;
 DROP TRIGGER IF EXISTS refresh_raid_totals_after_event_attendance_upd ON raid_event_attendance;
 DROP TRIGGER IF EXISTS refresh_raid_totals_after_event_attendance_del ON raid_event_attendance;
 CREATE TRIGGER refresh_raid_totals_after_event_attendance_ins AFTER INSERT ON raid_event_attendance FOR EACH ROW EXECUTE FUNCTION public.trigger_refresh_raid_totals_after_event_attendance();
 CREATE TRIGGER refresh_raid_totals_after_event_attendance_upd AFTER UPDATE ON raid_event_attendance FOR EACH ROW EXECUTE FUNCTION public.trigger_refresh_raid_totals_after_event_attendance();
-CREATE TRIGGER refresh_raid_totals_after_event_attendance_del AFTER DELETE ON raid_event_attendance FOR EACH ROW EXECUTE FUNCTION public.trigger_refresh_raid_totals_after_event_attendance();
+CREATE TRIGGER refresh_raid_totals_after_event_attendance_del
+  AFTER DELETE ON raid_event_attendance
+  REFERENCING OLD TABLE AS deleted_rows
+  FOR EACH STATEMENT
+  EXECUTE FUNCTION public.trigger_refresh_raid_totals_after_event_attendance_del_stmt();
 
 -- Incremental delta: cache is refreshed whenever a new row is added (INSERT) to attendance or loot.
 -- Apply only NEW rows to dkp_summary (no full table scan). For DELETE/UPDATE we run full refresh.

@@ -1,9 +1,8 @@
 -- =============================================================================
--- Avoid statement timeout when deleting a tic (many raid_event_attendance rows).
--- Before: DELETE triggered refresh_raid_attendance_totals(raid_id) FOR EACH ROW,
--- so deleting 50 attendees = 50x the same refresh. Now: one trigger per statement,
--- refresh each affected raid once.
--- Run in Supabase SQL Editor after supabase-schema.sql.
+-- One-off for existing DBs: avoid statement timeout when deleting a tic.
+-- Canonical schema (supabase-schema.sql) now includes the statement-level DELETE
+-- trigger. Run this only if you applied an older supabase-schema.sql before that
+-- change (same content as the canonical trigger block).
 -- =============================================================================
 
 -- Function for statement-level DELETE: refresh each distinct raid_id from deleted rows.
