@@ -531,21 +531,8 @@ export default function Officer({ isOfficer }) {
     const event_id = generateEventId(eventTime)
     const maxOrder = Math.max(0, ...events.map((e) => e.event_order || 0))
     const isFirstTic = events.length === 0
-    const addedAt = new Date().toISOString()
-    const { error: evErr } = await supabase.from('raid_events').insert({
-      raid_id: selectedRaidId,
-      event_id,
-      event_order: maxOrder + 1,
-      event_name: isFirstTic ? 'On-time' : 'DKP tic',
-      dkp_value: String(dkpValue),
-      attendee_count: String(names.length),
-      event_time: eventTime || addedAt,
-    })
-    if (evErr) {
-      setError(evErr.message)
-      setMutating(false)
-      return
-    }
+
+    // Resolve names to matched (credited) attendees before creating the tic
     const matched = []
     const unmatched = []
     const duplicates = []
@@ -572,6 +559,40 @@ export default function Officer({ isOfficer }) {
       seenCharId.add(char.char_id)
       seenAccountKey.add(accountKey)
       matched.push({ char_id: char.char_id, character_name: char.name })
+    }
+
+    // Only create a tic if we actually credited at least one attendee
+    if (matched.length === 0) {
+      setTicResult({
+        matched: 0,
+        matchedDisplay: [],
+        unmatched: unmatched.length > 0 ? unmatched : null,
+        duplicatesDisplay: duplicates.length > 0 ? duplicates : null,
+        sameAccountDisplay: sameAccount.length > 0 ? sameAccount : null,
+        event_id: null,
+        missingFromThisTicDisplay: null,
+        newThisTicDisplay: null,
+        noTicAdded: true,
+      })
+      setTicPaste('')
+      setMutating(false)
+      return
+    }
+
+    const addedAt = new Date().toISOString()
+    const { error: evErr } = await supabase.from('raid_events').insert({
+      raid_id: selectedRaidId,
+      event_id,
+      event_order: maxOrder + 1,
+      event_name: isFirstTic ? 'On-time' : 'DKP tic',
+      dkp_value: String(dkpValue),
+      attendee_count: String(matched.length),
+      event_time: eventTime || addedAt,
+    })
+    if (evErr) {
+      setError(evErr.message)
+      setMutating(false)
+      return
     }
     if (matched.length > 0) {
       const { error: attErr } = await supabase.from('raid_event_attendance').insert(
@@ -1125,7 +1146,11 @@ export default function Officer({ isOfficer }) {
             </div>
             {ticResult && (
               <div style={{ marginTop: 0, padding: '0.75rem', backgroundColor: 'rgba(0,0,0,0.25)', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.08)' }}>
-                <p style={{ color: '#22c55e', marginTop: 0, marginBottom: '0.5rem' }}><strong>Result:</strong> Tic added. Credited <strong>{ticResult.matched}</strong> attendee(s). Names shown as account (character).</p>
+                {ticResult.noTicAdded ? (
+                  <p style={{ color: '#f59e0b', marginTop: 0, marginBottom: '0.5rem' }}><strong>No tic added.</strong> No names matched the DKP list, so no attendees were credited.</p>
+                ) : (
+                  <p style={{ color: '#22c55e', marginTop: 0, marginBottom: '0.5rem' }}><strong>Result:</strong> Tic added. Credited <strong>{ticResult.matched}</strong> attendee(s). Names shown as account (character).</p>
+                )}
                 {ticResult.matchedDisplay?.length > 0 && (
                   <p style={{ color: '#22c55e', marginBottom: '0.25rem', fontSize: '0.9rem' }}><strong>Credited:</strong> {ticResult.matchedDisplay.join(', ')}</p>
                 )}
@@ -1423,7 +1448,7 @@ export default function Officer({ isOfficer }) {
                             </>
                           )}
                         </td>
-                        <td>{hasList ? `${attendees.length}${isExpanded ? '' : ' — click +'}` : (e.attendee_count ?? '—')}</td>
+                        <td>{hasList ? `${attendees.length}${isExpanded ? '' : ' — click +'}` : (e.attendee_count && e.attendee_count !== '0' ? e.attendee_count : '—')}</td>
                         <td>
                           <button type="button" className="btn btn-ghost" style={{ fontSize: '0.85rem', color: '#f87171' }} onClick={() => handleDeleteEvent(e.event_id)} disabled={mutating} title="Remove tic">Remove</button>
                         </td>
