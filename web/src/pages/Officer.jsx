@@ -1,9 +1,11 @@
 import { useEffect, useState, useCallback, useMemo, useRef, Fragment } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
+import useSWRConfig from 'swr'
 import { supabase } from '../lib/supabase'
 import { getDkpMobLoot } from '../lib/staticData'
 import { logOfficerAudit } from '../lib/officerAudit'
 import { formatAccountCharacter, formatAccountCharacters } from '../lib/formatAccountCharacter'
+import { DKP_DATA_KEY } from '../lib/dkpLeaderboard'
 
 // --- Parsing ---
 
@@ -109,6 +111,7 @@ function generateEventId(eventTimeStr) {
 export default function Officer({ isOfficer }) {
   const navigate = useNavigate()
   const location = useLocation()
+  const { mutate: globalMutate } = useSWRConfig()
   const [raids, setRaids] = useState([])
   const [selectedRaidId, setSelectedRaidId] = useState('')
   const [raid, setRaid] = useState(null)
@@ -452,6 +455,7 @@ export default function Officer({ isOfficer }) {
     const { count } = await supabase.from('raid_attendance').select('*', { count: 'exact', head: true }).eq('raid_id', selectedRaidId)
     if (count != null) await supabase.from('raids').update({ attendees: String(count) }).eq('raid_id', selectedRaidId)
     loadSelectedRaid()
+    globalMutate(DKP_DATA_KEY)
     setMutating(false)
   }
 
@@ -646,6 +650,7 @@ export default function Officer({ isOfficer }) {
     const { count } = await supabase.from('raid_attendance').select('*', { count: 'exact', head: true }).eq('raid_id', selectedRaidId)
     if (count != null) await supabase.from('raids').update({ attendees: String(count) }).eq('raid_id', selectedRaidId)
     loadSelectedRaid()
+    globalMutate(DKP_DATA_KEY)
     setMutating(false)
   }
 
@@ -694,12 +699,15 @@ export default function Officer({ isOfficer }) {
     setLootItemQuery('')
     setLootCharName('')
     setLootCost('0')
+    setLootCharName('')
+    setLootCost('0')
     setItemNames((prev) => {
       const key = itemName.trim().toLowerCase()
       if (prev.some((n) => (n || '').trim().toLowerCase() === key)) return prev
       return [...prev, itemName].sort((a, b) => a.localeCompare(b))
     })
     loadSelectedRaid()
+    globalMutate(DKP_DATA_KEY)
     setMutating(false)
   }
 
@@ -773,9 +781,10 @@ export default function Officer({ isOfficer }) {
         delta: { r: selectedRaidId, cnt: inserted, items: insertedItems },
       })
     }
-    setLootResult({ fromLog: true, inserted, total: totalRows })
+    setLootResult({ fromLog: true, inserted, total: totalRows, insertedItems })
     if (playerNotFound.length === 0 && itemNotFound.length === 0) setLootLogPaste('')
     loadSelectedRaid()
+    globalMutate(DKP_DATA_KEY)
     setMutating(false)
   }
 
@@ -826,6 +835,7 @@ export default function Officer({ isOfficer }) {
       })
       setEditingEventId(null)
       loadSelectedRaid()
+      globalMutate(DKP_DATA_KEY)
     }
   }
 
@@ -845,6 +855,7 @@ export default function Officer({ isOfficer }) {
       })
       setEditingEventTimeId(null)
       loadSelectedRaid()
+      globalMutate(DKP_DATA_KEY)
     }
   }
 
@@ -863,6 +874,7 @@ export default function Officer({ isOfficer }) {
       })
       setEditingLootId(null)
       loadSelectedRaid()
+      globalMutate(DKP_DATA_KEY)
     }
   }
 
@@ -881,6 +893,7 @@ export default function Officer({ isOfficer }) {
         delta: { r: selectedRaidId, l: row.id, i: row.item_name, c: row.character_name, cost: row.cost },
       })
       loadSelectedRaid()
+      globalMutate(DKP_DATA_KEY)
     }
   }
 
@@ -912,8 +925,9 @@ export default function Officer({ isOfficer }) {
     }
     const { count } = await supabase.from('raid_attendance').select('*', { count: 'exact', head: true }).eq('raid_id', selectedRaidId)
     if (count != null) await supabase.from('raids').update({ attendees: String(count) }).eq('raid_id', selectedRaidId)
-    setMutating(false)
     loadSelectedRaid()
+    globalMutate(DKP_DATA_KEY)
+    setMutating(false)
   }
 
   const handleRemoveAttendeeFromTic = async (eventId, charId, charName) => {
@@ -936,6 +950,7 @@ export default function Officer({ isOfficer }) {
     await supabase.rpc('refresh_dkp_summary')
     try { sessionStorage.removeItem('dkp_leaderboard_v2') } catch (_) {}
     loadSelectedRaid()
+    globalMutate(DKP_DATA_KEY)
     setMutating(false)
   }
 
@@ -1085,7 +1100,7 @@ export default function Officer({ isOfficer }) {
           <section className="card" style={{ marginBottom: '1.5rem' }}>
             <h2 style={{ marginTop: 0 }}>Add DKP tic (attendance)</h2>
             <p style={{ color: '#a1a1aa', fontSize: '0.9rem', marginBottom: '0.5rem' }}>
-              <strong>Matching:</strong> Paste the channel member list below. Each comma-separated name is matched to the DKP list by <strong>exact character name</strong> (case-insensitive). Only names that match a character on the DKP list receive credit. One credit per <strong>account</strong> per tic—duplicate character names in the paste and other toons on the same account are skipped and listed so you can verify.
+              <strong>Matching:</strong> Paste the channel member list below. Each comma-separated name is matched to the DKP list by <strong>exact character name</strong> (case-insensitive). Only names that match a character on the DKP list receive credit. One credit per <strong>account</strong> per tic—duplicate character names in the paste and other toons on the same account are skipped and listed so you can verify. DKP is credited to the character&apos;s <strong>linked account</strong> (account migration).
             </p>
             <textarea
               value={ticPaste}
@@ -1137,12 +1152,22 @@ export default function Officer({ isOfficer }) {
           {events.length > 0 && (
             <section className="card" style={{ marginBottom: '1.5rem' }}>
               <h2 style={{ marginTop: 0 }}>Add attendee to tic</h2>
-              <p style={{ color: '#71717a', fontSize: '0.9rem' }}>Pick a tic and a character to add them to that tic (e.g. someone missed the paste).</p>
+              <p style={{ color: '#71717a', fontSize: '0.9rem' }}>
+                Pick a tic and a character to add them to that tic (e.g. someone missed the paste). DKP is credited to the character&apos;s <strong>linked account</strong> (account migration), so the balance shown on account pages is correct.
+              </p>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', alignItems: 'flex-start' }}>
                 <select
                   value={addToTicEventId}
                   onChange={(e) => { setAddToTicEventId(e.target.value); setAddToTicResult(null) }}
-                  style={{ padding: '0.5rem 0.6rem', fontSize: '1rem', minWidth: '200px' }}
+                  style={{
+                    padding: '0.5rem 0.6rem',
+                    fontSize: '1rem',
+                    minWidth: '200px',
+                    minHeight: '48px',
+                    touchAction: 'manipulation',
+                    WebkitAppearance: 'menulist',
+                  }}
+                  aria-label="Select DKP tic to add character to"
                 >
                   {events.map((e) => (
                     <option key={e.event_id} value={e.event_id}>
@@ -1312,9 +1337,18 @@ export default function Officer({ isOfficer }) {
               Add from log
             </button>
             {lootResult && (
-              <p style={{ color: '#22c55e', marginTop: '0.5rem' }}>
-                {lootResult.fromLog ? `Added ${lootResult.inserted}/${lootResult.total} loot entries.` : `Added ${lootResult.itemName} → ${lootResult.characterName} (${lootResult.cost} DKP).`}
-              </p>
+              <div style={{ marginTop: '0.5rem' }}>
+                <p style={{ color: '#22c55e', marginBottom: lootResult.insertedItems?.length ? '0.25rem' : 0 }}>
+                  {lootResult.fromLog
+                    ? `Added ${lootResult.inserted}/${lootResult.total} loot entries.`
+                    : `Added: ${lootResult.itemName} → ${lootResult.characterName} (${lootResult.cost} DKP).`}
+                </p>
+                {lootResult.insertedItems?.length > 0 && (
+                  <p style={{ color: '#22c55e', fontSize: '0.9rem', marginTop: 0 }}>
+                    {lootResult.insertedItems.map((entry, i) => `${entry.i} → ${entry.c} (${entry.cost} DKP)`).join('; ')}
+                  </p>
+                )}
+              </div>
             )}
             {error && (
               <div className="error" role="alert" style={{ marginTop: '0.5rem', padding: '0.5rem 0.75rem', backgroundColor: 'rgba(248,113,113,0.15)', borderRadius: '4px', border: '1px solid #f87171' }}>

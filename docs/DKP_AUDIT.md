@@ -2,6 +2,15 @@
 
 Automated audit of the **Current Member DKP** page from Gamer Launch against Supabase account-level DKP totals.
 
+## Web app: account migration (add-to-tic and tic paste)
+
+When officers add characters to a DKP tic (either via **Add attendee to tic** or by pasting a channel list in **Add DKP tic**), DKP is credited to the **linked account** (not just the character). The backend uses `character_account` and `raid_attendance_dkp_by_account` / `account_dkp_summary`, so:
+
+- Adding a character to a tic gives DKP to that character's account (if linked in `character_account`).
+- The DKP leaderboard and account detail pages show account-level totals; the "Credited" and "Added to tic" messages in the Officer UI refer to the character, but the balance that updates is the account's.
+
+So when we add characters to a tic, we are using account migration and the messages are still meaningful (character name for clarity; DKP applies to the account).
+
 ## Why it works in the browser / pull-raids but not “direct” to members
 
 - **Browser:** You’ve already opened another rapid_raid page (e.g. Raids or Lists). The server then treats the next request (e.g. DKP) as part of the same “rapid_raid” session and may rely on cookies/state set on that first page.

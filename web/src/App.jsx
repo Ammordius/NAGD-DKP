@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { Routes, Route, Navigate, Link } from 'react-router-dom'
+import { useEffect, useState, useRef } from 'react'
+import { Routes, Route, Navigate, Link, useLocation, useNavigate } from 'react-router-dom'
 import { Analytics } from '@vercel/analytics/react'
 import { supabase } from './lib/supabase'
 import Login from './pages/Login'
@@ -23,6 +23,33 @@ export default function App() {
   const [session, setSession] = useState(null)
   const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(true)
+  const location = useLocation()
+  const navigate = useNavigate()
+  const hasRestoredRef = useRef(false)
+
+  // Persist current route so returning to the tab (or reopening the app) keeps you on the same page
+  useEffect(() => {
+    const path = location.pathname + location.search
+    if (path && path !== '/login') {
+      try {
+        sessionStorage.setItem('dkp-last-path', path)
+      } catch (_) { /* ignore */ }
+    }
+  }, [location.pathname, location.search])
+
+  // Restore last page only once when app loads at / (so we don't redirect when user clicks Home)
+  useEffect(() => {
+    if (loading || !session) return
+    if (location.pathname !== '/') return
+    if (hasRestoredRef.current) return
+    hasRestoredRef.current = true
+    try {
+      const saved = sessionStorage.getItem('dkp-last-path')
+      if (saved && saved.startsWith('/') && saved !== '/' && !saved.startsWith('/login')) {
+        navigate(saved, { replace: true })
+      }
+    } catch (_) { /* ignore */ }
+  }, [loading, session, location.pathname, navigate])
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
