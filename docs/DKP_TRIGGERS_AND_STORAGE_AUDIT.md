@@ -2,6 +2,8 @@
 
 Audit of triggers, where DKP data is stored, and the workflow for adding DKP from the website or upload backend. Goal: **fast, correct** updates without full-table refreshes when only one raid changes.
 
+**See also:** **docs/SCHEMA_RPC_INDEX.md** — full list of RPCs/functions, canonical vs one-off definitions, and callers.
+
 ---
 
 ## 1. Source-of-truth tables (canonical data)
@@ -105,9 +107,11 @@ Result:
 
 ---
 
-## 7. delete_raid_for_reupload RPC
+## 7. delete_raid (Officer UI) and delete_raid_for_reupload (upload script)
 
-After deleting one raid’s rows it runs:
+**delete_raid** (docs/supabase-officer-raids.sql) — Used by the Officer page to permanently delete a raid and all its tics/loot/attendance. Disables triggers during delete, then runs `refresh_dkp_summary_internal()` and (if present) `refresh_account_dkp_summary_internal()` so dkp_summary, dkp_period_totals, and account_dkp_summary stay correct.
+
+**delete_raid_for_reupload** (docs/delete_raid_for_reupload_rpc.sql) — Used by upload_raid_detail_to_supabase.py to clear one raid before re-uploading. After deleting that raid’s rows it runs:
 
 - `refresh_dkp_summary_internal()`
 - `refresh_raid_attendance_totals(raid_id)` (no-op for that raid once data is gone; keeps other state consistent)

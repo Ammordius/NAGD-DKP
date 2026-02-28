@@ -2,6 +2,8 @@
 
 Automated audit of the **Current Member DKP** page from Gamer Launch against Supabase account-level DKP totals.
 
+**RPC/schema index:** For a full list of DKP-related RPCs and where they are defined (canonical vs one-off), see **docs/SCHEMA_RPC_INDEX.md**.
+
 ## Web app: account migration (add-to-tic and tic paste)
 
 When officers add characters to a DKP tic (either via **Add attendee to tic** or by pasting a channel list in **Add DKP tic**), DKP is credited to the **linked account** (not just the character). The backend uses `character_account` and `raid_attendance_dkp_by_account` / `account_dkp_summary`, so:
