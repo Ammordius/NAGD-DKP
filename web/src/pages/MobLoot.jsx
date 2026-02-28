@@ -146,6 +146,15 @@ const PLANE_OF_TIME_MOB_ORDER = [
 ]
 const POT_ORDER_MAP = new Map(PLANE_OF_TIME_MOB_ORDER.map((name, i) => [name.toLowerCase().replace(/\s+/g, '_'), i]))
 
+/** Item names that drop only from Vallon Zek in Plane of Tactics, not from VZ in Plane of Time. Hide these when showing "Vallon Zek" in "Plane of Time". */
+const VZ_TACTICS_ONLY_ITEM_NAMES = new Set([
+  'furious hammer of zek',
+  'obsidian scimitar of war',
+  'resplendent war maul',
+  'girdle of the tactician',
+  'pendant of the triumphant victor',
+])
+
 /** Force specific mobs to the correct zone (overrides JSON/raid inference when wrong). */
 const MOB_ZONE_OVERRIDES = {
   'a_monsterous_mudwalker': 'Plane of Earth',
@@ -382,7 +391,7 @@ export default function MobLoot() {
     })
   }, [entries, mobZoneFromRaids])
 
-  /** Merge entries that are the same mob in the same zone (e.g. one from dkp, one from raid_item_sources). */
+  /** Merge entries that are the same mob in the same zone (e.g. one from dkp, one from raid_item_sources). Dedupe loot by resolved item_id (so same item from different sources appears once). */
   const entriesMergedByMobAndZone = useMemo(() => {
     const zoneMobToEntries = new Map()
     entriesWithZone.forEach((e) => {
@@ -395,24 +404,24 @@ export default function MobLoot() {
     })
     const result = []
     zoneMobToEntries.forEach((group) => {
-      if (group.length === 1) {
-        result.push({ ...group[0], key: group[0].key })
-        return
-      }
       const first = group[0]
       const displayZone = (first.displayZone || '').trim() || 'Other / Unknown'
       const mobsSet = new Set()
-      const lootByKey = new Map() // item_id or name -> { item, sources Set }
+      const lootByKey = new Map() // resolved item_id or name -> { item, sources Set }
       group.forEach((e) => {
         (e.mobs?.length ? e.mobs : [e.mob]).forEach((m) => mobsSet.add((m || '').replace(/^#/, '').trim()))
         ;(e.loot || []).forEach((item) => {
-          const id = item.item_id ?? item.name
-          const k = id != null ? String(id) : (item.name || '').trim().toLowerCase()
+          const nameNorm = (item.name || '').trim().toLowerCase()
+          const resolvedId = item.item_id ?? nameToId[nameNorm]
+          const k = resolvedId != null ? String(resolvedId) : nameNorm || 'unknown'
           if (!lootByKey.has(k)) {
             lootByKey.set(k, { item: { ...item }, sources: new Set(item.sources || []) })
           } else {
             const existing = lootByKey.get(k)
             ;(item.sources || []).forEach((s) => existing.sources.add(s))
+            if (existing.item.item_id == null && item.item_id != null) {
+              existing.item = { ...item }
+            }
           }
         })
       })
@@ -421,6 +430,15 @@ export default function MobLoot() {
         ...item,
         sources: [...sources].sort(),
       }))
+      if (group.length === 1) {
+        result.push({
+          ...group[0],
+          key: group[0].key,
+          mobs: mobs.length ? mobs : (group[0].mobs || [group[0].mob]),
+          loot,
+        })
+        return
+      }
       const mergedKey = `${mobs[0] || 'mob'}|${displayZone}|merged`
       result.push({
         key: mergedKey,
@@ -432,7 +450,7 @@ export default function MobLoot() {
       })
     })
     return result
-  }, [entriesWithZone])
+  }, [entriesWithZone, nameToId])
 
   /** Use JSON mobs array when present; otherwise group entries with same zone + same loot (backward compat). */
   const entriesGrouped = useMemo(() => {
@@ -480,10 +498,20 @@ export default function MobLoot() {
     return list
   }, [entriesGrouped, query])
 
-  /** For a mob's loot list: filter by slot/class and sort by gear score (desc). When class is selected, elemental molds resolve to class-specific armor for display and filtering. */
-  const getFilteredAndSortedLoot = useCallback((loot) => {
+  /** For a mob's loot list: filter by slot/class and sort by gear score (desc). When class is selected, elemental molds resolve to class-specific armor for display and filtering. When entry is VZ in Plane of Time, exclude VZ tactics-only items. */
+  const getFilteredAndSortedLoot = useCallback((loot, entry) => {
     if (!loot?.length) return []
-    const withStats = loot.map((item) => {
+    let baseLoot = loot
+    if (entry?.displayZone === 'Plane of Time' && entry.mobs?.length) {
+      const isVZInTime = entry.mobs.some((m) => /vallon_zek/i.test((m || '').replace(/^#/, '')))
+      if (isVZInTime) {
+        baseLoot = baseLoot.filter((item) => {
+          const nameNorm = (item.name || '').trim().toLowerCase()
+          return !VZ_TACTICS_ONLY_ITEM_NAMES.has(nameNorm)
+        })
+      }
+    }
+    const withStats = baseLoot.map((item) => {
       const name = (item.name || '').trim().toLowerCase()
       const moldId = item.item_id ?? nameToId[name]
       const moldInfo = getMoldInfo(moldId)
@@ -522,7 +550,7 @@ export default function MobLoot() {
     if (!filterSlot && !filterClass) return filtered
     return filtered
       .map((e) => {
-        const loot = getFilteredAndSortedLoot(e.loot)
+        const loot = getFilteredAndSortedLoot(e.loot, e)
         if (loot.length === 0) return null
         const maxGearScore = getGearScore(loot[0].stats) // loot already sorted desc by gear score
         return { ...e, maxGearScore }
@@ -584,7 +612,7 @@ export default function MobLoot() {
     if (!filterSlot && !filterClass) return
     const toExpand = {}
     filteredForDisplay.forEach((e) => {
-      const loot = getFilteredAndSortedLoot(e.loot)
+      const loot = getFilteredAndSortedLoot(e.loot, e)
       if (loot.length > 0 && loot.length < 3) toExpand[e.key] = true
     })
     if (Object.keys(toExpand).length === 0) return
@@ -677,7 +705,7 @@ export default function MobLoot() {
                 </tr>
                 {zoneEntries.map((e) => {
                   const isOpen = expanded[e.key]
-                  const filteredLoot = getFilteredAndSortedLoot(e.loot)
+                  const filteredLoot = getFilteredAndSortedLoot(e.loot, e)
                   const limit = itemsShownPerKey[e.key] ?? ITEMS_PER_PAGE
                   const visibleLoot = filteredLoot.slice(0, limit)
                   const hasMore = filteredLoot.length > limit
