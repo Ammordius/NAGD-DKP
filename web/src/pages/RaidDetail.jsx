@@ -96,6 +96,8 @@ export default function RaidDetail({ isOfficer }) {
   useEffect(() => {
     if (events.length > 0 && (!addToTicEventId || !events.some((e) => e.event_id === addToTicEventId))) {
       setAddToTicEventId(events[0].event_id)
+    } else if (events.length === 0 && addToTicEventId) {
+      setAddToTicEventId('')
     }
   }, [events, addToTicEventId])
 
@@ -369,11 +371,22 @@ export default function RaidDetail({ isOfficer }) {
     if (!raidId || !window.confirm(`Remove ${charName || charId} from this tic?`)) return
     const removedAccountId = getAccountId(charId) || getAccountId(charName)
     setMutating(true)
-    await supabase.from('raid_event_attendance').delete().eq('raid_id', raidId).eq('event_id', eventId).eq('char_id', charId)
+    setMutationError('')
+    const { error: delEvErr } = await supabase.from('raid_event_attendance').delete().eq('raid_id', raidId).eq('event_id', eventId).eq('char_id', charId)
+    if (delEvErr) {
+      setMutating(false)
+      setMutationError(delEvErr.message)
+      return
+    }
     const { data: remainingEventAtt } = await supabase.from('raid_event_attendance').select('char_id').eq('raid_id', raidId)
     const charIdsStillInEvents = new Set((remainingEventAtt || []).map((r) => String(r.char_id ?? '')).filter(Boolean))
     if (!charIdsStillInEvents.has(String(charId))) {
-      await supabase.from('raid_attendance').delete().eq('raid_id', raidId).eq('char_id', charId)
+      const { error: delAttErr } = await supabase.from('raid_attendance').delete().eq('raid_id', raidId).eq('char_id', charId)
+      if (delAttErr) {
+        setMutating(false)
+        setMutationError(delAttErr.message)
+        return
+      }
     }
     await logOfficerAudit(supabase, {
       action: 'remove_attendee_from_tic',
@@ -381,7 +394,7 @@ export default function RaidDetail({ isOfficer }) {
       target_id: eventId,
       delta: { r: raidId, e: eventId, c: charName },
     })
-    const { count } = await supabase.from('raid_attendance').select('raid_id', { count: 'exact', head: true }).eq('raid_id', raidId)
+    const { count } = await supabase.from('raid_attendance').select('*', { count: 'exact', head: true }).eq('raid_id', raidId)
     if (count != null) await supabase.from('raids').update({ attendees: String(count) }).eq('raid_id', raidId)
     await supabase.rpc('refresh_dkp_summary')
     await supabase.rpc('refresh_account_dkp_summary_for_raid', {

@@ -100,8 +100,11 @@ BEGIN
   DELETE FROM raid_classifications WHERE raid_id = p_raid_id;
   DELETE FROM raids WHERE raid_id = p_raid_id;
 
-  -- Single full refresh so dkp_summary and dkp_period_totals stay correct.
+  -- Single full refresh so dkp_summary, dkp_period_totals, and account_dkp_summary stay correct.
   PERFORM refresh_dkp_summary_internal();
+  IF EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'public' AND p.proname = 'refresh_account_dkp_summary_internal') THEN
+    PERFORM refresh_account_dkp_summary_internal();
+  END IF;
 
   -- Re-enable triggers (same order as disable).
   ALTER TABLE raid_events ENABLE TRIGGER refresh_raid_totals_after_events_del;

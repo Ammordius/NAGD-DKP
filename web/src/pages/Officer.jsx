@@ -389,10 +389,12 @@ export default function Officer({ isOfficer }) {
     }
   }, [ticResult?.event_id])
 
-  // Keep addToTicEventId in sync with events (default to first tic)
+  // Keep addToTicEventId in sync with events (default to first tic; clear when no tics)
   useEffect(() => {
     if (events.length > 0 && (!addToTicEventId || !events.some((e) => e.event_id === addToTicEventId))) {
       setAddToTicEventId(events[0].event_id)
+    } else if (events.length === 0 && addToTicEventId) {
+      setAddToTicEventId('')
     }
   }, [events, addToTicEventId])
 
@@ -509,8 +511,18 @@ export default function Officer({ isOfficer }) {
     })
     setAddRaidResult({ raid_id, raid_name: raidName.trim() })
     setRaidPaste('')
-    await loadRaids()
+    const dateVal = dateIso || new Date().toISOString().slice(0, 10)
+    const newRaidRow = { raid_id, raid_name: raidName.trim(), date_iso: dateVal, date: dateVal }
+    setRaids((prev) => {
+      if (prev.some((r) => r.raid_id === raid_id)) return prev
+      return [newRaidRow, ...prev]
+    })
     setSelectedRaidId(raid_id)
+    await loadRaids()
+    setRaids((prev) => {
+      if (prev.some((r) => r.raid_id === raid_id)) return prev
+      return [newRaidRow, ...prev]
+    })
     setMutating(false)
   }
 
@@ -729,6 +741,13 @@ export default function Officer({ isOfficer }) {
       if (prev.some((n) => (n || '').trim().toLowerCase() === key)) return prev
       return [...prev, itemName].sort((a, b) => a.localeCompare(b))
     })
+    const recipientAccountId = charIdToAccountId[char.char_id] ? String(charIdToAccountId[char.char_id]) : null
+    await supabase.rpc('refresh_dkp_summary')
+    await supabase.rpc('refresh_account_dkp_summary_for_raid', {
+      p_raid_id: selectedRaidId,
+      p_extra_account_ids: recipientAccountId ? [recipientAccountId] : [],
+    })
+    try { sessionStorage.removeItem('dkp_leaderboard_v2') } catch (_) {}
     loadSelectedRaid()
     globalMutate(DKP_DATA_KEY)
     setMutating(false)
@@ -803,6 +822,20 @@ export default function Officer({ isOfficer }) {
         target_id: null,
         delta: { r: selectedRaidId, cnt: inserted, items: insertedItems },
       })
+      const recipientAccountIds = [...new Set(
+        insertedItems
+          .map((item) => {
+            const char = nameToChar[(item.c || '').toLowerCase()]
+            return char && charIdToAccountId[char.char_id] ? String(charIdToAccountId[char.char_id]) : null
+          })
+          .filter(Boolean)
+      )]
+      await supabase.rpc('refresh_dkp_summary')
+      await supabase.rpc('refresh_account_dkp_summary_for_raid', {
+        p_raid_id: selectedRaidId,
+        p_extra_account_ids: recipientAccountIds,
+      })
+      try { sessionStorage.removeItem('dkp_leaderboard_v2') } catch (_) {}
     }
     setLootResult({ fromLog: true, inserted, total: totalRows, insertedItems })
     if (playerNotFound.length === 0 && itemNotFound.length === 0) setLootLogPaste('')
@@ -922,6 +955,9 @@ export default function Officer({ isOfficer }) {
 
   const handleDeleteEvent = async (eventId) => {
     if (!window.confirm('Are you sure you want to remove this DKP tic and all its attendance?\n\nThis cannot be undone.')) return
+    const accountIdsOnTic = [...new Set(
+      (eventAttendance || []).filter((r) => String(r.event_id) === String(eventId)).map((r) => charIdToAccountId[r.char_id]).filter(Boolean)
+    )].map(String)
     setMutating(true)
     await supabase.from('raid_event_attendance').delete().eq('raid_id', selectedRaidId).eq('event_id', eventId)
     const { error: err } = await supabase.from('raid_events').delete().eq('raid_id', selectedRaidId).eq('event_id', eventId)
@@ -948,6 +984,12 @@ export default function Officer({ isOfficer }) {
     }
     const { count } = await supabase.from('raid_attendance').select('*', { count: 'exact', head: true }).eq('raid_id', selectedRaidId)
     if (count != null) await supabase.from('raids').update({ attendees: String(count) }).eq('raid_id', selectedRaidId)
+    await supabase.rpc('refresh_dkp_summary')
+    await supabase.rpc('refresh_account_dkp_summary_for_raid', {
+      p_raid_id: selectedRaidId,
+      p_extra_account_ids: accountIdsOnTic.length ? accountIdsOnTic : [],
+    })
+    try { sessionStorage.removeItem('dkp_leaderboard_v2') } catch (_) {}
     loadSelectedRaid()
     globalMutate(DKP_DATA_KEY)
     setMutating(false)
@@ -957,11 +999,22 @@ export default function Officer({ isOfficer }) {
     if (!selectedRaidId || !window.confirm(`Remove ${charName || charId} from this tic?`)) return
     const removedAccountId = charIdToAccountId[charId] ? String(charIdToAccountId[charId]) : null
     setMutating(true)
-    await supabase.from('raid_event_attendance').delete().eq('raid_id', selectedRaidId).eq('event_id', eventId).eq('char_id', charId)
+    setError(null)
+    const { error: delEvErr } = await supabase.from('raid_event_attendance').delete().eq('raid_id', selectedRaidId).eq('event_id', eventId).eq('char_id', charId)
+    if (delEvErr) {
+      setMutating(false)
+      setError(delEvErr.message)
+      return
+    }
     const { data: remainingEventAtt } = await supabase.from('raid_event_attendance').select('char_id').eq('raid_id', selectedRaidId)
     const charIdsStillInEvents = new Set((remainingEventAtt || []).map((r) => String(r.char_id ?? '')).filter(Boolean))
     if (!charIdsStillInEvents.has(String(charId))) {
-      await supabase.from('raid_attendance').delete().eq('raid_id', selectedRaidId).eq('char_id', charId)
+      const { error: delAttErr } = await supabase.from('raid_attendance').delete().eq('raid_id', selectedRaidId).eq('char_id', charId)
+      if (delAttErr) {
+        setMutating(false)
+        setError(delAttErr.message)
+        return
+      }
     }
     await logOfficerAudit(supabase, {
       action: 'remove_attendee_from_tic',
@@ -1013,11 +1066,15 @@ export default function Officer({ isOfficer }) {
     return characterNamesList.filter((n) => n.toLowerCase().includes(q)).slice(0, 200)
   }, [characterNamesList, addToTicCharQuery])
 
+  const showAddToTicDropdown = showCharDropdown && (filteredCharacterNames.length > 0 || addToTicCharQuery === '')
+
   const filteredLootCharacterNames = useMemo(() => {
     const q = lootCharName.toLowerCase().trim()
     if (!q) return characterNamesList.slice(0, 200)
     return characterNamesList.filter((n) => n.toLowerCase().includes(q)).slice(0, 200)
   }, [characterNamesList, lootCharName])
+
+  const showLootCharDropdownList = showLootCharDropdown && (filteredLootCharacterNames.length > 0 || lootCharName === '')
 
   const addRaidSectionRef = useRef(null)
   const raidPasteRef = useRef(null)
@@ -1213,13 +1270,19 @@ export default function Officer({ isOfficer }) {
                     value={addToTicCharQuery}
                     onChange={(e) => { setAddToTicCharQuery(e.target.value); setAddToTicResult(null) }}
                     onFocus={() => setShowCharDropdown(true)}
-                    onBlur={() => setTimeout(() => setShowCharDropdown(false), 150)}
+                    onBlur={() => setTimeout(() => setShowCharDropdown(false), 200)}
                     placeholder="Character name (type to filter)"
                     style={{ padding: '0.5rem 0.6rem', fontSize: '1rem', width: '100%', minWidth: '180px', boxSizing: 'border-box' }}
+                    autoComplete="off"
+                    aria-expanded={showAddToTicDropdown}
+                    aria-haspopup="listbox"
+                    aria-controls="add-to-tic-char-list"
                   />
-                  {showCharDropdown && filteredCharacterNames.length > 0 && (
+                  {showAddToTicDropdown && (
                     <ul
+                      id="add-to-tic-char-list"
                       className="card"
+                      role="listbox"
                       style={{
                         position: 'absolute',
                         top: '100%',
@@ -1233,16 +1296,29 @@ export default function Officer({ isOfficer }) {
                         listStyle: 'none',
                         zIndex: 10,
                       }}
+                      onMouseDown={(e) => e.preventDefault()}
                     >
-                      {filteredCharacterNames.map((n) => (
-                        <li
-                          key={n}
-                          style={{ padding: '0.4rem 0.6rem', cursor: 'pointer' }}
-                          onMouseDown={(e) => { e.preventDefault(); setAddToTicCharQuery(n); setShowCharDropdown(false) }}
-                        >
-                          {n}
+                      {filteredCharacterNames.length === 0 ? (
+                        <li style={{ padding: '0.4rem 0.6rem', color: '#71717a' }}>
+                          {characterNamesList.length === 0 ? 'Loading characters…' : 'Type to filter'}
                         </li>
-                      ))}
+                      ) : (
+                        filteredCharacterNames.map((n) => (
+                          <li
+                            key={n}
+                            role="option"
+                            style={{ padding: '0.4rem 0.6rem', cursor: 'pointer' }}
+                            onMouseDown={(e) => {
+                              e.preventDefault()
+                              e.stopPropagation()
+                              setAddToTicCharQuery(n)
+                              setTimeout(() => setShowCharDropdown(false), 0)
+                            }}
+                          >
+                            {n}
+                          </li>
+                        ))
+                      )}
                     </ul>
                   )}
                 </div>
@@ -1312,13 +1388,17 @@ export default function Officer({ isOfficer }) {
                   value={lootCharName}
                   onChange={(e) => { setLootCharName(e.target.value); setError('') }}
                   onFocus={() => setShowLootCharDropdown(true)}
-                  onBlur={() => setTimeout(() => setShowLootCharDropdown(false), 150)}
+                  onBlur={() => setTimeout(() => setShowLootCharDropdown(false), 200)}
                   placeholder="Character name (type to filter)"
                   style={{ padding: '0.5rem 0.6rem', fontSize: '1rem', width: '100%', minWidth: '180px', boxSizing: 'border-box' }}
+                  autoComplete="off"
+                  aria-expanded={showLootCharDropdownList}
+                  aria-haspopup="listbox"
                 />
-                {showLootCharDropdown && filteredLootCharacterNames.length > 0 && (
+                {showLootCharDropdownList && (
                   <ul
                     className="card"
+                    role="listbox"
                     style={{
                       position: 'absolute',
                       top: '100%',
@@ -1332,16 +1412,29 @@ export default function Officer({ isOfficer }) {
                       listStyle: 'none',
                       zIndex: 10,
                     }}
+                    onMouseDown={(e) => e.preventDefault()}
                   >
-                    {filteredLootCharacterNames.map((n) => (
-                      <li
-                        key={n}
-                        style={{ padding: '0.4rem 0.6rem', cursor: 'pointer' }}
-                        onMouseDown={(e) => { e.preventDefault(); setLootCharName(n); setShowLootCharDropdown(false) }}
-                      >
-                        {n}
+                    {filteredLootCharacterNames.length === 0 ? (
+                      <li style={{ padding: '0.4rem 0.6rem', color: '#71717a' }}>
+                        {characterNamesList.length === 0 ? 'Loading characters…' : 'Type to filter'}
                       </li>
-                    ))}
+                    ) : (
+                      filteredLootCharacterNames.map((n) => (
+                        <li
+                          key={n}
+                          role="option"
+                          style={{ padding: '0.4rem 0.6rem', cursor: 'pointer' }}
+                          onMouseDown={(e) => {
+                            e.preventDefault()
+                            e.stopPropagation()
+                            setLootCharName(n)
+                            setTimeout(() => setShowLootCharDropdown(false), 0)
+                          }}
+                        >
+                          {n}
+                        </li>
+                      ))
+                    )}
                   </ul>
                 )}
               </div>
