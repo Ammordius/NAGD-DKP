@@ -868,6 +868,8 @@ export default function Officer({ isOfficer }) {
       target_id: selectedRaidId,
       delta: { r: selectedRaidId, n: raidName },
     })
+    const { error: refreshErr } = await supabase.rpc('refresh_account_dkp_summary')
+    if (refreshErr) setDeleteError(refreshErr.message)
     try { sessionStorage.removeItem('dkp_leaderboard_v2') } catch (_) {}
     globalMutate(DKP_DATA_KEY)
     setSelectedRaidId('')

@@ -117,7 +117,7 @@ Without these calls, adding or assigning loot would not update **account_dkp_sum
 
 ## 7. delete_raid (Officer UI) and delete_raid_for_reupload (upload script)
 
-**delete_raid** (docs/supabase-officer-raids.sql) — Used by the Officer page to permanently delete a raid and all its tics/loot/attendance. Disables triggers during delete, then runs `refresh_dkp_summary_internal()` and (if present) `refresh_account_dkp_summary_internal()` so dkp_summary, dkp_period_totals, and account_dkp_summary stay correct.
+**delete_raid** (docs/supabase-officer-raids.sql) — Used by the Officer page to permanently delete a raid and all its tics/loot/attendance. Disables triggers during delete, then runs `refresh_dkp_summary_internal()` and (if present) `refresh_account_dkp_summary_internal()` so dkp_summary, dkp_period_totals, and account_dkp_summary stay correct. The account refresh is optional inside the RPC (IF EXISTS), so **the Officer app also calls `refresh_account_dkp_summary()` after delete_raid returns** to guarantee account_dkp_summary is updated even when the in-RPC refresh was skipped (e.g. function not deployed).
 
 **delete_raid_for_reupload** (docs/delete_raid_for_reupload_rpc.sql) — Used by upload_raid_detail_to_supabase.py to clear one raid before re-uploading. After deleting that raid’s rows it runs:
 
