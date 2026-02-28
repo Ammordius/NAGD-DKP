@@ -306,19 +306,26 @@ def main() -> int:
             client.table("raid_event_attendance").insert(rea_rows).execute()
             print(f"Inserted {len(rea_rows)} raid_event_attendance (one per account per tic)")
 
-    # Refresh DKP totals
+    # Refresh DKP totals (per-raid account refresh is fast; full refresh only if per-raid not available)
     try:
         client.rpc("refresh_dkp_summary").execute()
         print("refresh_dkp_summary() completed.")
     except Exception as e:
         print(f"Warning: refresh_dkp_summary: {e}", file=sys.stderr)
     try:
-        client.rpc("refresh_account_dkp_summary").execute()
-        print("refresh_account_dkp_summary() completed.")
+        client.rpc("refresh_account_dkp_summary_for_raid", {"p_raid_id": raid_id}).execute()
+        print("refresh_account_dkp_summary_for_raid() completed.")
     except Exception as e:
         err = str(e).lower()
-        if "does not exist" not in err and "function" not in err:
-            print(f"Warning: refresh_account_dkp_summary: {e}", file=sys.stderr)
+        if "does not exist" in err or "function" in err:
+            try:
+                client.rpc("refresh_account_dkp_summary").execute()
+                print("refresh_account_dkp_summary() completed (fallback).")
+            except Exception as e2:
+                if "does not exist" not in str(e2).lower() and "function" not in str(e2).lower():
+                    print(f"Warning: refresh_account_dkp_summary: {e2}", file=sys.stderr)
+        else:
+            print(f"Warning: refresh_account_dkp_summary_for_raid: {e}", file=sys.stderr)
 
     print("Done. Reload the raid in the Officer page to see tics, loot, and attendance.")
     return 0

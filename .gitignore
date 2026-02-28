@@ -3,6 +3,14 @@
 .env.local
 .env.*.local
 cookies.txt
+cookies_raw.txt
+
+# Member/session data (re-run audit scripts to reproduce)
+data/members_dkp.html
+data/members_dkp_snapshot.json
+data/audit_dkp_result.json
+*Current Member DKP*.html
+*Current Member DKP*_files/
 
 # Dependencies and build
 node_modules/
