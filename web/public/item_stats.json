@@ -68779,5 +68779,67 @@
   },
   "86930": {
     "gearScore": 0
+  },
+  "32605": {
+    "flags": [
+      "MAGIC ITEM",
+      "LORE ITEM",
+      "NO DROP"
+    ],
+    "slot": "RANGE PRIMARY",
+    "ac": 15,
+    "mods": [
+      {
+        "label": "STA",
+        "value": 15
+      },
+      {
+        "label": "AGI",
+        "value": 20
+      },
+      {
+        "label": "INT",
+        "value": 25
+      },
+      {
+        "label": "HP",
+        "value": 145
+      },
+      {
+        "label": "MANA",
+        "value": 160
+      }
+    ],
+    "resists": [
+      {
+        "label": "Fire",
+        "value": 15
+      },
+      {
+        "label": "Cold",
+        "value": 15
+      },
+      {
+        "label": "Magic",
+        "value": 15
+      },
+      {
+        "label": "Poison",
+        "value": 15
+      },
+      {
+        "label": "Disease",
+        "value": 15
+      }
+    ],
+    "requiredLevel": 65,
+    "levelType": "required",
+    "effectSpellId": 3309,
+    "effectSpellName": "Embracing Darkness",
+    "effectNote": "",
+    "weight": 1.5,
+    "size": "SMALL",
+    "classes": "NEC",
+    "gearScore": 138
   }
 }
