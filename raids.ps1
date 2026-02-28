@@ -9,6 +9,8 @@
 #   .\raids.ps1 upload-raids
 #   .\raids.ps1 upload-raids-ids 1598692 1598705
 #   .\raids.ps1 sync-raids   # pull -> pull attendees -> confirm -> upload
+#   .\raids.ps1 pull-members-dkp   # download Current Member DKP page
+#   .\raids.ps1 audit-dkp          # download + parse + audit vs Supabase
 
 param(
     [Parameter(Position = 0)]
@@ -146,6 +148,28 @@ function Sync-Raids {
     }
 }
 
+function Pull-MembersDkp {
+    Check-Cookie
+    $outPath = "data/members_dkp.html"
+    if (-not (Test-Path "data")) { New-Item -ItemType Directory -Path "data" | Out-Null }
+    Write-Host "Downloading Current Member DKP page..."
+    python $ScriptDir/pull_members_dkp.py --cookies-file $Cookies --out $outPath
+    if ($LASTEXITCODE -eq 0) { Write-Host "Saved to $outPath. Run audit-dkp to parse and compare to Supabase." }
+}
+
+function Audit-Dkp {
+    Pull-MembersDkp
+    if ($LASTEXITCODE -ne 0) { return }
+    $snapshot = "data/members_dkp_snapshot.json"
+    $auditSql = "docs/audit_dkp_snapshot_vs_db.sql"
+    $jsonOut = "data/audit_dkp_result.json"
+    Write-Host "Parsing and emitting audit SQL..."
+    python $ScriptDir/parse_members_dkp_html.py parse data/members_dkp.html -o $snapshot --emit-sql $auditSql
+    if ($LASTEXITCODE -ne 0) { return }
+    Write-Host "Running audit vs Supabase..."
+    python $ScriptDir/parse_members_dkp_html.py audit $snapshot --json-out $jsonOut
+}
+
 function Show-Help {
     @"
 Local raid pull & upload (Windows). Use this instead of make/nmake.
@@ -157,6 +181,8 @@ Local raid pull & upload (Windows). Use this instead of make/nmake.
   .\raids.ps1 upload-raids-ids 1598692 1598705   # upload only these (spaces or commas)
   .\raids.ps1 sync-raids              # pull -> pull attendees -> confirm -> upload
   .\raids.ps1 upload-raid-detail 1598705
+  .\raids.ps1 pull-members-dkp        # download Current Member DKP page
+  .\raids.ps1 audit-dkp               # download + parse + audit vs Supabase
 
 Since-date: edit .raids-since-date (one line YYYY-MM-DD). After each pull it is set to today.
 Prereqs: cookies.txt (Cookie header), .env with SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.
@@ -171,6 +197,8 @@ switch ($Target.ToLower()) {
     "upload-raids-ids" { Upload-RaidsIds }
     "upload-raid-detail" { Upload-RaidDetail }
     "sync-raids"       { Sync-Raids }
+    "pull-members-dkp" { Pull-MembersDkp }
+    "audit-dkp"        { Audit-Dkp }
     "help"             { Show-Help }
     default            { Show-Help; if ($Target -ne "help") { Write-Error "Unknown target: $Target" } }
 }

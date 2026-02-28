@@ -4,12 +4,16 @@ Parse the Gamer Launch DKP HTML into a canonical snapshot and audit against Supa
 The HTML is already one row per ACCOUNT (aggregated earned/spent). We parse and compare at account level.
 
 Usage:
-  # Parse HTML → save canonical JSON (one row per account).
+  # Download the page first (requires cookies.txt):
+  python scripts/pull_parse_dkp_site/pull_members_dkp.py -o data/members_dkp.html
+
+  # Parse HTML -> save canonical JSON (one row per account).
   python parse_members_dkp_html.py parse "Current Member DKP - ... .html" -o data/members_dkp_snapshot.json
 
   # Audit: compare snapshot to DB (account-level; DB sums dkp_summary by account).
   python parse_members_dkp_html.py audit data/members_dkp_snapshot.json
   python parse_members_dkp_html.py audit "Current Member DKP - ... .html"
+  python parse_members_dkp_html.py audit data/members_dkp_snapshot.json --json-out audit_result.json
 
   # Emit SQL to run in Supabase SQL Editor for instant account-level audit:
   python parse_members_dkp_html.py parse "Current Member DKP - ... .html" -o data/snapshot.json --emit-sql docs/audit_dkp_snapshot_vs_db.sql
@@ -24,8 +28,13 @@ import json
 import os
 import re
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+# Repo root (dkp/) for resolving relative paths and .env
+SCRIPT_DIR = Path(__file__).resolve().parent
+ROOT = SCRIPT_DIR.parent.parent
 
 # Optional deps
 try:
@@ -34,10 +43,65 @@ except ImportError:
     BeautifulSoup = None  # type: ignore
 
 try:
-    from dotenv import load_dotenv
+    from dotenv import load_dotenv as _load_dotenv
 except ImportError:
-    def load_dotenv() -> None:
-        pass
+    _load_dotenv = None  # type: ignore
+
+
+def load_dotenv() -> None:
+    """Load .env from repo root and web/.env so SUPABASE_* is found when run from any cwd."""
+    for env_path in (ROOT / ".env", ROOT / "web" / ".env", ROOT / "web" / ".env.local"):
+        if env_path.exists():
+            try:
+                text = env_path.read_text(encoding="utf-8")
+            except Exception:
+                continue
+            for line in text.splitlines():
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                if "=" in line:
+                    k, v = line.split("=", 1)
+                    k, v = k.strip(), v.strip().strip("'\"")
+                    if k and k not in os.environ:
+                        os.environ[k] = v
+            for vite, plain in (
+                ("VITE_SUPABASE_URL", "SUPABASE_URL"),
+                ("VITE_SUPABASE_ANON_KEY", "SUPABASE_ANON_KEY"),
+                ("VITE_SUPABASE_SERVICE_ROLE_KEY", "SUPABASE_SERVICE_ROLE_KEY"),
+            ):
+                if not os.environ.get(plain) and os.environ.get(vite):
+                    os.environ[plain] = os.environ[vite]
+    if _load_dotenv:
+        _load_dotenv(ROOT / ".env")
+        _load_dotenv(ROOT / "web" / ".env")
+
+
+def _resolve_path(p: Path) -> Path:
+    """If p is relative, resolve against repo root so paths work from any cwd."""
+    if not p.is_absolute():
+        return (ROOT / p).resolve()
+    return p.resolve()
+
+
+def _find_members_html(path: Path) -> Path | None:
+    """Return path if it exists; else if looking for members_dkp.html, try browser default name."""
+    resolved = _resolve_path(path) if path else None
+    if resolved and resolved.exists():
+        return resolved
+    # Fallback: browser default save name (anywhere under repo root or data/)
+    for base in (ROOT, ROOT / "data"):
+        if not base.exists():
+            continue
+        for f in base.glob("Current Member DKP*.html"):
+            return f.resolve()
+    return resolved  # return resolved so caller sees the intended path in errors
+
+
+def _log(msg: str) -> None:
+    """Print a timestamped line for instrumentation/automation."""
+    ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    print(f"[{ts}] {msg}")
 
 
 def _norm(s: str | None) -> str:
@@ -205,16 +269,23 @@ ORDER BY (CASE WHEN d.account_id IS NULL THEN 2 WHEN m.earned <> COALESCE(d.db_e
 
 
 def run_parse(html_path: Path, out_json: Path | None, out_csv: Path | None, out_sql: Path | None) -> list[dict[str, Any]]:
+    html_path = _find_members_html(html_path) or _resolve_path(html_path)
+    if not html_path.exists():
+        print(f"Not found: {html_path}", file=sys.stderr)
+        print("Save the Gamer Launch members DKP page as 'Current Member DKP - Rapid Raid... .html' in the repo root or data/.", file=sys.stderr)
+        raise SystemExit(1)
     rows = parse_members_dkp_html(html_path)
     print(f"Parsed {len(rows)} accounts from {html_path.name}")
 
     if out_json:
+        out_json = _resolve_path(out_json)
         out_json.parent.mkdir(parents=True, exist_ok=True)
         payload = {"source": html_path.name, "accounts": rows}
         out_json.write_text(json.dumps(payload, indent=2), encoding="utf-8")
         print(f"Wrote {out_json}")
 
     if out_csv:
+        out_csv = _resolve_path(out_csv)
         out_csv.parent.mkdir(parents=True, exist_ok=True)
         import csv
         with open(out_csv, "w", newline="", encoding="utf-8") as f:
@@ -224,6 +295,7 @@ def run_parse(html_path: Path, out_json: Path | None, out_csv: Path | None, out_
         print(f"Wrote {out_csv}")
 
     if out_sql:
+        out_sql = _resolve_path(out_sql)
         emit_audit_sql(rows, out_sql)
 
     return rows
@@ -250,20 +322,30 @@ def run_audit(
     snapshot_path: Path | None,
     html_path: Path | None,
     by_account: bool,
+    json_out: Path | None = None,
 ) -> int:
     """Load snapshot (from JSON or by parsing HTML), query DB once for all dkp_summary, compare."""
+    _log("audit_start")
     load_dotenv()
+    if snapshot_path:
+        snapshot_path = _resolve_path(snapshot_path)
+    if html_path:
+        html_path = _find_members_html(html_path) or _resolve_path(html_path)
+    if json_out:
+        json_out = _resolve_path(json_out)
     url = os.environ.get("SUPABASE_URL", "").strip()
     key = (
         os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").strip()
         or os.environ.get("SUPABASE_ANON_KEY", "").strip()
     )
     if not url or not key:
+        _log("audit_error: missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY/SUPABASE_ANON_KEY")
         print("Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY (or SUPABASE_ANON_KEY) for audit.", file=sys.stderr)
         return 1
     try:
         from supabase import create_client
     except ImportError:
+        _log("audit_error: supabase package not installed")
         print("pip install supabase", file=sys.stderr)
         return 1
 
@@ -277,15 +359,19 @@ def run_audit(
         for row in accounts_snapshot:
             if "account_name" not in row and "character_name" in row:
                 row["account_name"] = row["character_name"]
+        _log(f"loaded_snapshot path={snapshot_path} accounts={len(accounts_snapshot)}")
         print(f"Loaded {len(accounts_snapshot)} accounts from {snapshot_path}")
     elif html_path and html_path.exists():
         accounts_snapshot = parse_members_dkp_html(html_path)
+        _log(f"parsed_html path={html_path} accounts={len(accounts_snapshot)}")
         print(f"Parsed {len(accounts_snapshot)} accounts from {html_path}")
     else:
+        _log("audit_error: no snapshot or html path provided")
         print("Provide --snapshot (JSON) or --html path.", file=sys.stderr)
         return 1
 
     client = create_client(url, key)
+    _log("supabase_connected")
     accounts = fetch_all(client, "accounts", "account_id, display_name, toon_names")
     ca_list = fetch_all(client, "character_account", "char_id, account_id")
     characters = fetch_all(client, "characters", "char_id, name")
@@ -325,6 +411,8 @@ def run_audit(
     matched = 0
     missing_in_db: list[dict[str, Any]] = []
 
+    # Per account_id: any snapshot row with HTML == DB means we've "found the main" (e.g. Frinop); skip reporting alts (Tunn, Scarf, etc.) as mismatches.
+    account_ids_with_matching_row: set[str] = set()
     for row in accounts_snapshot:
         account_name = _norm(row.get("account_name", ""))
         html_earned = int(row.get("earned", 0))
@@ -333,20 +421,37 @@ def run_audit(
         if not account_id:
             missing_in_db.append(row)
             continue
-        matched += 1
+        db_earned = db_earned_by_account.get(account_id, 0)
+        db_spent = db_spent_by_account.get(account_id, 0)
+        if html_earned == db_earned and html_spent == db_spent:
+            account_ids_with_matching_row.add(account_id)
+
+    # Build mismatches: only for account_ids where no row matched; one entry per account (pick row with highest html_earned as "main").
+    mismatches_by_account: dict[str, dict[str, Any]] = {}
+    for row in accounts_snapshot:
+        account_name = _norm(row.get("account_name", ""))
+        html_earned = int(row.get("earned", 0))
+        html_spent = int(row.get("spent", 0))
+        account_id = name_to_aid.get(account_name)
+        if not account_id or account_id in account_ids_with_matching_row:
+            continue
         db_earned = db_earned_by_account.get(account_id, 0)
         db_spent = db_spent_by_account.get(account_id, 0)
         if html_earned != db_earned or html_spent != db_spent:
-            mismatches.append({
-                "account_name": account_name,
-                "account_id": account_id,
-                "html_earned": html_earned,
-                "html_spent": html_spent,
-                "db_earned": db_earned,
-                "db_spent": db_spent,
-                "delta_earned": html_earned - db_earned,
-                "delta_spent": html_spent - db_spent,
-            })
+            existing = mismatches_by_account.get(account_id)
+            if existing is None or html_earned > existing["html_earned"]:
+                mismatches_by_account[account_id] = {
+                    "account_name": account_name,
+                    "account_id": account_id,
+                    "html_earned": html_earned,
+                    "html_spent": html_spent,
+                    "db_earned": db_earned,
+                    "db_spent": db_spent,
+                    "delta_earned": html_earned - db_earned,
+                    "delta_spent": html_spent - db_spent,
+                }
+    mismatches = list(mismatches_by_account.values())
+    matched = len(account_ids_with_matching_row)
 
     print()
     print("=== Audit result (account-level) ===")
@@ -354,6 +459,24 @@ def run_audit(
     print(f"Matched in DB:     {matched}")
     print(f"Missing in DB:    {len(missing_in_db)}")
     print(f"Mismatches:       {len(mismatches)}")
+
+    ok = not mismatches and not missing_in_db
+    _log(f"audit_complete snapshot={len(accounts_snapshot)} matched={matched} missing={len(missing_in_db)} mismatches={len(mismatches)} ok={ok}")
+
+    if json_out:
+        json_out.parent.mkdir(parents=True, exist_ok=True)
+        payload: dict[str, Any] = {
+            "ok": ok,
+            "snapshot_accounts": len(accounts_snapshot),
+            "matched": matched,
+            "missing_in_db": len(missing_in_db),
+            "mismatches_count": len(mismatches),
+            "missing": [{"account_name": r.get("account_name"), "earned": r.get("earned"), "spent": r.get("spent")} for r in missing_in_db],
+            "mismatches": mismatches,
+        }
+        json_out.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        _log(f"wrote_json path={json_out}")
+        print(f"Wrote audit result to {json_out}")
 
     if missing_in_db:
         print("\n--- Not in DB (name not matched to any account) ---")
@@ -377,7 +500,7 @@ def run_audit(
         if len(accounts_snapshot) > 50:
             print(f"  ... and {len(accounts_snapshot) - 50} more")
 
-    return 0 if not mismatches and not missing_in_db else 1
+    return 0 if ok else 1
 
 
 def main() -> int:
@@ -397,6 +520,7 @@ def main() -> int:
     p_audit.add_argument("--snapshot", type=Path, dest="snapshot", default=None, help="Snapshot JSON (alternative to positional)")
     p_audit.add_argument("--html", type=Path, dest="html_path", default=None, help="HTML file (alternative to positional)")
     p_audit.add_argument("--by-account", action="store_true", help="Show per-account aggregated totals from snapshot")
+    p_audit.add_argument("--json-out", type=Path, dest="json_out", default=None, help="Write machine-readable audit result JSON (ok, counts, missing, mismatches)")
 
     args = parser.parse_args()
 
@@ -415,7 +539,7 @@ def main() -> int:
                 snapshot = snapshot or args.input
             else:
                 html_path = html_path or args.input
-        return run_audit(snapshot, html_path, getattr(args, "by_account", False))
+        return run_audit(snapshot, html_path, getattr(args, "by_account", False), getattr(args, "json_out", None))
 
     return 0
 
