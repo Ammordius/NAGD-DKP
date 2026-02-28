@@ -969,8 +969,9 @@ export default function Officer({ isOfficer }) {
 
   const handleDeleteEvent = async (eventId) => {
     if (!window.confirm('Are you sure you want to remove this DKP tic and all its attendance?\n\nThis cannot be undone.')) return
+    const attendeesOnTic = (eventAttendance || []).filter((r) => String(r.event_id) === String(eventId))
     const accountIdsOnTic = [...new Set(
-      (eventAttendance || []).filter((r) => String(r.event_id) === String(eventId)).map((r) => charIdToAccountId[r.char_id]).filter(Boolean)
+      attendeesOnTic.map((r) => charIdToAccountId[String(r.char_id)] ?? charIdToAccountId[r.char_id]).filter(Boolean)
     )].map(String)
     setMutating(true)
     await supabase.from('raid_event_attendance').delete().eq('raid_id', selectedRaidId).eq('event_id', eventId)
@@ -999,10 +1000,14 @@ export default function Officer({ isOfficer }) {
     const { count } = await supabase.from('raid_attendance').select('*', { count: 'exact', head: true }).eq('raid_id', selectedRaidId)
     if (count != null) await supabase.from('raids').update({ attendees: String(count) }).eq('raid_id', selectedRaidId)
     await supabase.rpc('refresh_dkp_summary')
-    await supabase.rpc('refresh_account_dkp_summary_for_raid', {
-      p_raid_id: selectedRaidId,
-      p_extra_account_ids: accountIdsOnTic.length ? accountIdsOnTic : [],
-    })
+    if (attendeesOnTic.length > 0 && accountIdsOnTic.length === 0) {
+      await supabase.rpc('refresh_account_dkp_summary')
+    } else {
+      await supabase.rpc('refresh_account_dkp_summary_for_raid', {
+        p_raid_id: selectedRaidId,
+        p_extra_account_ids: accountIdsOnTic,
+      })
+    }
     try { sessionStorage.removeItem('dkp_leaderboard_v2') } catch (_) {}
     loadSelectedRaid()
     globalMutate(DKP_DATA_KEY)
