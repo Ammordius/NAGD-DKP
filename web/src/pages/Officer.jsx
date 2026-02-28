@@ -868,6 +868,8 @@ export default function Officer({ isOfficer }) {
       target_id: selectedRaidId,
       delta: { r: selectedRaidId, n: raidName },
     })
+    try { sessionStorage.removeItem('dkp_leaderboard_v2') } catch (_) {}
+    globalMutate(DKP_DATA_KEY)
     setSelectedRaidId('')
     setDeleteConfirm('')
     await loadRaids()
