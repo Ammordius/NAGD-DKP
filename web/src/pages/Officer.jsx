@@ -741,12 +741,16 @@ export default function Officer({ isOfficer }) {
       if (prev.some((n) => (n || '').trim().toLowerCase() === key)) return prev
       return [...prev, itemName].sort((a, b) => a.localeCompare(b))
     })
-    const recipientAccountId = charIdToAccountId[char.char_id] ? String(charIdToAccountId[char.char_id]) : null
+    const recipientAccountId = (() => { const a = charIdToAccountId[String(char.char_id)] ?? charIdToAccountId[char.char_id]; return a ? String(a) : null })()
     await supabase.rpc('refresh_dkp_summary')
-    await supabase.rpc('refresh_account_dkp_summary_for_raid', {
-      p_raid_id: selectedRaidId,
-      p_extra_account_ids: recipientAccountId ? [recipientAccountId] : [],
-    })
+    if (recipientAccountId) {
+      await supabase.rpc('refresh_account_dkp_summary_for_raid', {
+        p_raid_id: selectedRaidId,
+        p_extra_account_ids: [recipientAccountId],
+      })
+    } else {
+      await supabase.rpc('refresh_account_dkp_summary')
+    }
     try { sessionStorage.removeItem('dkp_leaderboard_v2') } catch (_) {}
     loadSelectedRaid()
     globalMutate(DKP_DATA_KEY)
@@ -999,7 +1003,6 @@ export default function Officer({ isOfficer }) {
     }
     const { count } = await supabase.from('raid_attendance').select('*', { count: 'exact', head: true }).eq('raid_id', selectedRaidId)
     if (count != null) await supabase.from('raids').update({ attendees: String(count) }).eq('raid_id', selectedRaidId)
-    await supabase.rpc('refresh_dkp_summary')
     if (attendeesOnTic.length > 0 && accountIdsOnTic.length === 0) {
       await supabase.rpc('refresh_account_dkp_summary')
     } else {

@@ -64,6 +64,8 @@ So: **raid_dkp_totals**, **raid_attendance_dkp**, and (with account-dkp-schema) 
 
 So: **account_dkp_summary is never updated by any trigger.** Only RPCs update it.
 
+**Timeout note:** Deleting a tic (many `raid_event_attendance` rows) used to fire `refresh_raid_attendance_totals(raid_id)` **per row**, causing statement timeouts. Apply **docs/fix_event_attendance_delete_trigger_statement_level.sql** to switch the DELETE trigger to `FOR EACH STATEMENT` with a transition table so each affected raid is refreshed once. The app also no longer calls `refresh_dkp_summary()` after delete-tic (the DELETE trigger already runs `refresh_dkp_summary_internal()`).
+
 ---
 
 ## 4. Restore-load mode (bulk import)

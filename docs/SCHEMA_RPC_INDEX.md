@@ -64,6 +64,7 @@ Single index of **all public RPCs/functions** and **one-off SQL** in this repo: 
 | File | Purpose |
 |------|---------|
 | **fix_account_dkp_after_raid_delete.sql** | Run `SELECT refresh_account_dkp_summary();` after deleting a raid so leaderboard (account_dkp_summary) matches. Supabase: run as officer. |
+| **fix_event_attendance_delete_trigger_statement_level.sql** | Run once: switch `raid_event_attendance` DELETE trigger to FOR EACH STATEMENT so deleting a tic (many rows) refreshes each raid once instead of N times; avoids statement timeout. |
 | fix_refresh_dkp_summary_includes_account_summary.sql | Defines **refresh_account_dkp_summary_for_raid** for DBs that have account_dkp_summary but not this RPC yet. Superseded if you deploy full supabase-account-dkp-schema.sql. |
 | fix_piama_dkp_to_account_22078559.sql | One-account DKP fix (example). |
 | supabase-backfill-event-times.sql | Data-only UPDATEs for event_time; no function. |
