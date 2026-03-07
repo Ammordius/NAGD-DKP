@@ -514,10 +514,12 @@
       }
     ]
   },
-  "A_shadow_reaver|Other / Unknown": {
-    "mob": "A_shadow_reaver",
+  "A_chanting_shade|Other / Unknown": {
+    "mob": "A_chanting_shade",
     "mobs": [
-      "A_shadow_reaver"
+      "A_chanting_shade",
+      "A_shadow_reaver",
+      "Xi_Vius"
     ],
     "zone": "Other / Unknown",
     "loot": [
@@ -1588,7 +1590,8 @@
   "Ixiblat_Fer|Other / Unknown": {
     "mob": "Ixiblat_Fer",
     "mobs": [
-      "Ixiblat_Fer"
+      "Ixiblat_Fer",
+      "Lord_Nagafen"
     ],
     "zone": "Other / Unknown",
     "loot": [
@@ -2378,9 +2381,10 @@
       }
     ]
   },
-  "Shei_Vinitras_|Other / Unknown": {
-    "mob": "Shei_Vinitras_",
+  "Altar_Priest|Other / Unknown": {
+    "mob": "Altar_Priest",
     "mobs": [
+      "Altar_Priest",
       "Shei_Vinitras_"
     ],
     "zone": "Other / Unknown",
@@ -2921,9 +2925,10 @@
       }
     ]
   },
-  "an_Enchanted_War_Boar|Tower of Solusek Ro": {
-    "mob": "an_Enchanted_War_Boar",
+  "a_torrid_elemental|Tower of Solusek Ro": {
+    "mob": "a_torrid_elemental",
     "mobs": [
+      "a_torrid_elemental",
       "an_Enchanted_War_Boar"
     ],
     "zone": "Tower of Solusek Ro",
@@ -3023,45 +3028,6 @@
       {
         "item_id": 32159,
         "name": "Shaded cloak",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ]
-  },
-  "A_chanting_shade|Akheva Ruins": {
-    "mob": "A_chanting_shade",
-    "mobs": [
-      "A_chanting_shade"
-    ],
-    "zone": "Akheva Ruins",
-    "loot": [
-      {
-        "item_id": 32166,
-        "name": "Shaded amice",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 32159,
-        "name": "Shaded cloak",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ]
-  },
-  "Altar_Priest|Akheva Ruins": {
-    "mob": "Altar_Priest",
-    "mobs": [
-      "Altar_Priest"
-    ],
-    "zone": "Akheva Ruins",
-    "loot": [
-      {
-        "item_id": 32176,
-        "name": "Temariel Vex",
         "sources": [
           "dkp"
         ]
@@ -3403,7 +3369,8 @@
   "Eindride_Icestorm|Bastion of Thunder": {
     "mob": "Eindride_Icestorm",
     "mobs": [
-      "Eindride_Icestorm"
+      "Eindride_Icestorm",
+      "Tagrin_Maldric"
     ],
     "zone": "Bastion of Thunder",
     "loot": [
@@ -3583,22 +3550,6 @@
       {
         "item_id": 16355,
         "name": "Ornate Silk Robe Pattern",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ]
-  },
-  "Tagrin_Maldric|Drunder, the Fortress of Zek": {
-    "mob": "Tagrin_Maldric",
-    "mobs": [
-      "Tagrin_Maldric"
-    ],
-    "zone": "Drunder, the Fortress of Zek",
-    "loot": [
-      {
-        "item_id": 16346,
-        "name": "Ornate Breastplate Mold",
         "sources": [
           "dkp"
         ]
@@ -3985,26 +3936,13 @@
       }
     ]
   },
-  "Lord_Nagafen|Nagafen's Lair": {
-    "mob": "Lord_Nagafen",
+  "Faydedar|Permafrost Caverns": {
+    "mob": "Faydedar",
     "mobs": [
-      "Lord_Nagafen"
-    ],
-    "zone": "Nagafen's Lair",
-    "loot": [
-      {
-        "item_id": 11621,
-        "name": "Cloak of Flames",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ]
-  },
-  "Lady_Vox|Permafrost Caverns": {
-    "mob": "Lady_Vox",
-    "mobs": [
-      "Lady_Vox"
+      "Faydedar",
+      "Gorenaire",
+      "Lady_Vox",
+      "Severilous"
     ],
     "zone": "Permafrost Caverns",
     "loot": [
@@ -9180,52 +9118,6 @@
       }
     ]
   },
-  "Gorenaire|The Dreadlands": {
-    "mob": "Gorenaire",
-    "mobs": [
-      "Gorenaire"
-    ],
-    "zone": "The Dreadlands",
-    "loot": [
-      {
-        "item_id": 17701,
-        "name": "Kavruul`s Mystic Pouch",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 11601,
-        "name": "Runed Bolster Belt",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ]
-  },
-  "Severilous|The Emerald Jungle": {
-    "mob": "Severilous",
-    "mobs": [
-      "Severilous"
-    ],
-    "zone": "The Emerald Jungle",
-    "loot": [
-      {
-        "item_id": 17701,
-        "name": "Kavruul`s Mystic Pouch",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 11601,
-        "name": "Runed Bolster Belt",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ]
-  },
   "Crusader_Kezzal|The Grey": {
     "mob": "Crusader_Kezzal",
     "mobs": [
@@ -9236,29 +9128,6 @@
       {
         "item_id": 6441,
         "name": "Carved Bone Ring",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ]
-  },
-  "Xi_Vius|The Maiden's Eye": {
-    "mob": "Xi_Vius",
-    "mobs": [
-      "Xi_Vius"
-    ],
-    "zone": "The Maiden's Eye",
-    "loot": [
-      {
-        "item_id": 32166,
-        "name": "Shaded amice",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 32159,
-        "name": "Shaded cloak",
         "sources": [
           "dkp"
         ]
@@ -9396,29 +9265,6 @@
         "name": "Wicked Mail",
         "sources": [
           "raid_item_sources"
-        ]
-      }
-    ]
-  },
-  "Faydedar|Timorous Deep": {
-    "mob": "Faydedar",
-    "mobs": [
-      "Faydedar"
-    ],
-    "zone": "Timorous Deep",
-    "loot": [
-      {
-        "item_id": 17701,
-        "name": "Kavruul`s Mystic Pouch",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 11601,
-        "name": "Runed Bolster Belt",
-        "sources": [
-          "dkp"
         ]
       }
     ]
@@ -9741,22 +9587,6 @@
       {
         "item_id": 16348,
         "name": "Ornate Leather Tunic Pattern",
-        "sources": [
-          "dkp"
-        ]
-      }
-    ]
-  },
-  "a_torrid_elemental|Tower of Solusek Ro": {
-    "mob": "a_torrid_elemental",
-    "mobs": [
-      "a_torrid_elemental"
-    ],
-    "zone": "Tower of Solusek Ro",
-    "loot": [
-      {
-        "item_id": 16298,
-        "name": "Ornate Boot Mold",
         "sources": [
           "dkp"
         ]

@@ -8,7 +8,10 @@ Uses raid_item_sources.json (item_id -> { mob, zone }) to assign each loot item
 to the correct (mob, zone). Items only in dkp_mob_loot (no raid_item_sources
 entry) stay in the entry's current zone.
 
-Run after merge_duplicate_mob_entries.py. Then run preprocess_mob_loot_for_display.py.
+Run after merge_duplicate_mob_entries.py (and optionally aggregate_mob_loot.py if you use
+merged rows with identical loot). Preserves aggregated mob lists when splitting by zone:
+entries that share the same zone and same loot table stay merged as one row. Then run
+preprocess_mob_loot_for_display.py.
 Outputs to data/ and optionally web/public/.
 
 Usage:
@@ -77,8 +80,10 @@ def main():
         if iid not in item_to_mob_zone or (zone and not item_to_mob_zone[iid][1]):
             item_to_mob_zone[iid] = (mob_norm, zone)
 
-    # (mob_norm, zone) -> list of loot items (dicts with item_id, name, sources)
-    by_mob_zone: dict[tuple[str, str], list[dict]] = defaultdict(list)
+    # (mob_norm, zone) -> { "mobs_set": set of display names, "loot": list }
+    # We collect all mob names from entries that contribute to each bucket so
+    # aggregated entries (e.g. A_Deadly_Warboar (+3) with identical loot) stay merged.
+    by_mob_zone: dict[tuple[str, str], dict] = defaultdict(lambda: {"mobs_set": set(), "loot": []})
     mob_display_by_key: dict[tuple[str, str], str] = {}
 
     for key, entry in data.items():
@@ -90,6 +95,14 @@ def main():
         entry_mob_display = (entry.get("mob") or key_mob or "").replace("#", "").strip()
         if not entry_zone and key.count("|") >= 1:
             entry_zone = key.split("|", 1)[1].strip()
+
+        # All mob names from this entry (aggregated list from merge/aggregate scripts)
+        mobs_from_entry = set()
+        for m in entry.get("mobs") or [entry.get("mob") or key_mob]:
+            if m:
+                mobs_from_entry.add((m or "").replace("#", "").strip())
+        if not mobs_from_entry:
+            mobs_from_entry = {entry_mob_display or key_mob.replace("#", "").strip()}
 
         for item in entry.get("loot") or []:
             item_id = item.get("item_id")
@@ -111,11 +124,13 @@ def main():
                 target_zone = "Other / Unknown"
 
             k = (target_mob_norm, target_zone)
+            bucket = by_mob_zone[k]
+            bucket["mobs_set"].update(mobs_from_entry)
             if k not in mob_display_by_key and entry_mob_display:
                 mob_display_by_key[k] = entry_mob_display if target_mob_norm == key_mob_norm else _norm_to_display(target_mob_norm)
 
             loot_item = {"item_id": item_id, "name": name, "sources": sources}
-            by_mob_zone[k].append(loot_item)
+            bucket["loot"].append(loot_item)
 
     def dedupe_loot(loot: list) -> list:
         by_key = {}
@@ -132,16 +147,42 @@ def main():
             it["sources"] = sorted(set(it["sources"]))
         return list(by_key.values())
 
-    new_data = {}
-    for (mob_norm, zone), loot in by_mob_zone.items():
-        if not loot:
+    def loot_signature(loot: list) -> tuple:
+        """Canonical signature for merging buckets with identical loot."""
+        deduped = dedupe_loot(loot)
+        return tuple(sorted((it.get("item_id"), (it.get("name") or "").strip()) for it in deduped))
+
+    # Merge buckets that have same zone and same loot (restore aggregated mob rows)
+    merged: dict[tuple[str, tuple], dict] = {}
+    for (mob_norm, zone), bucket in by_mob_zone.items():
+        if not bucket["loot"]:
             continue
-        loot = dedupe_loot(loot)
-        display_mob = mob_display_by_key.get((mob_norm, zone)) or _norm_to_display(mob_norm)
-        out_key = f"{display_mob}|{zone}" if zone else f"{display_mob}|"
+        loot = dedupe_loot(bucket["loot"])
+        sig = loot_signature(bucket["loot"])
+        key = (zone, sig)
+        if key not in merged:
+            merged[key] = {"mobs_set": set(), "loot": loot}
+        merged[key]["mobs_set"].update(bucket["mobs_set"])
+        # Prefer display name from mob_display_by_key for this (mob_norm, zone) if we're first
+        if "display_mob" not in merged[key]:
+            merged[key]["display_mob"] = mob_display_by_key.get((mob_norm, zone)) or _norm_to_display(mob_norm)
+
+    new_data = {}
+    for (zone, sig), group in merged.items():
+        mobs_set = group["mobs_set"]
+        if not mobs_set:
+            continue
+        loot = group["loot"]
+        display_mob = group.get("display_mob") or _norm_to_display(min(mobs_set, key=lambda s: s.lower()))
+        first_mob = sorted(mobs_set, key=lambda s: s.lower())[0]
+        out_key = f"{first_mob}|{zone}" if zone else f"{first_mob}|"
+        suffix = 0
+        while out_key in new_data:
+            suffix += 1
+            out_key = f"{first_mob}|{zone}_{suffix}" if zone else f"{first_mob}|_{suffix}"
         new_data[out_key] = {
-            "mob": display_mob,
-            "mobs": [display_mob],
+            "mob": first_mob,
+            "mobs": sorted(mobs_set, key=lambda s: s.lower()),
             "zone": zone,
             "loot": loot,
         }
