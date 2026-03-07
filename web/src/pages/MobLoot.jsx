@@ -118,15 +118,29 @@ function InlineItemRow({ name, itemId, showGearScore, moldName, initialStats }) 
 const LAST3_CACHE_KEY = 'mob_loot_last3_v2'
 const CACHE_TTL = 10 * 60 * 1000
 
-/** Zone display order: Time first, then Fire/Water/Air/Vex Thal, then god lairs, then the rest. */
+/** Zone display order: Time first, then elemental planes (Fire/Water/Air/Earth), Vex Thal, Tower of Solusek Ro, then others, then god lairs (Lair of TT) at end. */
 const ZONE_ORDER = [
   'Plane of Time',
-  'The Lair of Terris Thule',
   'Plane of Fire',
   'Plane of Water',
   'Plane of Air',
+  'Plane of Earth',
   'Vex Thal',
+  'Temple of Ssraeshza',
+  'Tower of Solusek Ro',
+  'Akheva Ruins',
+  'Plane of Fear',
+  'Temple of Veeshan',
+  "Sleeper's Tomb",
+  'Kael Drakkal',
+  'The Cursed Necropolis',
+  'The Lair of Terris Thule',
 ]
+/** Zone name aliases: normalize to canonical name so e.g. "Ssraeshza Temple" and "Temple of Ssraeshza" merge. */
+const ZONE_ALIASES = {
+  'ssraeshza temple': 'Temple of Ssraeshza',
+  'temple of ssraeshza': 'Temple of Ssraeshza',
+}
 /** Within Plane of Time, mob/group order (match by first mob in row). Names normalized for match (lowercase, spaces → underscores). */
 const PLANE_OF_TIME_MOB_ORDER = [
   'P1',
@@ -386,8 +400,10 @@ export default function MobLoot() {
       }
       const fromRaids = mobKeys.map((m) => mobZoneFromRaids[normalizeMobKey(m)]).find(Boolean)
       let displayZone = fromJson || fromRaids || 'Other / Unknown'
+      const aliasKey = displayZone.trim().toLowerCase()
+      if (ZONE_ALIASES[aliasKey]) displayZone = ZONE_ALIASES[aliasKey]
       const isAvatarOfWar = mobKeys.some((m) => /avatar\s*of\s*war|avatar_of_war/i.test((m || '').replace(/^#/, '')))
-      if (isAvatarOfWar) displayZone = 'Kael Drakkel'
+      if (isAvatarOfWar) displayZone = 'Kael Drakkal'
       return { ...e, displayZone }
     })
   }, [entries, mobZoneFromRaids])

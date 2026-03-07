@@ -878,7 +878,16 @@
           "dkp",
           "raid_item_sources"
         ]
-      },
+      }
+    ]
+  },
+  "Cazic_Thule|Plane of Fear": {
+    "mob": "Cazic_Thule",
+    "mobs": [
+      "Cazic_Thule"
+    ],
+    "zone": "Plane of Fear",
+    "loot": [
       {
         "item_id": 11646,
         "name": "Amulet of Necropotence",

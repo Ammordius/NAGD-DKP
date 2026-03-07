@@ -80,6 +80,23 @@ def main():
         if iid not in item_to_mob_zone or (zone and not item_to_mob_zone[iid][1]):
             item_to_mob_zone[iid] = (mob_norm, zone)
 
+    # Items that drop from Cazic Thule in Plane of Fear (not PoTime). Keep out of Cazic_Thule|Plane of Time.
+    CAZIC_FEAR_ONLY_ITEM_IDS = frozenset({
+        1547,   # Eye of Cazic Thule
+        1549,   # Halo of the Enlightened
+        1550,   # Bile Etched Obsidian Choker
+        1551,   # Cloak of the Fearsome
+        1552,   # Robe of Inspiration
+        1554,   # Brain of Cazic Thule
+        11641,  # Crimson Robe of Alendine
+        11642,  # Lyssa`s Darkwood Piccolo
+        11643,  # Puppet Strings
+        11646,  # Amulet of Necropotence
+        11648,  # DawnFire, Morning Star of Light
+        11649,  # Staff of the Earthcrafter
+        1531,   # Pauldrons of Ferocity
+    })
+
     # (mob_norm, zone) -> { "mobs_set": set of display names, "loot": list }
     # We collect all mob names from entries that contribute to each bucket so
     # aggregated entries (e.g. A_Deadly_Warboar (+3) with identical loot) stay merged.
@@ -119,6 +136,14 @@ def main():
                 target_mob_norm = ris_mob_norm
                 if ris_zone:
                     target_zone = ris_zone
+            # Cazic Thule in Plane of Fear drops (CT in Fears) must not appear in Cazic_Thule|Plane of Time
+            if (
+                target_mob_norm == "cazic_thule"
+                and target_zone == "Plane of Time"
+                and item_id is not None
+                and item_id in CAZIC_FEAR_ONLY_ITEM_IDS
+            ):
+                target_zone = "Plane of Fear"
 
             if not target_zone:
                 target_zone = "Other / Unknown"
@@ -163,18 +188,41 @@ def main():
         if key not in merged:
             merged[key] = {"mobs_set": set(), "loot": loot}
         merged[key]["mobs_set"].update(bucket["mobs_set"])
-        # Prefer display name from mob_display_by_key for this (mob_norm, zone) if we're first
         if "display_mob" not in merged[key]:
             merged[key]["display_mob"] = mob_display_by_key.get((mob_norm, zone)) or _norm_to_display(mob_norm)
 
-    new_data = {}
+    # Merge again by (zone, first_mob) so one row per mob per zone (no duplicate PoTime entries)
+    by_zone_mob: dict[tuple[str, str], dict] = {}
     for (zone, sig), group in merged.items():
         mobs_set = group["mobs_set"]
         if not mobs_set:
             continue
-        loot = group["loot"]
-        display_mob = group.get("display_mob") or _norm_to_display(min(mobs_set, key=lambda s: s.lower()))
         first_mob = sorted(mobs_set, key=lambda s: s.lower())[0]
+        key = (zone, first_mob)
+        if key not in by_zone_mob:
+            by_zone_mob[key] = {"mobs_set": set(), "loot_by_key": {}, "display_mob": group.get("display_mob")}
+        g = by_zone_mob[key]
+        g["mobs_set"].update(mobs_set)
+        if g["display_mob"] is None:
+            g["display_mob"] = group.get("display_mob")
+        for it in group["loot"]:
+            iid, name = it.get("item_id"), (it.get("name") or "").strip().lower()
+            k = (iid, name)
+            if k not in g["loot_by_key"]:
+                g["loot_by_key"][k] = dict(it)
+                g["loot_by_key"][k]["sources"] = list(set(it.get("sources") or []))
+            else:
+                g["loot_by_key"][k]["sources"] = list(set(g["loot_by_key"][k]["sources"]) | set(it.get("sources") or []))
+
+    new_data = {}
+    for (zone, first_mob), group in by_zone_mob.items():
+        mobs_set = group["mobs_set"]
+        if not mobs_set:
+            continue
+        loot = list(group["loot_by_key"].values())
+        for it in loot:
+            it["sources"] = sorted(set(it["sources"]))
+        display_mob = group.get("display_mob") or _norm_to_display(first_mob)
         out_key = f"{first_mob}|{zone}" if zone else f"{first_mob}|"
         suffix = 0
         while out_key in new_data:
