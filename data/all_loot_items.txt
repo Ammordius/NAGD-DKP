@@ -323,6 +323,7 @@ Cord of Insight
 Cord of Midnight
 Cord of Potential
 Cord of Temporal Weavings
+Cord of the Pyre
 Corroded Breastplate
 Corroded Chain Leggings
 Corroded Chain Tunic
@@ -474,6 +475,7 @@ Elphorn`s Cleaver
 Emerald Bastardsword of Purity
 Emerald Tear
 Ensorcelled Metalcloth Cape
+Ent Leaf
 Entropy Pendant
 Entwood Earring
 Envenomed Moccasins
@@ -689,6 +691,7 @@ Intricately Inscribed Band
 Iron Scroll of War
 Iron Silk Sandals
 Ishinaear Xiall
+Item 86930
 Itraer Insignia
 Ivory Crystal Greaves
 Ivory Etched Aegis
@@ -699,6 +702,7 @@ Jagged Shard of Frozen Flame
 Jagged Timeforged Blade
 Jaundiced Bone Breastplate
 Jenniy's Two-Tone Cuirass
+Jenniy's Two-tone Cuirass
 Karana's Tear
 Karn's Armplates of Retaliation
 Katana of Endurance
@@ -835,6 +839,7 @@ Onyx Chain Sleeves
 Onyx Gauntlets
 Opaline Charm
 Opaline charm
+Orb of Clinging
 Orb of Clinging Death
 Orb of Evasion
 Orb of Infinite Terror
@@ -1004,6 +1009,7 @@ Sanguine Robe
 Sanguine Slippers
 Sap Encrusted Branch
 Sapphire Studded Mantle
+Savage Lord's Eitchatka
 Savage Lord's Pitchatka
 Scale Mesh Leggings
 Scale Mesh Vambraces
@@ -1033,6 +1039,7 @@ Shaded Amice
 Shaded Boots
 Shaded Cloak
 Shaded amice
+Shaded boots
 Shaded cloak
 Shaderock Amulet
 Shaderock Bracer
@@ -1043,6 +1050,7 @@ Shaderock bracer
 Shaderock girdle
 Shadow Fang Necklace
 Shadow Flame Staff
+Shadow Flame staff
 Shadow Footpads
 Shadow Heart
 Shadow Pearl Earring
@@ -1199,6 +1207,7 @@ Stormriders Signet
 Strands of Power
 Sunbeam Staff
 Supple Onyx Chains
+Surreptitious Broach
 Surreptitious Brooch
 Swiftblade of Zek
 Sword of Lost Crusades
@@ -1231,6 +1240,7 @@ Tenuous Dragonscale Slippers
 Terror Forged Short Sword
 Terror Woven Wraps
 Tethered Air Cape
+The Binden Concerrentia
 The Horn of Hsagra
 The Orb of the Sun
 The Rhythm of Xegony
