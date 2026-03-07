@@ -10,6 +10,8 @@ Scripts that **fetch from or derive from the TAKP website** (AllaClone, Magelo, 
 
 **dkp_mob_loot.json pipeline (when refreshing mob loot):** Run in order: `merge_duplicate_mob_entries.py` (merge same mob in same zone), then optionally `aggregate_mob_loot.py` if you want multiple mobs with identical loot in one row (e.g. warboars), then `split_mob_loot_by_zone.py` (split gods into PoTime vs lair; preserves merged mob lists), then `preprocess_mob_loot_for_display.py`. Do not run `aggregate_mob_loot.py` after `split_mob_loot_by_zone.py`.
 
+**PoTime same-loot mobs:** Many PoTime mobs share identical loot tables (e.g. Gutripping_War_Beast and War_Shapen_Emissary). The source data often only has one name per loot table, so `split_mob_loot_by_zone.py` uses `SAME_LOOT_ALIASES` to add the other names to the row. To add more pairs, edit `SAME_LOOT_ALIASES` in `split_mob_loot_by_zone.py`: each key is `(zone, "Mob_Name")` and the value is a list of alternate mob names that share the same loot. Add both directions, e.g. `("Plane of Time", "Mob_A"): ["Mob_B"]` and `("Plane of Time", "Mob_B"): ["Mob_A"]`.
+
 Run from **repo root** so paths like `data/`, `web/public/` resolve:
 
 ```bash

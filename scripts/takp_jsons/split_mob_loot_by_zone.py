@@ -20,8 +20,13 @@ Usage:
 """
 import argparse
 import json
+import sys
 from pathlib import Path
 from collections import defaultdict
+
+# For zone-aware mob filtering (same zone only in each bucket)
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from merge_duplicate_mob_entries import MOB_ZONES
 
 
 def norm_mob(mob: str) -> str:
@@ -150,12 +155,33 @@ def main():
 
             k = (target_mob_norm, target_zone)
             bucket = by_mob_zone[k]
-            bucket["mobs_set"].update(mobs_from_entry)
-            if k not in mob_display_by_key and entry_mob_display:
-                mob_display_by_key[k] = entry_mob_display if target_mob_norm == key_mob_norm else _norm_to_display(target_mob_norm)
+            # Only add mobs that belong to this bucket's zone (so Rallos_Zek PoTime vs Rallos_Zek_the_Warlord Tactics stay separate)
+            mobs_to_add = {m for m in mobs_from_entry if MOB_ZONES.get(m) == target_zone or MOB_ZONES.get(m) is None}
+            bucket["mobs_set"].update(mobs_to_add)
+            primary = entry_mob_display if target_mob_norm == key_mob_norm else _norm_to_display(target_mob_norm)
+            if primary:
+                bucket["mobs_set"].add(primary)
+            if k not in mob_display_by_key and primary:
+                mob_display_by_key[k] = primary
 
             loot_item = {"item_id": item_id, "name": name, "sources": sources}
             bucket["loot"].append(loot_item)
+
+    # PoTime (and other) mobs that share identical loot: add display names so one row shows "Mob1, Mob2".
+    # When we have one of these in a bucket, add the others to mobs_set for that zone.
+    # Add more (zone, "Mob_Name") -> [aliases] as you discover PoTime same-loot pairs; include both directions.
+    SAME_LOOT_ALIASES: dict[tuple[str, str], list[str]] = {
+        ("Plane of Time", "Gutripping_War_Beast"): ["War_Shapen_Emissary"],
+        ("Plane of Time", "War_Shapen_Emissary"): ["Gutripping_War_Beast"],
+        ("Plane of Time", "A_Deadly_Warboar"): ["A_Ferocious_Warboar", "A_Needletusk_Warboar"],
+        ("Plane of Time", "A_Ferocious_Warboar"): ["A_Deadly_Warboar", "A_Needletusk_Warboar"],
+        ("Plane of Time", "A_Needletusk_Warboar"): ["A_Deadly_Warboar", "A_Ferocious_Warboar"],
+    }
+    for (mob_norm, zone), bucket in by_mob_zone.items():
+        for display_name in list(bucket["mobs_set"]):
+            key = (zone, display_name)
+            if key in SAME_LOOT_ALIASES:
+                bucket["mobs_set"].update(SAME_LOOT_ALIASES[key])
 
     def dedupe_loot(loot: list) -> list:
         by_key = {}
@@ -177,7 +203,8 @@ def main():
         deduped = dedupe_loot(loot)
         return tuple(sorted((it.get("item_id"), (it.get("name") or "").strip()) for it in deduped))
 
-    # Merge buckets that have same zone and same loot (restore aggregated mob rows)
+    # Merge buckets that have same zone and same loot (restore aggregated mob rows;
+    # e.g. Gutripping_War_Beast + War_Shapen_Emissary with identical loot -> one row)
     merged: dict[tuple[str, tuple], dict] = {}
     for (mob_norm, zone), bucket in by_mob_zone.items():
         if not bucket["loot"]:
@@ -191,37 +218,15 @@ def main():
         if "display_mob" not in merged[key]:
             merged[key]["display_mob"] = mob_display_by_key.get((mob_norm, zone)) or _norm_to_display(mob_norm)
 
-    # Merge again by (zone, first_mob) so one row per mob per zone (no duplicate PoTime entries)
-    by_zone_mob: dict[tuple[str, str], dict] = {}
+    # Output one row per (zone, sig); same-loot mobs stay merged (e.g. Faydedar+others, Gutripping+War_Shapen_Emissary).
+    # Key = first_mob|zone; suffix _2, _3 if collision (same mob, different loot sets - frontend will merge by zone+mobSig).
+    new_data = {}
     for (zone, sig), group in merged.items():
         mobs_set = group["mobs_set"]
         if not mobs_set:
             continue
+        loot = group["loot"]
         first_mob = sorted(mobs_set, key=lambda s: s.lower())[0]
-        key = (zone, first_mob)
-        if key not in by_zone_mob:
-            by_zone_mob[key] = {"mobs_set": set(), "loot_by_key": {}, "display_mob": group.get("display_mob")}
-        g = by_zone_mob[key]
-        g["mobs_set"].update(mobs_set)
-        if g["display_mob"] is None:
-            g["display_mob"] = group.get("display_mob")
-        for it in group["loot"]:
-            iid, name = it.get("item_id"), (it.get("name") or "").strip().lower()
-            k = (iid, name)
-            if k not in g["loot_by_key"]:
-                g["loot_by_key"][k] = dict(it)
-                g["loot_by_key"][k]["sources"] = list(set(it.get("sources") or []))
-            else:
-                g["loot_by_key"][k]["sources"] = list(set(g["loot_by_key"][k]["sources"]) | set(it.get("sources") or []))
-
-    new_data = {}
-    for (zone, first_mob), group in by_zone_mob.items():
-        mobs_set = group["mobs_set"]
-        if not mobs_set:
-            continue
-        loot = list(group["loot_by_key"].values())
-        for it in loot:
-            it["sources"] = sorted(set(it["sources"]))
         display_mob = group.get("display_mob") or _norm_to_display(first_mob)
         out_key = f"{first_mob}|{zone}" if zone else f"{first_mob}|"
         suffix = 0

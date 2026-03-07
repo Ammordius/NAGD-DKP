@@ -59,7 +59,7 @@ MOB_ZONES = {
     "Cazic_Thule": "Plane of Time",
     "Innoruuk": "Plane of Time",
     "Rallos_Zek": "Plane of Time",
-    "Rallos_Zek_the_Warlord": "Plane of Time",
+    "Rallos_Zek_the_Warlord": "Plane of Tactics",
     "Tallon_Zek": "Plane of Time",
     "Vallon_Zek": "Plane of Time",
     "Saryrn": "Plane of Time",

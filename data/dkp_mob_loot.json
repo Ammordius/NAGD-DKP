@@ -148,7 +148,9 @@
   "A_Deadly_Warboar|Plane of Time": {
     "mob": "A_Deadly_Warboar",
     "mobs": [
-      "A_Deadly_Warboar"
+      "A_Deadly_Warboar",
+      "A_Ferocious_Warboar",
+      "A_Needletusk_Warboar"
     ],
     "zone": "Plane of Time",
     "loot": [
@@ -1428,7 +1430,8 @@
   "Gutripping_War_Beast|Plane of Time": {
     "mob": "Gutripping_War_Beast",
     "mobs": [
-      "Gutripping_War_Beast"
+      "Gutripping_War_Beast",
+      "War_Shapen_Emissary"
     ],
     "zone": "Plane of Time",
     "loot": [
