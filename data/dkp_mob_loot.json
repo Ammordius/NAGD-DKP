@@ -98,7 +98,16 @@
           "dkp",
           "raid_item_sources"
         ]
-      },
+      }
+    ]
+  },
+  "Bertoxxulous|Crypt of Decay": {
+    "mob": "Bertoxxulous",
+    "mobs": [
+      "Bertoxxulous"
+    ],
+    "zone": "Crypt of Decay",
+    "loot": [
       {
         "item_id": 10241,
         "name": "Circle of Rotting Flesh",
@@ -139,23 +148,7 @@
   "A_Deadly_Warboar|Plane of Time": {
     "mob": "A_Deadly_Warboar",
     "mobs": [
-      "A_Deadly_Warboar",
-      "A_Ferocious_Warboar",
-      "A_Needletusk_Warboar",
-      "Champion_of_Torment",
-      "Dark_Knight_of_Terris",
-      "Deathbringer_Blackheart",
-      "Deathbringer_Rianit",
-      "Deathbringer_Skullsmash",
-      "Dersool_Fal`Giersnaol",
-      "Dreamwarp",
-      "Herlsoakian",
-      "Kraksmaal_Fir`Dethsin",
-      "P3",
-      "Sinrunal_Gorgedreal",
-      "Undead_Squad_Leader",
-      "Xeroan_Xi`Geruonask",
-      "Xerskel_Gerodnsal"
+      "A_Deadly_Warboar"
     ],
     "zone": "Plane of Time",
     "loot": [
@@ -239,12 +232,12 @@
       }
     ]
   },
-  "A_Monsterous_Mudwalker|Plane of Earth": {
+  "A_Monsterous_Mudwalker|Plane of Time": {
     "mob": "A_Monsterous_Mudwalker",
     "mobs": [
       "A_Monsterous_Mudwalker"
     ],
-    "zone": "Plane of Earth",
+    "zone": "Plane of Time",
     "loot": [
       {
         "item_id": 20453,
@@ -280,12 +273,12 @@
       }
     ]
   },
-  "A_Mystical_Arbitor_of_Earth|Plane of Earth": {
+  "A_Mystical_Arbitor_of_Earth|Plane of Time": {
     "mob": "A_Mystical_Arbitor_of_Earth",
     "mobs": [
       "A_Mystical_Arbitor_of_Earth"
     ],
-    "zone": "Plane of Earth",
+    "zone": "Plane of Time",
     "loot": [
       {
         "item_id": 27290,
@@ -313,12 +306,12 @@
       }
     ]
   },
-  "A_Perfected_Warder_of_Earth|Plane of Earth": {
+  "A_Perfected_Warder_of_Earth|Plane of Time": {
     "mob": "A_Perfected_Warder_of_Earth",
     "mobs": [
       "A_Perfected_Warder_of_Earth"
     ],
-    "zone": "Plane of Earth",
+    "zone": "Plane of Time",
     "loot": [
       {
         "item_id": 27106,
@@ -435,8 +428,7 @@
   "A_Pristine_Gem_Golem|Other / Unknown": {
     "mob": "A_Pristine_Gem_Golem",
     "mobs": [
-      "A_Pristine_Gem_Golem",
-      "A_Shimmering_Gem_Sentry"
+      "A_Pristine_Gem_Golem"
     ],
     "zone": "Other / Unknown",
     "loot": [
@@ -449,67 +441,75 @@
       }
     ]
   },
-  "A_burrower_parasite|Other / Unknown": {
+  "A_burrower_parasite|The Deep": {
     "mob": "A_burrower_parasite",
     "mobs": [
       "A_burrower_parasite"
     ],
-    "zone": "Other / Unknown",
+    "zone": "The Deep",
     "loot": [
       {
         "item_id": 8733,
         "name": "Ancient Burrower Flesh Cap",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
         "item_id": 8498,
         "name": "Ancient Burrower Hide Tunic",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
         "item_id": 8724,
         "name": "Ancient Burrower Spine",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
         "item_id": 8497,
         "name": "Bile Drenched Flesh Robe",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
         "item_id": 8735,
         "name": "Brilliant Stone Ring",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
         "item_id": 8736,
         "name": "Ring of Living Ore",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
         "item_id": 8734,
         "name": "Ring of the Depths",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
         "item_id": 8725,
         "name": "Shard from Unfathomable Depths",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       }
     ]
@@ -517,20 +517,7 @@
   "A_shadow_reaver|Other / Unknown": {
     "mob": "A_shadow_reaver",
     "mobs": [
-      "A_shadow_reaver",
-      "Diabo_Tatrua",
-      "Tavuel_Tatrua",
-      "Thall_Tatrua",
-      "Va_Tatrua",
-      "Xin`Xakra",
-      "Xin`Xakra_",
-      "Xin`Xakre",
-      "Xin`Xakri",
-      "Xin`Xakru",
-      "Xin`Xekra",
-      "Xin`Xikra",
-      "Xin`Xokra",
-      "Xin`Xukra"
+      "A_shadow_reaver"
     ],
     "zone": "Other / Unknown",
     "loot": [
@@ -566,18 +553,26 @@
       }
     ]
   },
-  "An_Elemental_Masterpiece|Other / Unknown": {
+  "An_Elemental_Masterpiece|Plane of Air": {
     "mob": "An_Elemental_Masterpiece",
     "mobs": [
       "An_Elemental_Masterpiece"
     ],
-    "zone": "Other / Unknown",
+    "zone": "Plane of Air",
     "loot": [
       {
         "item_id": 15812,
         "name": "Tethered Air Cape",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
+        ]
+      },
+      {
+        "item_id": 24773,
+        "name": "Bejeweled Dagger of Summoning",
+        "sources": [
+          "raid_item_sources"
         ]
       }
     ]
@@ -585,8 +580,7 @@
   "Anar_of_Water|Plane of Time": {
     "mob": "Anar_of_Water",
     "mobs": [
-      "Anar_of_Water",
-      "P1"
+      "Anar_of_Water"
     ],
     "zone": "Plane of Time",
     "loot": [
@@ -635,9 +629,7 @@
   "Avatar_of_the_Elements|Plane of Time": {
     "mob": "Avatar_of_the_Elements",
     "mobs": [
-      "Avatar_of_the_Elements",
-      "P3 Guardian",
-      "Supernatural_Guardian"
+      "Avatar_of_the_Elements"
     ],
     "zone": "Plane of Time",
     "loot": [
@@ -707,10 +699,7 @@
   "Azobian_the_Darklord|Plane of Fire": {
     "mob": "Azobian_the_Darklord",
     "mobs": [
-      "Azobian_the_Darklord",
-      "Hebabbilys_the_Ragelord",
-      "Javonn_the_Overlord",
-      "Reaxnous_the_Chaoslord"
+      "Azobian_the_Darklord"
     ],
     "zone": "Plane of Fire",
     "loot": [
@@ -746,18 +735,19 @@
       }
     ]
   },
-  "Bhaly_Adan|Other / Unknown": {
+  "Bhaly_Adan|Crypt of Decay": {
     "mob": "Bhaly_Adan",
     "mobs": [
       "Bhaly_Adan"
     ],
-    "zone": "Other / Unknown",
+    "zone": "Crypt of Decay",
     "loot": [
       {
         "item_id": 21893,
         "name": "Torch of Lxvanvom",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       }
     ]
@@ -980,35 +970,42 @@
       }
     ]
   },
-  "Chancellor_Kirtra|Other / Unknown": {
+  "Chancellor_Kirtra|Plane of Fire": {
     "mob": "Chancellor_Kirtra",
     "mobs": [
-      "Chancellor_Kirtra",
-      "Chancellor_Traxom",
-      "Omni_Magus_Crato",
-      "Warlord_Prollaz"
+      "Chancellor_Kirtra"
     ],
-    "zone": "Other / Unknown",
+    "zone": "Plane of Fire",
     "loot": [
       {
         "item_id": 11030,
         "name": "Bracer of Flickering Flames",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
         "item_id": 11324,
         "name": "Fire Crested Rune",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
         "item_id": 26798,
         "name": "Flame Idol of Ro",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
+        ]
+      },
+      {
+        "item_id": 12054,
+        "name": "Cord of the Pyre",
+        "sources": [
+          "raid_item_sources"
         ]
       }
     ]
@@ -1016,10 +1013,7 @@
   "Derugoak_Bloodwalker|Plane of Earth": {
     "mob": "Derugoak_Bloodwalker",
     "mobs": [
-      "Derugoak_Bloodwalker",
-      "Nrinda_of_Ice",
-      "Pwelon_of_Vapor",
-      "Vamuil_of_Water"
+      "Derugoak_Bloodwalker"
     ],
     "zone": "Plane of Earth",
     "loot": [
@@ -1060,8 +1054,7 @@
   "Earthen_Overseer|Plane of Time": {
     "mob": "Earthen_Overseer",
     "mobs": [
-      "Earthen_Overseer",
-      "Windshapen_Warlord_of_Air"
+      "Earthen_Overseer"
     ],
     "zone": "Plane of Time",
     "loot": [
@@ -1098,6 +1091,95 @@
       }
     ]
   },
+  "Emperor_Ssraeshza_|Temple of Ssraeshza": {
+    "mob": "Emperor_Ssraeshza_",
+    "mobs": [
+      "Emperor_Ssraeshza_"
+    ],
+    "zone": "Temple of Ssraeshza",
+    "loot": [
+      {
+        "item_id": 26585,
+        "name": "Acrylia Handled Broadsword",
+        "sources": [
+          "dkp",
+          "raid_item_sources"
+        ]
+      },
+      {
+        "item_id": 26599,
+        "name": "Caen's Bo Staff of Fury",
+        "sources": [
+          "dkp",
+          "raid_item_sources"
+        ]
+      },
+      {
+        "item_id": 30569,
+        "name": "Envenomed Moccasins",
+        "sources": [
+          "dkp",
+          "raid_item_sources"
+        ]
+      },
+      {
+        "item_id": 8359,
+        "name": "Gebron's Demented Cloak",
+        "sources": [
+          "dkp",
+          "raid_item_sources"
+        ]
+      },
+      {
+        "item_id": 30566,
+        "name": "Shawl of Awakenings",
+        "sources": [
+          "dkp",
+          "raid_item_sources"
+        ]
+      },
+      {
+        "item_id": 26564,
+        "name": "Shield of Mental Fortitude",
+        "sources": [
+          "dkp",
+          "raid_item_sources"
+        ]
+      },
+      {
+        "item_id": 26587,
+        "name": "The Sword of Ssraeshza",
+        "sources": [
+          "dkp",
+          "raid_item_sources"
+        ]
+      },
+      {
+        "item_id": 26584,
+        "name": "Torque of the Wyrmlord",
+        "sources": [
+          "dkp",
+          "raid_item_sources"
+        ]
+      },
+      {
+        "item_id": 30570,
+        "name": "Velvet Slippers of Harmony",
+        "sources": [
+          "dkp",
+          "raid_item_sources"
+        ]
+      },
+      {
+        "item_id": 21809,
+        "name": "White Ornate Chain Bridle",
+        "sources": [
+          "dkp",
+          "raid_item_sources"
+        ]
+      }
+    ]
+  },
   "Emperor_Ssraeshza_|Other / Unknown": {
     "mob": "Emperor_Ssraeshza_",
     "mobs": [
@@ -1106,13 +1188,6 @@
     "zone": "Other / Unknown",
     "loot": [
       {
-        "item_id": 26585,
-        "name": "Acrylia Handled Broadsword",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
         "item_id": 26749,
         "name": "Azaliil's Ring of Analogies",
         "sources": [
@@ -1120,71 +1195,8 @@
         ]
       },
       {
-        "item_id": 26599,
-        "name": "Caen's Bo Staff of Fury",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 30569,
-        "name": "Envenomed Moccasins",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 8359,
-        "name": "Gebron's Demented Cloak",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
         "item_id": 26604,
         "name": "Koadic's Robe of Heightened Focus",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 30566,
-        "name": "Shawl of Awakenings",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 26564,
-        "name": "Shield of Mental Fortitude",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 26587,
-        "name": "The Sword of Ssraeshza",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 26584,
-        "name": "Torque of the Wyrmlord",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 30570,
-        "name": "Velvet Slippers of Harmony",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 21809,
-        "name": "White Ornate Chain Bridle",
         "sources": [
           "dkp"
         ]
@@ -1302,6 +1314,74 @@
       }
     ]
   },
+  "Grieg_Veneficus|Grieg's End": {
+    "mob": "Grieg_Veneficus",
+    "mobs": [
+      "Grieg_Veneficus"
+    ],
+    "zone": "Grieg's End",
+    "loot": [
+      {
+        "item_id": 7789,
+        "name": "Attuned Spire Shard",
+        "sources": [
+          "dkp",
+          "raid_item_sources"
+        ]
+      },
+      {
+        "item_id": 26808,
+        "name": "Etched Bone Ulak",
+        "sources": [
+          "dkp",
+          "raid_item_sources"
+        ]
+      },
+      {
+        "item_id": 26533,
+        "name": "Geomantic Fingers of Focus",
+        "sources": [
+          "dkp",
+          "raid_item_sources"
+        ]
+      },
+      {
+        "item_id": 26551,
+        "name": "Belt of Virility",
+        "sources": [
+          "raid_item_sources"
+        ]
+      },
+      {
+        "item_id": 28843,
+        "name": "Bonecurse",
+        "sources": [
+          "raid_item_sources"
+        ]
+      },
+      {
+        "item_id": 26532,
+        "name": "Boots of Stability",
+        "sources": [
+          "raid_item_sources"
+        ]
+      },
+      {
+        "item_id": 28829,
+        "name": "Ichorflow",
+        "sources": [
+          "raid_item_sources"
+        ]
+      },
+      {
+        "item_id": 26557,
+        "name": "Jenniy's Two-tone Cuirass",
+        "sources": [
+          "raid_item_sources"
+        ]
+      }
+    ]
+  },
   "Grieg_Veneficus|Other / Unknown": {
     "mob": "Grieg_Veneficus",
     "mobs": [
@@ -1310,29 +1390,8 @@
     "zone": "Other / Unknown",
     "loot": [
       {
-        "item_id": 7789,
-        "name": "Attuned Spire Shard",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
         "item_id": 21812,
         "name": "Black Silken Bridle",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 26808,
-        "name": "Etched Bone Ulak",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 26533,
-        "name": "Geomantic Fingers of Focus",
         "sources": [
           "dkp"
         ]
@@ -1342,12 +1401,7 @@
   "Grondon_Zekkin|Other / Unknown": {
     "mob": "Grondon_Zekkin",
     "mobs": [
-      "Grondon_Zekkin",
-      "Khalerogg_Dorfenbane",
-      "Kromzog_Zekkin",
-      "Valorankt_Zekkin",
-      "Vinric_Thunderclap",
-      "Zlirron_Windchill"
+      "Grondon_Zekkin"
     ],
     "zone": "Other / Unknown",
     "loot": [
@@ -1363,8 +1417,7 @@
   "Gutripping_War_Beast|Plane of Time": {
     "mob": "Gutripping_War_Beast",
     "mobs": [
-      "Gutripping_War_Beast",
-      "War_Shapen_Emissary"
+      "Gutripping_War_Beast"
     ],
     "zone": "Plane of Time",
     "loot": [
@@ -1571,18 +1624,26 @@
       }
     ]
   },
-  "Melernil_Faal`Armanna|Other / Unknown": {
+  "Melernil_Faal`Armanna|Plane of Air": {
     "mob": "Melernil_Faal`Armanna",
     "mobs": [
       "Melernil_Faal`Armanna"
     ],
-    "zone": "Other / Unknown",
+    "zone": "Plane of Air",
     "loot": [
       {
         "item_id": 13668,
         "name": "Resplendent Epaulets",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
+        ]
+      },
+      {
+        "item_id": 13690,
+        "name": "Puresteel Mantle",
+        "sources": [
+          "raid_item_sources"
         ]
       }
     ]
@@ -1603,12 +1664,12 @@
       }
     ]
   },
-  "Peregrin_Rockskull|Plane of Earth": {
+  "Peregrin_Rockskull|Plane of Time": {
     "mob": "Peregrin_Rockskull",
     "mobs": [
       "Peregrin_Rockskull"
     ],
-    "zone": "Plane of Earth",
+    "zone": "Plane of Time",
     "loot": [
       {
         "item_id": 11096,
@@ -1616,13 +1677,6 @@
         "sources": [
           "dkp",
           "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 19144,
-        "name": "Flowing Moss Mantle",
-        "sources": [
-          "dkp"
         ]
       },
       {
@@ -1643,34 +1697,59 @@
       }
     ]
   },
-  "Pherlondien_Clawpike|Other / Unknown": {
-    "mob": "Pherlondien_Clawpike",
+  "Peregrin_Rockskull|Plane of Earth": {
+    "mob": "Peregrin_Rockskull",
     "mobs": [
-      "Pherlondien_Clawpike"
+      "Peregrin_Rockskull"
     ],
-    "zone": "Other / Unknown",
+    "zone": "Plane of Earth",
     "loot": [
       {
-        "item_id": 26095,
-        "name": "Crow Footed Lance",
+        "item_id": 19144,
+        "name": "Flowing Moss Mantle",
         "sources": [
           "dkp"
         ]
       }
     ]
   },
-  "Pzo_Adan|Other / Unknown": {
+  "Pherlondien_Clawpike|Plane of Air": {
+    "mob": "Pherlondien_Clawpike",
+    "mobs": [
+      "Pherlondien_Clawpike"
+    ],
+    "zone": "Plane of Air",
+    "loot": [
+      {
+        "item_id": 26095,
+        "name": "Crow Footed Lance",
+        "sources": [
+          "dkp",
+          "raid_item_sources"
+        ]
+      },
+      {
+        "item_id": 16152,
+        "name": "Band of Fortitude",
+        "sources": [
+          "raid_item_sources"
+        ]
+      }
+    ]
+  },
+  "Pzo_Adan|Crypt of Decay": {
     "mob": "Pzo_Adan",
     "mobs": [
       "Pzo_Adan"
     ],
-    "zone": "Other / Unknown",
+    "zone": "Crypt of Decay",
     "loot": [
       {
         "item_id": 21872,
         "name": "Green Fist of Death",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       }
     ]
@@ -1936,12 +2015,12 @@
       }
     ]
   },
-  "Rallos_Zek_the_Warlord|Plane of Time": {
+  "Rallos_Zek_the_Warlord|Plane of Tactics": {
     "mob": "Rallos_Zek_the_Warlord",
     "mobs": [
       "Rallos_Zek_the_Warlord"
     ],
-    "zone": "Plane of Time",
+    "zone": "Plane of Tactics",
     "loot": [
       {
         "item_id": 7770,
@@ -2150,7 +2229,16 @@
           "dkp",
           "raid_item_sources"
         ]
-      },
+      }
+    ]
+  },
+  "Saryrn|Torment, the Plane of Pain": {
+    "mob": "Saryrn",
+    "mobs": [
+      "Saryrn"
+    ],
+    "zone": "Torment, the Plane of Pain",
+    "loot": [
       {
         "item_id": 15806,
         "name": "Cape Embroidered with Runes",
@@ -2201,6 +2289,95 @@
       }
     ]
   },
+  "Shei_Vinitras_|Akheva Ruins": {
+    "mob": "Shei_Vinitras_",
+    "mobs": [
+      "Shei_Vinitras_"
+    ],
+    "zone": "Akheva Ruins",
+    "loot": [
+      {
+        "item_id": 26561,
+        "name": "Akhevan Shadow Shears",
+        "sources": [
+          "dkp",
+          "raid_item_sources"
+        ]
+      },
+      {
+        "item_id": 26560,
+        "name": "Crys`Va Mask",
+        "sources": [
+          "dkp",
+          "raid_item_sources"
+        ]
+      },
+      {
+        "item_id": 30540,
+        "name": "Flowing Gossamer Cloak",
+        "sources": [
+          "dkp",
+          "raid_item_sources"
+        ]
+      },
+      {
+        "item_id": 26570,
+        "name": "Frizznik's Robe of Tinkering",
+        "sources": [
+          "dkp",
+          "raid_item_sources"
+        ]
+      },
+      {
+        "item_id": 26566,
+        "name": "Ishinaear Xiall",
+        "sources": [
+          "dkp",
+          "raid_item_sources"
+        ]
+      },
+      {
+        "item_id": 30532,
+        "name": "Leggings of Serenity",
+        "sources": [
+          "dkp",
+          "raid_item_sources"
+        ]
+      },
+      {
+        "item_id": 30533,
+        "name": "Mantle of Fortitude",
+        "sources": [
+          "dkp",
+          "raid_item_sources"
+        ]
+      },
+      {
+        "item_id": 26601,
+        "name": "Shadowed Storm Sphere",
+        "sources": [
+          "dkp",
+          "raid_item_sources"
+        ]
+      },
+      {
+        "item_id": 26598,
+        "name": "Shadowed Torment",
+        "sources": [
+          "dkp",
+          "raid_item_sources"
+        ]
+      },
+      {
+        "item_id": 26574,
+        "name": "Shadowsong Cloak",
+        "sources": [
+          "dkp",
+          "raid_item_sources"
+        ]
+      }
+    ]
+  },
   "Shei_Vinitras_|Other / Unknown": {
     "mob": "Shei_Vinitras_",
     "mobs": [
@@ -2208,76 +2385,6 @@
     ],
     "zone": "Other / Unknown",
     "loot": [
-      {
-        "item_id": 26561,
-        "name": "Akhevan Shadow Shears",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 26560,
-        "name": "Crys`Va Mask",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 30540,
-        "name": "Flowing Gossamer Cloak",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 26570,
-        "name": "Frizznik's Robe of Tinkering",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 26566,
-        "name": "Ishinaear Xiall",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 30532,
-        "name": "Leggings of Serenity",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 30533,
-        "name": "Mantle of Fortitude",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 26601,
-        "name": "Shadowed Storm Sphere",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 26598,
-        "name": "Shadowed Torment",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 26574,
-        "name": "Shadowsong Cloak",
-        "sources": [
-          "dkp"
-        ]
-      },
       {
         "item_id": 32176,
         "name": "Temariel Vex",
@@ -2370,7 +2477,16 @@
           "dkp",
           "raid_item_sources"
         ]
-      },
+      }
+    ]
+  },
+  "Tallon_Zek|Drunder, the Fortress of Zek": {
+    "mob": "Tallon_Zek",
+    "mobs": [
+      "Tallon_Zek"
+    ],
+    "zone": "Drunder, the Fortress of Zek",
+    "loot": [
       {
         "item_id": 26739,
         "name": "Battle Fists",
@@ -2490,7 +2606,16 @@
           "dkp",
           "raid_item_sources"
         ]
-      },
+      }
+    ]
+  },
+  "Terris_Thule|The Lair of Terris Thule": {
+    "mob": "Terris_Thule",
+    "mobs": [
+      "Terris_Thule"
+    ],
+    "zone": "The Lair of Terris Thule",
+    "loot": [
       {
         "item_id": 10127,
         "name": "Carved Bone Ring",
@@ -2533,12 +2658,12 @@
       }
     ]
   },
-  "The_Avatar_of_War|Plane of Time": {
+  "The_Avatar_of_War|Kael Drakkel": {
     "mob": "The_Avatar_of_War",
     "mobs": [
       "The_Avatar_of_War"
     ],
-    "zone": "Plane of Time",
+    "zone": "Kael Drakkel",
     "loot": [
       {
         "item_id": 25210,
@@ -2606,12 +2731,12 @@
       }
     ]
   },
-  "The_Protector_of_Dresolik|Tower of Solusek Ro": {
+  "The_Protector_of_Dresolik|Plane of Time": {
     "mob": "The_Protector_of_Dresolik",
     "mobs": [
       "The_Protector_of_Dresolik"
     ],
-    "zone": "Tower of Solusek Ro",
+    "zone": "Plane of Time",
     "loot": [
       {
         "item_id": 25987,
@@ -2655,12 +2780,12 @@
       }
     ]
   },
-  "Tribal_Leader_Diseranon|Plane of Earth": {
+  "Tribal_Leader_Diseranon|Plane of Time": {
     "mob": "Tribal_Leader_Diseranon",
     "mobs": [
       "Tribal_Leader_Diseranon"
     ],
-    "zone": "Plane of Earth",
+    "zone": "Plane of Time",
     "loot": [
       {
         "item_id": 22896,
@@ -2907,14 +3032,7 @@
   "A_chanting_shade|Akheva Ruins": {
     "mob": "A_chanting_shade",
     "mobs": [
-      "A_chanting_shade",
-      "A_wailing_shade",
-      "Renthias`Dator",
-      "Rygan_Anisher",
-      "The_Protector",
-      "Xaui_Tatrua",
-      "Xi_Vius",
-      "Xi_Xaui"
+      "A_chanting_shade"
     ],
     "zone": "Akheva Ruins",
     "loot": [
@@ -2937,13 +3055,7 @@
   "Altar_Priest|Akheva Ruins": {
     "mob": "Altar_Priest",
     "mobs": [
-      "Altar_Priest",
-      "An_Akhevan_lifetaker",
-      "Atulinae`Vius",
-      "Lorekeeper",
-      "Sheleric_Vis",
-      "Transient_Emissary",
-      "Transient_Xin"
+      "Altar_Priest"
     ],
     "zone": "Akheva Ruins",
     "loot": [
@@ -2952,85 +3064,6 @@
         "name": "Temariel Vex",
         "sources": [
           "dkp"
-        ]
-      }
-    ]
-  },
-  "Shei_Vinitras_|Akheva Ruins": {
-    "mob": "Shei_Vinitras_",
-    "mobs": [
-      "Shei_Vinitras_"
-    ],
-    "zone": "Akheva Ruins",
-    "loot": [
-      {
-        "item_id": 26561,
-        "name": "Akhevan Shadow Shears",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 26560,
-        "name": "Crys`Va Mask",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 30540,
-        "name": "Flowing Gossamer Cloak",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 26570,
-        "name": "Frizznik's Robe of Tinkering",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 26566,
-        "name": "Ishinaear Xiall",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 30532,
-        "name": "Leggings of Serenity",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 30533,
-        "name": "Mantle of Fortitude",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 26601,
-        "name": "Shadowed Storm Sphere",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 26598,
-        "name": "Shadowed Torment",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 26574,
-        "name": "Shadowsong Cloak",
-        "sources": [
-          "raid_item_sources"
         ]
       }
     ]
@@ -3452,38 +3485,6 @@
       }
     ]
   },
-  "Bhaly_Adan|Crypt of Decay": {
-    "mob": "Bhaly_Adan",
-    "mobs": [
-      "Bhaly_Adan"
-    ],
-    "zone": "Crypt of Decay",
-    "loot": [
-      {
-        "item_id": 21893,
-        "name": "Torch of Lxvanvom",
-        "sources": [
-          "raid_item_sources"
-        ]
-      }
-    ]
-  },
-  "Pzo_Adan|Crypt of Decay": {
-    "mob": "Pzo_Adan",
-    "mobs": [
-      "Pzo_Adan"
-    ],
-    "zone": "Crypt of Decay",
-    "loot": [
-      {
-        "item_id": 21872,
-        "name": "Green Fist of Death",
-        "sources": [
-          "raid_item_sources"
-        ]
-      }
-    ]
-  },
   "Vaniki|Dragon Necropolis": {
     "mob": "Vaniki",
     "mobs": [
@@ -3620,71 +3621,6 @@
       }
     ]
   },
-  "Grieg_Veneficus|Grieg's End": {
-    "mob": "Grieg_Veneficus",
-    "mobs": [
-      "Grieg_Veneficus"
-    ],
-    "zone": "Grieg's End",
-    "loot": [
-      {
-        "item_id": 7789,
-        "name": "Attuned Spire Shard",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 26551,
-        "name": "Belt of Virility",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 28843,
-        "name": "Bonecurse",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 26532,
-        "name": "Boots of Stability",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 26808,
-        "name": "Etched Bone Ulak",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 26533,
-        "name": "Geomantic Fingers of Focus",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 28829,
-        "name": "Ichorflow",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 26557,
-        "name": "Jenniy's Two-tone Cuirass",
-        "sources": [
-          "raid_item_sources"
-        ]
-      }
-    ]
-  },
   "Servitor_of_Luclin|Grieg's End": {
     "mob": "Servitor_of_Luclin",
     "mobs": [
@@ -3771,10 +3707,7 @@
   "Armor_of_Zek|Kael Drakkel": {
     "mob": "Armor_of_Zek",
     "mobs": [
-      "Armor_of_Zek",
-      "High_Priest_of_Tallon_Zek",
-      "High_Priest_of_Vallon_Zek",
-      "a_guardian_of_Zek"
+      "Armor_of_Zek"
     ],
     "zone": "Kael Drakkel",
     "loot": [
@@ -4052,46 +3985,6 @@
       }
     ]
   },
-  "a_fire_elemental|Lavastorm Mountains": {
-    "mob": "a_fire_elemental",
-    "mobs": [
-      "a_fire_elemental"
-    ],
-    "zone": "Lavastorm Mountains",
-    "loot": []
-  },
-  "A_Battle_Horror|Mons Letalis": {
-    "mob": "A_Battle_Horror",
-    "mobs": [
-      "A_Battle_Horror",
-      "A_Dark_Rockhopper",
-      "A_Defiant_Spire_Spirit",
-      "A_Dishonorable_Horror",
-      "A_Dread_Horror",
-      "A_Dread_Thought_Leech",
-      "A_Foretold_Horror",
-      "A_Hardy_Rockhopper",
-      "A_Honored_Spire_Spirit",
-      "A_Light_Spire_Spirit",
-      "A_Light_Stonegrabber",
-      "A_Raging_Rockhopper",
-      "A_Scorched_Stonegrabber",
-      "A_Sculpted_Stonegrabber",
-      "A_Shik_Nar_Centurion",
-      "A_Shik_Nar_Combatant",
-      "A_Shik_Nar_Defender",
-      "A_Shik_Nar_Legionnaire",
-      "A_Shik_Nar_Screecher",
-      "A_Steadfast_Spire_Spirit",
-      "A_Studded_Stonegrabber",
-      "A_Vigorous_Rockhopper",
-      "A_Violent_Rockhopper",
-      "An_Ancient_Stonegrabber",
-      "An_Ebony_Horror"
-    ],
-    "zone": "Mons Letalis",
-    "loot": []
-  },
   "Lord_Nagafen|Nagafen's Lair": {
     "mob": "Lord_Nagafen",
     "mobs": [
@@ -4107,22 +4000,6 @@
         ]
       }
     ]
-  },
-  "lava_guardian|Nagafen's Lair": {
-    "mob": "lava_guardian",
-    "mobs": [
-      "lava_guardian"
-    ],
-    "zone": "Nagafen's Lair",
-    "loot": []
-  },
-  "a_fire_elemental|Najena": {
-    "mob": "a_fire_elemental",
-    "mobs": [
-      "a_fire_elemental"
-    ],
-    "zone": "Najena",
-    "loot": []
   },
   "Lady_Vox|Permafrost Caverns": {
     "mob": "Lady_Vox",
@@ -4254,75 +4131,6 @@
       {
         "item_id": 26788,
         "name": "Xephyrus, Wand of the Flowing Wind",
-        "sources": [
-          "raid_item_sources"
-        ]
-      }
-    ]
-  },
-  "An_Elemental_Masterpiece|Plane of Air": {
-    "mob": "An_Elemental_Masterpiece",
-    "mobs": [
-      "An_Elemental_Masterpiece"
-    ],
-    "zone": "Plane of Air",
-    "loot": [
-      {
-        "item_id": 24773,
-        "name": "Bejeweled Dagger of Summoning",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 15812,
-        "name": "Tethered Air Cape",
-        "sources": [
-          "raid_item_sources"
-        ]
-      }
-    ]
-  },
-  "Melernil_Faal`Armanna|Plane of Air": {
-    "mob": "Melernil_Faal`Armanna",
-    "mobs": [
-      "Melernil_Faal`Armanna"
-    ],
-    "zone": "Plane of Air",
-    "loot": [
-      {
-        "item_id": 13690,
-        "name": "Puresteel Mantle",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 13668,
-        "name": "Resplendent Epaulets",
-        "sources": [
-          "raid_item_sources"
-        ]
-      }
-    ]
-  },
-  "Pherlondien_Clawpike|Plane of Air": {
-    "mob": "Pherlondien_Clawpike",
-    "mobs": [
-      "Pherlondien_Clawpike"
-    ],
-    "zone": "Plane of Air",
-    "loot": [
-      {
-        "item_id": 16152,
-        "name": "Band of Fortitude",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 26095,
-        "name": "Crow Footed Lance",
         "sources": [
           "raid_item_sources"
         ]
@@ -4461,7 +4269,16 @@
           "dkp",
           "raid_item_sources"
         ]
-      },
+      }
+    ]
+  },
+  "Retseth_Tretse|The Hole": {
+    "mob": "Retseth_Tretse",
+    "mobs": [
+      "Retseth_Tretse"
+    ],
+    "zone": "The Hole",
+    "loot": [
       {
         "item_id": 14760,
         "name": "Essence of Earth",
@@ -4474,9 +4291,7 @@
   "Dread|Plane of Fear": {
     "mob": "Dread",
     "mobs": [
-      "Dread",
-      "Fright",
-      "Terror"
+      "Dread"
     ],
     "zone": "Plane of Fear",
     "loot": [
@@ -4706,48 +4521,10 @@
       }
     ]
   },
-  "Chancellor_Kirtra|Plane of Fire": {
-    "mob": "Chancellor_Kirtra",
-    "mobs": [
-      "Chancellor_Kirtra"
-    ],
-    "zone": "Plane of Fire",
-    "loot": [
-      {
-        "item_id": 11030,
-        "name": "Bracer of Flickering Flames",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 12054,
-        "name": "Cord of the Pyre",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 11324,
-        "name": "Fire Crested Rune",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 26798,
-        "name": "Flame Idol of Ro",
-        "sources": [
-          "raid_item_sources"
-        ]
-      }
-    ]
-  },
   "Criare_Sunmane|Plane of Fire": {
     "mob": "Criare_Sunmane",
     "mobs": [
-      "Criare_Sunmane",
-      "Jaxoliz_Dawneyes"
+      "Criare_Sunmane"
     ],
     "zone": "Plane of Fire",
     "loot": [
@@ -5146,10 +4923,7 @@
   "Fayl_Everstrong|Plane of Growth": {
     "mob": "Fayl_Everstrong",
     "mobs": [
-      "Fayl_Everstrong",
-      "Rumbleroot",
-      "Treah_Greenroot",
-      "an_entoling_essence_channeler"
+      "Fayl_Everstrong"
     ],
     "zone": "Plane of Growth",
     "loot": [
@@ -5205,15 +4979,6 @@
         ]
       }
     ]
-  },
-  "a_crystaline_cloud|Plane of Sky": {
-    "mob": "a_crystaline_cloud",
-    "mobs": [
-      "a_crystaline_cloud",
-      "a_gust_of_wind"
-    ],
-    "zone": "Plane of Sky",
-    "loot": []
   },
   "an_azarack|Plane of Sky": {
     "mob": "an_azarack",
@@ -5639,9 +5404,7 @@
   "Triloun_Egg_Keeper|Plane of Water": {
     "mob": "Triloun_Egg_Keeper",
     "mobs": [
-      "Triloun_Egg_Keeper",
-      "Triloun_Seer",
-      "Triloun_Warder"
+      "Triloun_Egg_Keeper"
     ],
     "zone": "Plane of Water",
     "loot": [
@@ -5804,60 +5567,6 @@
         ]
       }
     ]
-  },
-  "a_bloodtribe_chanter|Scarlet Desert": {
-    "mob": "a_bloodtribe_chanter",
-    "mobs": [
-      "a_bloodtribe_chanter",
-      "a_bloodtribe_lightwarrior",
-      "a_bloodtribe_lorekeeper",
-      "a_bloodtribe_martialist",
-      "a_bloodtribe_ornamentalist",
-      "a_chill_vas_ren_guardian",
-      "a_composed_cheetah",
-      "a_courageous_tro_jeg_invader",
-      "a_dark_rockhopper",
-      "a_darkeyed_sunflower",
-      "a_ferocious_rockhopper",
-      "a_fiery_sun_revenant",
-      "a_fire_blossom",
-      "a_fleshy_sunflower",
-      "a_flowery_cheetah",
-      "a_forsaken_lightcrawler",
-      "a_frantic_lightcrawler",
-      "a_fruitful_sunflower",
-      "a_gallant_cheetah",
-      "a_glorious_sunflower",
-      "a_golden_grol_baku_sentry",
-      "a_grim_lightcrawler",
-      "a_grol_baku_gemkeeper",
-      "a_grol_baku_runemaster",
-      "a_grol_baku_sand_collector",
-      "a_grol_baku_wiseman",
-      "a_hardy_rockhopper",
-      "a_hearty_sun_revenant",
-      "a_light_cheetah",
-      "a_pious_sun_revenant",
-      "a_repulsive_lightcrawler",
-      "a_rough_cheetah",
-      "a_savage_rockhopper",
-      "a_scorched_tro_jeg_soldier",
-      "a_sun_revenant_hero",
-      "a_sunflower_of_darkness",
-      "a_tro_jeg_dread_bane",
-      "a_tro_jeg_rock_collector",
-      "a_tro_jeg_smith",
-      "a_valorous_vas_ren_guard",
-      "a_vas_ren_holyman",
-      "a_vas_ren_musician",
-      "a_vas_ren_tactician",
-      "a_vigorous_rockhopper",
-      "a_wild_lightcrawler",
-      "an_etched_sun_revenant",
-      "an_opposed_cheetah"
-    ],
-    "zone": "Scarlet Desert",
-    "loot": []
   },
   "Talendor|Skyfire Mountains": {
     "mob": "Talendor",
@@ -6310,15 +6019,6 @@
         ]
       }
     ]
-  },
-  "blazing_elemental|Solusek's Eye": {
-    "mob": "blazing_elemental",
-    "mobs": [
-      "blazing_elemental",
-      "lava_elemental"
-    ],
-    "zone": "Solusek's Eye",
-    "loot": []
   },
   "Blood_of_Ssraeshza|Ssraeshza Temple": {
     "mob": "Blood_of_Ssraeshza",
@@ -6851,6 +6551,7 @@
         "item_id": 26555,
         "name": "Sleeves of Elemental Auras",
         "sources": [
+          "dkp",
           "raid_item_sources"
         ]
       },
@@ -7214,85 +6915,6 @@
       }
     ]
   },
-  "Emperor_Ssraeshza_|Temple of Ssraeshza": {
-    "mob": "Emperor_Ssraeshza_",
-    "mobs": [
-      "Emperor_Ssraeshza_"
-    ],
-    "zone": "Temple of Ssraeshza",
-    "loot": [
-      {
-        "item_id": 26585,
-        "name": "Acrylia Handled Broadsword",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 26599,
-        "name": "Caen's Bo Staff of Fury",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 30569,
-        "name": "Envenomed Moccasins",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 8359,
-        "name": "Gebron's Demented Cloak",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 30566,
-        "name": "Shawl of Awakenings",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 26564,
-        "name": "Shield of Mental Fortitude",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 26587,
-        "name": "The Sword of Ssraeshza",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 26584,
-        "name": "Torque of the Wyrmlord",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 30570,
-        "name": "Velvet Slippers of Harmony",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 21809,
-        "name": "White Ornate Chain Bridle",
-        "sources": [
-          "raid_item_sources"
-        ]
-      }
-    ]
-  },
   "Rhag`Zhezum|Temple of Ssraeshza": {
     "mob": "Rhag`Zhezum",
     "mobs": [
@@ -7443,6 +7065,7 @@
         "item_id": 31214,
         "name": "Barrier of Sound",
         "sources": [
+          "dkp",
           "raid_item_sources"
         ]
       },
@@ -7457,6 +7080,7 @@
         "item_id": 31218,
         "name": "Melodic Charm",
         "sources": [
+          "dkp",
           "raid_item_sources"
         ]
       },
@@ -7464,6 +7088,7 @@
         "item_id": 31222,
         "name": "Ring of Superiority",
         "sources": [
+          "dkp",
           "raid_item_sources"
         ]
       },
@@ -7471,6 +7096,7 @@
         "item_id": 31219,
         "name": "Runed Fang Necklace",
         "sources": [
+          "dkp",
           "raid_item_sources"
         ]
       },
@@ -7485,6 +7111,7 @@
         "item_id": 31211,
         "name": "Shield of Fury",
         "sources": [
+          "dkp",
           "raid_item_sources"
         ]
       },
@@ -7492,6 +7119,7 @@
         "item_id": 31217,
         "name": "Shield of Thorns",
         "sources": [
+          "dkp",
           "raid_item_sources"
         ]
       },
@@ -7506,6 +7134,7 @@
         "item_id": 31216,
         "name": "Shield of the Wurms",
         "sources": [
+          "dkp",
           "raid_item_sources"
         ]
       }
@@ -8517,9 +8146,7 @@
   "A_Lava_Defender|Temple of Veeshan": {
     "mob": "A_Lava_Defender",
     "mobs": [
-      "A_Lava_Defender",
-      "An_Onyx_Defender",
-      "an_elder_temple_defender"
+      "A_Lava_Defender"
     ],
     "zone": "Temple of Veeshan",
     "loot": [
@@ -8577,74 +8204,13 @@
   "Beldion_Icewind|Temple of Veeshan": {
     "mob": "Beldion_Icewind",
     "mobs": [
-      "Beldion_Icewind",
-      "Bryrym",
-      "Carx`Vean",
-      "Gra`Vloren",
-      "Hsrek",
-      "Kal`Vunar",
-      "Kedrak",
-      "Lurian",
-      "Mazrien",
-      "Nir`Tan",
-      "Vukuz",
-      "Wel`Wnas",
-      "Zyerek_Onyxblood"
+      "Beldion_Icewind"
     ],
     "zone": "Temple of Veeshan",
     "loot": [
       {
-        "item_id": 31214,
-        "name": "Barrier of Sound",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31218,
-        "name": "Melodic Charm",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31222,
-        "name": "Ring of Superiority",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31219,
-        "name": "Runed Fang Necklace",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
         "item_id": 31215,
         "name": "Shield of Dragonkind",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31211,
-        "name": "Shield of Fury",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31217,
-        "name": "Shield of Thorns",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 31216,
-        "name": "Shield of the Wurms",
         "sources": [
           "dkp"
         ]
@@ -8733,11 +8299,7 @@
   "a_cerulean_guardian|Temple of Veeshan": {
     "mob": "a_cerulean_guardian",
     "mobs": [
-      "a_cerulean_guardian",
-      "a_glimmering_emerald_drake",
-      "a_greater_sky_drake",
-      "a_shimmer_drake",
-      "an_ancient_shard_wyvern"
+      "a_cerulean_guardian"
     ],
     "zone": "Temple of Veeshan",
     "loot": [
@@ -8781,9 +8343,7 @@
   "a_cerulean_sky_gazer|Temple of Veeshan": {
     "mob": "a_cerulean_sky_gazer",
     "mobs": [
-      "a_cerulean_sky_gazer",
-      "a_shimmering_green_drake",
-      "an_ancient_sky_drake"
+      "a_cerulean_sky_gazer"
     ],
     "zone": "Temple of Veeshan",
     "loot": [
@@ -8813,8 +8373,7 @@
   "a_fiery_drake|Temple of Veeshan": {
     "mob": "a_fiery_drake",
     "mobs": [
-      "a_fiery_drake",
-      "a_vehement_wyvern"
+      "a_fiery_drake"
     ],
     "zone": "Temple of Veeshan",
     "loot": [
@@ -8937,8 +8496,7 @@
   "a_fiery_temple_guardian|Temple of Veeshan": {
     "mob": "a_fiery_temple_guardian",
     "mobs": [
-      "a_fiery_temple_guardian",
-      "an_onyx_sky_drake"
+      "a_fiery_temple_guardian"
     ],
     "zone": "Temple of Veeshan",
     "loot": [
@@ -8975,9 +8533,7 @@
   "a_fiery_watcher|Temple of Veeshan": {
     "mob": "a_fiery_watcher",
     "mobs": [
-      "a_fiery_watcher",
-      "a_lava_dancer",
-      "an_elder_onyx_drake"
+      "a_fiery_watcher"
     ],
     "zone": "Temple of Veeshan",
     "loot": [
@@ -9146,10 +8702,7 @@
   "a_malevolent_drake|Temple of Veeshan": {
     "mob": "a_malevolent_drake",
     "mobs": [
-      "a_malevolent_drake",
-      "a_raging_wyvern",
-      "an_ancient_tigerclaw_racnar",
-      "an_elder_crimson_drake"
+      "a_malevolent_drake"
     ],
     "zone": "Temple of Veeshan",
     "loot": [
@@ -9200,8 +8753,7 @@
   "an_ancient_frost_guardian|Temple of Veeshan": {
     "mob": "an_ancient_frost_guardian",
     "mobs": [
-      "an_ancient_frost_guardian",
-      "an_elder_racnar"
+      "an_ancient_frost_guardian"
     ],
     "zone": "Temple of Veeshan",
     "loot": [
@@ -9464,8 +9016,7 @@
   "an_ancient_ice_wurm_defender|Temple of Veeshan": {
     "mob": "an_ancient_ice_wurm_defender",
     "mobs": [
-      "an_ancient_ice_wurm_defender",
-      "an_emerald_sky_defender"
+      "an_ancient_ice_wurm_defender"
     ],
     "zone": "Temple of Veeshan",
     "loot": [
@@ -9509,8 +9060,7 @@
   "an_elder_shard_wyvern|Temple of Veeshan": {
     "mob": "an_elder_shard_wyvern",
     "mobs": [
-      "an_elder_shard_wyvern",
-      "an_emerald_watcher"
+      "an_elder_shard_wyvern"
     ],
     "zone": "Temple of Veeshan",
     "loot": [
@@ -9547,92 +9097,6 @@
         "name": "Unadorned Chain Tunic",
         "sources": [
           "dkp"
-        ]
-      }
-    ]
-  },
-  "a_bloody_wolf|The Dawnshroud Peaks": {
-    "mob": "a_bloody_wolf",
-    "mobs": [
-      "a_bloody_wolf",
-      "a_bluesky_stonegrabber",
-      "a_crazed_zelniak",
-      "a_dire_wolf",
-      "a_ferocious_wolf",
-      "a_fiery_zelniak",
-      "a_greater_zelniak",
-      "a_hardened_stonegrabber",
-      "a_light_stonegrabber",
-      "a_lunar_stonegrabber",
-      "a_prowling_wolf",
-      "a_starved_wolf",
-      "a_zealous_zelniak",
-      "an_enraged_zelniak"
-    ],
-    "zone": "The Dawnshroud Peaks",
-    "loot": []
-  },
-  "A_burrower_parasite|The Deep": {
-    "mob": "A_burrower_parasite",
-    "mobs": [
-      "A_burrower_parasite"
-    ],
-    "zone": "The Deep",
-    "loot": [
-      {
-        "item_id": 8733,
-        "name": "Ancient Burrower Flesh Cap",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 8498,
-        "name": "Ancient Burrower Hide Tunic",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 8724,
-        "name": "Ancient Burrower Spine",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 8497,
-        "name": "Bile Drenched Flesh Robe",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 8735,
-        "name": "Brilliant Stone Ring",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 8736,
-        "name": "Ring of Living Ore",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 8734,
-        "name": "Ring of the Depths",
-        "sources": [
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 8725,
-        "name": "Shard from Unfathomable Depths",
-        "sources": [
-          "raid_item_sources"
         ]
       }
     ]
@@ -9689,13 +9153,6 @@
         "sources": [
           "dkp",
           "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 26555,
-        "name": "Sleeves of Elemental Auras",
-        "sources": [
-          "dkp"
         ]
       },
       {
@@ -9785,19 +9242,10 @@
       }
     ]
   },
-  "Retseth_Tretse|The Hole": {
-    "mob": "Retseth_Tretse",
-    "mobs": [
-      "Retseth_Tretse"
-    ],
-    "zone": "The Hole",
-    "loot": []
-  },
   "Xi_Vius|The Maiden's Eye": {
     "mob": "Xi_Vius",
     "mobs": [
-      "Xi_Vius",
-      "Xi_Xaui"
+      "Xi_Vius"
     ],
     "zone": "The Maiden's Eye",
     "loot": [
@@ -9816,48 +9264,6 @@
         ]
       }
     ]
-  },
-  "a_coterie_cohort|The Tenebrous Mountains": {
-    "mob": "a_coterie_cohort",
-    "mobs": [
-      "a_coterie_cohort",
-      "a_coterie_dragoon",
-      "a_coterie_duelist",
-      "a_coterie_fighter",
-      "a_coterie_swordsman",
-      "a_cral_ligi_guardian",
-      "a_cral_ligi_lorekeeper",
-      "a_cral_ligi_runner",
-      "a_cral_ligi_tailor",
-      "a_cral_ligi_torchbearer",
-      "a_grol_baku_armsman",
-      "a_grol_baku_chanter",
-      "a_grol_baku_frightling",
-      "a_grol_baku_hero",
-      "a_grol_baku_ritualist",
-      "a_killer_darkwing_bat",
-      "a_light_sonic_wolf",
-      "a_meeda_hune_dancer",
-      "a_meeda_hune_hero",
-      "a_meeda_hune_hopeful",
-      "a_meeda_hune_justicar",
-      "a_meeda_hune_noble",
-      "a_nasty_darkwing_bat",
-      "a_shadowed_darkwing_bat",
-      "a_tenacious_darkwing_bat",
-      "an_ancient_darkwing_bat"
-    ],
-    "zone": "The Tenebrous Mountains",
-    "loot": []
-  },
-  "a_cral_ligi_soldier|The Tenebrous Mountains": {
-    "mob": "a_cral_ligi_soldier",
-    "mobs": [
-      "a_cral_ligi_soldier",
-      "a_meeda_hune_soldier"
-    ],
-    "zone": "The Tenebrous Mountains",
-    "loot": []
   },
   "Rumblecrush|The Umbral Plains": {
     "mob": "Rumblecrush",
@@ -10356,64 +9762,6 @@
         ]
       }
     ]
-  },
-  "a_blessed_underbulk|Twilight": {
-    "mob": "a_blessed_underbulk",
-    "mobs": [
-      "a_blessed_underbulk",
-      "a_cral_ligi_diver",
-      "a_cral_ligi_hero",
-      "a_cral_ligi_painter",
-      "a_cral_ligi_polisher",
-      "a_cral_ligi_shadowmaster",
-      "a_cral_ligi_warmonger",
-      "a_greater_sea_turtle",
-      "a_grol_baku_contender",
-      "a_grol_baku_drummer",
-      "a_grol_baku_holyman",
-      "a_grol_baku_idolist",
-      "a_grol_baku_lifemaster",
-      "a_grol_baku_nightwalker",
-      "a_grol_baku_rocklord",
-      "a_horrid_shadow",
-      "a_powerful_underbulk",
-      "a_resolute_sea_turtle",
-      "a_sinister_shadow",
-      "a_tenacious_sea_turtle",
-      "a_tenacious_shadow",
-      "a_toughened_underbulk",
-      "a_triumphant_sea_turtle",
-      "a_vas_ren_bead_collector",
-      "a_vas_ren_blesser",
-      "a_vas_ren_dawnlord",
-      "a_vas_ren_holymaster",
-      "a_vas_ren_tenor",
-      "a_venerable_sea_turtle",
-      "a_wayward_sea_turtle",
-      "a_wretched_shadow",
-      "an_enormous_underbulk",
-      "an_immense_underbulk",
-      "an_unholy_shadow"
-    ],
-    "zone": "Twilight",
-    "loot": []
-  },
-  "a_cral_ligi_guardian|Twilight": {
-    "mob": "a_cral_ligi_guardian",
-    "mobs": [
-      "a_cral_ligi_guardian",
-      "a_cral_ligi_shaman",
-      "a_cral_ligi_spiritward",
-      "a_cral_ligi_warder",
-      "a_cral_ligi_warlord",
-      "a_cral_ligi_warmaster",
-      "a_cral_ligi_worker",
-      "a_grol_baku_warlord",
-      "a_swift_air_elemental",
-      "an_air_elemental"
-    ],
-    "zone": "Twilight",
-    "loot": []
   },
   "Druushk|Veeshan's Peak": {
     "mob": "Druushk",
@@ -11337,13 +10685,10 @@
       }
     ]
   },
-  "Eom_Thall|Vex Thal": {
-    "mob": "Eom_Thall",
+  "Thall_Va_Xakra|Vex Thal": {
+    "mob": "Thall_Va_Xakra",
     "mobs": [
-      "Eom_Thall",
-      "Eom_Thall_Xakra",
-      "Eom_Zethon",
-      "Eom_Zethon_Xakra"
+      "Thall_Va_Xakra"
     ],
     "zone": "Vex Thal",
     "loot": [
@@ -11351,82 +10696,129 @@
         "item_id": 28881,
         "name": "Boots of Silent Dreams",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
         "item_id": 28891,
         "name": "Bracer of the Silent Star",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
         "item_id": 28892,
         "name": "Cap of the Silent Star",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
         "item_id": 28887,
         "name": "Cloak of Icy Shadows",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
         "item_id": 28890,
         "name": "Cord of Midnight",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
         "item_id": 28885,
         "name": "Gorget of Superiority",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
         "item_id": 28889,
         "name": "Living Symbol",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
         "item_id": 28884,
         "name": "Ring of Rage",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
         "item_id": 28883,
         "name": "Shaded Amice",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
         "item_id": 28888,
         "name": "Shadow Footpads",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
         "item_id": 28882,
         "name": "Steel Skin Armplates",
         "sources": [
-          "dkp"
+          "dkp",
+          "raid_item_sources"
         ]
       },
       {
         "item_id": 28886,
         "name": "Umbracite Bracer",
+        "sources": [
+          "dkp",
+          "raid_item_sources"
+        ]
+      },
+      {
+        "item_id": 26620,
+        "name": "Ancient: Chaotic Visions",
+        "sources": [
+          "dkp"
+        ]
+      },
+      {
+        "item_id": 26615,
+        "name": "Ancient: Destruction of Ice",
+        "sources": [
+          "dkp"
+        ]
+      },
+      {
+        "item_id": 26616,
+        "name": "Ancient: Greater Concussion",
+        "sources": [
+          "dkp"
+        ]
+      },
+      {
+        "item_id": 26609,
+        "name": "Ancient: Legacy of Blades",
+        "sources": [
+          "dkp"
+        ]
+      },
+      {
+        "item_id": 26612,
+        "name": "Ancient: Scourge of Nife",
         "sources": [
           "dkp"
         ]
@@ -11869,146 +11261,6 @@
       }
     ]
   },
-  "Thall_Va_Xakra|Vex Thal": {
-    "mob": "Thall_Va_Xakra",
-    "mobs": [
-      "Thall_Va_Xakra"
-    ],
-    "zone": "Vex Thal",
-    "loot": [
-      {
-        "item_id": 26620,
-        "name": "Ancient: Chaotic Visions",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 26615,
-        "name": "Ancient: Destruction of Ice",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 26616,
-        "name": "Ancient: Greater Concussion",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 26609,
-        "name": "Ancient: Legacy of Blades",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 26612,
-        "name": "Ancient: Scourge of Nife",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
-        "item_id": 28881,
-        "name": "Boots of Silent Dreams",
-        "sources": [
-          "dkp",
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 28891,
-        "name": "Bracer of the Silent Star",
-        "sources": [
-          "dkp",
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 28892,
-        "name": "Cap of the Silent Star",
-        "sources": [
-          "dkp",
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 28887,
-        "name": "Cloak of Icy Shadows",
-        "sources": [
-          "dkp",
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 28890,
-        "name": "Cord of Midnight",
-        "sources": [
-          "dkp",
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 28885,
-        "name": "Gorget of Superiority",
-        "sources": [
-          "dkp",
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 28889,
-        "name": "Living Symbol",
-        "sources": [
-          "dkp",
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 28884,
-        "name": "Ring of Rage",
-        "sources": [
-          "dkp",
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 28883,
-        "name": "Shaded Amice",
-        "sources": [
-          "dkp",
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 28888,
-        "name": "Shadow Footpads",
-        "sources": [
-          "dkp",
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 28882,
-        "name": "Steel Skin Armplates",
-        "sources": [
-          "dkp",
-          "raid_item_sources"
-        ]
-      },
-      {
-        "item_id": 28886,
-        "name": "Umbracite Bracer",
-        "sources": [
-          "dkp",
-          "raid_item_sources"
-        ]
-      }
-    ]
-  },
   "Thall_Xundraux_Diabo|Vex Thal": {
     "mob": "Thall_Xundraux_Diabo",
     "mobs": [
@@ -12306,9 +11558,7 @@
   "Bufa|Western Wastes": {
     "mob": "Bufa",
     "mobs": [
-      "Bufa",
-      "Ionat",
-      "Mazi"
+      "Bufa"
     ],
     "zone": "Western Wastes",
     "loot": [
@@ -12329,13 +11579,6 @@
     "zone": "Western Wastes",
     "loot": [
       {
-        "item_id": 26012,
-        "name": "First Brood Talisman",
-        "sources": [
-          "dkp"
-        ]
-      },
-      {
         "item_id": 27244,
         "name": "Harla Dar's Talisman",
         "sources": [
@@ -12347,9 +11590,7 @@
   "Hechaeva|Western Wastes": {
     "mob": "Hechaeva",
     "mobs": [
-      "Hechaeva",
-      "Neordla",
-      "Quoza"
+      "Hechaeva"
     ],
     "zone": "Western Wastes",
     "loot": [
@@ -12369,13 +11610,6 @@
     ],
     "zone": "Western Wastes",
     "loot": [
-      {
-        "item_id": 26012,
-        "name": "First Brood Talisman",
-        "sources": [
-          "dkp"
-        ]
-      },
       {
         "item_id": 27255,
         "name": "Klandicar's Talisman",
@@ -12420,13 +11654,6 @@
     ],
     "zone": "Western Wastes",
     "loot": [
-      {
-        "item_id": 26012,
-        "name": "First Brood Talisman",
-        "sources": [
-          "dkp"
-        ]
-      },
       {
         "item_id": 27156,
         "name": "Matchless Dragonspine Vambraces",

@@ -118,9 +118,10 @@ function InlineItemRow({ name, itemId, showGearScore, moldName, initialStats }) 
 const LAST3_CACHE_KEY = 'mob_loot_last3_v2'
 const CACHE_TTL = 10 * 60 * 1000
 
-/** Zone display order: Time first, then Fire/Water/Air/Vex Thal, then the rest. */
+/** Zone display order: Time first, then Fire/Water/Air/Vex Thal, then god lairs, then the rest. */
 const ZONE_ORDER = [
   'Plane of Time',
+  'The Lair of Terris Thule',
   'Plane of Fire',
   'Plane of Water',
   'Plane of Air',

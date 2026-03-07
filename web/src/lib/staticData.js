@@ -3,7 +3,7 @@
  * Each file is fetched at most once per session; subsequent callers get the same promise/result.
  * Bump DKP_MOB_LOOT_VERSION when deploying updated dkp_mob_loot.json to avoid stale cache.
  */
-const DKP_MOB_LOOT_VERSION = 2
+const DKP_MOB_LOOT_VERSION = 3
 
 let dkpMobLootPromise = null
 let raidItemSourcesPromise = null
