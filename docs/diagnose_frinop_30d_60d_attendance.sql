@@ -4,6 +4,21 @@
 -- Run in Supabase SQL Editor. This finds why earned_30d / earned_60d are only 2.
 -- =============================================================================
 
+-- 0) RAW raid_event_attendance: what actually produces "Frinop" vs "21990375"?
+--    If you still see two keys after running fix_frinop_single_key_consolidate.sql,
+--    check this: name-only rows (char_id empty) produce key "Frinop"; exact character_name shown.
+SELECT '0_rea_raw_keys' AS step,
+  CASE WHEN COALESCE(trim(char_id::text), '') = '' THEN 'name_only' ELSE 'char_id' END AS key_source,
+  char_id,
+  character_name,
+  length(COALESCE(character_name,'')) AS name_len,
+  COUNT(*) AS row_count
+FROM raid_event_attendance
+WHERE char_id = '21990375'
+   OR trim(COALESCE(character_name,'')) ILIKE '%frinop%'
+GROUP BY (CASE WHEN COALESCE(trim(char_id::text), '') = '' THEN 'name_only' ELSE 'char_id' END), char_id, character_name
+ORDER BY key_source, character_name;
+
 -- 1) dkp_summary rows for Frinop (both keys: char_id and name)
 --    If two rows exist, the app merges them; check earned_30d and earned_60d per row.
 SELECT '1_dkp_summary' AS step,

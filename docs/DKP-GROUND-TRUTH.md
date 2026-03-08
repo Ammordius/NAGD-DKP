@@ -11,7 +11,7 @@
 
 ### Verify the website matches ground truth
 
-Run the expected-values table and optionally export CSV, then compare to the DKP page (Earned, Spent, Balance per character):
+Run the expected-values table and optionally export CSV, then compare to the DKP page (Earned, Spent, Balance per **account** after account-scoped migration):
 
 ```bash
 python verify_website_vs_ground_truth.py ground_truth.txt
@@ -19,6 +19,8 @@ python verify_website_vs_ground_truth.py ground_truth.txt --csv data/expected_fo
 ```
 
 Open your DKP site and check that the leaderboard matches the printed table (or the CSV).
+
+**After account-scoped DKP migration:** The leaderboard shows one row per account (`account_dkp_summary`). To validate, run `docs/supabase-account-dkp-migration.sql` then `SELECT refresh_account_dkp_summary_internal();`. Compare `account_dkp_summary` (earned, spent per account_id) to ground truth aggregated by account (map character names to account_id via `character_account` + `characters`, sum earned/spent per account). The audit script `parse_members_dkp_html.py audit` uses `account_dkp_summary` when present.
 
 Local computed totals (`python compute_dkp.py` → `data/dkp_totals.csv`) match this ground truth when you use **per-event attendance** (see below). Run `python compare_dkp_ground_truth.py` to verify; you should see ~90+ matches with Diff +0.0 and a few small −1 to −2 differences.
 

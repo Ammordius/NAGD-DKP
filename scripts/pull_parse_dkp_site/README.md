@@ -31,12 +31,11 @@ make pull-raids-ids RAID_IDS=1598692,1598705
 make pull-attendees
 make upload-raids
 
-# Or pull all raids since 2/24 (first 5 list pages), then upload
+# Or pull all raids since 2/24 (page 1) — includes attendee pages
 make pull-raids
-make pull-attendees
 make upload-raids
 
-# Full sync in one go
+# Full sync in one go (pull raids + attendees, confirm, upload)
 make sync-raids
 ```
 

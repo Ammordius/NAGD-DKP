@@ -41,7 +41,7 @@ SINCE_DATE := $(shell (test -f $(SINCE_DATE_FILE) && cat $(SINCE_DATE_FILE)) || 
 check-cookie:
 	@$(PYTHON) -c "from pathlib import Path; p=Path('$(COOKIES)'); exit(0 if p.exists() else (print('Create $(COOKIES) with your GamerLaunch Cookie header (one line). Do not commit.'), 1)[1])"
 
-# Pull raid list (since date in .raids-since-date) + each raid detail page. Updates .raids-since-date to today after pull.
+# Pull raid list (since date in .raids-since-date) + each raid detail page + attendee pages. Updates .raids-since-date to today after pull.
 pull-raids: check-cookie
 	@echo "Pulling raids since $$(cat $(SINCE_DATE_FILE) 2>/dev/null || echo '$(DEFAULT_SINCE_DATE)') (page 1 only)..."
 	$(PYTHON) $(SCRIPTS)/pull_raids.py \
@@ -52,6 +52,8 @@ pull-raids: check-cookie
 	  --index $(INDEX) \
 	  --sleep 2 --jitter 0.5
 	@echo "$$(date +%Y-%m-%d 2>/dev/null || echo '2026-02-27')" > $(SINCE_DATE_FILE)
+	@echo "Pulling attendees for all raids in index..."
+	$(MAKE) pull-attendees
 
 # Pull only specific raid IDs (e.g. make pull-raids-ids RAID_IDS=1598692,1598705).
 pull-raids-ids: check-cookie
@@ -103,8 +105,8 @@ upload-raid-detail:
 	  --raids-dir $(RAIDS_DIR) \
 	  --apply
 
-# Full sync: pull (since .raids-since-date) -> pull attendees -> prompt to confirm -> upload.
-sync-raids: pull-raids pull-attendees
+# Full sync: pull (raids + attendees) -> prompt to confirm -> upload.
+sync-raids: pull-raids
 	@echo ""; echo "Raids with both detail + attendees (would be uploaded):"; \
 	for id in $$(tail -n +2 $(INDEX) 2>/dev/null | cut -d',' -f1 | tr -d '"'); do \
 	  if [ -f "$(RAIDS_DIR)/raid_$$id.html" ] && [ -f "$(RAIDS_DIR)/raid_$$id_attendees.html" ]; then echo "  $$id"; fi; \

@@ -62,6 +62,10 @@ function Pull-Raids {
         --index $Index `
         --sleep 2 --jitter 0.5
     if ($LASTEXITCODE -eq 0) { Set-SinceDateToToday }
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "Pulling attendees for all raids in index..."
+        Pull-Attendees
+    }
 }
 
 function Pull-RaidsIds {
@@ -120,7 +124,7 @@ function Upload-RaidDetail {
 
 function Sync-Raids {
     Pull-Raids
-    Pull-Attendees
+    if ($LASTEXITCODE -ne 0) { return }
     Write-Host ""
     Write-Host "Raids in index with both detail + attendees (would be uploaded):"
     if (-not (Test-Path $Index)) { Write-Error "No $Index. Run pull-raids and pull-attendees first." }
@@ -174,11 +178,12 @@ function Show-Help {
     @"
 Local raid pull & upload (Windows). Use this instead of make/nmake.
 
-  .\raids.ps1 pull-raids              # page 1, since date in .raids-since-date (default 2026-02-27)
+  .\raids.ps1 pull-raids              # page 1, since date in .raids-since-date; also pulls attendees
   .\raids.ps1 pull-raids-ids 1598692 1598705
   .\raids.ps1 pull-attendees
   .\raids.ps1 upload-raids
   .\raids.ps1 upload-raids-ids 1598692 1598705   # upload only these (spaces or commas)
+  .\raids.ps1 upload-raid-ids 1598730           # same as upload-raids-ids
   .\raids.ps1 sync-raids              # pull -> pull attendees -> confirm -> upload
   .\raids.ps1 upload-raid-detail 1598705
   .\raids.ps1 pull-members-dkp        # download Current Member DKP page
@@ -195,6 +200,7 @@ switch ($Target.ToLower()) {
     "pull-attendees"   { Pull-Attendees }
     "upload-raids"     { Upload-Raids }
     "upload-raids-ids" { Upload-RaidsIds }
+    "upload-raid-ids"  { Upload-RaidsIds }   # alias: same as upload-raids-ids
     "upload-raid-detail" { Upload-RaidDetail }
     "sync-raids"       { Sync-Raids }
     "pull-members-dkp" { Pull-MembersDkp }

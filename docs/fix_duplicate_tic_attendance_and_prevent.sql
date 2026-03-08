@@ -3,6 +3,10 @@
 -- Run the ENTIRE file in Supabase SQL Editor in one go. The DELETEs must run
 -- before the CREATE UNIQUE INDEX or you get: Key (raid_id, event_id, char_id)=...
 -- is duplicated.
+--
+-- If you still see "Earned: 5 / 4 DKP" (earned > raid total): either this script
+-- was not run, refresh_* was skipped, or data was re-imported after the fix.
+-- Re-run this entire script, then check with docs/diagnose_vex_thal_5_4_dkp.sql.
 -- =============================================================================
 
 BEGIN;
@@ -28,6 +32,18 @@ WHERE (rea1.char_id IS NULL OR trim(rea1.char_id::text) = '')
   AND EXISTS (
     SELECT 1 FROM raid_event_attendance rea2
     WHERE rea2.raid_id = rea1.raid_id AND rea2.event_id = rea1.event_id
+      AND trim(COALESCE(rea2.character_name,'')) = trim(rea1.character_name)
+      AND rea2.char_id IS NOT NULL AND trim(rea2.char_id::text) <> ''
+      AND rea2.id <> rea1.id
+  );
+
+-- 1b2) Name-only row when same raid has that character with char_id on ANY event (fixes "5/4 DKP" - same person under two keys in one raid)
+DELETE FROM raid_event_attendance rea1
+WHERE (rea1.char_id IS NULL OR trim(rea1.char_id::text) = '')
+  AND trim(COALESCE(rea1.character_name,'')) <> ''
+  AND EXISTS (
+    SELECT 1 FROM raid_event_attendance rea2
+    WHERE rea2.raid_id = rea1.raid_id
       AND trim(COALESCE(rea2.character_name,'')) = trim(rea1.character_name)
       AND rea2.char_id IS NOT NULL AND trim(rea2.char_id::text) <> ''
       AND rea2.id <> rea1.id

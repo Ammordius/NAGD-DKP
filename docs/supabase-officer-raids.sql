@@ -75,14 +75,15 @@ RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
+SET statement_timeout = '60s'
 AS $$
 BEGIN
   IF NOT public.is_officer() THEN
     RAISE EXCEPTION 'Only officers can delete raids';
   END IF;
 
-  -- Allow more time for deletes + one full refresh (Supabase default can be as low as 8s).
-  SET LOCAL statement_timeout = '120s';
+  -- Belt-and-suspenders: role default is 8s (authenticated); function-level SET above overrides for this invocation.
+  SET LOCAL statement_timeout = '60s';
 
   -- Disable triggers that would run full refresh or per-row refresh on each delete (causes timeout).
   ALTER TABLE raid_loot DISABLE TRIGGER full_refresh_dkp_after_loot_change;
@@ -122,6 +123,7 @@ RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
+SET statement_timeout = '120s'
 AS $$
 BEGIN
   IF NOT public.is_officer() THEN

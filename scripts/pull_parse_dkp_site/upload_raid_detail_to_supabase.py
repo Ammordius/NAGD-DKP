@@ -101,6 +101,7 @@ def main() -> int:
     ap.add_argument("--raid-id", type=str, default="1598662", help="Raid ID (e.g. 1598662)")
     ap.add_argument("--raids-dir", type=Path, default=ROOT / "raids", help="Directory containing raid_*.html")
     ap.add_argument("--apply", action="store_true", help="Perform upload; without this, dry run only")
+    ap.add_argument("--skip-dkp-summary-refresh", action="store_true", help="Skip refresh_dkp_summary (caller does one after batch)")
     args = ap.parse_args()
 
     raid_id = args.raid_id.strip()
@@ -302,16 +303,34 @@ def main() -> int:
                 names = [name for _, name in rows]
                 print(f"  event_id={eid}: {len(rows)} rows -> {names}")
         if rea_rows:
-            # Plain insert; we delete existing rows for this raid before re-inserting.
-            client.table("raid_event_attendance").insert(rea_rows).execute()
-            print(f"Inserted {len(rea_rows)} raid_event_attendance (one per account per tic)")
+            # Prefer server-side RPC with higher timeout and single refresh; fall back to plain insert if RPC is missing.
+            try:
+                client.rpc(
+                    "insert_raid_event_attendance_for_upload",
+                    {"p_raid_id": raid_id, "p_rows": rea_rows},
+                ).execute()
+                print(
+                    f"Inserted {len(rea_rows)} raid_event_attendance (one per account per tic) via insert_raid_event_attendance_for_upload RPC"
+                )
+            except Exception as e:
+                err = str(e).lower()
+                if "function" in err and "does not exist" in err:
+                    # Older DB without RPC: use direct insert (may be slower / hit statement_timeout on large datasets).
+                    client.table("raid_event_attendance").insert(rea_rows).execute()
+                    print(
+                        f"Inserted {len(rea_rows)} raid_event_attendance (one per account per tic) via direct insert (RPC missing)"
+                    )
+                else:
+                    print(
+                        f"Warning: insert_raid_event_attendance_for_upload RPC failed (falling back to direct insert): {e}",
+                        file=sys.stderr,
+                    )
+                    client.table("raid_event_attendance").insert(rea_rows).execute()
+                    print(
+                        f"Inserted {len(rea_rows)} raid_event_attendance (one per account per tic) via direct insert after RPC failure"
+                    )
 
-    # Refresh DKP totals (per-raid account refresh is fast; full refresh only if per-raid not available)
-    try:
-        client.rpc("refresh_dkp_summary").execute()
-        print("refresh_dkp_summary() completed.")
-    except Exception as e:
-        print(f"Warning: refresh_dkp_summary: {e}", file=sys.stderr)
+    # Refresh account DKP for this raid only (fast). Skip full refresh_dkp_summary here — batch upload does one at the end to avoid N× full rebuilds.
     try:
         client.rpc("refresh_account_dkp_summary_for_raid", {"p_raid_id": raid_id}).execute()
         print("refresh_account_dkp_summary_for_raid() completed.")
@@ -326,6 +345,14 @@ def main() -> int:
                     print(f"Warning: refresh_account_dkp_summary: {e2}", file=sys.stderr)
         else:
             print(f"Warning: refresh_account_dkp_summary_for_raid: {e}", file=sys.stderr)
+
+    # Full dkp_summary refresh (earned_30d/60d). Skip when run from batch — batch script does one at end.
+    if not args.skip_dkp_summary_refresh:
+        try:
+            client.rpc("refresh_dkp_summary").execute()
+            print("refresh_dkp_summary() completed.")
+        except Exception as e:
+            print(f"Warning: refresh_dkp_summary: {e}", file=sys.stderr)
 
     print("Done. Reload the raid in the Officer page to see tics, loot, and attendance.")
     return 0

@@ -47,6 +47,14 @@ Interpretation:
 
 ## Recommended fix (after running the diagnostic)
 
+**Preferred: one Frinop in the DB.** The root cause is two `dkp_summary` rows (character_key `21990375` and `Frinop`). Consolidate to a single key so there is only one row:
+
+- Run **`docs/fix_frinop_single_key_consolidate.sql`** in Supabase SQL Editor. It:
+  - Deletes name-only `Frinop` attendance where the same (raid/event) already has `char_id` 21990375.
+  - Sets `char_id = '21990375'` on all remaining name-only Frinop rows in `raid_event_attendance`, `raid_attendance`, and `raid_loot`.
+  - Dedupes so each (raid, event) has at most one row per character, then runs `refresh_all_raid_attendance_totals()` and `refresh_dkp_summary()`.
+- After that, step 1 of the diagnostic should show **one** `dkp_summary` row for Frinop (character_key `21990375`) with correct `earned_30d` / `earned_60d` (e.g. 4/4). The frontend merge (earned_30d/60d from name key) remains as a safety net for any other character with two keys.
+
 1. **If attendance is missing for the two raids:**  
    Re-import or re-parse those raids so Frinop appears in `raid_event_attendance` (prefer **char_id = 21990375** and `character_name = 'Frinop'` so he has one key). Then run:
 

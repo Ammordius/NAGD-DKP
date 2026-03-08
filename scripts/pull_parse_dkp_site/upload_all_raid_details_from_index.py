@@ -10,9 +10,34 @@ from __future__ import annotations
 
 import argparse
 import csv
+import os
 import sys
 import subprocess
 from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent.parent
+
+
+def _load_env(path: Path) -> None:
+    try:
+        text = path.read_text(encoding="utf-8")
+    except Exception:
+        return
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        k, v = line.split("=", 1)
+        k, v = k.strip(), v.strip().strip("'\"")
+        if k:
+            os.environ.setdefault(k, v)
+    for vite, plain in (
+        ("VITE_SUPABASE_URL", "SUPABASE_URL"),
+        ("VITE_SUPABASE_ANON_KEY", "SUPABASE_ANON_KEY"),
+        ("VITE_SUPABASE_SERVICE_ROLE_KEY", "SUPABASE_SERVICE_ROLE_KEY"),
+    ):
+        if not os.environ.get(plain) and os.environ.get(vite):
+            os.environ[plain] = os.environ[vite]
 
 
 def main() -> int:
@@ -59,12 +84,34 @@ def main() -> int:
                 "--raids-dir",
                 str(args.raids_dir),
                 "--apply",
+                "--skip-dkp-summary-refresh",
             ],
             cwd=str(root),
         )
         if r.returncode != 0:
             return r.returncode
     print(f"Uploaded {n} raid(s).")
+
+    # One full dkp_summary refresh after batch (avoids N× full rebuilds when uploading many raids).
+    if n > 0:
+        for path in (ROOT / ".env", ROOT / "web" / ".env", ROOT / "web" / ".env.local"):
+            if path.exists():
+                _load_env(path)
+        url = os.environ.get("SUPABASE_URL", "").strip()
+        key = (
+            os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").strip()
+            or os.environ.get("SUPABASE_ANON_KEY", "").strip()
+        )
+        if url and key:
+            try:
+                from supabase import create_client
+                client = create_client(url, key)
+                client.rpc("refresh_dkp_summary").execute()
+                print("refresh_dkp_summary() completed.")
+            except Exception as e:
+                print(f"Warning: refresh_dkp_summary: {e}", file=sys.stderr)
+        else:
+            print("Skipping refresh_dkp_summary (SUPABASE_URL/KEY not set).", file=sys.stderr)
     return 0
 
 
