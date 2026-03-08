@@ -21,11 +21,11 @@ This guide covers **full restore** of DKP data from a backup (e.g. after a bad m
 4. **Refresh** – After load, `end_restore_load()` (or manual `refresh_dkp_summary()` + `refresh_all_raid_attendance_totals()`) brings cache tables up to date.
 
 **Tables cleared and loaded (order matters for FKs):**  
-characters, accounts, character_account, raids, raid_events, raid_loot, raid_attendance, raid_event_attendance, raid_dkp_totals, raid_attendance_dkp, raid_classifications, dkp_adjustments, dkp_summary, dkp_period_totals, active_raiders, officer_audit_log.
+characters, accounts, character_account, raids, raid_events, raid_loot, raid_attendance, raid_event_attendance, raid_dkp_totals, raid_attendance_dkp, raid_attendance_dkp_by_account, raid_classifications, dkp_adjustments, dkp_summary, account_dkp_summary, dkp_period_totals, active_raiders, active_accounts, officer_audit_log.
 
 **Notes:**
 - `accounts` is **not** truncated (profiles references it). Restore **upserts** accounts from CSV to avoid breaking profiles.
-- `raid_dkp_totals` and `raid_attendance_dkp` are **not** loaded from CSV; they are repopulated by triggers / `end_restore_load()`.
+- `raid_dkp_totals`, `raid_attendance_dkp`, `raid_attendance_dkp_by_account`, and `account_dkp_summary` are **not** loaded from CSV; they are repopulated by triggers / `end_restore_load()`.
 
 ---
 
@@ -96,9 +96,15 @@ python scripts/restore_supabase_from_backup.py --backup-dir backup --load-only
   SELECT fix_serial_sequences_for_restore();
   SELECT refresh_dkp_summary();
   SELECT refresh_all_raid_attendance_totals();
+  SELECT refresh_account_dkp_summary();
   ```
 
   You can run each statement separately if one of them is slow.
+
+**Large restores (e.g. 150k+ rows):** The script inserts in batches of 500 rows per table, so the load phase does not send 150k rows in one request. If a restore appears stuck:
+
+- **During load** – Progress is logged every 5,000 rows (every 10 batches). If the same table has not advanced for 15+ minutes, the run may be hitting API rate limits or network issues; re-run with `--load-only` after the truncate (data already loaded will be duplicated if you don’t truncate again, so prefer fixing the run or running truncate + restore again).
+- **After load** – The step that often fails on large DBs is `end_restore_load()` (statement timeout). All CSV rows are already inserted; use Option A or B above to run the refresh manually. No need to re-upload CSVs.
 
 ---
 
@@ -140,6 +146,6 @@ For a one-time aggressive reclaim (brief lock): `VACUUM FULL ANALYZE;` during lo
 | `scripts/pull_parse_dkp_site/run_end_restore_load.py` | Run `end_restore_load()` only (after timeout). |
 | `.github/workflows/db-restore.yml` | GitHub Action for restore from artifact. |
 | `docs/CI-DB-RESTORE.md` | Shorter CI-focused restore notes. |
-| `docs/supabase-schema.sql` | Defines `truncate_dkp_for_restore`, `begin_restore_load`, `end_restore_load`, `fix_serial_sequences_for_restore`. |
+| `docs/supabase-schema-full.sql` | Defines `truncate_dkp_for_restore`, `begin_restore_load`, `end_restore_load`, `fix_serial_sequences_for_restore`. |
 | `docs/supabase-restore-truncate.sql` | Manual truncate SQL if you want load-only. |
 | `docs/fix_all_serial_sequences.sql` | Manual sequence fix. |

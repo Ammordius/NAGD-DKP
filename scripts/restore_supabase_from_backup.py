@@ -243,7 +243,7 @@ def main() -> int:
             code = e.args[0].get("code", "")
         msg = str(e).lower()
         if code == "PGRST202" or "could not find the function" in msg or "begin_restore_load" in msg:
-            print("  begin_restore_load() not in schema (run latest docs/supabase-schema.sql); load will run with triggers on.", flush=True)
+            print("  begin_restore_load() not in schema (run latest docs/supabase-schema-full.sql); load will run with triggers on.", flush=True)
         else:
             raise
 

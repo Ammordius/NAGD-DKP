@@ -45,14 +45,14 @@ The job will:
 - **List backup artifacts** – Fetches backup artifact names and shows them in the step summary.
 - Resolve **latest** or use the name you entered.
 - Download the chosen artifact and extract the `backup/` directory of CSVs.
-- **Clear** DKP data tables via `truncate_dkp_for_restore()` RPC (in main schema), call **begin_restore_load()** (if present) so DKP triggers skip during insert, **insert** rows from each CSV via the API, then **end_restore_load()** or manual refresh. If `begin_restore_load` is not in your schema yet, restore still runs but triggers fire per row (slower); run the latest **`docs/supabase-schema.sql`** in Supabase SQL Editor for fast load.
+- **Clear** DKP data tables via `truncate_dkp_for_restore()` RPC (in main schema), call **begin_restore_load()** (if present) so DKP triggers skip during insert, **insert** rows from each CSV via the API, then **end_restore_load()** or manual refresh. If `begin_restore_load` is not in your schema yet, restore still runs but triggers fire per row (slower); run the latest **`docs/supabase-schema-full.sql`** in Supabase SQL Editor for fast load.
 
 ### How long it takes
 
 - **Load only** (after running the truncate SQL in Supabase): about **1–2 minutes per 100k rows** for the load phase only → **~5–12 minutes** for ~330k rows.
 - **Normal restore** (RPC truncate + load): clear is one fast RPC call; load about **1–2 min per 100k rows** → **~5–12 minutes** for ~330k rows.
 
-Progress is logged every 5,000 rows. If the same line hasn’t changed for 15+ minutes, the run may be stuck.
+Progress is logged every 5,000 rows. If the same line hasn’t changed for 15+ minutes, the run may be stuck (see [RESTORE-BACKUP.md](RESTORE-BACKUP.md) §5 for large restores and `end_restore_load()` timeout recovery).
 
 After a successful restore, run in **Supabase SQL Editor** if you use the DKP cache:
 
