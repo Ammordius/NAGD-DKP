@@ -311,6 +311,13 @@ def main():
         if not cache_dir.exists():
             print(f"Cache dir not found: {cache_dir}")
             return 1
+        # Preserve existing entries not in cache (e.g. manually appended items)
+        if out_path.exists() and not args.no_resume:
+            try:
+                result = json.loads(out_path.read_text(encoding="utf-8"))
+                print(f"Merge with existing: {len(result)} entries in {out_path} (cache will update/add only)")
+            except Exception as e:
+                print(f"Could not load existing output: {e}")
         html_files = sorted(cache_dir.glob("*.html"), key=lambda p: int(p.stem) if p.stem.isdigit() else 0)
         print(f"Building from cache: {cache_dir} ({len(html_files)} HTML files)")
         for i, path in enumerate(html_files):

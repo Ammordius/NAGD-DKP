@@ -20,3 +20,28 @@ python scripts/takp_jsons/build_item_stats.py --from-cache data/item_pages --out
 python scripts/takp_jsons/build_raid_classifications.py
 # etc.
 ```
+
+## Grabbing more item stats
+
+To add stats for **new item IDs** (e.g. raid/quest items not in mob loot):
+
+1. **Add the item IDs** to `raid_item_sources.json` (and `web/public/raid_item_sources.json`) with at least `"name": "Item 12345"` (or the real name). Item IDs come from `dkp_mob_loot` + `raid_item_sources` + elemental armor.
+
+2. **Fetch their pages** (rate-limited; skips already-cached):
+   ```bash
+   python scripts/takp_jsons/fetch_item_pages.py --cache-dir data/item_pages
+   ```
+   Then **build from cache** (merges with existing; does not remove manually added entries):
+   ```bash
+   python scripts/takp_jsons/build_item_stats.py --from-cache data/item_pages --out web/public/item_stats.json
+   ```
+
+3. **Sync both outputs** and optionally push to magelo:
+   ```bash
+   cp web/public/item_stats.json data/item_stats.json
+   # From magelo repo: python scripts/copy_dkp_item_stats_to_magelo.py
+   ```
+
+**Note:** Building with `--from-cache` loads the existing `item_stats.json` first and only updates entries that have a cache file, so manually appended items (e.g. focus stubs) are preserved. Use `--no-resume` only when you intend to overwrite from scratch.
+
+Full details: [docs/ITEM-STATS-BUILD.md](../docs/ITEM-STATS-BUILD.md).
