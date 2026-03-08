@@ -2,6 +2,12 @@
 
 Guild DKP site: roster + raid data, Supabase backend, React frontend. Deploy to Vercel. **Data requires sign-in**; roles are anon (handshake), user, and officer (manually assigned).
 
+## What this gives you
+
+- **CI-driven backup → artifact → restore with restore validation** — Scheduled Supabase exports (on data change), versioned artifacts, one-click restore workflow, and optional validation so you can recover confidently.
+- **Per-user action logging into an audit table** — Every sensitive officer action (add/delete raid, tics, loot, manual DKP edits) is written to `officer_audit_log` with actor, timestamp, and minimal delta; visible in the app and exportable for compliance.
+- **Daily SQL-to-SQL diffs as CI artifacts** — A separate workflow compares the last two daily (or weekly/monthly) backup artifacts table-by-table and publishes exact **added / removed / changed** row deltas to GitHub Pages, so you have a transparent, tamper-resistant ledger of what changed and when.
+
 See **[docs/SETUP-WALKTHROUGH.md](docs/SETUP-WALKTHROUGH.md)** for full setup (Supabase, import, run locally, deploy).  
 See **[docs/AUTH-AND-EGRESS-PROTECTION.md](docs/AUTH-AND-EGRESS-PROTECTION.md)** for requiring login, disabling sign-ups, and limiting egress.  
 To run a **full-stack mirror** (own DB, same CI, data from backup or CSVs): **[docs/MIRROR-SETUP-FULL-STACK.md](docs/MIRROR-SETUP-FULL-STACK.md)**.
