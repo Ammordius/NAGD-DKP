@@ -75656,147 +75656,1830 @@
     "name": "TAKP AllaClone  :: Yttrium Studded Veil"
   },
   "19726": {
-    "name": "Item 19726",
-    "gearScore": 0
+    "flags": [
+      "MAGIC ITEM"
+    ],
+    "slot": "SHOULDERS",
+    "ac": 5,
+    "mods": [
+      {
+        "label": "STA",
+        "value": 5
+      },
+      {
+        "label": "HP",
+        "value": 25
+      }
+    ],
+    "resists": [
+      {
+        "label": "Fire",
+        "value": 10
+      },
+      {
+        "label": "Cold",
+        "value": 10
+      },
+      {
+        "label": "Magic",
+        "value": 10
+      },
+      {
+        "label": "Poison",
+        "value": 10
+      },
+      {
+        "label": "Disease",
+        "value": 10
+      }
+    ],
+    "weight": 0.2,
+    "size": "SMALL",
+    "classes": "ALL",
+    "gearScore": 63
   },
   "9960": {
-    "name": "Item 9960",
-    "gearScore": 0
+    "flags": [
+      "MAGIC ITEM",
+      "LORE ITEM",
+      "NO DROP"
+    ],
+    "slot": "FINGERS",
+    "ac": 9,
+    "mods": [
+      {
+        "label": "STA",
+        "value": 15
+      },
+      {
+        "label": "DEX",
+        "value": 8
+      },
+      {
+        "label": "WIS",
+        "value": 8
+      },
+      {
+        "label": "INT",
+        "value": 8
+      },
+      {
+        "label": "HP",
+        "value": 85
+      },
+      {
+        "label": "MANA",
+        "value": 85
+      }
+    ],
+    "resists": [
+      {
+        "label": "Cold",
+        "value": 20
+      }
+    ],
+    "requiredLevel": 62,
+    "levelType": "recommended",
+    "effectSpellId": 2687,
+    "effectSpellName": "Aura of Healing",
+    "effectNote": "",
+    "weight": 0.5,
+    "size": "TINY",
+    "classes": "ALL",
+    "gearScore": 57
   },
   "11408": {
-    "name": "Item 11408",
-    "gearScore": 0
+    "flags": [
+      "MAGIC ITEM",
+      "LORE ITEM",
+      "NO DROP"
+    ],
+    "slot": "ARMS",
+    "ac": 20,
+    "mods": [
+      {
+        "label": "STR",
+        "value": 12
+      },
+      {
+        "label": "STA",
+        "value": 12
+      },
+      {
+        "label": "AGI",
+        "value": 12
+      },
+      {
+        "label": "INT",
+        "value": 12
+      },
+      {
+        "label": "HP",
+        "value": 85
+      },
+      {
+        "label": "MANA",
+        "value": 85
+      }
+    ],
+    "resists": [
+      {
+        "label": "Fire",
+        "value": 25
+      }
+    ],
+    "requiredLevel": 65,
+    "levelType": "required",
+    "effectSpellId": 1300,
+    "effectSpellName": "Flowing Thought III",
+    "effectNote": "",
+    "weight": 0.6,
+    "size": "MEDIUM",
+    "classes": "NEC WIZ MAG ENC",
+    "tint": "(150, 0, 0)",
+    "gearScore": 73
   },
   "16257": {
-    "name": "Signet of the Arcane",
+    "flags": [
+      "MAGIC ITEM",
+      "LORE ITEM",
+      "NO DROP"
+    ],
+    "slot": "EAR",
+    "ac": 25,
+    "mods": [
+      {
+        "label": "STR",
+        "value": 25
+      },
+      {
+        "label": "STA",
+        "value": 25
+      },
+      {
+        "label": "AGI",
+        "value": 25
+      },
+      {
+        "label": "DEX",
+        "value": 25
+      },
+      {
+        "label": "WIS",
+        "value": 25
+      },
+      {
+        "label": "INT",
+        "value": 25
+      },
+      {
+        "label": "HP",
+        "value": 130
+      },
+      {
+        "label": "MANA",
+        "value": 150
+      }
+    ],
+    "resists": [
+      {
+        "label": "Fire",
+        "value": 15
+      },
+      {
+        "label": "Cold",
+        "value": 15
+      },
+      {
+        "label": "Magic",
+        "value": 15
+      },
+      {
+        "label": "Poison",
+        "value": 15
+      },
+      {
+        "label": "Disease",
+        "value": 15
+      }
+    ],
+    "effectSpellId": 1300,
+    "effectSpellName": "Flowing Thought III",
+    "effectNote": "",
+    "focusSpellId": 3538,
     "focusSpellName": "Preservation of Xegony",
     "focusPct": 15,
-    "gearScore": 0
+    "weight": 1.5,
+    "size": "TINY",
+    "classes": "ALL",
+    "gearScore": 143
   },
   "16255": {
-    "name": "Item 16255",
-    "gearScore": 0
+    "flags": [
+      "MAGIC ITEM",
+      "LORE ITEM",
+      "NO DROP"
+    ],
+    "slot": "EAR",
+    "ac": 25,
+    "mods": [
+      {
+        "label": "STR",
+        "value": 25
+      },
+      {
+        "label": "STA",
+        "value": 25
+      },
+      {
+        "label": "AGI",
+        "value": 25
+      },
+      {
+        "label": "DEX",
+        "value": 25
+      },
+      {
+        "label": "WIS",
+        "value": 25
+      },
+      {
+        "label": "INT",
+        "value": 25
+      },
+      {
+        "label": "HP",
+        "value": 145
+      }
+    ],
+    "resists": [
+      {
+        "label": "Fire",
+        "value": 15
+      },
+      {
+        "label": "Cold",
+        "value": 15
+      },
+      {
+        "label": "Magic",
+        "value": 15
+      },
+      {
+        "label": "Poison",
+        "value": 15
+      },
+      {
+        "label": "Disease",
+        "value": 15
+      }
+    ],
+    "effectSpellId": 3553,
+    "effectSpellName": "Aura of Bravery",
+    "effectNote": "",
+    "weight": 2.0,
+    "size": "TINY",
+    "classes": "ALL",
+    "gearScore": 148
   },
   "9489": {
-    "name": "Item 9489",
+    "flags": [
+      "MAGIC ITEM",
+      "LORE ITEM",
+      "NO DROP"
+    ],
+    "slot": "FACE",
+    "ac": 12,
+    "mods": [
+      {
+        "label": "STA",
+        "value": 7
+      },
+      {
+        "label": "DEX",
+        "value": 8
+      },
+      {
+        "label": "WIS",
+        "value": 8
+      },
+      {
+        "label": "HP",
+        "value": 65
+      },
+      {
+        "label": "MANA",
+        "value": 65
+      }
+    ],
+    "resists": [
+      {
+        "label": "Fire",
+        "value": 10
+      },
+      {
+        "label": "Poison",
+        "value": 10
+      }
+    ],
+    "requiredLevel": 56,
+    "levelType": "recommended",
+    "effectSpellId": 3501,
+    "effectSpellName": "Improved Healing IV",
+    "effectNote": "",
+    "focusSpellId": 3501,
     "focusSpellName": "Improved Healing IV",
     "focusPct": 20,
-    "gearScore": 0
+    "weight": 0.8,
+    "size": "SMALL",
+    "classes": "CLR PAL RNG DRU SHM BST",
+    "gearScore": 53
   },
   "30369": {
-    "name": "Item 30369",
-    "gearScore": 0
+    "flags": [
+      "MAGIC ITEM",
+      "LORE ITEM",
+      "NO DROP"
+    ],
+    "slot": "FINGERS",
+    "ac": 9,
+    "mods": [
+      {
+        "label": "STR",
+        "value": 9
+      },
+      {
+        "label": "STA",
+        "value": 9
+      },
+      {
+        "label": "HP",
+        "value": 50
+      }
+    ],
+    "resists": [
+      {
+        "label": "Magic",
+        "value": 9
+      }
+    ],
+    "effectSpellId": 1963,
+    "effectSpellName": "Shield of the Eighth",
+    "effectNote": "",
+    "weight": 1.0,
+    "size": "MEDIUM",
+    "classes": "ALL",
+    "gearScore": 34
   },
   "30164": {
-    "name": "Item 30164",
-    "gearScore": 0
+    "flags": [
+      "MAGIC ITEM",
+      "LORE ITEM",
+      "NO DROP"
+    ],
+    "slot": "FINGERS",
+    "ac": 8,
+    "mods": [
+      {
+        "label": "STR",
+        "value": 8
+      }
+    ],
+    "resists": [
+      {
+        "label": "Magic",
+        "value": 8
+      }
+    ],
+    "effectSpellId": 1963,
+    "effectSpellName": "Shield of the Eighth",
+    "effectNote": "",
+    "weight": 1.0,
+    "size": "MEDIUM",
+    "classes": "ALL",
+    "gearScore": 16
   },
   "30385": {
-    "name": "Item 30385",
-    "gearScore": 0
+    "flags": [
+      "MAGIC ITEM",
+      "LORE ITEM",
+      "NO DROP"
+    ],
+    "slot": "FINGERS",
+    "ac": 10,
+    "mods": [
+      {
+        "label": "STR",
+        "value": 10
+      },
+      {
+        "label": "STA",
+        "value": 10
+      },
+      {
+        "label": "HP",
+        "value": 100
+      }
+    ],
+    "resists": [
+      {
+        "label": "Magic",
+        "value": 10
+      }
+    ],
+    "effectSpellId": 1350,
+    "effectSpellName": "Frostreaver's Blessing",
+    "effectNote": "",
+    "weight": 0.1,
+    "size": "SMALL",
+    "classes": "ALL",
+    "races": "ALL",
+    "light": 7,
+    "gearScore": 53
   },
   "5723": {
-    "name": "Item 5723",
-    "gearScore": 0
+    "flags": [
+      "MAGIC ITEM",
+      "LORE ITEM",
+      "NO DROP"
+    ],
+    "slot": "SHOULDERS ARMS WRIST",
+    "ac": 12,
+    "mods": [
+      {
+        "label": "STA",
+        "value": 5
+      },
+      {
+        "label": "HP",
+        "value": 100
+      }
+    ],
+    "resists": [
+      {
+        "label": "Cold",
+        "value": 10
+      },
+      {
+        "label": "Magic",
+        "value": 5
+      }
+    ],
+    "effectSpellId": 1499,
+    "effectSpellName": "Aura of Battle",
+    "effectNote": "",
+    "weight": 0.5,
+    "size": "SMALL",
+    "classes": "ALL",
+    "light": 6,
+    "tint": "(70, 0, 0)",
+    "gearScore": 60
   },
   "6508": {
-    "name": "Item 6508",
-    "gearScore": 0
+    "flags": [
+      "MAGIC ITEM",
+      "LORE ITEM"
+    ],
+    "slot": "EAR",
+    "ac": 7,
+    "mods": [
+      {
+        "label": "STR",
+        "value": 5
+      },
+      {
+        "label": "AGI",
+        "value": 5
+      },
+      {
+        "label": "DEX",
+        "value": 5
+      },
+      {
+        "label": "HP",
+        "value": 80
+      },
+      {
+        "label": "MANA",
+        "value": 30
+      }
+    ],
+    "resists": [
+      {
+        "label": "Fire",
+        "value": 6
+      },
+      {
+        "label": "Cold",
+        "value": 6
+      },
+      {
+        "label": "Magic",
+        "value": 6
+      },
+      {
+        "label": "Poison",
+        "value": 6
+      },
+      {
+        "label": "Disease",
+        "value": 6
+      }
+    ],
+    "requiredLevel": 56,
+    "levelType": "recommended",
+    "weight": 0.2,
+    "size": "TINY",
+    "classes": "WAR PAL RNG SHD MNK BRD ROG BST",
+    "gearScore": 63
   },
   "29597": {
-    "name": "Item 29597",
-    "gearScore": 0
+    "flags": [
+      "MAGIC ITEM"
+    ],
+    "slot": "RANGE",
+    "dmg": 42,
+    "dmgBonus": 13,
+    "dmgBonusNote": "(lvl 65)",
+    "ac": 10,
+    "mods": [
+      {
+        "label": "STR",
+        "value": 15
+      },
+      {
+        "label": "STA",
+        "value": 10
+      },
+      {
+        "label": "INT",
+        "value": 15
+      },
+      {
+        "label": "HP",
+        "value": 100
+      },
+      {
+        "label": "MANA",
+        "value": 100
+      }
+    ],
+    "resists": [
+      {
+        "label": "Disease",
+        "value": 35
+      }
+    ],
+    "requiredLevel": 61,
+    "levelType": "required",
+    "effectSpellId": 1499,
+    "effectSpellName": "Aura of Battle",
+    "effectNote": "",
+    "weight": 3.0,
+    "size": "LARGE",
+    "classes": "WAR PAL RNG SHD ROG",
+    "gearScore": 78
   },
   "1557": {
-    "name": "Item 1557",
-    "gearScore": 0
+    "flags": [
+      "MAGIC ITEM",
+      "LORE ITEM",
+      "NO DROP"
+    ],
+    "slot": "SHOULDERS",
+    "ac": 10,
+    "resists": [
+      {
+        "label": "Fire",
+        "value": 35
+      },
+      {
+        "label": "Cold",
+        "value": 35
+      },
+      {
+        "label": "Magic",
+        "value": 35
+      },
+      {
+        "label": "Poison",
+        "value": 35
+      },
+      {
+        "label": "Disease",
+        "value": 35
+      }
+    ],
+    "weight": 0.0,
+    "size": "SMALL",
+    "classes": "ALL",
+    "gearScore": 185
   },
   "2611": {
-    "name": "Item 2611",
-    "gearScore": 0
+    "flags": [
+      "MAGIC ITEM",
+      "LORE ITEM",
+      "NO DROP"
+    ],
+    "slot": "HEAD",
+    "ac": 35,
+    "mods": [
+      {
+        "label": "STR",
+        "value": 10
+      },
+      {
+        "label": "WIS",
+        "value": 10
+      },
+      {
+        "label": "INT",
+        "value": 10
+      },
+      {
+        "label": "HP",
+        "value": 100
+      }
+    ],
+    "resists": [
+      {
+        "label": "Fire",
+        "value": 10
+      },
+      {
+        "label": "Cold",
+        "value": 10
+      },
+      {
+        "label": "Magic",
+        "value": 25
+      },
+      {
+        "label": "Poison",
+        "value": 10
+      },
+      {
+        "label": "Disease",
+        "value": 10
+      }
+    ],
+    "effectSpellId": 1788,
+    "effectSpellName": "Truesight",
+    "effectNote": "",
+    "weight": 1.0,
+    "size": "TINY",
+    "classes": "ALL",
+    "races": "ALL",
+    "light": 11,
+    "gearScore": 133
   },
   "30928": {
-    "name": "Item 30928",
-    "gearScore": 0
+    "flags": [
+      "MAGIC ITEM"
+    ],
+    "slot": "FEET",
+    "ac": 26,
+    "mods": [
+      {
+        "label": "STR",
+        "value": 9
+      },
+      {
+        "label": "STA",
+        "value": 5
+      },
+      {
+        "label": "DEX",
+        "value": 7
+      },
+      {
+        "label": "WIS",
+        "value": 5
+      },
+      {
+        "label": "HP",
+        "value": 90
+      },
+      {
+        "label": "MANA",
+        "value": 35
+      }
+    ],
+    "resists": [
+      {
+        "label": "Poison",
+        "value": 9
+      },
+      {
+        "label": "Disease",
+        "value": 9
+      }
+    ],
+    "requiredLevel": 46,
+    "levelType": "required",
+    "weight": 4.0,
+    "size": "MEDIUM",
+    "classes": "RNG ROG SHM",
+    "tint": "(10, 70, 90)",
+    "gearScore": 74
   },
   "30926": {
-    "name": "Item 30926",
-    "gearScore": 0
+    "flags": [
+      "MAGIC ITEM"
+    ],
+    "slot": "WRIST",
+    "ac": 22,
+    "mods": [
+      {
+        "label": "STR",
+        "value": 7
+      },
+      {
+        "label": "STA",
+        "value": 3
+      },
+      {
+        "label": "DEX",
+        "value": 5
+      },
+      {
+        "label": "WIS",
+        "value": 4
+      },
+      {
+        "label": "HP",
+        "value": 70
+      },
+      {
+        "label": "MANA",
+        "value": 25
+      }
+    ],
+    "resists": [
+      {
+        "label": "Poison",
+        "value": 6
+      },
+      {
+        "label": "Disease",
+        "value": 6
+      }
+    ],
+    "requiredLevel": 46,
+    "levelType": "required",
+    "weight": 1.0,
+    "size": "MEDIUM",
+    "classes": "RNG ROG SHM",
+    "tint": "(10, 70, 90)",
+    "gearScore": 57
   },
   "30921": {
-    "name": "Item 30921",
-    "gearScore": 0
+    "flags": [
+      "MAGIC ITEM"
+    ],
+    "slot": "HEAD",
+    "ac": 28,
+    "mods": [
+      {
+        "label": "STR",
+        "value": 9
+      },
+      {
+        "label": "STA",
+        "value": 5
+      },
+      {
+        "label": "DEX",
+        "value": 7
+      },
+      {
+        "label": "WIS",
+        "value": 5
+      },
+      {
+        "label": "HP",
+        "value": 90
+      },
+      {
+        "label": "MANA",
+        "value": 35
+      }
+    ],
+    "resists": [
+      {
+        "label": "Poison",
+        "value": 9
+      },
+      {
+        "label": "Disease",
+        "value": 9
+      }
+    ],
+    "requiredLevel": 46,
+    "levelType": "required",
+    "weight": 3.5,
+    "size": "MEDIUM",
+    "classes": "RNG ROG SHM",
+    "tint": "(10, 70, 90)",
+    "gearScore": 76
   },
   "30927": {
-    "name": "Item 30927",
-    "gearScore": 0
+    "flags": [
+      "MAGIC ITEM"
+    ],
+    "slot": "HANDS",
+    "ac": 26,
+    "mods": [
+      {
+        "label": "STR",
+        "value": 8
+      },
+      {
+        "label": "STA",
+        "value": 4
+      },
+      {
+        "label": "DEX",
+        "value": 6
+      },
+      {
+        "label": "WIS",
+        "value": 4
+      },
+      {
+        "label": "HP",
+        "value": 80
+      },
+      {
+        "label": "MANA",
+        "value": 30
+      }
+    ],
+    "resists": [
+      {
+        "label": "Poison",
+        "value": 8
+      },
+      {
+        "label": "Disease",
+        "value": 8
+      }
+    ],
+    "requiredLevel": 46,
+    "levelType": "required",
+    "weight": 3.0,
+    "size": "MEDIUM",
+    "classes": "RNG ROG SHM",
+    "tint": "(10, 70, 90)",
+    "gearScore": 68
   },
   "30925": {
-    "name": "Item 30925",
-    "gearScore": 0
+    "flags": [
+      "MAGIC ITEM"
+    ],
+    "slot": "LEGS",
+    "ac": 35,
+    "mods": [
+      {
+        "label": "STR",
+        "value": 10
+      },
+      {
+        "label": "STA",
+        "value": 6
+      },
+      {
+        "label": "DEX",
+        "value": 8
+      },
+      {
+        "label": "WIS",
+        "value": 6
+      },
+      {
+        "label": "HP",
+        "value": 100
+      },
+      {
+        "label": "MANA",
+        "value": 40
+      }
+    ],
+    "resists": [
+      {
+        "label": "Poison",
+        "value": 12
+      },
+      {
+        "label": "Disease",
+        "value": 12
+      }
+    ],
+    "requiredLevel": 46,
+    "levelType": "required",
+    "weight": 4.5,
+    "size": "MEDIUM",
+    "classes": "RNG ROG SHM",
+    "tint": "(10, 70, 90)",
+    "gearScore": 92
   },
   "30924": {
-    "name": "Item 30924",
-    "gearScore": 0
+    "flags": [
+      "MAGIC ITEM"
+    ],
+    "slot": "ARMS",
+    "ac": 28,
+    "mods": [
+      {
+        "label": "STR",
+        "value": 9
+      },
+      {
+        "label": "STA",
+        "value": 5
+      },
+      {
+        "label": "DEX",
+        "value": 7
+      },
+      {
+        "label": "WIS",
+        "value": 5
+      },
+      {
+        "label": "HP",
+        "value": 90
+      },
+      {
+        "label": "MANA",
+        "value": 35
+      }
+    ],
+    "resists": [
+      {
+        "label": "Poison",
+        "value": 9
+      },
+      {
+        "label": "Disease",
+        "value": 9
+      }
+    ],
+    "requiredLevel": 46,
+    "levelType": "required",
+    "weight": 2.5,
+    "size": "MEDIUM",
+    "classes": "RNG ROG SHM",
+    "tint": "(10, 70, 90)",
+    "gearScore": 76
   },
   "30923": {
-    "name": "Item 30923",
-    "gearScore": 0
+    "flags": [
+      "MAGIC ITEM"
+    ],
+    "slot": "CHEST",
+    "ac": 52,
+    "mods": [
+      {
+        "label": "STR",
+        "value": 12
+      },
+      {
+        "label": "STA",
+        "value": 8
+      },
+      {
+        "label": "DEX",
+        "value": 10
+      },
+      {
+        "label": "WIS",
+        "value": 8
+      },
+      {
+        "label": "HP",
+        "value": 120
+      },
+      {
+        "label": "MANA",
+        "value": 50
+      }
+    ],
+    "resists": [
+      {
+        "label": "Poison",
+        "value": 15
+      },
+      {
+        "label": "Disease",
+        "value": 15
+      }
+    ],
+    "requiredLevel": 46,
+    "levelType": "required",
+    "weight": 6.5,
+    "size": "MEDIUM",
+    "classes": "RNG ROG SHM",
+    "tint": "(10, 70, 90)",
+    "gearScore": 122
   },
   "31299": {
-    "name": "Item 31299",
-    "gearScore": 0
+    "flags": [
+      "MAGIC ITEM"
+    ],
+    "slot": "FEET",
+    "ac": 33,
+    "mods": [
+      {
+        "label": "STR",
+        "value": 9
+      },
+      {
+        "label": "STA",
+        "value": 5
+      },
+      {
+        "label": "DEX",
+        "value": 7
+      },
+      {
+        "label": "WIS",
+        "value": 5
+      },
+      {
+        "label": "INT",
+        "value": 5
+      },
+      {
+        "label": "HP",
+        "value": 90
+      },
+      {
+        "label": "MANA",
+        "value": 35
+      }
+    ],
+    "resists": [
+      {
+        "label": "Poison",
+        "value": 9
+      },
+      {
+        "label": "Disease",
+        "value": 9
+      }
+    ],
+    "requiredLevel": 46,
+    "levelType": "required",
+    "weight": 5.5,
+    "size": "MEDIUM",
+    "classes": "WAR CLR PAL SHD BRD",
+    "tint": "(10, 70, 90)",
+    "gearScore": 81
   },
   "31297": {
-    "name": "Item 31297",
-    "gearScore": 0
+    "flags": [
+      "MAGIC ITEM"
+    ],
+    "slot": "WRIST",
+    "ac": 27,
+    "mods": [
+      {
+        "label": "STR",
+        "value": 7
+      },
+      {
+        "label": "STA",
+        "value": 3
+      },
+      {
+        "label": "DEX",
+        "value": 5
+      },
+      {
+        "label": "WIS",
+        "value": 4
+      },
+      {
+        "label": "INT",
+        "value": 4
+      },
+      {
+        "label": "HP",
+        "value": 70
+      },
+      {
+        "label": "MANA",
+        "value": 25
+      }
+    ],
+    "resists": [
+      {
+        "label": "Poison",
+        "value": 6
+      },
+      {
+        "label": "Disease",
+        "value": 6
+      }
+    ],
+    "requiredLevel": 46,
+    "levelType": "required",
+    "weight": 3.0,
+    "size": "MEDIUM",
+    "classes": "WAR CLR PAL SHD BRD",
+    "tint": "(10, 70, 90)",
+    "gearScore": 62
   },
   "31248": {
-    "name": "Item 31248",
-    "gearScore": 0
+    "flags": [
+      "MAGIC ITEM"
+    ],
+    "slot": "CHEST",
+    "ac": 65,
+    "mods": [
+      {
+        "label": "STR",
+        "value": 12
+      },
+      {
+        "label": "STA",
+        "value": 8
+      },
+      {
+        "label": "DEX",
+        "value": 10
+      },
+      {
+        "label": "WIS",
+        "value": 8
+      },
+      {
+        "label": "INT",
+        "value": 8
+      },
+      {
+        "label": "HP",
+        "value": 120
+      },
+      {
+        "label": "MANA",
+        "value": 50
+      }
+    ],
+    "resists": [
+      {
+        "label": "Poison",
+        "value": 15
+      },
+      {
+        "label": "Disease",
+        "value": 15
+      }
+    ],
+    "requiredLevel": 46,
+    "levelType": "required",
+    "weight": 8.0,
+    "size": "MEDIUM",
+    "classes": "WAR CLR PAL SHD BRD",
+    "tint": "(10, 70, 90)",
+    "gearScore": 135
   },
   "31298": {
-    "name": "Item 31298",
-    "gearScore": 0
+    "flags": [
+      "MAGIC ITEM"
+    ],
+    "slot": "HANDS",
+    "ac": 33,
+    "mods": [
+      {
+        "label": "STR",
+        "value": 8
+      },
+      {
+        "label": "STA",
+        "value": 4
+      },
+      {
+        "label": "DEX",
+        "value": 6
+      },
+      {
+        "label": "WIS",
+        "value": 4
+      },
+      {
+        "label": "INT",
+        "value": 4
+      },
+      {
+        "label": "HP",
+        "value": 80
+      },
+      {
+        "label": "MANA",
+        "value": 30
+      }
+    ],
+    "resists": [
+      {
+        "label": "Poison",
+        "value": 8
+      },
+      {
+        "label": "Disease",
+        "value": 8
+      }
+    ],
+    "requiredLevel": 46,
+    "levelType": "required",
+    "weight": 4.0,
+    "size": "MEDIUM",
+    "classes": "WAR CLR PAL SHD BRD",
+    "tint": "(10, 70, 90)",
+    "gearScore": 75
   },
   "31296": {
-    "name": "Item 31296",
-    "gearScore": 0
+    "flags": [
+      "MAGIC ITEM"
+    ],
+    "slot": "LEGS",
+    "ac": 43,
+    "mods": [
+      {
+        "label": "STR",
+        "value": 10
+      },
+      {
+        "label": "STA",
+        "value": 6
+      },
+      {
+        "label": "DEX",
+        "value": 8
+      },
+      {
+        "label": "WIS",
+        "value": 6
+      },
+      {
+        "label": "INT",
+        "value": 6
+      },
+      {
+        "label": "HP",
+        "value": 100
+      },
+      {
+        "label": "MANA",
+        "value": 40
+      }
+    ],
+    "resists": [
+      {
+        "label": "Poison",
+        "value": 12
+      },
+      {
+        "label": "Disease",
+        "value": 12
+      }
+    ],
+    "requiredLevel": 46,
+    "levelType": "required",
+    "weight": 6.5,
+    "size": "MEDIUM",
+    "classes": "WAR CLR PAL SHD BRD",
+    "tint": "(10, 70, 90)",
+    "gearScore": 100
   },
   "31247": {
-    "name": "Item 31247",
-    "gearScore": 0
+    "flags": [
+      "MAGIC ITEM"
+    ],
+    "slot": "HEAD",
+    "ac": 35,
+    "mods": [
+      {
+        "label": "STR",
+        "value": 9
+      },
+      {
+        "label": "STA",
+        "value": 5
+      },
+      {
+        "label": "DEX",
+        "value": 7
+      },
+      {
+        "label": "WIS",
+        "value": 5
+      },
+      {
+        "label": "INT",
+        "value": 5
+      },
+      {
+        "label": "HP",
+        "value": 90
+      },
+      {
+        "label": "MANA",
+        "value": 35
+      }
+    ],
+    "resists": [
+      {
+        "label": "Poison",
+        "value": 9
+      },
+      {
+        "label": "Disease",
+        "value": 9
+      }
+    ],
+    "requiredLevel": 46,
+    "levelType": "required",
+    "weight": 5.0,
+    "size": "MEDIUM",
+    "classes": "WAR CLR PAL SHD BRD",
+    "tint": "(10, 70, 90)",
+    "gearScore": 83
   },
   "31249": {
-    "name": "Item 31249",
-    "gearScore": 0
+    "flags": [
+      "MAGIC ITEM"
+    ],
+    "slot": "ARMS",
+    "ac": 35,
+    "mods": [
+      {
+        "label": "STR",
+        "value": 9
+      },
+      {
+        "label": "STA",
+        "value": 5
+      },
+      {
+        "label": "DEX",
+        "value": 7
+      },
+      {
+        "label": "WIS",
+        "value": 5
+      },
+      {
+        "label": "INT",
+        "value": 5
+      },
+      {
+        "label": "HP",
+        "value": 90
+      },
+      {
+        "label": "MANA",
+        "value": 35
+      }
+    ],
+    "resists": [
+      {
+        "label": "Poison",
+        "value": 9
+      },
+      {
+        "label": "Disease",
+        "value": 9
+      }
+    ],
+    "requiredLevel": 46,
+    "levelType": "required",
+    "weight": 5.5,
+    "size": "MEDIUM",
+    "classes": "WAR CLR PAL SHD BRD",
+    "tint": "(10, 70, 90)",
+    "gearScore": 83
   },
   "30468": {
-    "name": "Item 30468",
-    "gearScore": 0
+    "flags": [
+      "MAGIC ITEM"
+    ],
+    "slot": "FEET",
+    "ac": 13,
+    "mods": [
+      {
+        "label": "STR",
+        "value": 9
+      },
+      {
+        "label": "STA",
+        "value": 5
+      },
+      {
+        "label": "DEX",
+        "value": 7
+      },
+      {
+        "label": "INT",
+        "value": 5
+      },
+      {
+        "label": "HP",
+        "value": 90
+      },
+      {
+        "label": "MANA",
+        "value": 35
+      }
+    ],
+    "resists": [
+      {
+        "label": "Poison",
+        "value": 9
+      },
+      {
+        "label": "Disease",
+        "value": 9
+      }
+    ],
+    "requiredLevel": 46,
+    "levelType": "required",
+    "weight": 1.0,
+    "size": "MEDIUM",
+    "classes": "NEC WIZ MAG ENC",
+    "tint": "(75, 45, 25)",
+    "gearScore": 61
   },
   "30469": {
-    "name": "Item 30469",
-    "gearScore": 0
+    "flags": [
+      "MAGIC ITEM"
+    ],
+    "slot": "HEAD",
+    "ac": 14,
+    "mods": [
+      {
+        "label": "STR",
+        "value": 9
+      },
+      {
+        "label": "STA",
+        "value": 5
+      },
+      {
+        "label": "DEX",
+        "value": 7
+      },
+      {
+        "label": "INT",
+        "value": 5
+      },
+      {
+        "label": "HP",
+        "value": 90
+      },
+      {
+        "label": "MANA",
+        "value": 35
+      }
+    ],
+    "resists": [
+      {
+        "label": "Poison",
+        "value": 9
+      },
+      {
+        "label": "Disease",
+        "value": 9
+      }
+    ],
+    "requiredLevel": 46,
+    "levelType": "required",
+    "weight": 0.5,
+    "size": "MEDIUM",
+    "classes": "NEC WIZ MAG ENC",
+    "races": "HUM ERU HIE DEF GNM IKS",
+    "tint": "(75, 45, 25)",
+    "gearScore": 62
   },
   "30467": {
-    "name": "Item 30467",
-    "gearScore": 0
+    "flags": [
+      "MAGIC ITEM"
+    ],
+    "slot": "HANDS",
+    "ac": 13,
+    "mods": [
+      {
+        "label": "STR",
+        "value": 8
+      },
+      {
+        "label": "STA",
+        "value": 4
+      },
+      {
+        "label": "DEX",
+        "value": 6
+      },
+      {
+        "label": "INT",
+        "value": 4
+      },
+      {
+        "label": "HP",
+        "value": 80
+      },
+      {
+        "label": "MANA",
+        "value": 30
+      }
+    ],
+    "resists": [
+      {
+        "label": "Poison",
+        "value": 8
+      },
+      {
+        "label": "Disease",
+        "value": 8
+      }
+    ],
+    "requiredLevel": 46,
+    "levelType": "required",
+    "weight": 0.5,
+    "size": "MEDIUM",
+    "classes": "NEC WIZ MAG ENC",
+    "tint": "(75, 45, 25)",
+    "gearScore": 55
   },
   "30466": {
-    "name": "Item 30466",
-    "gearScore": 0
+    "flags": [
+      "MAGIC ITEM"
+    ],
+    "slot": "LEGS",
+    "ac": 17,
+    "mods": [
+      {
+        "label": "STR",
+        "value": 10
+      },
+      {
+        "label": "STA",
+        "value": 6
+      },
+      {
+        "label": "DEX",
+        "value": 8
+      },
+      {
+        "label": "INT",
+        "value": 6
+      },
+      {
+        "label": "HP",
+        "value": 100
+      },
+      {
+        "label": "MANA",
+        "value": 40
+      }
+    ],
+    "resists": [
+      {
+        "label": "Poison",
+        "value": 12
+      },
+      {
+        "label": "Disease",
+        "value": 12
+      }
+    ],
+    "requiredLevel": 46,
+    "levelType": "required",
+    "weight": 1.2,
+    "size": "MEDIUM",
+    "classes": "NEC WIZ MAG ENC",
+    "tint": "(75, 45, 25)",
+    "gearScore": 74
   },
   "30465": {
-    "name": "Item 30465",
-    "gearScore": 0
+    "flags": [
+      "MAGIC ITEM"
+    ],
+    "slot": "ARMS",
+    "ac": 14,
+    "mods": [
+      {
+        "label": "STR",
+        "value": 9
+      },
+      {
+        "label": "STA",
+        "value": 5
+      },
+      {
+        "label": "DEX",
+        "value": 7
+      },
+      {
+        "label": "INT",
+        "value": 5
+      },
+      {
+        "label": "HP",
+        "value": 90
+      },
+      {
+        "label": "MANA",
+        "value": 35
+      }
+    ],
+    "resists": [
+      {
+        "label": "Poison",
+        "value": 9
+      },
+      {
+        "label": "Disease",
+        "value": 9
+      }
+    ],
+    "requiredLevel": 46,
+    "levelType": "required",
+    "weight": 0.8,
+    "size": "MEDIUM",
+    "classes": "NEC WIZ MAG ENC",
+    "tint": "(75, 45, 25)",
+    "gearScore": 62
   },
   "30470": {
-    "name": "Item 30470",
-    "gearScore": 0
+    "flags": [
+      "MAGIC ITEM"
+    ],
+    "slot": "WRIST",
+    "ac": 11,
+    "mods": [
+      {
+        "label": "STR",
+        "value": 7
+      },
+      {
+        "label": "STA",
+        "value": 3
+      },
+      {
+        "label": "DEX",
+        "value": 5
+      },
+      {
+        "label": "INT",
+        "value": 4
+      },
+      {
+        "label": "HP",
+        "value": 70
+      },
+      {
+        "label": "MANA",
+        "value": 25
+      }
+    ],
+    "resists": [
+      {
+        "label": "Poison",
+        "value": 6
+      },
+      {
+        "label": "Disease",
+        "value": 6
+      }
+    ],
+    "requiredLevel": 46,
+    "levelType": "required",
+    "weight": 0.2,
+    "size": "MEDIUM",
+    "classes": "NEC WIZ MAG ENC",
+    "tint": "(75, 45, 25)",
+    "gearScore": 46
   },
   "14733": {
-    "name": "Item 14733",
-    "gearScore": 0
+    "flags": [
+      "MAGIC ITEM",
+      "NO DROP"
+    ],
+    "dmg": 30,
+    "dmgBonus": 19,
+    "dmgBonusNote": "(lvl 65)",
+    "ac": 28,
+    "mods": [
+      {
+        "label": "STR",
+        "value": 18
+      },
+      {
+        "label": "AGI",
+        "value": 20
+      },
+      {
+        "label": "CHA",
+        "value": 18
+      },
+      {
+        "label": "HP",
+        "value": 185
+      }
+    ],
+    "resists": [
+      {
+        "label": "Fire",
+        "value": 15
+      },
+      {
+        "label": "Cold",
+        "value": 15
+      },
+      {
+        "label": "Magic",
+        "value": 15
+      },
+      {
+        "label": "Poison",
+        "value": 15
+      },
+      {
+        "label": "Disease",
+        "value": 15
+      }
+    ],
+    "requiredLevel": 65,
+    "levelType": "required",
+    "weight": 0.3,
+    "size": "TINY",
+    "classes": "WAR MNK BRD ROG BST",
+    "races": "ALL",
+    "light": 11,
+    "gearScore": 164
+  },
+  "32605": {
+    "flags": [
+      "MAGIC ITEM",
+      "LORE ITEM",
+      "NO DROP"
+    ],
+    "slot": "RANGE PRIMARY",
+    "ac": 15,
+    "mods": [
+      {
+        "label": "STA",
+        "value": 15
+      },
+      {
+        "label": "AGI",
+        "value": 20
+      },
+      {
+        "label": "INT",
+        "value": 25
+      },
+      {
+        "label": "HP",
+        "value": 145
+      },
+      {
+        "label": "MANA",
+        "value": 160
+      }
+    ],
+    "resists": [
+      {
+        "label": "Fire",
+        "value": 15
+      },
+      {
+        "label": "Cold",
+        "value": 15
+      },
+      {
+        "label": "Magic",
+        "value": 15
+      },
+      {
+        "label": "Poison",
+        "value": 15
+      },
+      {
+        "label": "Disease",
+        "value": 15
+      }
+    ],
+    "requiredLevel": 65,
+    "levelType": "required",
+    "effectSpellId": 3309,
+    "effectSpellName": "Embracing Darkness",
+    "effectNote": "",
+    "weight": 1.5,
+    "size": "SMALL",
+    "classes": "NEC",
+    "gearScore": 138
   }
 }
