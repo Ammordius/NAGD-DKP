@@ -74,14 +74,40 @@ def parse_item_page(html: str, item_id: int, name: str) -> dict | None:
     soup = BeautifulSoup(html, "lxml")
     text = soup.get_text(separator=" ", strip=True)
 
+    out = {}
+
+    # Item name from page (og:title or <title>); fall back to passed-in name
+    page_name = None
+    m = re.search(r'property="og:title"\s+content="([^"]+)"', html)
+    if m:
+        page_name = m.group(1).strip()
+    if not page_name:
+        m = re.search(r'content="([^"]+)"\s+property="og:title"', html)
+        if m:
+            page_name = m.group(1).strip()
+    if not page_name:
+        og = soup.find("meta", attrs={"property": "og:title"})
+        if og and og.get("content"):
+            page_name = (og["content"] or "").strip()
+    if not page_name:
+        title_tag = soup.find("title")
+        if title_tag and title_tag.string:
+            t = title_tag.string.strip()
+            if "::" in t:
+                page_name = t.split("::", 1)[-1].strip()
+            else:
+                page_name = t
+    if page_name:
+        out["name"] = page_name
+    else:
+        out["name"] = name or f"Item {item_id}"
+
     # Spell links: extract spell.php?id=XXX and link text for Effect / Focus Effect
     spell_links = []
     for a in soup.find_all("a", href=True):
         m = re.search(r"spell\.php\?id=(\d+)", a.get("href", ""))
         if m:
             spell_links.append((int(m.group(1)), (a.get_text() or "").strip()))
-
-    out = {}
 
     # Flags (MAGIC ITEM LORE ITEM NO DROP / NO TRADE)
     flags = []
