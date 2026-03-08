@@ -56,14 +56,21 @@ jobs:
           sort -u -k1,1 -t' ' /tmp/artifacts.txt | sort -r -k1,1 -t' ' > /tmp/uniq.txt
           NEW_LINE=$(sed -n '1p' /tmp/uniq.txt)
           OLD_LINE=$(sed -n '2p' /tmp/uniq.txt)
-          if [ -z "$NEW_LINE" ] || [ -z "$OLD_LINE" ]; then
-            echo "Need at least 2 $BACKUP_TYPE backup artifacts; skipping."
-            echo "new_name=" >> $GITHUB_OUTPUT
+          if [ -z "$NEW_LINE" ]; then
+            echo "No $BACKUP_TYPE backup artifacts found."
             echo "has_two=false" >> $GITHUB_OUTPUT
             exit 0
           fi
           NEW_NAME="${NEW_LINE% *}"
           NEW_RUN_ID="${NEW_LINE#* }"
+          echo "new_name=$NEW_NAME" >> $GITHUB_OUTPUT
+          echo "new_date=${NEW_NAME#$PREFIX}" >> $GITHUB_OUTPUT
+          if [ -z "$OLD_LINE" ]; then
+            echo "Only one backup artifact; cannot build delta. Latest data: ${NEW_NAME#$PREFIX}"
+            echo "has_two=false" >> $GITHUB_OUTPUT
+            echo "latest_single_date=${NEW_NAME#$PREFIX}" >> $GITHUB_OUTPUT
+            exit 0
+          fi
           OLD_NAME="${OLD_LINE% *}"
           OLD_RUN_ID="${OLD_LINE#* }"
           echo "new_name=$NEW_NAME" >> $GITHUB_OUTPUT
@@ -162,15 +169,54 @@ jobs:
         env:
           REPO: ${{ github.repository }}
           BACKUP_TYPE: ${{ github.event.inputs.backup_type || 'daily' }}
+          LATEST_DATE: ${{ steps.artifacts.outputs.latest_single_date }}
         run: |
           mkdir -p ledger
-          cat > ledger/index.html << EOF
+          if [ -n "$LATEST_DATE" ]; then
+            cat > ledger/index.html << EOF
           <!DOCTYPE html>
-          <html><head><meta charset="utf-8"><title>Public SQL Ledger</title></head>
-          <body><h1>Public SQL Ledger</h1>
-          <p>No delta yet. Need at least two $BACKUP_TYPE backup artifacts from the DB backup workflow.</p>
-          <p><a href="https://github.com/$REPO/actions">Actions</a></p></body></html>
+          <html lang="en">
+          <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <title>Public SQL Ledger</title>
+            <style>
+              :root { --bg: #0f1419; --surface: #1a2332; --text: #e6edf3; --muted: #8b949e; }
+              body { font-family: ui-sans-serif, system-ui, sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; margin: 0; padding: 2rem; max-width: 48rem; }
+              a { color: #58a6ff; }
+              h1 { font-size: 1.5rem; }
+              .meta { color: var(--muted); margin: 1rem 0; }
+              .card { background: var(--surface); border-radius: 8px; padding: 1rem; margin: 1rem 0; }
+            </style>
+          </head>
+          <body>
+            <h1>Public SQL Ledger</h1>
+            <p class="meta">Transparent, historical record of database changes. Backup-to-backup deltas (all tables except raid_loot).</p>
+            <div class="card">
+              <p><strong>Data last updated:</strong> $LATEST_DATE</p>
+              <p>Only one $BACKUP_TYPE backup artifact so far. Run another backup to generate a delta (compare two snapshots).</p>
+            </div>
+            <p class="meta"><a href="https://github.com/$REPO/actions">Actions</a></p>
+          </body>
+          </html>
           EOF
+          else
+            cat > ledger/index.html << EOF
+          <!DOCTYPE html>
+          <html lang="en">
+          <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <title>Public SQL Ledger</title>
+          </head>
+          <body>
+            <h1>Public SQL Ledger</h1>
+            <p>No delta yet. Need at least two $BACKUP_TYPE backup artifacts from the DB backup workflow.</p>
+            <p><a href="https://github.com/$REPO/actions">Actions</a></p>
+          </body>
+          </html>
+          EOF
+          fi
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3

@@ -17,7 +17,7 @@ export default function DkpChangelog({ isOfficer }) {
     const to = from + PAGE_SIZE - 1
     const { data, error } = await supabase
       .from('officer_audit_log')
-      .select('id,created_at,actor_display_name,actor_email,action,target_type,target_id,delta')
+      .select('id,created_at,actor_display_name,action,target_type,target_id,delta')
       .order('created_at', { ascending: false })
       .range(from, to)
     setLoading(false)
@@ -63,7 +63,7 @@ export default function DkpChangelog({ isOfficer }) {
               const when = entry.created_at
                 ? new Date(entry.created_at).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })
                 : '—'
-              const who = (entry.actor_display_name || '').trim() || (entry.actor_email || '').trim() || entry.actor_id || '—'
+              const who = (entry.actor_display_name || '').trim() || entry.actor_id || '—'
               const actionLabel = {
                 add_raid: 'Add raid',
                 add_tic: 'Add tic',

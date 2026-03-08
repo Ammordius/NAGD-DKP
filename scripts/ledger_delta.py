@@ -42,7 +42,7 @@ LEDGER_TABLES = [
 ]
 
 # Columns to redact in HTML and JSON output (never display on the delta page).
-REDACT_COLUMNS = frozenset({"email"})
+REDACT_COLUMNS = frozenset({"email", "actor_email"})
 
 # Rows per page for Added/Removed/Changed tables (client-side paging).
 PAGE_SIZE = 50
@@ -205,6 +205,7 @@ def render_html(
         '<p class="back"><a href="index.html">← Back to SQL Ledger index</a></p>',
         f"<h1>Public SQL Ledger — Daily Delta</h1>",
         f'<p class="meta">Comparing <strong>{escape(old_date)}</strong> (older) → <strong>{escape(new_date)}</strong> (newer). Loot assignments (raid_loot) are excluded from this audit.</p>',
+        f'<p class="meta">Data (newer snapshot) as of <strong>{escape(new_date)}</strong> — delta is between the two backup dates above.</p>',
     ]
 
     if no_changes:
