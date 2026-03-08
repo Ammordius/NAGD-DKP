@@ -2,8 +2,18 @@
 -- Account-scoped DKP schema: run AFTER supabase-schema.sql (and loot-assignment if used).
 -- Adds account_dkp_summary, account_id on raid_event_attendance, raid_attendance_dkp_by_account,
 -- account_id on dkp_adjustments, active_accounts. Keeps existing character-based tables during transition.
--- Requires: loot_assignment table must exist (run supabase-loot-assignment-table.sql first, or create empty loot_assignment).
+-- Creates loot_assignment stub if missing (so LATERAL joins in refresh functions succeed without running supabase-loot-assignment-table.sql first).
 -- =============================================================================
+
+-- Stub so refresh_account_dkp_summary_internal can reference loot_assignment (LEFT JOIN LATERAL).
+-- If you later run supabase-loot-assignment-table.sql, it uses CREATE TABLE IF NOT EXISTS and adds views/RPCs.
+CREATE TABLE IF NOT EXISTS loot_assignment (
+  loot_id BIGINT PRIMARY KEY REFERENCES raid_loot(id) ON DELETE CASCADE,
+  assigned_char_id TEXT,
+  assigned_character_name TEXT,
+  assigned_via_magelo SMALLINT DEFAULT NULL
+);
+COMMENT ON TABLE loot_assignment IS 'Which character has each loot item. Stub from account-dkp-schema; full definition in supabase-loot-assignment-table.sql.';
 
 -- 1) account_dkp_summary: one row per account (replaces dkp_summary for leaderboard once migrated)
 CREATE TABLE IF NOT EXISTS account_dkp_summary (
@@ -264,6 +274,11 @@ DROP POLICY IF EXISTS "Officers manage active_accounts" ON active_accounts;
 CREATE POLICY "Officers manage active_accounts" ON active_accounts FOR ALL TO authenticated
   USING (public.is_officer())
   WITH CHECK (public.is_officer());
+
+-- No anon read (canonical); drop if present so re-apply is consistent
+DROP POLICY IF EXISTS "Anon read account_dkp_summary" ON account_dkp_summary;
+DROP POLICY IF EXISTS "Anon read raid_attendance_dkp_by_account" ON raid_attendance_dkp_by_account;
+DROP POLICY IF EXISTS "Anon read active_accounts" ON active_accounts;
 
 GRANT EXECUTE ON FUNCTION public.refresh_account_dkp_summary() TO authenticated;
 GRANT EXECUTE ON FUNCTION public.refresh_account_dkp_summary() TO service_role;

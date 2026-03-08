@@ -1,4 +1,6 @@
 -- =============================================================================
+-- SUPERSEDED: Use docs/upload_script_rpcs.sql instead (includes this RPC plus insert_raid_event_attendance_for_upload).
+-- =============================================================================
 -- RPC: delete all data for one raid (events, loot, attendance, event_attendance)
 -- so it can be re-uploaded. Call via API: client.rpc('delete_raid_for_reupload', {'p_raid_id': '1598692'}).
 --

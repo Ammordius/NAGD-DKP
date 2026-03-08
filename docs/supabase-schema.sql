@@ -1,5 +1,8 @@
 -- Run this in Supabase SQL Editor after creating a project.
 -- Creates tables matching data/*.csv + profiles for auth roles + RLS.
+--
+-- CANONICAL DEPLOY: use docs/supabase-schema-full.sql instead (single file).
+-- This file is a source fragment for that; do not run it alone for a full deploy.
 
 -- 1) Profiles: one per auth user, holds role (officer | player)
 CREATE TABLE IF NOT EXISTS profiles (

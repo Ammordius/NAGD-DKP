@@ -47,23 +47,25 @@ You will use this project for all schema and data; CI and the web app will talk 
 
 ## Step 3: Run SQL in order (schema + optional)
 
-Run these in the Supabase **SQL Editor** (New query → paste → Run). Order matters: schema first, then optional extensions.
+**Canonical reference:** **[docs/SCHEMA_DEPLOYMENT.md](SCHEMA_DEPLOYMENT.md)** — single source of truth for all schema and triggers, in order, plus how to dump the live DB to verify.
 
-### 3.1 Core schema (required)
+Run these in the Supabase **SQL Editor** (New query → paste → Run). **Order matters.**
 
-1. Open **`docs/supabase-schema.sql`** from the repo, copy all of it, paste into SQL Editor, **Run**.  
-   This creates tables, RLS, triggers, RPCs, and the `handle_new_user` trigger. You should see “Success.”
+### 3.1 Required: single schema file
+
+1. Open **`docs/supabase-schema-full.sql`** from the repo, copy **all** of it, paste into the Supabase SQL Editor, **Run**.
+2. You should see “Success.” That one file creates all tables, RLS, triggers, account DKP, officer writes, and upload script RPCs. No other SQL files are required.
 
 ### 3.2 Optional SQL (run if you use those features)
 
 | File | When to run |
 |------|-------------|
 | **`docs/supabase-loot-to-character.sql`** | If you want loot-to-character assignment (Magelo) and the `update_raid_loot_assignments` RPC. Required for the **Loot-to-character** CI workflow. |
-| **`docs/supabase-loot-assignment-table.sql`** | Loot assignment split (loot_assignment table + RPC). Run if you use the split schema; then run **`docs/supabase-github-worker-role.sql`** for CI. |
+| **`docs/supabase-loot-assignment-table.sql`** | Loot assignment split (loot_assignment table + views + RPC). Run if you use the split schema; then run **`docs/supabase-github-worker-role.sql`** for CI. (If you only ran required SQL, account-dkp-schema already created a minimal `loot_assignment` stub.) |
 | **`docs/supabase-github-worker-role.sql`** | Optional: creates `github_worker` role for direct DB use (e.g. future tooling). **CI uses the Supabase API secret** (service_role key from Dashboard → API), not a custom role. Run after **loot-assignment-table** SQL if you use the split schema. |
 | **`docs/supabase-officer-audit-log.sql`** | If you want the officer audit log table (may already be in schema; run only if the table or policies are missing). |
-| **`docs/supabase-create-my-account-rpc.sql`** | If the schema doesn’t already define `create_my_account` / account-claiming (usually already in main schema). |
-| **`docs/supabase-anon-read-policies.sql`** | Only if you need to re-apply anon read policies (main schema already includes anon read; use only if you changed RLS). |
+| **`docs/supabase-create-my-account-rpc.sql`** | If the schema doesn’t already define `create_my_account` / account-claiming (already in main schema). |
+| **`docs/supabase-anon-read-policies.sql`** | Only if you need to re-apply anon read policies (main schema disables anon read; use only if you changed RLS). |
 
 Do **not** run `docs/supabase-reset-and-import.sql` now; that truncates data and is for re-imports later.
 
@@ -186,8 +188,8 @@ All three workflows use the **same** repo and the **same** Supabase project (you
 
 - [ ] Repo forked/cloned (mirror).
 - [ ] New Supabase project created; password saved.
-- [ ] **docs/supabase-schema.sql** run in SQL Editor.
-- [ ] Optional: **docs/supabase-loot-to-character.sql** (and any other optional SQL) run.
+- [ ] **docs/supabase-schema-full.sql** run in SQL Editor (single file; no other SQL required).
+- [ ] Optional: **docs/supabase-loot-to-character.sql** (and any other optional SQL) run if needed.
 - [ ] Data loaded: from backup artifact (Option A) or from **data/** CSVs (Option B), in correct import order.
 - [ ] GitHub Actions secrets set: **SUPABASE_URL**, **SUPABASE_SERVICE_ROLE_KEY** (use API secret from Supabase → Project Settings → API; see Step 5).
 - [ ] GitHub Pages enabled (Source: GitHub Actions).
@@ -199,6 +201,7 @@ All three workflows use the **same** repo and the **same** Supabase project (you
 
 ## Reference docs
 
+- **[SCHEMA_DEPLOYMENT.md](SCHEMA_DEPLOYMENT.md)** — **Single source of truth:** required SQL in order, optional SQL, how to dump schema from the DB to verify.
 - **[SETUP-WALKTHROUGH.md](SETUP-WALKTHROUGH.md)** — Single-instance setup (Supabase, import, local run, Vercel).
 - **[CI-DB-BACKUP.md](CI-DB-BACKUP.md)** — Backup workflow, retention, restore from artifact.
 - **[SQL-LEDGER.md](SQL-LEDGER.md)** — How the ledger workflow and GitHub Pages work.

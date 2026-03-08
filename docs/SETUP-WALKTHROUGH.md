@@ -22,20 +22,12 @@ Follow these steps in order. Everything is done in the browser and in this repo.
 
 ## Part 2: Run the schema SQL
 
+**Single file.** Run **`docs/supabase-schema-full.sql`** once in the Supabase SQL Editor. It contains all tables, RLS, triggers, account DKP, officer writes, and upload script RPCs. No other SQL files are required.
+
 1. In the left sidebar, click **“SQL Editor”**.
-
 2. Click **“New query”** (or the + button).
-
-3. Open the file **`docs/supabase-schema.sql`** from this repo in your editor (e.g. Cursor/VS Code).  
-   Select **all** the contents (Ctrl+A) and copy (Ctrl+C).
-
-4. Paste into the Supabase SQL Editor (the big text area).
-
-5. Click **“Run”** (or press Ctrl+Enter).
-
-6. You should see a green “Success” message.  
-   If you see any red errors, copy the error message and we can fix the schema.  
-   Otherwise, the tables (`profiles`, `characters`, `raids`, etc.) and RLS policies are now created.
+3. Open **`docs/supabase-schema-full.sql`** from the repo, select all (Ctrl+A), copy, paste into the SQL Editor, and click **Run**.
+4. You should see “Success.” If you see any red errors, copy the message so we can fix the schema.
 
 ---
 
@@ -237,7 +229,7 @@ To link each raid loot row to the **toon that actually has the item** (from Mage
 ## Quick checklist
 
 - [ ] Part 1: Supabase project created, password saved
-- [ ] Part 2: `docs/supabase-schema.sql` run in SQL Editor, success
+- [ ] Part 2: **docs/supabase-schema-full.sql** run in SQL Editor, success
 - [ ] Part 3: Project URL and anon key copied
 - [ ] Part 4: All 7 CSVs imported (characters, accounts, character_account, raids, raid_events, raid_loot, raid_attendance)
 - [ ] Part 5: Signed up in the app, then ran `UPDATE profiles SET role = 'officer'` with your User UID

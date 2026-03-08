@@ -2,7 +2,7 @@
 
 Audit of triggers, where DKP data is stored, and the workflow for adding DKP from the website or upload backend. Goal: **fast, correct** updates without full-table refreshes when only one raid changes.
 
-**See also:** **docs/SCHEMA_RPC_INDEX.md** — full list of RPCs/functions, canonical vs one-off definitions, and callers.
+**See also:** **docs/SCHEMA_DEPLOYMENT.md** — required SQL files in order and how to dump schema from the DB. **docs/SCHEMA_RPC_INDEX.md** — full list of RPCs/functions, canonical vs one-off definitions, and callers.
 
 ---
 
@@ -119,7 +119,7 @@ Without these calls, adding or assigning loot would not update **account_dkp_sum
 
 ## 7. delete_raid (Officer UI) and delete_raid_for_reupload (upload script)
 
-**delete_raid** (docs/supabase-officer-raids.sql) — Used by the Officer page to permanently delete a raid and all its tics/loot/attendance. Disables triggers during delete, then runs `refresh_dkp_summary_internal()` and (if present) `refresh_account_dkp_summary_internal()` so dkp_summary, dkp_period_totals, and account_dkp_summary stay correct. The account refresh is optional inside the RPC (IF EXISTS), so **the Officer app also calls `refresh_account_dkp_summary()` after delete_raid returns** to guarantee account_dkp_summary is updated even when the in-RPC refresh was skipped (e.g. function not deployed).
+**delete_raid** (docs/supabase-officer-raids.sql) — Used by the Officer page to permanently delete a raid and all its tics/loot/attendance. It deletes from **raid_attendance_dkp_by_account** for the raid, then **raid_attendance_dkp**, **raid_dkp_totals**, and all source tables. Disables triggers during delete, then runs `refresh_dkp_summary_internal()` and (if present) `refresh_account_dkp_summary_internal()` so dkp_summary, dkp_period_totals, and account_dkp_summary stay correct. The account refresh is optional inside the RPC (IF EXISTS), so **the Officer app also calls `refresh_account_dkp_summary()` after delete_raid returns** to guarantee account_dkp_summary is updated even when the in-RPC refresh was skipped (e.g. function not deployed).
 
 **Timeout on delete_raid:** If you see "canceling statement due to statement timeout" (often in **under 10 seconds**), Supabase’s **authenticated** role has a default `statement_timeout` of **8s**, so the RPC was being cut off before the deletes/refresh finished. The fix is to set a longer timeout **on the function** so it applies when the RPC runs: `CREATE FUNCTION delete_raid ... SET statement_timeout = '60s'` (see supabase-officer-raids.sql). Redeploy the function so the change takes effect.
 

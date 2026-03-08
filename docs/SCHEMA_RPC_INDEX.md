@@ -2,12 +2,16 @@
 
 Single index of **all public RPCs/functions** and **one-off SQL** in this repo: where each is defined (canonical vs supplemental), what uses it, and how to avoid orphans.
 
-**Canonical schema** = the files that define the live database when deploying from scratch, in order:
+**Deploy:** Run **docs/supabase-schema-full.sql** once in the Supabase SQL Editor. It is the single canonical schema (tables, RLS, triggers, account DKP, officer writes, upload RPCs). See [SCHEMA_DEPLOYMENT.md](SCHEMA_DEPLOYMENT.md).
 
-1. **docs/supabase-schema.sql** — core tables, triggers, DKP summary (character), restore, profiles, accounts, raid totals
-2. **docs/supabase-account-dkp-schema.sql** — account_dkp_summary, account-scoped refresh, end_restore_load/truncate overrides
-3. **docs/supabase-officer-raids.sql** — is_officer, delete_raid, delete_tic, RLS for officer-managed tables
-4. **docs/supabase-loot-assignment-table.sql** — loot_assignment table, update_single_raid_loot_assignment, get_character_dkp_spent, refresh_character_dkp_spent (if using loot_assignment flow)
+**Canonical schema** = one file for deploy; maintained from these sources (you do not run them separately):
+
+1. **docs/supabase-schema-full.sql** — **Run this.** Single file. Built from the four below.
+2. docs/supabase-schema.sql — core (source for full)
+3. docs/supabase-account-dkp-schema.sql — account DKP (source for full)
+4. docs/supabase-officer-raids.sql — officer writes (source for full)
+5. docs/upload_script_rpcs.sql — upload RPCs (source for full)
+6. **docs/supabase-loot-assignment-table.sql** — (optional) loot_assignment table, update_single_raid_loot_assignment, get_character_dkp_spent, refresh_character_dkp_spent
 
 ---
 
@@ -23,13 +27,14 @@ Single index of **all public RPCs/functions** and **one-off SQL** in this repo: 
 | **reset_claim_cooldown** | supabase-schema.sql | — | OfficerClaimCooldowns.jsx |
 | **delete_raid** | supabase-officer-raids.sql | — | Officer.jsx (permanent delete raid + tics) |
 | **delete_tic** | supabase-officer-raids.sql | — | Officer.jsx (remove one tic + attendance; avoids timeout) |
-| **delete_raid_for_reupload** | — | **delete_raid_for_reupload_rpc.sql** | upload_raid_detail_to_supabase.py |
+| **delete_raid_for_reupload** | upload_script_rpcs.sql | delete_raid_for_reupload_rpc.sql (superseded) | upload_raid_detail_to_supabase.py |
+| **insert_raid_event_attendance_for_upload** | upload_script_rpcs.sql | — | upload_raid_detail_to_supabase.py |
 | **refresh_dkp_summary** | supabase-schema.sql | — | Officer.jsx, RaidDetail.jsx, DKP.jsx, upload script, restore, dedupe, zerodkp |
-| **refresh_dkp_summary_internal** | supabase-schema.sql | — | Triggers, delete_raid, delete_tic, delete_raid_for_reupload, end_restore_load |
+| **refresh_dkp_summary_internal** | supabase-schema.sql | — | Triggers, delete_raid, delete_tic, delete_raid_for_reupload, insert_raid_event_attendance_for_upload (via end_restore_load), end_restore_load |
 | **refresh_account_dkp_summary** | supabase-account-dkp-schema.sql | — | DKP.jsx, upload script (fallback), restore_supabase_from_backup.py |
 | **refresh_account_dkp_summary_internal** | supabase-account-dkp-schema.sql | — | end_restore_load, delete_raid (if present), delete_raid_for_reupload |
 | **refresh_account_dkp_summary_for_raid** | supabase-account-dkp-schema.sql | fix_refresh_dkp_summary_includes_account_summary.sql (for DBs without account schema) | Officer.jsx, RaidDetail.jsx, upload_raid_detail_to_supabase.py, delete_tic |
-| **refresh_raid_attendance_totals** | supabase-schema.sql (base); supabase-account-dkp-schema.sql (account version) | — | Triggers, delete_raid_for_reupload |
+| **refresh_raid_attendance_totals** | supabase-schema.sql (base); supabase-account-dkp-schema.sql (account version) | — | Triggers, delete_raid_for_reupload, insert_raid_event_attendance_for_upload (via end_restore_load) |
 | **refresh_all_raid_attendance_totals** | supabase-schema.sql | — | end_restore_load, restore script |
 | **truncate_dkp_for_restore** | supabase-schema.sql; supabase-account-dkp-schema.sql (extends) | supabase-restore-truncate-rpc.sql (standalone) | restore_supabase_from_backup.py |
 | **begin_restore_load** | supabase-schema.sql | — | restore script, diff_inactive_tic_loot_dry_run.py |
@@ -75,11 +80,10 @@ Single index of **all public RPCs/functions** and **one-off SQL** in this repo: 
 
 ## Orphans and where they live
 
-These are **not** in the canonical schema; deploy the listed file if you need them.
+These are **not** in the four required canonical files; deploy the listed file if you need them.
 
 | RPC | Only defined in | Required for |
 |-----|------------------|---------------|
-| **delete_raid_for_reupload** | docs/delete_raid_for_reupload_rpc.sql | upload_raid_detail_to_supabase.py (delete before re-upload) |
 | **update_raid_event_times** | docs/supabase-update-event-times-rpc.sql | scripts/pull_parse_dkp_site/update_supabase_event_times.py |
 | **update_single_raid_loot_assignment** | docs/supabase-loot-assignment-table.sql or docs/supabase-loot-to-character.sql | AccountDetail.jsx (loot assignment UI) |
 | **get_character_dkp_spent** | docs/supabase-loot-to-character.sql | LootRecipients.jsx |
@@ -89,7 +93,8 @@ These are **not** in the canonical schema; deploy the listed file if you need th
 
 ## Documentation cross-references
 
-- **DKP_TRIGGERS_AND_STORAGE_AUDIT.md** — Triggers, derived tables, website/upload flow, delete_raid_for_reupload, refresh_account_dkp_summary_for_raid.
+- **DKP_TRIGGERS_AND_STORAGE_AUDIT.md** — Triggers, derived tables, website/upload flow, delete_raid_for_reupload, insert_raid_event_attendance_for_upload, refresh_account_dkp_summary_for_raid.
+- **SCHEMA_AUDIT.md** — Audit of DB vs repo (tables, functions, triggers, RLS); single canonical deploy order.
 - **DKP_AUDIT.md** — Gamer Launch vs Supabase audit; mentions fix_refresh_dkp_summary_includes_account_summary.sql.
 - **IMPLEMENT-LOOT-ASSIGNMENT-TABLE.md** / **LOOT-TO-CHARACTER.md** — Loot assignment RPCs and flows.
 
