@@ -79374,5 +79374,57 @@
     "size": "SMALL",
     "classes": "CLR DRU SHM NEC WIZ MAG ENC",
     "gearScore": 118
+  },
+  "15827": {
+    "name": "Cloak of Earthen Twine",
+    "flags": [
+      "MAGIC ITEM",
+      "LORE ITEM",
+      "NO DROP"
+    ],
+    "slot": "BACK",
+    "ac": 14,
+    "mods": [
+      {
+        "label": "STA",
+        "value": 15
+      },
+      {
+        "label": "WIS",
+        "value": 12
+      },
+      {
+        "label": "INT",
+        "value": 12
+      },
+      {
+        "label": "CHA",
+        "value": 10
+      },
+      {
+        "label": "HP",
+        "value": 100
+      },
+      {
+        "label": "MANA",
+        "value": 85
+      }
+    ],
+    "resists": [
+      {
+        "label": "Poison",
+        "value": 20
+      },
+      {
+        "label": "Disease",
+        "value": 20
+      }
+    ],
+    "requiredLevel": 62,
+    "levelType": "recommended",
+    "weight": 0.8,
+    "size": "MEDIUM",
+    "classes": "CLR DRU SHM NEC WIZ MAG ENC",
+    "gearScore": 87
   }
 }

@@ -1254,6 +1254,13 @@
     "zone": "Plane of Time",
     "name": "(item 15824)"
   },
+  "15827": {
+    "mob": "A_Korascian_Warlord",
+    "zone": "Plane of Earth",
+    "name": "Cloak of Earthen Twine",
+    "respawn_seconds": null,
+    "respawn_note": "Minis triggered by rings: 3.5\u00b10.5 days"
+  },
   "15839": {
     "mob": "#Overlord_Banord_Paffa",
     "zone": "Crypt of Decay",
