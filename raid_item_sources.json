@@ -95,6 +95,9 @@
     "name": "Clawed Guardian Bracer",
     "respawn_seconds": 475200
   },
+  "1557": {
+    "name": "Item 1557"
+  },
   "1628": {
     "mob": "Phara_Dar",
     "zone": "Veeshan's Peak",
@@ -140,6 +143,9 @@
     "mob": "#Tunare",
     "zone": "Plane of Growth",
     "name": "Sap Encrusted Branch"
+  },
+  "2611": {
+    "name": "Item 2611"
   },
   "2629": {
     "mob": "#Rizlona",
@@ -211,6 +217,9 @@
     "zone": "Plane of Time",
     "name": "(item 5594)"
   },
+  "5723": {
+    "name": "Item 5723"
+  },
   "5760": {
     "mob": "Avatar_of_the_Elements",
     "zone": "Plane of Time",
@@ -273,6 +282,9 @@
     "zone": "Veeshan's Peak",
     "name": "Bo Staff of Trorsmang",
     "respawn_seconds": 604800
+  },
+  "6508": {
+    "name": "Item 6508"
   },
   "6512": {
     "mob": "Agnarr_the_Storm_Lord",
@@ -859,6 +871,9 @@
     "name": "Abalone Engraved Tribal Mask",
     "respawn_seconds": 259200
   },
+  "9489": {
+    "name": "Item 9489"
+  },
   "9497": {
     "mob": "Brynju_Thunderclap",
     "zone": "Bastion of Thunder",
@@ -871,6 +886,9 @@
     "name": "Band of Swirling Air",
     "respawn_note": "3.5\u00b10.5 days (triggered)",
     "respawn_seconds": null
+  },
+  "9960": {
+    "name": "Item 9960"
   },
   "10127": {
     "mob": "Terris_Thule",
@@ -1009,6 +1027,9 @@
     "zone": "Plane of Time",
     "name": "(item 11402)"
   },
+  "11408": {
+    "name": "Item 11408"
+  },
   "11878": {
     "mob": "Solusek_Ro",
     "zone": "Tower of Solusek Ro",
@@ -1093,6 +1114,12 @@
     "respawn_note": "3.5\u00b10.5 days (triggered)",
     "respawn_seconds": null
   },
+  "13670": {
+    "mob": "Eindride_Icestorm",
+    "zone": "Bastion of Thunder",
+    "name": "Mantle of the Rainmaker",
+    "respawn_seconds": 21600
+  },
   "13672": {
     "mob": "#Xegony_the_Queen_of_Air",
     "zone": "Plane of Air",
@@ -1135,6 +1162,9 @@
     "name": "(item 13767)",
     "respawn_seconds": null,
     "respawn_note": "Minis triggered by rings: 3.5\u00b10.5 days"
+  },
+  "14733": {
+    "name": "Item 14733"
   },
   "14747": {
     "mob": "#Xegony_the_Queen_of_Air",
@@ -1321,6 +1351,12 @@
     "respawn_seconds": null,
     "respawn_note": "Minis triggered by rings: 3.5\u00b10.5 days"
   },
+  "16255": {
+    "name": "Item 16255"
+  },
+  "16257": {
+    "name": "Signet of the Arcane"
+  },
   "16567": {
     "mob": "#Rinturion_Windblade",
     "zone": "Plane of Air",
@@ -1365,6 +1401,9 @@
     "mob": "Rallos_Zek_the_Warlord",
     "zone": "Plane of Tactics",
     "name": "Boots of the Warmaster"
+  },
+  "19726": {
+    "name": "Item 19726"
   },
   "20438": {
     "mob": "Ta`Grusch_the_Abomination",
@@ -1589,6 +1628,12 @@
     "respawn_seconds": null,
     "respawn_note": "3.5\u00b10.5 days (triggered)"
   },
+  "22971": {
+    "mob": "Eindride_Icestorm",
+    "zone": "Bastion of Thunder",
+    "name": "Great Blade of Storms",
+    "respawn_seconds": 21600
+  },
   "22972": {
     "mob": "#War_Chieftan_Galronar",
     "zone": "Plane of Earth",
@@ -1635,6 +1680,12 @@
     "mob": "Rallos_Zek",
     "zone": "Plane of Time",
     "name": "(item 22999)"
+  },
+  "23496": {
+    "mob": "Auliffe_Chaoswind",
+    "zone": "Bastion of Thunder",
+    "name": "Blackblade of the Rain",
+    "respawn_seconds": 21600
   },
   "23497": {
     "mob": "Jiva",
@@ -1823,6 +1874,12 @@
     "mob": "A_Deadly_Warboar",
     "zone": "Plane of Time",
     "name": "(item 24776)"
+  },
+  "24780": {
+    "mob": "Auliffe_Chaoswind",
+    "zone": "Bastion of Thunder",
+    "name": "Greatstaff of the Four Winds",
+    "respawn_seconds": 21600
   },
   "24789": {
     "mob": "Criare_Sunmane",
@@ -2481,6 +2538,12 @@
     "zone": "Plane of Time",
     "name": "(item 26740)"
   },
+  "26747": {
+    "mob": "Auliffe_Chaoswind",
+    "zone": "Bastion of Thunder",
+    "name": "Wand of the Ice Storm",
+    "respawn_seconds": 21600
+  },
   "26748": {
     "mob": "The_Protector_of_Dresolik",
     "zone": "Plane of Time",
@@ -2895,6 +2958,12 @@
     "name": "Shield of Unimaginable Horrors",
     "respawn_seconds": 259200
   },
+  "27168": {
+    "mob": "Eindride_Icestorm",
+    "zone": "Bastion of Thunder",
+    "name": "Twice Forged Steel Bulwark",
+    "respawn_seconds": 21600
+  },
   "27258": {
     "mob": "Zlandicar",
     "zone": "Dragon Necropolis",
@@ -2947,6 +3016,12 @@
     "mob": "Quarm",
     "zone": "Plane of Time",
     "name": "(item 27280)"
+  },
+  "27289": {
+    "mob": "Auliffe_Chaoswind",
+    "zone": "Bastion of Thunder",
+    "name": "Stormrider Carapace",
+    "respawn_seconds": 21600
   },
   "27290": {
     "mob": "A_Mystical_Arbitor_of_Earth",
@@ -4482,6 +4557,9 @@
     "zone": "Sleeper's Tomb",
     "name": "Sightless Velium Eye"
   },
+  "29597": {
+    "name": "Item 29597"
+  },
   "29645": {
     "mob": "Quest: Tormax's Head - Dragons in Kael Drakkel",
     "zone": "",
@@ -4502,10 +4580,19 @@
     "zone": "",
     "name": "Bracer of Benevolence"
   },
+  "30164": {
+    "name": "Item 30164"
+  },
+  "30369": {
+    "name": "Item 30369"
+  },
   "30380": {
     "mob": "Tunare",
     "zone": "Plane of Growth",
     "name": "Blade of the Swarm"
+  },
+  "30385": {
+    "name": "Item 30385"
   },
   "30388": {
     "mob": "Quest: Charayan's Ring in Skyshrine",
@@ -4516,6 +4603,24 @@
     "mob": "Quest: Charayan's Guantlets in Skyshrine",
     "zone": "",
     "name": "Chromatic Gauntlets of the Ages"
+  },
+  "30465": {
+    "name": "Item 30465"
+  },
+  "30466": {
+    "name": "Item 30466"
+  },
+  "30467": {
+    "name": "Item 30467"
+  },
+  "30468": {
+    "name": "Item 30468"
+  },
+  "30469": {
+    "name": "Item 30469"
+  },
+  "30470": {
+    "name": "Item 30470"
   },
   "30502": {
     "mob": "#Dain_Frostreaver_IV",
@@ -4635,6 +4740,12 @@
     "name": "(item 30538)",
     "respawn_seconds": 561600
   },
+  "30539": {
+    "mob": "#Lord_Inquisitor_Seru",
+    "zone": "Sanctus Seru",
+    "name": "Bow of Storms",
+    "respawn_seconds": 561600
+  },
   "30540": {
     "mob": "Shei_Vinitras_",
     "zone": "Akheva Ruins",
@@ -4686,6 +4797,12 @@
     "mob": "#Lord_Inquisitor_Seru",
     "zone": "Sanctus Seru",
     "name": "(item 30551)",
+    "respawn_seconds": 561600
+  },
+  "30552": {
+    "mob": "#Lord_Inquisitor_Seru",
+    "zone": "Sanctus Seru",
+    "name": "Glowing Amber Band",
     "respawn_seconds": 561600
   },
   "30555": {
@@ -4792,6 +4909,27 @@
     "mob": "#Arch_Lich_Rhag`Zadune",
     "zone": "Temple of Ssraeshza",
     "name": "(item 30571)"
+  },
+  "30921": {
+    "name": "Item 30921"
+  },
+  "30923": {
+    "name": "Item 30923"
+  },
+  "30924": {
+    "name": "Item 30924"
+  },
+  "30925": {
+    "name": "Item 30925"
+  },
+  "30926": {
+    "name": "Item 30926"
+  },
+  "30927": {
+    "name": "Item 30927"
+  },
+  "30928": {
+    "name": "Item 30928"
   },
   "31201": {
     "mob": "#Adjutant_Brunkin",
@@ -4978,6 +5116,27 @@
     "mob": "#Vulak`Aerr",
     "zone": "Temple of Veeshan",
     "name": "Camii's Bracer of Vigor"
+  },
+  "31247": {
+    "name": "Item 31247"
+  },
+  "31248": {
+    "name": "Item 31248"
+  },
+  "31249": {
+    "name": "Item 31249"
+  },
+  "31296": {
+    "name": "Item 31296"
+  },
+  "31297": {
+    "name": "Item 31297"
+  },
+  "31298": {
+    "name": "Item 31298"
+  },
+  "31299": {
+    "name": "Item 31299"
   },
   "31300": {
     "mob": "#Lord_Vyemm",
@@ -5752,40 +5911,5 @@
     "mob": "Rhag`Zhezum",
     "zone": "Temple of Ssraeshza",
     "name": "(item 86930)"
-  },
-  "19726": { "name": "Item 19726" },
-  "9960": { "name": "Item 9960" },
-  "11408": { "name": "Item 11408" },
-  "16257": { "name": "Signet of the Arcane" },
-  "16255": { "name": "Item 16255" },
-  "9489": { "name": "Item 9489" },
-  "30369": { "name": "Item 30369" },
-  "30164": { "name": "Item 30164" },
-  "30385": { "name": "Item 30385" },
-  "5723": { "name": "Item 5723" },
-  "6508": { "name": "Item 6508" },
-  "29597": { "name": "Item 29597" },
-  "1557": { "name": "Item 1557" },
-  "2611": { "name": "Item 2611" },
-  "30928": { "name": "Item 30928" },
-  "30926": { "name": "Item 30926" },
-  "30921": { "name": "Item 30921" },
-  "30927": { "name": "Item 30927" },
-  "30925": { "name": "Item 30925" },
-  "30924": { "name": "Item 30924" },
-  "30923": { "name": "Item 30923" },
-  "31299": { "name": "Item 31299" },
-  "31297": { "name": "Item 31297" },
-  "31248": { "name": "Item 31248" },
-  "31298": { "name": "Item 31298" },
-  "31296": { "name": "Item 31296" },
-  "31247": { "name": "Item 31247" },
-  "31249": { "name": "Item 31249" },
-  "30468": { "name": "Item 30468" },
-  "30469": { "name": "Item 30469" },
-  "30467": { "name": "Item 30467" },
-  "30466": { "name": "Item 30466" },
-  "30465": { "name": "Item 30465" },
-  "30470": { "name": "Item 30470" },
-  "14733": { "name": "Item 14733" }
+  }
 }

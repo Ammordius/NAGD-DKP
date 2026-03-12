@@ -78857,5 +78857,522 @@
     "size": "SMALL",
     "classes": "NEC",
     "gearScore": 138
+  },
+  "13670": {
+    "name": "Mantle of the Rainmaker",
+    "flags": [
+      "MAGIC ITEM",
+      "LORE ITEM",
+      "NO DROP"
+    ],
+    "slot": "SHOULDERS",
+    "ac": 18,
+    "mods": [
+      {
+        "label": "STR",
+        "value": 13
+      },
+      {
+        "label": "STA",
+        "value": 11
+      },
+      {
+        "label": "WIS",
+        "value": 12
+      },
+      {
+        "label": "INT",
+        "value": 12
+      },
+      {
+        "label": "HP",
+        "value": 100
+      },
+      {
+        "label": "MANA",
+        "value": 100
+      }
+    ],
+    "resists": [
+      {
+        "label": "Fire",
+        "value": 15
+      },
+      {
+        "label": "Cold",
+        "value": 15
+      }
+    ],
+    "requiredLevel": 61,
+    "levelType": "recommended",
+    "effectSpellId": 3531,
+    "effectSpellName": "Haste of Mithaniel",
+    "effectNote": "",
+    "focusSpellId": 3531,
+    "focusSpellName": "Haste of Mithaniel",
+    "weight": 1.0,
+    "size": "MEDIUM",
+    "classes": "PAL RNG SHD BRD BST",
+    "gearScore": 81
+  },
+  "22971": {
+    "name": "Great Blade of Storms",
+    "flags": [
+      "MAGIC ITEM",
+      "LORE ITEM",
+      "NO DROP"
+    ],
+    "slot": "PRIMARY SECONDARY",
+    "skill": "1H Slashing",
+    "atkDelay": 18,
+    "dmg": 14,
+    "dmgBonus": 13,
+    "dmgBonusNote": "(lvl 65)",
+    "mods": [
+      {
+        "label": "AGI",
+        "value": 8
+      },
+      {
+        "label": "DEX",
+        "value": 8
+      },
+      {
+        "label": "WIS",
+        "value": 8
+      },
+      {
+        "label": "INT",
+        "value": 8
+      },
+      {
+        "label": "HP",
+        "value": 85
+      }
+    ],
+    "resists": [
+      {
+        "label": "Cold",
+        "value": 15
+      }
+    ],
+    "requiredLevel": 55,
+    "levelType": "required",
+    "effectSpellId": 22,
+    "effectSpellName": "Force Shock",
+    "effectNote": "",
+    "weight": 5.0,
+    "size": "MEDIUM",
+    "classes": "WAR RNG BRD ROG",
+    "gearScore": 43
+  },
+  "23496": {
+    "name": "Blackblade of the Rain",
+    "flags": [
+      "MAGIC ITEM",
+      "LORE ITEM",
+      "NO DROP"
+    ],
+    "slot": "PRIMARY",
+    "skill": "1H Slashing",
+    "atkDelay": 21,
+    "dmg": 23,
+    "dmgBonus": 13,
+    "dmgBonusNote": "(lvl 65)",
+    "mods": [
+      {
+        "label": "STR",
+        "value": 12
+      },
+      {
+        "label": "STA",
+        "value": 15
+      },
+      {
+        "label": "WIS",
+        "value": 12
+      },
+      {
+        "label": "HP",
+        "value": 100
+      },
+      {
+        "label": "MANA",
+        "value": 100
+      }
+    ],
+    "resists": [
+      {
+        "label": "Fire",
+        "value": 5
+      },
+      {
+        "label": "Cold",
+        "value": 5
+      },
+      {
+        "label": "Magic",
+        "value": 5
+      }
+    ],
+    "requiredLevel": 55,
+    "levelType": "required",
+    "effectSpellId": 1180,
+    "effectSpellName": "Zombie Bane",
+    "effectNote": "",
+    "weight": 2.5,
+    "size": "MEDIUM",
+    "classes": "PAL",
+    "gearScore": 48
+  },
+  "24780": {
+    "name": "Greatstaff of the Four Winds",
+    "flags": [
+      "MAGIC ITEM",
+      "LORE ITEM",
+      "NO DROP"
+    ],
+    "slot": "PRIMARY",
+    "skill": "2H Blunt",
+    "atkDelay": 31,
+    "dmg": 41,
+    "dmgBonus": 36,
+    "dmgBonusNote": "(lvl 65)",
+    "mods": [
+      {
+        "label": "DEX",
+        "value": 15
+      },
+      {
+        "label": "WIS",
+        "value": 10
+      },
+      {
+        "label": "INT",
+        "value": 10
+      },
+      {
+        "label": "HP",
+        "value": 125
+      },
+      {
+        "label": "MANA",
+        "value": 125
+      }
+    ],
+    "resists": [
+      {
+        "label": "Fire",
+        "value": 7
+      },
+      {
+        "label": "Cold",
+        "value": 7
+      },
+      {
+        "label": "Magic",
+        "value": 7
+      },
+      {
+        "label": "Poison",
+        "value": 7
+      },
+      {
+        "label": "Disease",
+        "value": 7
+      }
+    ],
+    "requiredLevel": 55,
+    "levelType": "required",
+    "effectSpellId": 2658,
+    "effectSpellName": "Lightning Surge",
+    "effectNote": "",
+    "weight": 2.5,
+    "size": "LARGE",
+    "classes": "WAR PAL RNG SHD MNK BST",
+    "gearScore": 76
+  },
+  "26747": {
+    "name": "Wand of the Ice Storm",
+    "flags": [
+      "MAGIC ITEM",
+      "LORE ITEM",
+      "NO DROP"
+    ],
+    "slot": "PRIMARY SECONDARY",
+    "mods": [
+      {
+        "label": "AGI",
+        "value": 7
+      },
+      {
+        "label": "DEX",
+        "value": 7
+      },
+      {
+        "label": "INT",
+        "value": 12
+      },
+      {
+        "label": "HP",
+        "value": 100
+      },
+      {
+        "label": "MANA",
+        "value": 100
+      }
+    ],
+    "resists": [
+      {
+        "label": "Fire",
+        "value": 15
+      },
+      {
+        "label": "Magic",
+        "value": 15
+      }
+    ],
+    "requiredLevel": 56,
+    "levelType": "recommended",
+    "effectSpellId": 3510,
+    "effectSpellName": "Extended Range IV",
+    "effectNote": "",
+    "focusSpellId": 3510,
+    "focusSpellName": "Extended Range IV",
+    "weight": 0.8,
+    "size": "SMALL",
+    "classes": "NEC WIZ MAG ENC",
+    "gearScore": 63
+  },
+  "27168": {
+    "name": "Twice Forged Steel Bulwark",
+    "flags": [
+      "MAGIC ITEM",
+      "LORE ITEM",
+      "NO DROP"
+    ],
+    "slot": "SECONDARY",
+    "ac": 50,
+    "mods": [
+      {
+        "label": "STR",
+        "value": 15
+      },
+      {
+        "label": "DEX",
+        "value": 15
+      },
+      {
+        "label": "HP",
+        "value": 100
+      },
+      {
+        "label": "MANA",
+        "value": 100
+      }
+    ],
+    "resists": [
+      {
+        "label": "Magic",
+        "value": 18
+      },
+      {
+        "label": "Poison",
+        "value": 18
+      },
+      {
+        "label": "Disease",
+        "value": 18
+      }
+    ],
+    "requiredLevel": 61,
+    "levelType": "recommended",
+    "weight": 12.5,
+    "size": "LARGE",
+    "classes": "WAR PAL RNG SHD BRD ROG",
+    "gearScore": 137
+  },
+  "27289": {
+    "name": "Stormrider Carapace",
+    "flags": [
+      "MAGIC ITEM",
+      "LORE ITEM",
+      "NO DROP"
+    ],
+    "slot": "SECONDARY",
+    "ac": 54,
+    "mods": [
+      {
+        "label": "STR",
+        "value": 15
+      },
+      {
+        "label": "STA",
+        "value": 15
+      },
+      {
+        "label": "DEX",
+        "value": 8
+      },
+      {
+        "label": "HP",
+        "value": 125
+      }
+    ],
+    "resists": [
+      {
+        "label": "Fire",
+        "value": 15
+      },
+      {
+        "label": "Cold",
+        "value": 15
+      },
+      {
+        "label": "Magic",
+        "value": 15
+      }
+    ],
+    "requiredLevel": 56,
+    "levelType": "recommended",
+    "effectSpellId": 2458,
+    "effectSpellName": "Furious Bash IV",
+    "effectNote": "",
+    "focusSpellId": 2458,
+    "focusSpellName": "Furious Bash IV",
+    "weight": 13.5,
+    "size": "LARGE",
+    "classes": "WAR",
+    "gearScore": 140
+  },
+  "30539": {
+    "name": "Bow of Storms",
+    "flags": [
+      "MAGIC ITEM",
+      "LORE ITEM",
+      "NO DROP"
+    ],
+    "slot": "RANGE",
+    "dmg": 37,
+    "dmgBonus": 13,
+    "dmgBonusNote": "(lvl 65)",
+    "mods": [
+      {
+        "label": "STR",
+        "value": 15
+      },
+      {
+        "label": "STA",
+        "value": 10
+      },
+      {
+        "label": "DEX",
+        "value": 15
+      },
+      {
+        "label": "HP",
+        "value": 100
+      },
+      {
+        "label": "MANA",
+        "value": 100
+      }
+    ],
+    "resists": [
+      {
+        "label": "Fire",
+        "value": 10
+      },
+      {
+        "label": "Cold",
+        "value": 10
+      },
+      {
+        "label": "Magic",
+        "value": 10
+      },
+      {
+        "label": "Poison",
+        "value": 10
+      },
+      {
+        "label": "Disease",
+        "value": 10
+      }
+    ],
+    "requiredLevel": 55,
+    "levelType": "required",
+    "effectSpellId": 419,
+    "effectSpellName": "Careless Lightning",
+    "effectNote": "",
+    "weight": 3.0,
+    "size": "SMALL",
+    "classes": "WAR PAL RNG SHD ROG",
+    "gearScore": 83
+  },
+  "30552": {
+    "name": "Glowing Amber Band",
+    "flags": [
+      "MAGIC ITEM",
+      "LORE ITEM",
+      "NO DROP"
+    ],
+    "slot": "EAR WRIST",
+    "ac": 10,
+    "mods": [
+      {
+        "label": "STR",
+        "value": 5
+      },
+      {
+        "label": "WIS",
+        "value": 10
+      },
+      {
+        "label": "INT",
+        "value": 10
+      },
+      {
+        "label": "HP",
+        "value": 100
+      },
+      {
+        "label": "MANA",
+        "value": 100
+      }
+    ],
+    "resists": [
+      {
+        "label": "Fire",
+        "value": 15
+      },
+      {
+        "label": "Cold",
+        "value": 15
+      },
+      {
+        "label": "Magic",
+        "value": 15
+      },
+      {
+        "label": "Poison",
+        "value": 15
+      },
+      {
+        "label": "Disease",
+        "value": 15
+      }
+    ],
+    "requiredLevel": 55,
+    "levelType": "required",
+    "effectSpellId": 2350,
+    "effectSpellName": "Extended Range III",
+    "effectNote": "",
+    "focusSpellId": 2350,
+    "focusSpellName": "Extended Range III",
+    "weight": 1.0,
+    "size": "SMALL",
+    "classes": "CLR DRU SHM NEC WIZ MAG ENC",
+    "gearScore": 118
   }
 }
