@@ -175,16 +175,13 @@ def main() -> int:
 
     client = create_client(url, key)
 
-    # Delete existing data for this raid: try RPC first (one server-side call), else batched table deletes via API.
-    if _delete_raid_via_rpc(client, raid_id):
-        print("Deleted raid data via delete_raid_for_reupload RPC")
-    else:
-        for table in ("raid_event_attendance", "raid_loot", "raid_attendance", "raid_events"):
-            deleted = _delete_raid_from_table(client, table, raid_id)
-            if deleted is not None:
-                print(f"Deleted {deleted} row(s) from {table}")
-            elif table == "raid_event_attendance":
-                print("Tip: deploy docs/delete_raid_for_reupload_rpc.sql in Supabase SQL Editor to delete via API and avoid timeouts.", file=sys.stderr)
+    # Delete existing data for this raid via direct, batched table deletes.
+    # Avoid the delete_raid_for_reupload RPC here: it runs full refreshes that are
+    # appropriate for bulk restore, but overkill (and slow) for a single-raid upload.
+    for table in ("raid_event_attendance", "raid_loot", "raid_attendance", "raid_events"):
+        deleted = _delete_raid_from_table(client, table, raid_id)
+        if deleted is not None:
+            print(f"Deleted {deleted} row(s) from {table}")
 
     # Insert raid_events
     if events:
@@ -303,32 +300,12 @@ def main() -> int:
                 names = [name for _, name in rows]
                 print(f"  event_id={eid}: {len(rows)} rows -> {names}")
         if rea_rows:
-            # Prefer server-side RPC with higher timeout and single refresh; fall back to plain insert if RPC is missing.
-            try:
-                client.rpc(
-                    "insert_raid_event_attendance_for_upload",
-                    {"p_raid_id": raid_id, "p_rows": rea_rows},
-                ).execute()
-                print(
-                    f"Inserted {len(rea_rows)} raid_event_attendance (one per account per tic) via insert_raid_event_attendance_for_upload RPC"
-                )
-            except Exception as e:
-                err = str(e).lower()
-                if "function" in err and "does not exist" in err:
-                    # Older DB without RPC: use direct insert (may be slower / hit statement_timeout on large datasets).
-                    client.table("raid_event_attendance").insert(rea_rows).execute()
-                    print(
-                        f"Inserted {len(rea_rows)} raid_event_attendance (one per account per tic) via direct insert (RPC missing)"
-                    )
-                else:
-                    print(
-                        f"Warning: insert_raid_event_attendance_for_upload RPC failed (falling back to direct insert): {e}",
-                        file=sys.stderr,
-                    )
-                    client.table("raid_event_attendance").insert(rea_rows).execute()
-                    print(
-                        f"Inserted {len(rea_rows)} raid_event_attendance (one per account per tic) via direct insert after RPC failure"
-                    )
+            # For single-raid uploads, just insert directly; per-row triggers are cheap at this scale,
+            # and we avoid the heavy end_restore_load() + full refresh path used by the RPC.
+            client.table("raid_event_attendance").insert(rea_rows).execute()
+            print(
+                f"Inserted {len(rea_rows)} raid_event_attendance (one per account per tic) via direct insert"
+            )
 
     # Refresh account DKP for this raid only (fast). Skip full refresh_dkp_summary here — batch upload does one at the end to avoid N× full rebuilds.
     try:
