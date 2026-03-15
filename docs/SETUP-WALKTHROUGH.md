@@ -76,7 +76,27 @@ Then import **raid_events**, **raid_loot**, **raid_attendance**, and **raid_even
 SELECT end_restore_load();
 ```
 
-That recomputes DKP and raid totals once instead of per row. You can import **characters**, **accounts**, **character_account**, **raids**, and **raid_classifications** normally (no restore mode needed).
+That recomputes DKP and raid totals once instead of per row. The function requests a 10‑minute timeout.
+
+**If `end_restore_load()` still times out** (e.g. very large dataset or strict project limits), run these in the SQL Editor **one at a time**, in order:
+
+```sql
+UPDATE restore_in_progress SET in_progress = false WHERE id = 1;
+```
+```sql
+SELECT fix_serial_sequences_for_restore();
+```
+```sql
+SELECT refresh_dkp_summary();
+```
+```sql
+SELECT refresh_all_raid_attendance_totals();
+```
+```sql
+SELECT refresh_account_dkp_summary_internal();
+```
+
+You can import **characters**, **accounts**, **character_account**, **raids**, and **raid_classifications** normally (no restore mode needed).
 
 **Import in this order** (to satisfy foreign keys):
 

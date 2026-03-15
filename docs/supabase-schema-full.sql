@@ -1223,10 +1223,11 @@ END;
 $$;
 COMMENT ON FUNCTION public.refresh_account_dkp_summary() IS 'Officer-only: refresh account_dkp_summary from attendance and loot.';
 
--- 9) end_restore_load: also refresh account DKP
+-- 9) end_restore_load: also refresh account DKP. Uses a long timeout so large datasets can finish (Supabase default ~8s is often too low).
 CREATE OR REPLACE FUNCTION public.end_restore_load()
 RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 BEGIN
+  SET LOCAL statement_timeout = '600s';  -- 10 min for full refresh over all raids
   UPDATE restore_in_progress SET in_progress = false WHERE id = 1;
   PERFORM fix_serial_sequences_for_restore();
   PERFORM refresh_dkp_summary();
