@@ -64,6 +64,20 @@ You have two options.
    - Choose the CSV from this repo under **`data/`** (see list below).
    - Map columns: CSV column names should match the table columns. Supabase will suggest mappings; confirm and import.
 
+**Bulk import (avoid timeout):** The schema runs a trigger on **every row** inserted into `raid_events`, `raid_loot`, `raid_attendance`, and `raid_event_attendance`. With thousands of rows, that can hit Supabase’s statement timeout and the import stops partway (e.g. raid_events at ~3000/5000). Before importing those four tables, run in the **SQL Editor**:
+
+```sql
+SELECT begin_restore_load();
+```
+
+Then import **raid_events**, **raid_loot**, **raid_attendance**, and **raid_event_attendance** (Table Editor → each table → Import from CSV). When you’re done with all of them, run:
+
+```sql
+SELECT end_restore_load();
+```
+
+That recomputes DKP and raid totals once instead of per row. You can import **characters**, **accounts**, **character_account**, **raids**, and **raid_classifications** normally (no restore mode needed).
+
 **Import in this order** (to satisfy foreign keys):
 
 | Table              | CSV file in `data/`        |
@@ -123,6 +137,8 @@ Run your usual pipeline so the `data/` CSVs are up to date, for example:
 
 ### 2. Re-import CSVs into Supabase
 
+For **raid_events**, **raid_loot**, **raid_attendance**, and **raid_event_attendance**, run `SELECT begin_restore_load();` in SQL Editor before re-importing, then `SELECT end_restore_load();` after (see Part 4 bulk-import note). Otherwise large re-imports can time out.
+
 In the Supabase **Table Editor**, for each table that gets new data, either:
 
 - **Replace data:** Delete all rows (e.g. right‑click table → Delete all rows, or run `DELETE FROM raid_events;` in SQL Editor), then **Insert** → **Import data from CSV** and choose the updated file from `data/`, or  
@@ -139,7 +155,7 @@ In the Supabase **Table Editor**, for each table that gets new data, either:
 | raid_event_attendance | `raid_event_attendance.csv` (if you use per-event DKP) |
 | raid_classifications | `raid_classifications.csv` (if you ran `build_raid_classifications.py`) |
 
-If the **raid_event_attendance** table doesn’t exist yet, run the schema again (Part 2) or run just the `CREATE TABLE raid_event_attendance ...` and related index/RLS statements from `docs/supabase-schema.sql`, then import `data/raid_event_attendance.csv`.
+If the **raid_event_attendance** table doesn’t exist yet, run the full schema again (Part 2: `docs/supabase-schema-full.sql`); it includes that table. Then import `data/raid_event_attendance.csv` (use `begin_restore_load()` / `end_restore_load()` if importing a large file).
 
 ### 3. Redeploy the frontend (if hosted)
 
