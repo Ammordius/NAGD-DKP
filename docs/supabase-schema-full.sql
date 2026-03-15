@@ -187,6 +187,17 @@ RETURNS DATE LANGUAGE sql IMMUTABLE AS $$
   END
 $$;
 
+-- Helper: current user is officer (SECURITY DEFINER so reading profiles doesn't trigger RLS). Must be defined before any RPC or policy that calls it.
+CREATE OR REPLACE FUNCTION public.is_officer()
+RETURNS boolean
+LANGUAGE sql
+SECURITY DEFINER
+STABLE
+SET search_path = public
+AS $$
+  SELECT EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'officer');
+$$;
+
 -- Indexes for common queries
 CREATE INDEX IF NOT EXISTS idx_raid_events_raid ON raid_events(raid_id);
 CREATE INDEX IF NOT EXISTS idx_raid_loot_raid ON raid_loot(raid_id);
@@ -1408,17 +1419,6 @@ GRANT EXECUTE ON FUNCTION public.refresh_account_dkp_summary_for_raid(TEXT, TEXT
 GRANT EXECUTE ON FUNCTION public.refresh_account_dkp_summary_for_raid(TEXT, TEXT[]) TO service_role;
 
 
-
--- Helper: current user is officer (SECURITY DEFINER so reading profiles doesn't trigger RLS).
-CREATE OR REPLACE FUNCTION public.is_officer()
-RETURNS boolean
-LANGUAGE sql
-SECURITY DEFINER
-STABLE
-SET search_path = public
-AS $$
-  SELECT EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'officer');
-$$;
 
 -- Profiles: one SELECT (own row or officer), one UPDATE (own row or officer)
 DROP POLICY IF EXISTS "Users can read own profile" ON profiles;
