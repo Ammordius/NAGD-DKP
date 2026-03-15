@@ -666,23 +666,66 @@ BEGIN
 END;
 $$;
 
--- Backfill all raids (run once after creating tables or importing data).
+-- Backfill all raids in one go (set-based). Use this after bulk import instead of looping refresh_raid_attendance_totals to avoid timeout.
 CREATE OR REPLACE FUNCTION public.refresh_all_raid_attendance_totals()
 RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
 AS $$
-DECLARE r TEXT;
+DECLARE
+  use_per_event BOOLEAN;
 BEGIN
-  FOR r IN SELECT DISTINCT raid_id FROM (
-    SELECT raid_id FROM raid_events
-    UNION SELECT raid_id FROM raid_event_attendance
-    UNION SELECT raid_id FROM raid_attendance
-  ) t
-  LOOP
-    PERFORM refresh_raid_attendance_totals(r);
-  END LOOP;
+  -- 1) raid_dkp_totals: one bulk upsert
+  INSERT INTO raid_dkp_totals (raid_id, total_dkp)
+  SELECT raid_id, COALESCE(SUM((dkp_value::numeric)), 0)
+  FROM raid_events
+  GROUP BY raid_id
+  ON CONFLICT (raid_id) DO UPDATE SET total_dkp = EXCLUDED.total_dkp;
+
+  -- 2) Clear per-raid cache tables
+  TRUNCATE raid_attendance_dkp;
+  TRUNCATE raid_attendance_dkp_by_account;
+
+  SELECT EXISTS (SELECT 1 FROM raid_event_attendance LIMIT 1) INTO use_per_event;
+
+  IF use_per_event THEN
+    -- 3a) raid_attendance_dkp from per-event attendance (all raids in one statement)
+    INSERT INTO raid_attendance_dkp (raid_id, character_key, character_name, dkp_earned)
+    SELECT rea.raid_id,
+           (CASE WHEN COALESCE(trim(rea.char_id::text), '') = '' THEN COALESCE(trim(rea.character_name), 'unknown') ELSE trim(rea.char_id::text) END),
+           MAX(COALESCE(trim(rea.character_name), rea.char_id::text, 'unknown')),
+           SUM(COALESCE((re.dkp_value::numeric), 0))
+    FROM raid_event_attendance rea
+    LEFT JOIN raid_events re ON re.raid_id = rea.raid_id AND re.event_id = rea.event_id
+    GROUP BY rea.raid_id, (CASE WHEN COALESCE(trim(rea.char_id::text), '') = '' THEN COALESCE(trim(rea.character_name), 'unknown') ELSE trim(rea.char_id::text) END);
+
+    -- 4a) raid_attendance_dkp_by_account (all raids in one statement)
+    INSERT INTO raid_attendance_dkp_by_account (raid_id, account_id, dkp_earned)
+    SELECT rea.raid_id, COALESCE(rea.account_id, x.aid), SUM(COALESCE((re.dkp_value::numeric), 0))
+    FROM raid_event_attendance rea
+    LEFT JOIN raid_events re ON re.raid_id = rea.raid_id AND re.event_id = rea.event_id
+    LEFT JOIN LATERAL (
+      SELECT ca.account_id FROM character_account ca
+      WHERE (rea.char_id IS NOT NULL AND trim(rea.char_id::text) <> '' AND ca.char_id = trim(rea.char_id::text))
+         OR (rea.character_name IS NOT NULL AND trim(rea.character_name) <> '' AND EXISTS (
+           SELECT 1 FROM characters c WHERE c.char_id = ca.char_id AND trim(c.name) = trim(rea.character_name)
+         ))
+      LIMIT 1
+    ) x(aid) ON true
+    WHERE rea.account_id IS NOT NULL OR x.aid IS NOT NULL
+    GROUP BY rea.raid_id, COALESCE(rea.account_id, x.aid);
+  ELSE
+    -- 3b) raid_attendance_dkp from raid-level attendance (all raids in one statement)
+    INSERT INTO raid_attendance_dkp (raid_id, character_key, character_name, dkp_earned)
+    SELECT ra.raid_id,
+           (CASE WHEN COALESCE(trim(ra.char_id::text), '') = '' THEN COALESCE(trim(ra.character_name), 'unknown') ELSE trim(ra.char_id::text) END),
+           MAX(COALESCE(trim(ra.character_name), ra.char_id::text, 'unknown')),
+           COALESCE(rt.dkp, 0)
+    FROM raid_attendance ra
+    LEFT JOIN (SELECT raid_id, SUM((dkp_value::numeric)) AS dkp FROM raid_events GROUP BY raid_id) rt ON ra.raid_id = rt.raid_id
+    GROUP BY ra.raid_id, (CASE WHEN COALESCE(trim(ra.char_id::text), '') = '' THEN COALESCE(trim(ra.character_name), 'unknown') ELSE trim(ra.char_id::text) END), rt.dkp;
+  END IF;
 END;
 $$;
 
@@ -1223,7 +1266,7 @@ END;
 $$;
 COMMENT ON FUNCTION public.refresh_account_dkp_summary() IS 'Officer-only: refresh account_dkp_summary from attendance and loot.';
 
--- 9) end_restore_load: also refresh account DKP. Uses a long timeout so large datasets can finish (Supabase default ~8s is often too low).
+-- 9) end_restore_load: also refresh account DKP
 CREATE OR REPLACE FUNCTION public.end_restore_load()
 RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 BEGIN

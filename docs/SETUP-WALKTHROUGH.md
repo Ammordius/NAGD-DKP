@@ -76,7 +76,7 @@ Then import **raid_events**, **raid_loot**, **raid_attendance**, and **raid_even
 SELECT end_restore_load();
 ```
 
-That recomputes DKP and raid totals once instead of per row. The function requests a 10‑minute timeout.
+That recomputes DKP and raid totals once instead of per row. The schema uses a **bulk** refresh (set-based) so it should complete in a few statements instead of one per raid; the function also requests a 10‑minute timeout.
 
 **If `end_restore_load()` still times out** (e.g. very large dataset or strict project limits), run these in the SQL Editor **one at a time**, in order:
 
