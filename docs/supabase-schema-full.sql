@@ -1643,13 +1643,13 @@ COMMENT ON FUNCTION public.delete_raid_for_reupload(text) IS 'Delete one raid fr
 GRANT EXECUTE ON FUNCTION public.delete_raid_for_reupload(text) TO service_role;
 GRANT EXECUTE ON FUNCTION public.delete_raid_for_reupload(text) TO authenticated;
 
--- 2) Bulk insert raid_event_attendance (avoids per-row triggers; single refresh at end)
+-- 2) Bulk insert raid_event_attendance (avoids per-row triggers)
+-- No end_restore_load: Supabase API statement cap; upload script runs refresh_dkp_summary separately.
 CREATE OR REPLACE FUNCTION public.insert_raid_event_attendance_for_upload(p_raid_id text, p_rows jsonb)
 RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
-SET statement_timeout = '120s'
 AS $$
 BEGIN
   IF p_raid_id IS NULL OR trim(p_raid_id) = '' THEN
@@ -1659,23 +1659,27 @@ BEGIN
     RETURN;
   END IF;
 
-  SET LOCAL statement_timeout = '120s';
-
   PERFORM begin_restore_load();
 
-  INSERT INTO raid_event_attendance (raid_id, event_id, char_id, character_name, account_id)
-  SELECT
-    COALESCE(trim((elem->>'raid_id')), trim(p_raid_id)),
-    trim(elem->>'event_id'),
-    NULLIF(trim(elem->>'char_id'), ''),
-    NULLIF(trim(elem->>'character_name'), ''),
-    NULLIF(trim(elem->>'account_id'), '')
-  FROM jsonb_array_elements(p_rows) AS elem;
+  BEGIN
+    INSERT INTO raid_event_attendance (raid_id, event_id, char_id, character_name, account_id)
+    SELECT
+      COALESCE(trim((elem->>'raid_id')), trim(p_raid_id)),
+      trim(elem->>'event_id'),
+      NULLIF(trim(elem->>'char_id'), ''),
+      NULLIF(trim(elem->>'character_name'), ''),
+      NULLIF(trim(elem->>'account_id'), '')
+    FROM jsonb_array_elements(p_rows) AS elem;
 
-  PERFORM end_restore_load();
+    UPDATE restore_in_progress SET in_progress = false WHERE id = 1;
+    PERFORM refresh_raid_attendance_totals(trim(p_raid_id));
+  EXCEPTION WHEN OTHERS THEN
+    UPDATE restore_in_progress SET in_progress = false WHERE id = 1;
+    RAISE;
+  END;
 END;
 $$;
 
-COMMENT ON FUNCTION public.insert_raid_event_attendance_for_upload(text, jsonb) IS 'Bulk insert raid_event_attendance for upload script. Uses restore_load to avoid per-row triggers then runs full refresh. p_rows: JSON array of {raid_id, event_id, char_id, character_name, account_id}.';
+COMMENT ON FUNCTION public.insert_raid_event_attendance_for_upload(text, jsonb) IS 'Bulk insert raid_event_attendance under restore_load; clears restore flag; refresh_raid_attendance_totals for this raid only. Caller must run refresh_account_dkp_summary_for_raid / refresh_dkp_summary.';
 GRANT EXECUTE ON FUNCTION public.insert_raid_event_attendance_for_upload(text, jsonb) TO service_role;
 GRANT EXECUTE ON FUNCTION public.insert_raid_event_attendance_for_upload(text, jsonb) TO authenticated;

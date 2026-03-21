@@ -21,12 +21,19 @@ import sys
 import time
 from pathlib import Path
 
+import httpx
+
 ROOT = Path(__file__).resolve().parent.parent.parent  # repo root
 
 # Batch size for delete-by-id to avoid statement timeout on large tables
 DELETE_BATCH_SIZE = 200
 DELETE_RETRIES = 3
 DELETE_RETRY_DELAY_SEC = 2
+
+# PostgREST timeout; refresh_dkp_summary runs in a separate request after the insert RPC
+POSTGREST_TIMEOUT_SEC = 600
+RPC_RETRIES = 3
+RPC_RETRY_DELAY_SEC = 5
 
 
 def _load_env(path: Path) -> None:
@@ -95,6 +102,68 @@ def _delete_raid_via_rpc(client, raid_id: str) -> bool:
         return False
 
 
+def _insert_raid_event_attendance_rows(client, raid_id: str, rea_rows: list[dict]) -> None:
+    """Insert per-tic rows via insert_raid_event_attendance_for_upload.
+
+    Uses begin_restore_load + bulk INSERT (triggers no-op), clears restore flag, then
+    refresh_raid_attendance_totals for this raid only. Global refresh_dkp_summary runs
+    afterward in main() as a separate API call (avoids Supabase single-statement timeout).
+    """
+    if not rea_rows:
+        return
+    payload = [
+        {
+            "raid_id": str(r.get("raid_id") or raid_id),
+            "event_id": str(r.get("event_id", "")),
+            "char_id": r.get("char_id") or "",
+            "character_name": r.get("character_name") or "",
+            "account_id": r.get("account_id") or "",
+        }
+        for r in rea_rows
+    ]
+    last_err: Exception | None = None
+    for attempt in range(RPC_RETRIES):
+        try:
+            client.rpc(
+                "insert_raid_event_attendance_for_upload",
+                {"p_raid_id": raid_id, "p_rows": payload},
+            ).execute()
+            return
+        except Exception as e:
+            last_err = e
+            err = str(e).lower()
+            if "function" in err and "does not exist" in err:
+                print(
+                    "Missing DB function insert_raid_event_attendance_for_upload. "
+                    "Run docs/upload_script_rpcs.sql in the Supabase SQL editor, then retry.",
+                    file=sys.stderr,
+                )
+                raise
+            if "57014" in str(e) or "statement timeout" in err:
+                print(
+                    "insert_raid_event_attendance_for_upload hit statement_timeout. Redeploy the function from "
+                    "docs/upload_script_rpcs.sql (it must not call end_restore_load inside one API request). "
+                    "If this persists, raise Database statement timeout in Supabase Dashboard → Database → Settings.",
+                    file=sys.stderr,
+                )
+            transient = "readtimeout" in err or "read operation timed out" in err
+            if isinstance(e, httpx.ReadTimeout):
+                transient = True
+            if transient and attempt < RPC_RETRIES - 1:
+                print(
+                    f"insert_raid_event_attendance_for_upload timed out (attempt {attempt + 1}/{RPC_RETRIES}); "
+                    f"retrying in {RPC_RETRY_DELAY_SEC}s...",
+                    file=sys.stderr,
+                )
+                time.sleep(RPC_RETRY_DELAY_SEC)
+                # RPC only INSERTs; a timeout after server success would duplicate rows on retry.
+                _delete_raid_from_table(client, "raid_event_attendance", raid_id)
+                continue
+            raise
+    if last_err:
+        raise last_err
+
+
 def main() -> int:
     import argparse
     ap = argparse.ArgumentParser(description="Upload one raid's events, loot, attendance to Supabase")
@@ -102,6 +171,13 @@ def main() -> int:
     ap.add_argument("--raids-dir", type=Path, default=ROOT / "raids", help="Directory containing raid_*.html")
     ap.add_argument("--apply", action="store_true", help="Perform upload; without this, dry run only")
     ap.add_argument("--skip-dkp-summary-refresh", action="store_true", help="Skip refresh_dkp_summary (caller does one after batch)")
+    ap.add_argument(
+        "--postgrest-timeout",
+        type=int,
+        default=POSTGREST_TIMEOUT_SEC,
+        metavar="SEC",
+        help=f"HTTP read timeout for Supabase PostgREST/RPC calls (default {POSTGREST_TIMEOUT_SEC})",
+    )
     args = ap.parse_args()
 
     raid_id = args.raid_id.strip()
@@ -169,11 +245,16 @@ def main() -> int:
 
     try:
         from supabase import create_client
+        from supabase.lib.client_options import SyncClientOptions
     except ImportError:
         print("pip install supabase", file=sys.stderr)
         return 1
 
-    client = create_client(url, key)
+    client = create_client(
+        url,
+        key,
+        options=SyncClientOptions(postgrest_client_timeout=args.postgrest_timeout),
+    )
 
     # Delete existing data for this raid via direct, batched table deletes.
     # Avoid the delete_raid_for_reupload RPC here: it runs full refreshes that are
@@ -300,11 +381,10 @@ def main() -> int:
                 names = [name for _, name in rows]
                 print(f"  event_id={eid}: {len(rows)} rows -> {names}")
         if rea_rows:
-            # For single-raid uploads, just insert directly; per-row triggers are cheap at this scale,
-            # and we avoid the heavy end_restore_load() + full refresh path used by the RPC.
-            client.table("raid_event_attendance").insert(rea_rows).execute()
+            _insert_raid_event_attendance_rows(client, raid_id, rea_rows)
             print(
-                f"Inserted {len(rea_rows)} raid_event_attendance (one per account per tic) via direct insert"
+                f"Inserted {len(rea_rows)} raid_event_attendance (one per account per tic) "
+                "via insert_raid_event_attendance_for_upload (restore_load + per-raid attendance totals)"
             )
 
     # Refresh account DKP for this raid only (fast). Skip full refresh_dkp_summary here — batch upload does one at the end to avoid N× full rebuilds.
