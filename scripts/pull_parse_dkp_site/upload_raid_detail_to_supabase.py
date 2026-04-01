@@ -36,6 +36,63 @@ RPC_RETRIES = 3
 RPC_RETRY_DELAY_SEC = 5
 
 
+def _is_transient_refresh_error(exc: Exception) -> bool:
+    err = str(exc).lower()
+    return (
+        "57014" in err
+        or "statement timeout" in err
+        or "readtimeout" in err
+        or "read operation timed out" in err
+        or isinstance(exc, httpx.ReadTimeout)
+    )
+
+
+def _refresh_account_summary_strict(client, raid_id: str) -> tuple[bool, str]:
+    """Refresh account summary for one raid; fail only if all attempts/fallbacks fail."""
+    last_err: Exception | None = None
+
+    # Fast path: per-raid refresh with retries on transient failures.
+    for attempt in range(RPC_RETRIES):
+        try:
+            client.rpc("refresh_account_dkp_summary_for_raid", {"p_raid_id": raid_id}).execute()
+            return True, "per_raid"
+        except Exception as e:
+            last_err = e
+            err = str(e).lower()
+            if "does not exist" in err and "function" in err:
+                break
+            if _is_transient_refresh_error(e) and attempt < RPC_RETRIES - 1:
+                print(
+                    f"refresh_account_dkp_summary_for_raid timed out/transient "
+                    f"(attempt {attempt + 1}/{RPC_RETRIES}); retrying in {RPC_RETRY_DELAY_SEC}s...",
+                    file=sys.stderr,
+                )
+                time.sleep(RPC_RETRY_DELAY_SEC)
+                continue
+            break
+
+    # Fallback: full account refresh (strict mode requires one to succeed).
+    for attempt in range(RPC_RETRIES):
+        try:
+            client.rpc("refresh_account_dkp_summary").execute()
+            return True, "full_fallback"
+        except Exception as e:
+            last_err = e
+            if _is_transient_refresh_error(e) and attempt < RPC_RETRIES - 1:
+                print(
+                    f"refresh_account_dkp_summary fallback timed out/transient "
+                    f"(attempt {attempt + 1}/{RPC_RETRIES}); retrying in {RPC_RETRY_DELAY_SEC}s...",
+                    file=sys.stderr,
+                )
+                time.sleep(RPC_RETRY_DELAY_SEC)
+                continue
+            break
+
+    if last_err is None:
+        last_err = RuntimeError("unknown refresh_account_dkp_summary failure")
+    return False, str(last_err)
+
+
 def _load_env(path: Path) -> None:
     try:
         text = path.read_text(encoding="utf-8")
@@ -387,29 +444,45 @@ def main() -> int:
                 "via insert_raid_event_attendance_for_upload (restore_load + per-raid attendance totals)"
             )
 
-    # Refresh account DKP for this raid only (fast). Skip full refresh_dkp_summary here — batch upload does one at the end to avoid N× full rebuilds.
-    try:
-        client.rpc("refresh_account_dkp_summary_for_raid", {"p_raid_id": raid_id}).execute()
-        print("refresh_account_dkp_summary_for_raid() completed.")
-    except Exception as e:
-        err = str(e).lower()
-        if "does not exist" in err or "function" in err:
-            try:
-                client.rpc("refresh_account_dkp_summary").execute()
-                print("refresh_account_dkp_summary() completed (fallback).")
-            except Exception as e2:
-                if "does not exist" not in str(e2).lower() and "function" not in str(e2).lower():
-                    print(f"Warning: refresh_account_dkp_summary: {e2}", file=sys.stderr)
+    # Strict: this upload is considered successful only if account summary refresh succeeds.
+    account_refresh_ok, account_refresh_mode_or_error = _refresh_account_summary_strict(client, raid_id)
+    if account_refresh_ok:
+        if account_refresh_mode_or_error == "per_raid":
+            print("refresh_account_dkp_summary_for_raid() completed.")
         else:
-            print(f"Warning: refresh_account_dkp_summary_for_raid: {e}", file=sys.stderr)
+            print("refresh_account_dkp_summary() completed (fallback).")
+    else:
+        print(
+            "ERROR: account summary refresh failed; upload is not considered synchronized. "
+            "Rerun this upload after resolving DB timeout/connectivity issues.",
+            file=sys.stderr,
+        )
+        print(f"Details: {account_refresh_mode_or_error}", file=sys.stderr)
+        return 2
 
     # Full dkp_summary refresh (earned_30d/60d). Skip when run from batch — batch script does one at end.
+    dkp_refresh_ok = True
     if not args.skip_dkp_summary_refresh:
         try:
             client.rpc("refresh_dkp_summary").execute()
             print("refresh_dkp_summary() completed.")
         except Exception as e:
-            print(f"Warning: refresh_dkp_summary: {e}", file=sys.stderr)
+            dkp_refresh_ok = False
+            print(
+                "ERROR: refresh_dkp_summary() failed; upload is not considered synchronized. "
+                "Rerun this upload after resolving DB timeout/connectivity issues.",
+                file=sys.stderr,
+            )
+            print(f"Details: {e}", file=sys.stderr)
+            return 3
+
+    print("Upload status: synchronized")
+    if not args.skip_dkp_summary_refresh and dkp_refresh_ok:
+        print("  account_summary: ok")
+        print("  dkp_summary: ok")
+    else:
+        print("  account_summary: ok")
+        print("  dkp_summary: skipped (batch mode)")
 
     print("Done. Reload the raid in the Officer page to see tics, loot, and attendance.")
     return 0

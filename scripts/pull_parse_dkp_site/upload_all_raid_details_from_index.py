@@ -13,9 +13,12 @@ import csv
 import os
 import sys
 import subprocess
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent.parent
+REFRESH_RETRIES = 3
+REFRESH_RETRY_DELAY_SEC = 5
 
 
 def _load_env(path: Path) -> None:
@@ -38,6 +41,36 @@ def _load_env(path: Path) -> None:
     ):
         if not os.environ.get(plain) and os.environ.get(vite):
             os.environ[plain] = os.environ[vite]
+
+
+def _is_transient_refresh_error(exc: Exception) -> bool:
+    err = str(exc).lower()
+    return (
+        "57014" in err
+        or "statement timeout" in err
+        or "readtimeout" in err
+        or "read operation timed out" in err
+    )
+
+
+def _call_rpc_with_retries(client, rpc_name: str) -> tuple[bool, str]:
+    last_err: Exception | None = None
+    for attempt in range(REFRESH_RETRIES):
+        try:
+            client.rpc(rpc_name).execute()
+            return True, ""
+        except Exception as e:
+            last_err = e
+            if _is_transient_refresh_error(e) and attempt < REFRESH_RETRIES - 1:
+                print(
+                    f"{rpc_name} timed out/transient (attempt {attempt + 1}/{REFRESH_RETRIES}); "
+                    f"retrying in {REFRESH_RETRY_DELAY_SEC}s...",
+                    file=sys.stderr,
+                )
+                time.sleep(REFRESH_RETRY_DELAY_SEC)
+                continue
+            break
+    return False, str(last_err) if last_err else "unknown error"
 
 
 def main() -> int:
@@ -92,7 +125,7 @@ def main() -> int:
             return r.returncode
     print(f"Uploaded {n} raid(s).")
 
-    # One full dkp_summary refresh after batch (avoids N× full rebuilds when uploading many raids).
+    # Strict-mode finalization: full account + dkp refresh must both succeed.
     if n > 0:
         for path in (ROOT / ".env", ROOT / "web" / ".env", ROOT / "web" / ".env.local"):
             if path.exists():
@@ -106,12 +139,37 @@ def main() -> int:
             try:
                 from supabase import create_client
                 client = create_client(url, key)
-                client.rpc("refresh_dkp_summary").execute()
-                print("refresh_dkp_summary() completed.")
+                acc_ok, acc_err = _call_rpc_with_retries(client, "refresh_account_dkp_summary")
+                dkp_ok, dkp_err = _call_rpc_with_retries(client, "refresh_dkp_summary")
+
+                print("Batch refresh status:")
+                print(f"  account_summary: {'ok' if acc_ok else 'failed'}")
+                print(f"  dkp_summary: {'ok' if dkp_ok else 'failed'}")
+
+                if not acc_ok or not dkp_ok:
+                    print(
+                        "ERROR: batch upload completed inserts but final refresh is incomplete; "
+                        "run is not synchronized and should be rerun.",
+                        file=sys.stderr,
+                    )
+                    if not acc_ok:
+                        print(f"  refresh_account_dkp_summary error: {acc_err}", file=sys.stderr)
+                    if not dkp_ok:
+                        print(f"  refresh_dkp_summary error: {dkp_err}", file=sys.stderr)
+                    return 2
             except Exception as e:
-                print(f"Warning: refresh_dkp_summary: {e}", file=sys.stderr)
+                print(
+                    "ERROR: could not execute final batch refresh calls; run is not synchronized.",
+                    file=sys.stderr,
+                )
+                print(f"Details: {e}", file=sys.stderr)
+                return 2
         else:
-            print("Skipping refresh_dkp_summary (SUPABASE_URL/KEY not set).", file=sys.stderr)
+            print(
+                "ERROR: missing SUPABASE_URL/KEY for final refresh; run is not synchronized.",
+                file=sys.stderr,
+            )
+            return 2
     return 0
 
 
