@@ -75,19 +75,42 @@ BEGIN
       WHERE account_id IS NOT NULL
     ),
     loot_for_accounts AS (
-      SELECT
+      SELECT DISTINCT ON (rl.id)
         ca.account_id,
         rl.id AS loot_id,
         public.raid_date_parsed(r.date_iso) AS raid_date,
         rl.item_name,
         rl.cost::text AS cost_text,
-        NULLIF(trim(rl.char_id::text), '') AS loot_char_id,
-        NULLIF(trim(rl.character_name::text), '') AS loot_character_name
+        NULLIF(trim(ca.char_id::text), '') AS loot_char_id,
+        COALESCE(
+          NULLIF(trim(la.assigned_character_name), ''),
+          NULLIF(trim(rl.character_name), ''),
+          NULLIF(trim(ch.name), '')
+        ) AS loot_character_name
       FROM raid_loot rl
       JOIN raids r ON r.raid_id = rl.raid_id
-      JOIN character_account ca ON NULLIF(trim(rl.char_id::text), '') IS NOT NULL
-        AND ca.char_id = NULLIF(trim(rl.char_id::text), '')
+      LEFT JOIN LATERAL (
+        SELECT la0.assigned_char_id, la0.assigned_character_name
+        FROM loot_assignment la0
+        WHERE la0.loot_id = rl.id
+        LIMIT 1
+      ) la ON true
+      LEFT JOIN character_account ca ON (
+        (COALESCE(trim(la.assigned_char_id), trim(rl.char_id::text)) <> ''
+          AND ca.char_id = COALESCE(trim(la.assigned_char_id), trim(rl.char_id::text)))
+        OR (
+          COALESCE(trim(la.assigned_character_name), trim(rl.character_name)) <> ''
+          AND EXISTS (
+            SELECT 1
+            FROM characters c2
+            WHERE c2.char_id = ca.char_id
+              AND trim(c2.name) = COALESCE(trim(la.assigned_character_name), trim(rl.character_name))
+          )
+        )
+      )
+      LEFT JOIN characters ch ON ch.char_id = ca.char_id
       WHERE ca.account_id IN (SELECT account_id FROM account_ids)
+      ORDER BY rl.id, ca.account_id
     ),
     loot_numeric AS (
       SELECT

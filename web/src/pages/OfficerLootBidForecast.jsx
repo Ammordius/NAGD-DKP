@@ -7,17 +7,20 @@ import {
   itemUsableByClass,
 } from '../lib/mageloUpgradeEngine'
 import {
-  archetypeDescription,
   avgDkpFromPrices,
   bidVsMarketFromPurchasesTimeAware,
   buildNameToItemId,
+  buildSharedAccountSpendBullets,
+  dormantToonVersusAccountNarrative,
   estimateBidBand,
+  interestScoreDormantPenalty,
   lastSpendNarrative,
   perToonShareNarrative,
   resolveItemIdFromName,
   spendArchetypeTags,
 } from '../lib/bidForecastModel'
 import { ACTIVE_DAYS } from '../lib/dkpLeaderboard'
+import { usePersistedState } from '../lib/usePersistedState'
 
 const CLASS_RANKINGS_URL = import.meta.env.VITE_CLASS_RANKINGS_URL || '/class_rankings.json'
 
@@ -125,6 +128,7 @@ export default function OfficerLootBidForecast({ isOfficer }) {
   const [precomputedByItem, setPrecomputedByItem] = useState(null)
   const [precomputedMeta, setPrecomputedMeta] = useState(null)
   const [precomputedLoadNote, setPrecomputedLoadNote] = useState('')
+  const [sortBy, setSortBy] = usePersistedState('/officer/loot-bid-forecast:sortBy', 'interest')
 
   useEffect(() => {
     if (!isOfficer) navigate('/')
@@ -293,90 +297,178 @@ export default function OfficerLootBidForecast({ isOfficer }) {
 
       const purchases = Array.isArray(prof?.recent_purchases_desc) ? prof.recent_purchases_desc : []
       const bidInfo = bidVsMarketFromPurchasesTimeAware(purchases, nameToId, dkpPrices || {})
-      const tags = spendArchetypeTags(prof, bidInfo.label, bidInfo.medianRatio)
-      const archetypeText = archetypeDescription(tags)
+      const tags = spendArchetypeTags(prof, bidInfo.label, bidInfo.medianRatio, {
+        attendeeCharId: charId || undefined,
+      })
       const balance = prof?.balance != null ? Number(prof.balance) : 0
       const anchor = avgDkpFromPrices(dkpPrices || {}, resolvedItemId, 3)
       const band = estimateBidBand(balance, anchor, bidInfo.medianRatio, upgrade?.scoreDelta)
 
-      const summaryLine =
+      const summaryLinePre =
         pc != null
           ? `Upgrade vs ${pc.slotName}${pc.currentItemName ? ` (currently ${pc.currentItemName})` : ''}: score Δ ≈ ${pc.scoreDelta?.toFixed?.(3) ?? pc.scoreDelta}; HP Δ ${pc.hpDelta ?? 0}. (Precomputed CI index)`
           : null
 
-      const detailBullets = []
-      if (summaryLine) detailBullets.push(summaryLine)
-      if (pc?.focusSpellName) detailBullets.push(`Focus: ${pc.focusSpellName}`)
+      const toonDetailBullets = []
+      if (summaryLinePre) toonDetailBullets.push(summaryLinePre)
+      if (pc?.focusSpellName) toonDetailBullets.push(`Focus: ${pc.focusSpellName}`)
       const deltaFmt = formatDeltasDetail(pc?.deltasDetail)
-      if (deltaFmt) detailBullets.push(`Stat deltas: ${deltaFmt}`)
+      if (deltaFmt) toonDetailBullets.push(`Stat deltas: ${deltaFmt}`)
 
       if (!pc) {
         if (mageloChar && upgrade?.eligible) {
           if (upgrade.isUpgrade) {
-            detailBullets.push(
+            toonDetailBullets.push(
               `Upgrade vs ${upgrade.slotName}${upgrade.currentItemName ? ` (currently ${upgrade.currentItemName})` : ''}: score Δ ≈ ${upgrade.scoreDelta?.toFixed?.(3) ?? upgrade.scoreDelta}; HP Δ ${upgrade.hpDelta ?? 0}.`,
             )
           } else {
-            detailBullets.push(
+            toonDetailBullets.push(
               `Can equip in ${upgrade.slotName} but Magelo scoring does not show a gain (sidegrade/downgrade vs current).`,
             )
           }
         } else if (!mageloChar) {
-          detailBullets.push('No matching Magelo export for this toon — live upgrade line skipped.')
+          toonDetailBullets.push('No matching Magelo export for this toon — live upgrade line skipped.')
         } else if (upgrade && !upgrade.eligible) {
-          detailBullets.push(`Not a candidate for this item: ${upgrade.reason || 'unknown'}.`)
+          toonDetailBullets.push(`Not a candidate for this item: ${upgrade.reason || 'unknown'}.`)
         }
       }
 
       if (prof) {
-        detailBullets.push(lastSpendNarrative(prof, charId))
+        const dorm = dormantToonVersusAccountNarrative(prof, charId, charName)
+        if (dorm) toonDetailBullets.push(dorm)
         const pts = perToonShareNarrative(prof, charId)
-        if (pts) detailBullets.push(pts)
-        detailBullets.push(`Account balance (earned − spent): ~${Math.round(balance)} DKP.`)
-        detailBullets.push(archetypeText)
-        if (bidInfo.medianRatio != null) {
-          const refLabel = Array.isArray(forecastPayload.roster)
-            ? 'Vs reference prices (guild history when available, else dkp_prices.json)'
-            : 'Vs recent reference prices for matched items'
-          detailBullets.push(
-            `${refLabel}: median paid/reference ≈ ${bidInfo.medianRatio.toFixed(2)} (${bidInfo.label}).`,
-          )
-        }
-      } else {
-        detailBullets.push('No linked account — DKP spend profile unavailable.')
+        if (pts) toonDetailBullets.push(pts)
+        toonDetailBullets.push(lastSpendNarrative(prof, charId))
       }
 
-      const interestScore =
+      const bidRatioLabel = Array.isArray(forecastPayload.roster)
+        ? null
+        : 'Vs recent reference prices for matched items'
+      const sharedBullets = buildSharedAccountSpendBullets(prof, bidInfo, balance, tags, bidRatioLabel)
+
+      let interestScore =
         (upgrade?.isUpgrade ? 50 + Math.min(40, (upgrade.scoreDelta || 0) * 200) : 0)
         + (prof && balance > 0 ? Math.min(25, balance / 8) : 0)
         + (bidInfo.medianRatio != null && bidInfo.medianRatio >= 1.1 ? 8 : 0)
+      interestScore -= interestScoreDormantPenalty(prof, charId, charName)
 
+      const summaryLine =
+        summaryLinePre
+        || (upgrade?.eligible && upgrade?.isUpgrade
+          ? `Upgrade · score Δ ≈ ${upgrade.scoreDelta?.toFixed?.(3) ?? upgrade.scoreDelta}`
+          : upgrade?.eligible === false
+            ? (upgrade.reason || 'Not eligible')
+            : upgrade?.isUpgrade === false
+              ? 'Sidegrade / no gain (live)'
+              : '—')
+
+      const toonRowKey = `${accountId}:${charId || charName}`
       out.push({
+        toonRowKey,
         charName: charName || charId || '—',
+        charId,
         className,
         accountId: accountId || '—',
         interestScore,
         tags,
         band,
         anchor,
-        detailBullets,
+        toonDetailBullets,
+        sharedBullets,
+        prof,
+        bidInfo,
+        balance,
         upgrade,
         hasMagelo: !!mageloChar,
         hasPrecompute: !!pc,
-        summaryLine:
-          summaryLine
-          || (upgrade?.eligible && upgrade?.isUpgrade
-            ? `Upgrade · score Δ ≈ ${upgrade.scoreDelta?.toFixed?.(3) ?? upgrade.scoreDelta}`
-            : upgrade?.eligible === false
-              ? (upgrade.reason || 'Not eligible')
-              : upgrade?.isUpgrade === false
-                ? 'Sidegrade / no gain (live)'
-                : '—'),
+        summaryLine,
       })
     }
 
-    out.sort((x, y) => y.interestScore - x.interestScore)
-    return out
+    const byAccount = new Map()
+    for (const r of out) {
+      const k = r.accountId && r.accountId !== '—' ? r.accountId : `orphan:${r.toonRowKey}`
+      if (!byAccount.has(k)) byAccount.set(k, [])
+      byAccount.get(k).push(r)
+    }
+
+    const merged = []
+    for (const [k, group] of byAccount) {
+      if (group.length === 1) {
+        const g = group[0]
+        merged.push({
+          rowKey: g.toonRowKey,
+          consolidated: false,
+          accountId: g.accountId,
+          interestScore: g.interestScore,
+          tags: g.tags,
+          band: g.band,
+          anchor: g.anchor,
+          charLine: `${g.charName}${g.className ? ` (${g.className})` : ''}`,
+          classLabel: g.className || '—',
+          summaryLine: g.summaryLine,
+          toons: [g],
+          sharedBullets: g.sharedBullets,
+          hasPrecompute: g.hasPrecompute,
+        })
+      } else {
+        const g0 = group[0]
+        const accountTags = spendArchetypeTags(g0.prof, g0.bidInfo.label, g0.bidInfo.medianRatio, {
+          accountLevelArchetype: true,
+        })
+        const bidRatioLabel = Array.isArray(forecastPayload.roster)
+          ? null
+          : 'Vs recent reference prices for matched items'
+        const sharedBullets = buildSharedAccountSpendBullets(
+          g0.prof,
+          g0.bidInfo,
+          g0.balance,
+          accountTags,
+          bidRatioLabel,
+        )
+        const maxScore = Math.max(...group.map((x) => x.interestScore))
+        merged.push({
+          rowKey: `account:${k}`,
+          consolidated: true,
+          accountId: k,
+          interestScore: maxScore,
+          tags: accountTags,
+          band: g0.band,
+          anchor: g0.anchor,
+          charLine: group
+            .map((g) => `${g.charName}${g.className ? ` (${g.className})` : ''}`)
+            .join(' · '),
+          classLabel: group.map((g) => g.className || '—').join(', '),
+          summaryLine: group.map((g) => `${g.charName}: ${g.summaryLine}`).join(' · '),
+          toons: group,
+          sharedBullets,
+          hasPrecompute: group.some((g) => g.hasPrecompute),
+        })
+      }
+    }
+
+    const sb = sortBy || 'interest'
+    merged.sort((a, b) => {
+      if (sb === 'bandHigh') {
+        const vb = Number(b.band?.high) || 0
+        const va = Number(a.band?.high) || 0
+        if (vb !== va) return vb - va
+      }
+      if (sb === 'class') {
+        const c = (a.classLabel || '').localeCompare(b.classLabel || '', undefined, {
+          sensitivity: 'base',
+        })
+        if (c !== 0) return c
+      }
+      if (sb === 'charName') {
+        const c = (a.charLine || '').localeCompare(b.charLine || '', undefined, {
+          sensitivity: 'base',
+        })
+        if (c !== 0) return c
+      }
+      return b.interestScore - a.interestScore
+    })
+    return merged
   }, [
     forecastPayload,
     forecastPeople,
@@ -386,6 +478,7 @@ export default function OfficerLootBidForecast({ isOfficer }) {
     dkpPrices,
     nameToId,
     precomputedByItem,
+    sortBy,
   ])
 
   if (!isOfficer) return null
@@ -453,6 +546,20 @@ export default function OfficerLootBidForecast({ isOfficer }) {
         <button type="button" className="btn btn-ghost" onClick={loadRankings}>
           Reload Magelo JSON
         </button>
+        <label style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+          <span style={{ fontSize: '0.8rem', color: '#a1a1aa' }}>Sort</span>
+          <select
+            className="input"
+            style={{ minWidth: '11rem' }}
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value)}
+          >
+            <option value="interest">Interest score</option>
+            <option value="bandHigh">Bid band (high)</option>
+            <option value="charName">Character A–Z</option>
+            <option value="class">Class A–Z</option>
+          </select>
+        </label>
       </div>
 
       {precomputedLoadNote && (
@@ -507,13 +614,13 @@ export default function OfficerLootBidForecast({ isOfficer }) {
             </thead>
             <tbody>
               {rows.map((r) => (
-                <tr key={`${r.charName}-${r.accountId}`}>
+                <tr key={r.rowKey}>
                   <td>{Math.round(r.interestScore)}</td>
                   <td style={{ fontSize: '0.85rem', whiteSpace: 'nowrap' }}>
                     {r.band.low}–{r.band.high} (mid {r.band.mid})
                   </td>
-                  <td>{r.charName}</td>
-                  <td>{r.className || '—'}</td>
+                  <td style={{ maxWidth: '14rem' }}>{r.charLine}</td>
+                  <td style={{ maxWidth: '10rem' }}>{r.classLabel}</td>
                   <td style={{ fontSize: '0.85rem', wordBreak: 'break-all' }}>
                     {r.accountId !== '—' ? (
                       <Link to={`/accounts/${encodeURIComponent(r.accountId)}`}>Account</Link>
@@ -532,13 +639,50 @@ export default function OfficerLootBidForecast({ isOfficer }) {
                       <summary style={{ cursor: 'pointer', color: '#a78bfa' }}>
                         {r.hasPrecompute ? 'Why (precompute + spend)' : 'Why (spend / live scoring)'}
                       </summary>
-                      <ul style={{ margin: '0.5rem 0 0', paddingLeft: '1.1rem' }}>
-                        {r.detailBullets.map((t, i) => (
-                          <li key={i} style={{ marginBottom: '0.35rem' }}>
-                            {t}
-                          </li>
+                      <div style={{ marginTop: '0.5rem' }}>
+                        {r.toons.map((t, idx) => (
+                          <div
+                            key={t.toonRowKey}
+                            style={{
+                              marginBottom: r.toons.length > 1 ? '0.65rem' : 0,
+                              paddingBottom: r.toons.length > 1 ? '0.65rem' : 0,
+                              borderBottom:
+                                r.toons.length > 1 && idx < r.toons.length - 1
+                                  ? '1px solid #3f3f46'
+                                  : undefined,
+                            }}
+                          >
+                            {r.consolidated && r.toons.length > 1 && (
+                              <div style={{ fontWeight: 600, color: '#d4d4d8', marginBottom: '0.35rem' }}>
+                                {t.charName}
+                                {t.className ? ` (${t.className})` : ''}
+                              </div>
+                            )}
+                            <ul style={{ margin: 0, paddingLeft: '1.1rem' }}>
+                              {t.toonDetailBullets.map((text, i) => (
+                                <li key={i} style={{ marginBottom: '0.35rem' }}>
+                                  {text}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
                         ))}
-                      </ul>
+                        {r.sharedBullets.length > 0 && (
+                          <ul
+                            style={{
+                              margin: r.toons.some((t) => t.toonDetailBullets.length) ? '0.5rem 0 0' : '0.25rem 0 0',
+                              paddingLeft: '1.1rem',
+                              color: '#a1a1aa',
+                            }}
+                          >
+                            {r.sharedBullets.map((text, i) => (
+                              <li key={`s-${i}`} style={{ marginBottom: '0.35rem' }}>
+                                {text}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
                     </details>
                   </td>
                 </tr>

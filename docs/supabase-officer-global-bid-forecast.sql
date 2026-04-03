@@ -8,6 +8,7 @@
 -- a window over positive-cost rows (fast join for typical purchases). Zero-cost rows use a guarded
 -- scalar subquery (same semantics as the old LATERAL).
 -- Optional: denormalized raid_sale_date on raid_loot + index on (norm_name, raid_sale_date, id) if needed.
+-- Loot → account matches refresh_account_dkp_summary_internal (loot_assignment + char or name resolve).
 -- =============================================================================
 
 CREATE OR REPLACE FUNCTION public.normalize_item_name_for_lookup(p_name text)
@@ -131,20 +132,43 @@ BEGIN
       FROM roster_by_account rba
     ),
     loot_for_accounts AS (
-      SELECT
+      SELECT DISTINCT ON (rl.id)
         ca.account_id,
         rl.id AS loot_id,
         public.raid_date_parsed(r.date_iso) AS raid_date,
         rl.item_name,
         public.normalize_item_name_for_lookup(rl.item_name) AS norm_name,
         rl.cost::text AS cost_text,
-        NULLIF(trim(rl.char_id::text), '') AS loot_char_id,
-        NULLIF(trim(rl.character_name::text), '') AS loot_character_name
+        NULLIF(trim(ca.char_id::text), '') AS loot_char_id,
+        COALESCE(
+          NULLIF(trim(la.assigned_character_name), ''),
+          NULLIF(trim(rl.character_name), ''),
+          NULLIF(trim(ch.name), '')
+        ) AS loot_character_name
       FROM raid_loot rl
       JOIN raids r ON r.raid_id = rl.raid_id
-      JOIN character_account ca ON NULLIF(trim(rl.char_id::text), '') IS NOT NULL
-        AND ca.char_id = NULLIF(trim(rl.char_id::text), '')
+      LEFT JOIN LATERAL (
+        SELECT la0.assigned_char_id, la0.assigned_character_name
+        FROM loot_assignment la0
+        WHERE la0.loot_id = rl.id
+        LIMIT 1
+      ) la ON true
+      LEFT JOIN character_account ca ON (
+        (COALESCE(trim(la.assigned_char_id), trim(rl.char_id::text)) <> ''
+          AND ca.char_id = COALESCE(trim(la.assigned_char_id), trim(rl.char_id::text)))
+        OR (
+          COALESCE(trim(la.assigned_character_name), trim(rl.character_name)) <> ''
+          AND EXISTS (
+            SELECT 1
+            FROM characters c2
+            WHERE c2.char_id = ca.char_id
+              AND trim(c2.name) = COALESCE(trim(la.assigned_character_name), trim(rl.character_name))
+          )
+        )
+      )
+      LEFT JOIN characters ch ON ch.char_id = ca.char_id
       WHERE ca.account_id IN (SELECT account_id FROM active_account_ids)
+      ORDER BY rl.id, ca.account_id
     ),
     loot_numeric AS (
       SELECT

@@ -87,14 +87,26 @@ export function bidVsMarketFromPurchasesTimeAware(purchasesChronological, nameTo
   return { medianRatio, ratios, label }
 }
 
-export function spendArchetypeTags(profile, bidLabel, medianRatio) {
+/** @param {object} [archetypeOpts]
+ * @param {string} [archetypeOpts.attendeeCharId] — when set, funnel_main only if this toon is top spender
+ * @param {boolean} [archetypeOpts.accountLevelArchetype] — when true, funnel_main uses account-wide share (consolidated row) */
+export function spendArchetypeTags(profile, bidLabel, medianRatio, archetypeOpts = {}) {
   const tags = []
   const share = Number(profile?.top_toon_share) || 0
   const pc = Number(profile?.purchase_count) || 0
   const bal = Number(profile?.balance) || 0
   const days = profile?.days_since_last_spend
+  const { attendeeCharId, accountLevelArchetype } = archetypeOpts
 
-  if (share >= 0.72 && pc >= 2) tags.push('funnel_main')
+  const funnelCandidate = share >= 0.72 && pc >= 2
+  if (funnelCandidate) {
+    if (accountLevelArchetype) {
+      tags.push('funnel_main')
+    } else if (attendeeCharId) {
+      const topId = topSpenderCharIdFromProfile(profile)
+      if (topId != null && String(topId) === String(attendeeCharId)) tags.push('funnel_main')
+    }
+  }
   if (share > 0 && share <= 0.38 && pc >= 4) tags.push('spread_across_toons')
   if (days != null && days >= 56 && bal >= 40) tags.push('long_save_candidate')
 
@@ -104,6 +116,123 @@ export function spendArchetypeTags(profile, bidLabel, medianRatio) {
   }
 
   return [...new Set(tags)]
+}
+
+/** Char id with highest lifetime spend in profile.per_toon_spent, or null */
+export function topSpenderCharIdFromProfile(profile) {
+  const map = profile?.per_toon_spent
+  if (!map || typeof map !== 'object') return null
+  let bestK = null
+  let bestV = -1
+  for (const [k, v] of Object.entries(map)) {
+    const n = Number(v) || 0
+    if (n > bestV) {
+      bestV = n
+      bestK = k
+    }
+  }
+  return bestV > 0 ? bestK : null
+}
+
+function normToken(s) {
+  return String(s || '')
+    .trim()
+    .toLowerCase()
+}
+
+function purchaseMatchesToon(p, charId, charName) {
+  if (charId && p?.char_id != null && String(p.char_id).trim() !== '' && String(p.char_id) === String(charId)) {
+    return true
+  }
+  if (charName && p?.character_name && normToken(p.character_name) === normToken(charName)) return true
+  return false
+}
+
+/** @returns {number | null} whole days from raid_date to now */
+export function daysSinceRaidDate(raidDate) {
+  if (raidDate == null) return null
+  const d = raidDate instanceof Date ? raidDate : new Date(raidDate)
+  if (Number.isNaN(d.getTime())) return null
+  const today = new Date()
+  const utc = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate())
+  const utcT = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate())
+  return Math.floor((utcT - utc) / 86400000)
+}
+
+/**
+ * Newest matching purchase for this toon (purchases chronological ascending from RPC).
+ * @returns {{ raid_date: string, item_name?: string, cost?: number } | null}
+ */
+export function lastPurchaseOnCharacter(purchasesChronological, charId, charName) {
+  if (!Array.isArray(purchasesChronological) || purchasesChronological.length === 0) return null
+  for (let i = purchasesChronological.length - 1; i >= 0; i--) {
+    const p = purchasesChronological[i]
+    if (purchaseMatchesToon(p, charId, charName)) return p
+  }
+  return null
+}
+
+/** Optional interest-score penalty when this toon is cold vs active spending elsewhere */
+export const DORMANT_TOON_THRESHOLD_DAYS = 90
+
+export function interestScoreDormantPenalty(profile, charId, charName) {
+  if (!profile) return 0
+  const purchases = Array.isArray(profile.recent_purchases_desc) ? profile.recent_purchases_desc : []
+  const lastOnToon = lastPurchaseOnCharacter(purchases, charId, charName)
+  const daysAccount = profile.days_since_last_spend
+  if (lastOnToon == null) {
+    if (purchases.length > 0 || (Number(profile.purchase_count) || 0) > 0) return 12
+    return 0
+  }
+  const daysOnToon = daysSinceRaidDate(lastOnToon.raid_date)
+  if (daysOnToon == null) return 0
+  if (daysOnToon < DORMANT_TOON_THRESHOLD_DAYS) return 0
+  if (daysAccount != null && daysAccount < Math.max(0, daysOnToon - 14)) return 10
+  return 0
+}
+
+/**
+ * Context when spend history is not on this character (or is much older than account-level activity).
+ */
+/** Shared account lines (balance, archetype, bid vs ref); used once per account row. */
+export function buildSharedAccountSpendBullets(prof, bidInfo, balance, tagsForArchetype, bidRatioLabel) {
+  const shared = []
+  const label =
+    bidRatioLabel ||
+    'Vs reference prices (guild history when available, else dkp_prices.json)'
+  if (prof) {
+    shared.push(`Account balance (earned − spent): ~${Math.round(Number(balance) || 0)} DKP.`)
+    shared.push(archetypeDescription(tagsForArchetype))
+    if (bidInfo?.medianRatio != null) {
+      shared.push(`${label}: median paid/ref ≈ ${bidInfo.medianRatio.toFixed(2)} (${bidInfo.label}).`)
+    }
+  } else {
+    shared.push('No linked account — DKP spend profile unavailable.')
+  }
+  return shared
+}
+
+export function dormantToonVersusAccountNarrative(profile, charId, charName) {
+  if (!profile) return ''
+  const purchases = Array.isArray(profile.recent_purchases_desc) ? profile.recent_purchases_desc : []
+  const hasAnySpend = purchases.length > 0 || (Number(profile.purchase_count) || 0) > 0
+  if (!hasAnySpend) return ''
+
+  const lastOnToon = lastPurchaseOnCharacter(purchases, charId, charName)
+  if (!lastOnToon) {
+    return 'No tracked loot spend on this character in sampled history; the account has spending on other toons — funneling context may apply to those characters, not this one.'
+  }
+
+  const daysOnToon = daysSinceRaidDate(lastOnToon.raid_date)
+  const daysAccount = profile.days_since_last_spend
+  if (daysOnToon == null) return ''
+  if (daysOnToon >= 56 && daysAccount != null && daysAccount < daysOnToon - 7) {
+    return `Last spend on this toon was ~${daysOnToon}d ago; the account’s most recent spend overall was more recent (~${daysAccount}d ago), likely on another character.`
+  }
+  if (daysOnToon >= DORMANT_TOON_THRESHOLD_DAYS) {
+    return `This toon has not received a tracked loot purchase in ~${daysOnToon}d — consider that when judging interest vs alts on the same account.`
+  }
+  return ''
 }
 
 export function archetypeDescription(tags) {
