@@ -60,22 +60,30 @@ export function formatCharacterClassSpentLine(c, spent) {
 }
 
 /**
- * Sum DKP spent per toon from raid loot, using loot_assignment only (same rules as AccountDetail).
- * Buyer on raid_loot is ignored unless the row is assigned to someone (assigned_* may still match buyer).
+ * Spent per assignee, scoped to loot rows whose buyer (raid_loot.char_id) belongs to that account.
+ * Matches AccountDetail Characters tab: fetch uses .in('char_id', accountCharIds), then sum by assigned_*.
  *
- * @param {Array<{ cost?: string | number, assigned_char_id?: string, assigned_character_name?: string }>} lootRows
- * @returns {Record<string, number>}
+ * @param {Array<{ char_id?: string, cost?: string | number, assigned_char_id?: string, assigned_character_name?: string }>} lootRows
+ * @param {Record<string, string>} buyerCharIdToAccountId - char_id -> account_id from character_account
+ * @returns {Record<string, Record<string, number>>} account_id -> (assignee key -> spent)
  */
-export function buildSpentByAssignedCharacter(lootRows) {
-  const spent = {}
+export function buildSpentByAccountFromLoot(lootRows, buyerCharIdToAccountId) {
+  /** @type {Record<string, Record<string, number>>} */
+  const byAccount = {}
   for (const row of lootRows || []) {
+    const buyer = String(row.char_id ?? '').trim()
+    if (!buyer) continue
+    const accountId = buyerCharIdToAccountId[buyer]
+    if (!accountId) continue
     const k = (row.assigned_character_name || row.assigned_char_id || '').trim()
     if (!k) continue
     const cost = parseFloat(row.cost ?? 0)
     if (!Number.isFinite(cost)) continue
-    spent[k] = (spent[k] || 0) + cost
+    if (!byAccount[accountId]) byAccount[accountId] = {}
+    const m = byAccount[accountId]
+    m[k] = (m[k] || 0) + cost
   }
-  return spent
+  return byAccount
 }
 
 /**

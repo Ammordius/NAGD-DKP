@@ -33,13 +33,14 @@ const ACTIVITY_PAGE_SIZE = 50
 const ACTIVITY_PAGINATION_THRESHOLD = 100
 const IN_CHUNK = 150 // avoid URL length limits and timeouts when filtering by 1000+ ids
 
-async function fetchAll(table, select = '*', filter) {
+async function fetchAll(table, select = '*', filter, opts) {
   const all = []
   let from = 0
   while (true) {
     const to = from + PAGE - 1
     let q = supabase.from(table).select(select).range(from, to)
     if (filter) q = filter(q)
+    if (opts?.order) q = q.order(opts.order.column, { ascending: opts.order.ascending })
     const { data, error } = await q
     if (error) return { data: null, error }
     all.push(...(data || []))
@@ -94,7 +95,7 @@ async function fetchAccountDetail(accountId) {
   const [chRes, attRes, lootRes, attDkpByAccountRes, attDkpRes] = await Promise.all([
     supabase.from('characters').select('char_id, name, class_name, level').in('char_id', charIds),
     fetchAll('raid_attendance', 'raid_id, char_id, character_name', (q) => q.in('char_id', charIds)),
-    fetchAll('raid_loot_with_assignment', 'id, raid_id, char_id, character_name, item_name, cost, assigned_char_id, assigned_character_name', (q) => q.in('char_id', charIds)),
+    fetchAll('raid_loot_with_assignment', 'id, raid_id, char_id, character_name, item_name, cost, assigned_char_id, assigned_character_name', (q) => q.in('char_id', charIds), { order: { column: 'id', ascending: true } }),
     fetchAll('raid_attendance_dkp_by_account', 'raid_id, account_id, dkp_earned', (q) => q.eq('account_id', accountId), { order: { column: 'raid_id', ascending: true } }),
     (async () => {
       const cr = await supabase.from('characters').select('char_id, name').in('char_id', charIds)

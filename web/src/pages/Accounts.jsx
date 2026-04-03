@@ -5,11 +5,11 @@ import { fetchAll } from '../lib/accountData'
 import { usePersistedState } from '../lib/usePersistedState'
 import {
   formatCharacterClassSpentLine,
-  buildSpentByAssignedCharacter,
+  buildSpentByAccountFromLoot,
   spentForCharacterFromLootMap,
 } from '../lib/formatAccountCharacter'
 
-const CACHE_KEY = 'accounts_list_v4'
+const CACHE_KEY = 'accounts_list_v5'
 const CACHE_TTL = 10 * 60 * 1000
 const MAGELO_BASE = 'https://www.takproject.net/magelo/character.php?char='
 
@@ -33,7 +33,9 @@ export default function Accounts() {
       fetchAll('characters', 'char_id, name, class_name, level'),
       fetchAll(
         'raid_loot_with_assignment',
-        'cost, assigned_char_id, assigned_character_name',
+        'id, char_id, cost, assigned_char_id, assigned_character_name',
+        undefined,
+        { order: { column: 'id', ascending: true } },
       ),
     ]).then(([a, ca, ch, lootRes]) => {
       if (a.error) {
@@ -59,16 +61,21 @@ export default function Accounts() {
       const charMap = {}
       ;(ch.data || []).forEach((c) => { charMap[c.char_id] = c })
       const byAccount = {}
+      const buyerCharIdToAccountId = {}
       ;(ca.data || []).forEach((row) => {
         if (!byAccount[row.account_id]) byAccount[row.account_id] = []
         byAccount[row.account_id].push(row.char_id)
+        if (row.char_id != null && String(row.char_id).trim() !== '') {
+          buyerCharIdToAccountId[String(row.char_id).trim()] = String(row.account_id)
+        }
       })
-      const spentByKey = buildSpentByAssignedCharacter(lootRes.data || [])
+      const spentByAccount = buildSpentByAccountFromLoot(lootRes.data || [], buyerCharIdToAccountId)
       const accList = (a.data || []).filter((acc) => !acc.inactive).map((acc) => {
         const rawChars = (byAccount[acc.account_id] || []).map((cid) => charMap[cid]).filter(Boolean)
+        const spentMap = spentByAccount[String(acc.account_id)] || {}
         const withSpent = rawChars.map((c) => ({
           ...c,
-          dkp_spent: spentForCharacterFromLootMap(spentByKey, c),
+          dkp_spent: spentForCharacterFromLootMap(spentMap, c),
         }))
         const characters = [...withSpent].sort((x, y) => {
           if (y.dkp_spent !== x.dkp_spent) return y.dkp_spent - x.dkp_spent
