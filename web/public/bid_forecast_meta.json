@@ -1,6 +1,13 @@
 {
   "version": 1,
-  "generated_at": null,
+  "generated_at": "2026-04-03T23:14:08.938Z",
   "activity_days": 120,
-  "note": "Placeholder until GitHub Actions job bid_forecast_index runs with CLASS_RANKINGS_URL + Supabase secrets."
+  "rankings_hash": "1565dffc34558b0d",
+  "item_stats_hash": "a1583535e37a7d8d",
+  "magelo_characters_total": 3202,
+  "guild_magelo_matched": 476,
+  "skipped_no_roster_match": 2726,
+  "skipped_no_class_weights": 0,
+  "upgrade_entries": 40846,
+  "distinct_items": 530
 }
