@@ -8,6 +8,7 @@ import AssignedLootDisclaimer from '../components/AssignedLootDisclaimer'
 import ItemLink from '../components/ItemLink'
 import { getDkpMobLoot } from '../lib/staticData'
 import { formatAccountCharacter, formatAccountCharacters } from '../lib/formatAccountCharacter'
+import { groupRaidLootByEvent } from '../lib/groupRaidLootByEvent'
 
 /** SWR deduplication: 60s so revisiting the same raid or multiple components don't each hit the DB. */
 const RAID_DEDUPING_INTERVAL_MS = 60_000
@@ -187,6 +188,8 @@ export default function RaidDetail({ isOfficer }) {
     () => groupAttendeesByAccount(displayAttendance, getAccountId, getAccountDisplayName ?? (() => null)),
     [displayAttendance, groupAttendeesByAccount, getAccountId, getAccountDisplayName]
   )
+
+  const lootSections = useMemo(() => groupRaidLootByEvent(loot, events), [loot, events])
 
   // When attendees are derived from current events only, keep raid.attendees and raid_attendance in sync (fixes count after a tic was deleted).
   useEffect(() => {
@@ -614,61 +617,79 @@ export default function RaidDetail({ isOfficer }) {
           </thead>
           <tbody>
             {loot.length === 0 && <tr><td colSpan={isOfficer ? 5 : 4}>No loot recorded</td></tr>}
-            {loot.map((row, i) => {
-              const isEditingCost = isOfficer && editingLootId === row.id
-              return (
-                <tr key={row.id || i}>
-                  <td>
-                    <ItemLink
-                      itemName={row.item_name || ''}
-                      itemId={itemIdMap[(row.item_name || '').trim().toLowerCase()]}
-                    >
-                      {row.item_name || '—'}
-                    </ItemLink>
+            {lootSections.map((section) => (
+              <Fragment key={section.key}>
+                <tr>
+                  <td
+                    colSpan={isOfficer ? 5 : 4}
+                    style={{
+                      padding: '0.5rem 0.75rem',
+                      backgroundColor: 'rgba(0,0,0,0.25)',
+                      borderBottom: '1px solid #27272a',
+                      fontWeight: 600,
+                      color: '#e4e4e7',
+                    }}
+                  >
+                    {section.title}
                   </td>
-                  <td>
-                    {(() => {
-                      const charName = row.character_name || row.char_id || '—'
-                      const accountId = getAccountId(row.character_name || row.char_id)
-                      const accountName = getAccountDisplayName?.(row.character_name || row.char_id)
-                      const label = formatAccountCharacter(accountName, charName)
-                      const to = accountId ? `/accounts/${accountId}` : `/characters/${encodeURIComponent(charName)}`
-                      return <Link to={to}>{label}</Link>
-                    })()}
-                  </td>
-                  <td style={{ color: '#a1a1aa', fontSize: '0.875rem' }}>
-                    {(row.assigned_character_name || row.assigned_char_id) ? (
-                      <Link to={`/characters/${encodeURIComponent(row.assigned_character_name || row.assigned_char_id)}`}>{row.assigned_character_name || row.assigned_char_id}</Link>
-                    ) : (
-                      <span style={{ color: '#71717a' }}>Unassigned</span>
-                    )}
-                  </td>
-                  <td>
-                    {isEditingCost ? (
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
-                        <input type="text" value={editingLootCost} onChange={(ev) => setEditingLootCost(ev.target.value)} style={{ width: '4rem', padding: '0.2rem' }} />
-                        <button type="button" className="btn btn-ghost" onClick={() => handleSaveLootCost(row)} disabled={mutating}>Save</button>
-                        <button type="button" className="btn btn-ghost" onClick={() => setEditingLootId(null)}>Cancel</button>
-                      </span>
-                    ) : (
-                      <>
-                        {row.cost}
-                        {isOfficer && (
-                          <button type="button" className="btn btn-ghost" style={{ marginLeft: '0.25rem', fontSize: '0.85rem' }} onClick={() => { setEditingLootId(row.id); setEditingLootCost(row.cost ?? '') }} title="Edit cost">✎</button>
-                        )}
-                      </>
-                    )}
-                  </td>
-                  {isOfficer && (
-                    <td>
-                      {!isEditingCost && (
-                        <button type="button" className="btn btn-ghost" style={{ fontSize: '0.85rem', color: '#f87171' }} onClick={() => handleDeleteLoot(row)}>Remove</button>
-                      )}
-                    </td>
-                  )}
                 </tr>
-              )
-            })}
+                {section.rows.map((row, i) => {
+                  const isEditingCost = isOfficer && editingLootId === row.id
+                  return (
+                    <tr key={row.id || `${section.key}-${i}`}>
+                      <td>
+                        <ItemLink
+                          itemName={row.item_name || ''}
+                          itemId={itemIdMap[(row.item_name || '').trim().toLowerCase()]}
+                        >
+                          {row.item_name || '—'}
+                        </ItemLink>
+                      </td>
+                      <td>
+                        {(() => {
+                          const charName = row.character_name || row.char_id || '—'
+                          const accountId = getAccountId(row.character_name || row.char_id)
+                          const accountName = getAccountDisplayName?.(row.character_name || row.char_id)
+                          const label = formatAccountCharacter(accountName, charName)
+                          const to = accountId ? `/accounts/${accountId}` : `/characters/${encodeURIComponent(charName)}`
+                          return <Link to={to}>{label}</Link>
+                        })()}
+                      </td>
+                      <td style={{ color: '#a1a1aa', fontSize: '0.875rem' }}>
+                        {(row.assigned_character_name || row.assigned_char_id) ? (
+                          <Link to={`/characters/${encodeURIComponent(row.assigned_character_name || row.assigned_char_id)}`}>{row.assigned_character_name || row.assigned_char_id}</Link>
+                        ) : (
+                          <span style={{ color: '#71717a' }}>Unassigned</span>
+                        )}
+                      </td>
+                      <td>
+                        {isEditingCost ? (
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
+                            <input type="text" value={editingLootCost} onChange={(ev) => setEditingLootCost(ev.target.value)} style={{ width: '4rem', padding: '0.2rem' }} />
+                            <button type="button" className="btn btn-ghost" onClick={() => handleSaveLootCost(row)} disabled={mutating}>Save</button>
+                            <button type="button" className="btn btn-ghost" onClick={() => setEditingLootId(null)}>Cancel</button>
+                          </span>
+                        ) : (
+                          <>
+                            {row.cost}
+                            {isOfficer && (
+                              <button type="button" className="btn btn-ghost" style={{ marginLeft: '0.25rem', fontSize: '0.85rem' }} onClick={() => { setEditingLootId(row.id); setEditingLootCost(row.cost ?? '') }} title="Edit cost">✎</button>
+                            )}
+                          </>
+                        )}
+                      </td>
+                      {isOfficer && (
+                        <td>
+                          {!isEditingCost && (
+                            <button type="button" className="btn btn-ghost" style={{ fontSize: '0.85rem', color: '#f87171' }} onClick={() => handleDeleteLoot(row)}>Remove</button>
+                          )}
+                        </td>
+                      )}
+                    </tr>
+                  )
+                })}
+              </Fragment>
+            ))}
           </tbody>
         </table>
       </div>

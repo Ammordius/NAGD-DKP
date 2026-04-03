@@ -6,6 +6,7 @@ import { getDkpMobLoot } from '../lib/staticData'
 import { logOfficerAudit } from '../lib/officerAudit'
 import { formatAccountCharacter, formatAccountCharacters } from '../lib/formatAccountCharacter'
 import { DKP_DATA_KEY } from '../lib/dkpLeaderboard'
+import { groupRaidLootByEvent } from '../lib/groupRaidLootByEvent'
 
 // --- Parsing ---
 
@@ -1053,6 +1054,8 @@ export default function Officer({ isOfficer }) {
     return byEvent
   }, [eventAttendance])
 
+  const lootSections = useMemo(() => groupRaidLootByEvent(loot, events), [loot, events])
+
   const filteredItemNames = useMemo(() => {
     const q = lootItemQuery.toLowerCase().trim()
     if (!q) return itemNames
@@ -1597,41 +1600,59 @@ export default function Officer({ isOfficer }) {
               </thead>
               <tbody>
                 {loot.length === 0 && <tr><td colSpan={4}>No loot recorded</td></tr>}
-                {loot.map((row, i) => {
-                  const isEditingCost = editingLootId === row.id
-                  return (
-                    <tr key={row.id || i}>
-                      <td><Link to={`/items/${encodeURIComponent(row.item_name || '')}`}>{row.item_name || '—'}</Link></td>
-                      <td>
-                        {(() => {
-                          const charName = row.character_name || row.char_id || '—'
-                          const accountId = getAccountId(row.character_name || row.char_id)
-                          const to = accountId ? `/accounts/${accountId}` : `/characters/${encodeURIComponent(charName)}`
-                          return <Link to={to}>{charName}</Link>
-                        })()}
-                      </td>
-                      <td>
-                        {isEditingCost ? (
-                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
-                            <input type="text" value={editingLootCost} onChange={(ev) => setEditingLootCost(ev.target.value)} style={{ width: '4rem', padding: '0.2rem' }} />
-                            <button type="button" className="btn btn-ghost" onClick={() => handleSaveLootCost(row)} disabled={mutating}>Save</button>
-                            <button type="button" className="btn btn-ghost" onClick={() => setEditingLootId(null)}>Cancel</button>
-                          </span>
-                        ) : (
-                          <>
-                            {row.cost}
-                            <button type="button" className="btn btn-ghost" style={{ marginLeft: '0.25rem', fontSize: '0.85rem' }} onClick={() => { setEditingLootId(row.id); setEditingLootCost(row.cost ?? '') }} title="Edit cost">✎</button>
-                          </>
-                        )}
-                      </td>
-                      <td>
-                        {!isEditingCost && (
-                          <button type="button" className="btn btn-ghost" style={{ fontSize: '0.85rem', color: '#f87171' }} onClick={() => handleDeleteLoot(row)}>Remove</button>
-                        )}
+                {lootSections.map((section) => (
+                  <Fragment key={section.key}>
+                    <tr>
+                      <td
+                        colSpan={4}
+                        style={{
+                          padding: '0.5rem 0.75rem',
+                          backgroundColor: 'rgba(0,0,0,0.25)',
+                          borderBottom: '1px solid #27272a',
+                          fontWeight: 600,
+                          color: '#e4e4e7',
+                        }}
+                      >
+                        {section.title}
                       </td>
                     </tr>
-                  )
-                })}
+                    {section.rows.map((row, i) => {
+                      const isEditingCost = editingLootId === row.id
+                      return (
+                        <tr key={row.id || `${section.key}-${i}`}>
+                          <td><Link to={`/items/${encodeURIComponent(row.item_name || '')}`}>{row.item_name || '—'}</Link></td>
+                          <td>
+                            {(() => {
+                              const charName = row.character_name || row.char_id || '—'
+                              const accountId = getAccountId(row.character_name || row.char_id)
+                              const to = accountId ? `/accounts/${accountId}` : `/characters/${encodeURIComponent(charName)}`
+                              return <Link to={to}>{charName}</Link>
+                            })()}
+                          </td>
+                          <td>
+                            {isEditingCost ? (
+                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
+                                <input type="text" value={editingLootCost} onChange={(ev) => setEditingLootCost(ev.target.value)} style={{ width: '4rem', padding: '0.2rem' }} />
+                                <button type="button" className="btn btn-ghost" onClick={() => handleSaveLootCost(row)} disabled={mutating}>Save</button>
+                                <button type="button" className="btn btn-ghost" onClick={() => setEditingLootId(null)}>Cancel</button>
+                              </span>
+                            ) : (
+                              <>
+                                {row.cost}
+                                <button type="button" className="btn btn-ghost" style={{ marginLeft: '0.25rem', fontSize: '0.85rem' }} onClick={() => { setEditingLootId(row.id); setEditingLootCost(row.cost ?? '') }} title="Edit cost">✎</button>
+                              </>
+                            )}
+                          </td>
+                          <td>
+                            {!isEditingCost && (
+                              <button type="button" className="btn btn-ghost" style={{ fontSize: '0.85rem', color: '#f87171' }} onClick={() => handleDeleteLoot(row)}>Remove</button>
+                            )}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </Fragment>
+                ))}
               </tbody>
             </table>
 
