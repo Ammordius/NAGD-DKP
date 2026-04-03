@@ -1726,3 +1726,5 @@ $$;
 COMMENT ON FUNCTION public.insert_raid_event_attendance_for_upload(text, jsonb) IS 'Bulk insert raid_event_attendance under restore_load; clears restore flag; refresh_raid_attendance_totals for this raid only. Caller must run refresh_account_dkp_summary_for_raid / refresh_dkp_summary.';
 GRANT EXECUTE ON FUNCTION public.insert_raid_event_attendance_for_upload(text, jsonb) TO service_role;
 GRANT EXECUTE ON FUNCTION public.insert_raid_event_attendance_for_upload(text, jsonb) TO authenticated;
+
+-- Officer loot bid forecast (SECURITY DEFINER, is_officer): apply from docs/supabase-officer-loot-bid-forecast.sql

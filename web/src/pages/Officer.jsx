@@ -1119,7 +1119,8 @@ export default function Officer({ isOfficer }) {
     <div className="container">
       <h1>Officer – Raid management</h1>
       <p style={{ color: '#a1a1aa' }}>
-        Add raids from Discord, paste DKP tics (channel lists), add loot manually or from logs. All edits require officer permissions.
+        Add raids from Discord, paste DKP tics (channel lists), add loot manually or from logs. All edits require officer permissions.{' '}
+        <Link to="/officer/loot-bid-forecast">Loot bid interest</Link> (heuristic, officer-only).
       </p>
       <div style={{ marginBottom: '1rem' }}>
         <button type="button" className="btn" onClick={focusAddRaid} style={{ fontWeight: 'bold' }}>

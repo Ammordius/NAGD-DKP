@@ -17,6 +17,7 @@ import LootRecipients from './pages/LootRecipients'
 import Officer from './pages/Officer'
 import DkpChangelog from './pages/DkpChangelog'
 import OfficerClaimCooldowns from './pages/OfficerClaimCooldowns'
+import OfficerLootBidForecast from './pages/OfficerLootBidForecast'
 import Profile from './pages/Profile'
 
 export default function App() {
@@ -107,6 +108,7 @@ export default function App() {
             <Link to="/profile">Profile</Link>
             {isOfficer && <Link to="/officer" style={{ color: '#fbbf24' }}>Officer</Link>}
             {isOfficer && <Link to="/officer/dkp-changelog">DKP changelog</Link>}
+            {isOfficer && <Link to="/officer/loot-bid-forecast">Bid hints</Link>}
             {isOfficer && <Link to="/officer/claim-cooldowns">Admin</Link>}
             <span className="role">{profile?.role === 'officer' ? 'Officer' : 'Player'}</span>
             <button
@@ -128,6 +130,7 @@ export default function App() {
         <Route path="/dkp" element={<RequireAuth><DKP isOfficer={isOfficer} /></RequireAuth>} />
         <Route path="/officer" element={<RequireAuth><Officer isOfficer={isOfficer} /></RequireAuth>} />
         <Route path="/officer/dkp-changelog" element={<RequireAuth><DkpChangelog isOfficer={isOfficer} /></RequireAuth>} />
+        <Route path="/officer/loot-bid-forecast" element={<RequireAuth><OfficerLootBidForecast isOfficer={isOfficer} /></RequireAuth>} />
         <Route path="/officer/claim-cooldowns" element={<RequireAuth><OfficerClaimCooldowns isOfficer={isOfficer} /></RequireAuth>} />
         <Route path="/loot" element={<RequireAuth><LootSearch /></RequireAuth>} />
         <Route path="/loot-recipients" element={<RequireAuth><LootRecipients /></RequireAuth>} />
