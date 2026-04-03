@@ -238,61 +238,6 @@ function dedupeByCharacterName(list) {
 }
 
 /**
- * Per-character spent from dkp_summary + spent_delta adjustments (same dedupe rules as the leaderboard).
- * Use on /accounts where loading all raid_loot rows would be too heavy; stays aligned with DKP totals.
- *
- * @param {Array<{ character_key: string, character_name?: string, earned?: number, spent?: number }>} dkpSummaryRows
- * @param {Array<{ character_name?: string, spent_delta?: number }>} adjustments
- * @param {Array<{ char_id: string, name?: string }>} charData
- * @returns {(c: { char_id?: string, name?: string }) => number}
- */
-export function buildCharacterSpentLookup(dkpSummaryRows, adjustments, charData) {
-  const adjustmentsMap = {}
-  ;(adjustments ?? []).forEach((row) => {
-    const n = (row.character_name || '').trim()
-    if (n) adjustmentsMap[n] = { spent_delta: Number(row.spent_delta) || 0 }
-  })
-  const charIdToName = {}
-  ;(charData || []).forEach((c) => {
-    if (c.name) charIdToName[String(c.char_id)] = c.name
-  })
-  let list = (dkpSummaryRows || []).map((r) => ({
-    char_id: r.character_key,
-    name: r.character_name || r.character_key,
-    earned: Math.round(Number(r.earned) || 0),
-    spent: Math.round(Number(r.spent) || 0),
-    earned_30d: 0,
-    earned_60d: 0,
-    last_activity_date: null,
-  }))
-  if (charData?.length) {
-    list = list.map((r) => {
-      const resolvedName = charIdToName[String(r.char_id)]
-      if (resolvedName) return { ...r, name: resolvedName }
-      return r
-    })
-  }
-  list = dedupeByCharacterName(list)
-  list.forEach((r) => {
-    const adj = adjustmentsMap[(r.name || '').trim()] || adjustmentsMap[(r.name || '').trim().replace(/^\(\*\)\s*/, '')]
-    if (adj) r.spent = Math.round(Number(r.spent) || 0) + Math.round(Number(adj.spent_delta) || 0)
-  })
-  const byKey = {}
-  list.forEach((r) => {
-    const spent = Math.round(Number(r.spent) || 0)
-    const idK = String(r.char_id ?? '').trim()
-    const nmK = canonicalCharacterKey(r.name || r.char_id)
-    if (idK) byKey[`id:${idK}`] = spent
-    if (nmK) byKey[`nm:${nmK}`] = spent
-  })
-  return function getSpentForCharacter(c) {
-    const idK = `id:${String(c?.char_id ?? '').trim()}`
-    const nmK = `nm:${canonicalCharacterKey(c?.name || c?.char_id)}`
-    return byKey[idK] ?? byKey[nmK] ?? 0
-  }
-}
-
-/**
  * Process /api/get-dkp response into leaderboard list and account list (with adjustments applied).
  * Returns { list, accountList, activeKeys, periodTotals, caData, accData, charData, summaryUpdatedAt } or null.
  * When account_dkp_summary is present, uses account-scoped data; otherwise falls back to character-based aggregation.

@@ -58,3 +58,34 @@ export function formatCharacterClassSpentLine(c, spent) {
   if (cls) return `${cls} ${spentPart}`
   return spentPart
 }
+
+/**
+ * Sum DKP spent per toon from raid loot, using loot_assignment only (same rules as AccountDetail).
+ * Buyer on raid_loot is ignored unless the row is assigned to someone (assigned_* may still match buyer).
+ *
+ * @param {Array<{ cost?: string | number, assigned_char_id?: string, assigned_character_name?: string }>} lootRows
+ * @returns {Record<string, number>}
+ */
+export function buildSpentByAssignedCharacter(lootRows) {
+  const spent = {}
+  for (const row of lootRows || []) {
+    const k = (row.assigned_character_name || row.assigned_char_id || '').trim()
+    if (!k) continue
+    const cost = parseFloat(row.cost ?? 0)
+    if (!Number.isFinite(cost)) continue
+    spent[k] = (spent[k] || 0) + cost
+  }
+  return spent
+}
+
+/**
+ * Lookup spent for a characters row using name then char_id (matches AccountDetail list).
+ *
+ * @param {Record<string, number>} spentMap
+ * @param {{ name?: string, char_id?: string }} c
+ */
+export function spentForCharacterFromLootMap(spentMap, c) {
+  const name = (c.name || '').trim()
+  const id = String(c.char_id ?? '').trim()
+  return (name ? spentMap[name] : undefined) ?? spentMap[id] ?? 0
+}

@@ -1,13 +1,15 @@
 import { useEffect, useState, useMemo } from 'react'
 import { Link } from 'react-router-dom'
-import { supabase } from '../lib/supabase'
 import { createCache } from '../lib/cache'
 import { fetchAll } from '../lib/accountData'
 import { usePersistedState } from '../lib/usePersistedState'
-import { buildCharacterSpentLookup } from '../lib/dkpLeaderboard'
-import { formatCharacterClassSpentLine } from '../lib/formatAccountCharacter'
+import {
+  formatCharacterClassSpentLine,
+  buildSpentByAssignedCharacter,
+  spentForCharacterFromLootMap,
+} from '../lib/formatAccountCharacter'
 
-const CACHE_KEY = 'accounts_list_v3'
+const CACHE_KEY = 'accounts_list_v4'
 const CACHE_TTL = 10 * 60 * 1000
 const MAGELO_BASE = 'https://www.takproject.net/magelo/character.php?char='
 
@@ -29,9 +31,11 @@ export default function Accounts() {
       fetchAll('accounts', 'account_id, toon_count, display_name, inactive'),
       fetchAll('character_account', 'account_id, char_id'),
       fetchAll('characters', 'char_id, name, class_name, level'),
-      fetchAll('dkp_summary', 'character_key, character_name, earned, spent'),
-      supabase.from('dkp_adjustments').select('character_name, spent_delta').limit(1000),
-    ]).then(([a, ca, ch, dkpSum, adjRes]) => {
+      fetchAll(
+        'raid_loot_with_assignment',
+        'cost, assigned_char_id, assigned_character_name',
+      ),
+    ]).then(([a, ca, ch, lootRes]) => {
       if (a.error) {
         setError(a.error.message)
         setLoading(false)
@@ -47,13 +51,8 @@ export default function Accounts() {
         setLoading(false)
         return
       }
-      if (dkpSum.error) {
-        setError(dkpSum.error.message)
-        setLoading(false)
-        return
-      }
-      if (adjRes.error) {
-        setError(adjRes.error.message)
+      if (lootRes.error) {
+        setError(lootRes.error.message)
         setLoading(false)
         return
       }
@@ -64,17 +63,12 @@ export default function Accounts() {
         if (!byAccount[row.account_id]) byAccount[row.account_id] = []
         byAccount[row.account_id].push(row.char_id)
       })
-      const allChars = Object.values(charMap)
-      const getSpentForCharacter = buildCharacterSpentLookup(
-        dkpSum.data || [],
-        adjRes.data || [],
-        allChars,
-      )
+      const spentByKey = buildSpentByAssignedCharacter(lootRes.data || [])
       const accList = (a.data || []).filter((acc) => !acc.inactive).map((acc) => {
         const rawChars = (byAccount[acc.account_id] || []).map((cid) => charMap[cid]).filter(Boolean)
         const withSpent = rawChars.map((c) => ({
           ...c,
-          dkp_spent: getSpentForCharacter(c),
+          dkp_spent: spentForCharacterFromLootMap(spentByKey, c),
         }))
         const characters = [...withSpent].sort((x, y) => {
           if (y.dkp_spent !== x.dkp_spent) return y.dkp_spent - x.dkp_spent
