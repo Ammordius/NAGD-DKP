@@ -128,6 +128,7 @@ export default function OfficerLootBidForecast({ isOfficer }) {
   const [precomputedByItem, setPrecomputedByItem] = useState(null)
   const [precomputedMeta, setPrecomputedMeta] = useState(null)
   const [precomputedLoadNote, setPrecomputedLoadNote] = useState('')
+  const [precomputeReady, setPrecomputeReady] = useState(false)
   const [sortBy, setSortBy] = usePersistedState('/officer/loot-bid-forecast:sortBy', 'interest')
 
   useEffect(() => {
@@ -171,6 +172,9 @@ export default function OfficerLootBidForecast({ isOfficer }) {
           setPrecomputedLoadNote('No bid_forecast_by_item.json (CI precompute not deployed yet).')
         }
       })
+      .finally(() => {
+        if (!cancelled) setPrecomputeReady(true)
+      })
     fetch('/bid_forecast_meta.json')
       .then((r) => {
         if (r.status === 404) return null
@@ -204,10 +208,6 @@ export default function OfficerLootBidForecast({ isOfficer }) {
       })
   }, [])
 
-  useEffect(() => {
-    loadRankings()
-  }, [loadRankings])
-
   const nameToId = useMemo(() => buildNameToItemId(itemStats), [itemStats])
 
   const resolvedItemId = useMemo(() => {
@@ -216,6 +216,40 @@ export default function OfficerLootBidForecast({ isOfficer }) {
     if (/^\d+$/.test(t)) return t
     return resolveItemIdFromName(t, nameToId)
   }, [itemInput, nameToId])
+
+  useEffect(() => {
+    if (
+      !precomputeReady ||
+      !forecastPayload ||
+      !resolvedItemId ||
+      !itemStats ||
+      rankingsData != null
+    ) {
+      return
+    }
+    const people = normalizedForecastPeople(forecastPayload)
+    if (!people.length) return
+    let needsMagelo = false
+    for (const a of people) {
+      const name = (a.character_name || '').trim()
+      const cls = (a.class_name || '').trim()
+      const pc = findPrecomputedUpgrade(precomputedByItem, resolvedItemId, name, cls)
+      if (!pc) {
+        needsMagelo = true
+        break
+      }
+    }
+    if (!needsMagelo) return
+    loadRankings()
+  }, [
+    precomputeReady,
+    forecastPayload,
+    resolvedItemId,
+    itemStats,
+    precomputedByItem,
+    rankingsData,
+    loadRankings,
+  ])
 
   const runForecast = async () => {
     const rid = (raidInput || '').trim()
