@@ -4,8 +4,10 @@ import { supabase } from '../lib/supabase'
 import { createCache } from '../lib/cache'
 import { fetchAll } from '../lib/accountData'
 import { usePersistedState } from '../lib/usePersistedState'
+import { buildCharacterSpentLookup } from '../lib/dkpLeaderboard'
+import { formatCharacterClassSpentLine } from '../lib/formatAccountCharacter'
 
-const CACHE_KEY = 'accounts_list_v2'
+const CACHE_KEY = 'accounts_list_v3'
 const CACHE_TTL = 10 * 60 * 1000
 const MAGELO_BASE = 'https://www.takproject.net/magelo/character.php?char='
 
@@ -27,7 +29,9 @@ export default function Accounts() {
       fetchAll('accounts', 'account_id, toon_count, display_name, inactive'),
       fetchAll('character_account', 'account_id, char_id'),
       fetchAll('characters', 'char_id, name, class_name, level'),
-    ]).then(([a, ca, ch]) => {
+      fetchAll('dkp_summary', 'character_key, character_name, earned, spent'),
+      supabase.from('dkp_adjustments').select('character_name, spent_delta').limit(1000),
+    ]).then(([a, ca, ch, dkpSum, adjRes]) => {
       if (a.error) {
         setError(a.error.message)
         setLoading(false)
@@ -43,6 +47,16 @@ export default function Accounts() {
         setLoading(false)
         return
       }
+      if (dkpSum.error) {
+        setError(dkpSum.error.message)
+        setLoading(false)
+        return
+      }
+      if (adjRes.error) {
+        setError(adjRes.error.message)
+        setLoading(false)
+        return
+      }
       const charMap = {}
       ;(ch.data || []).forEach((c) => { charMap[c.char_id] = c })
       const byAccount = {}
@@ -50,13 +64,30 @@ export default function Accounts() {
         if (!byAccount[row.account_id]) byAccount[row.account_id] = []
         byAccount[row.account_id].push(row.char_id)
       })
-      const accList = (a.data || []).filter((acc) => !acc.inactive).map((acc) => ({
-        account_id: acc.account_id,
-        toon_count: acc.toon_count,
-        display_name: acc.display_name,
-        char_ids: byAccount[acc.account_id] || [],
-        characters: (byAccount[acc.account_id] || []).map((cid) => charMap[cid]).filter(Boolean),
-      }))
+      const allChars = Object.values(charMap)
+      const getSpentForCharacter = buildCharacterSpentLookup(
+        dkpSum.data || [],
+        adjRes.data || [],
+        allChars,
+      )
+      const accList = (a.data || []).filter((acc) => !acc.inactive).map((acc) => {
+        const rawChars = (byAccount[acc.account_id] || []).map((cid) => charMap[cid]).filter(Boolean)
+        const withSpent = rawChars.map((c) => ({
+          ...c,
+          dkp_spent: getSpentForCharacter(c),
+        }))
+        const characters = [...withSpent].sort((x, y) => {
+          if (y.dkp_spent !== x.dkp_spent) return y.dkp_spent - x.dkp_spent
+          return String(x.name || x.char_id).localeCompare(String(y.name || y.char_id))
+        })
+        return {
+          account_id: acc.account_id,
+          toon_count: acc.toon_count,
+          display_name: acc.display_name,
+          char_ids: byAccount[acc.account_id] || [],
+          characters,
+        }
+      })
       accList.sort((x, y) => (y.characters?.length || 0) - (x.characters?.length || 0))
       setAccounts(accList)
       setLoading(false)
@@ -150,6 +181,8 @@ export default function Accounts() {
                         {chars.map((c, i) => {
                           const name = c.name || c.char_id
                           const mageloUrl = `${MAGELO_BASE}${encodeURIComponent(name)}`
+                          const spent = c.dkp_spent ?? 0
+                          const classSpentLine = formatCharacterClassSpentLine(c, spent)
                           return (
                             <span
                               key={c.char_id}
@@ -163,11 +196,9 @@ export default function Accounts() {
                             >
                               {i > 0 && <span style={{ color: '#52525b', marginRight: '0.25rem' }}>·</span>}
                               <Link to={`/characters/${encodeURIComponent(name)}`}>{name}</Link>
-                              {(c.class_name || c.level) && (
-                                <span style={{ color: '#71717a', fontSize: '0.875rem' }}>
-                                  {[c.class_name, c.level].filter(Boolean).join(' · ')}
-                                </span>
-                              )}
+                              <span style={{ color: '#71717a', fontSize: '0.875rem' }}>
+                                {classSpentLine}
+                              </span>
                               <a
                                 href={mageloUrl}
                                 target="_blank"

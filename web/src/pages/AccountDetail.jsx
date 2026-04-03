@@ -8,7 +8,7 @@ import DkpSiteDisclaimer from '../components/DkpSiteDisclaimer'
 import ItemLink from '../components/ItemLink'
 import { getDkpMobLoot } from '../lib/staticData'
 import { useDkpData } from '../lib/dkpLeaderboard'
-import { formatAccountCharacter } from '../lib/formatAccountCharacter'
+import { formatAccountCharacter, formatCharacterClassSpentLine } from '../lib/formatAccountCharacter'
 
 const MAGELO_BASE = 'https://www.takproject.net/magelo/character.php?char='
 
@@ -260,6 +260,18 @@ export default function AccountDetail({ isOfficer, profile, session }) {
 
   const itemIdMap = useMemo(() => buildItemIdMap(mobLoot), [mobLoot])
 
+  const sortedCharacters = useMemo(() => {
+    const spentOf = (c) => {
+      const name = c.name || c.char_id
+      return Number(dkpByCharacterKey.spent[name] ?? dkpByCharacterKey.spent[c.char_id] ?? 0)
+    }
+    return [...characters].sort((a, b) => {
+      const ds = spentOf(b) - spentOf(a)
+      if (ds !== 0) return ds
+      return String(a.name || a.char_id).localeCompare(String(b.name || b.char_id))
+    })
+  }, [characters, dkpByCharacterKey])
+
   if (loading) return <div className="container">Loading account...</div>
   if (error) return <div className="container"><span className="error">{error}</span> <Link to="/accounts">← Accounts</Link></div>
   if (!account) return <div className="container">Account not found. <Link to="/accounts">← Accounts</Link></div>
@@ -351,23 +363,17 @@ export default function AccountDetail({ isOfficer, profile, session }) {
             <p style={{ color: '#71717a' }}>No characters linked to this account.{canAddChar && ' Use + to add a character.'}</p>
           ) : (
             <ul style={{ listStyle: 'none', paddingLeft: 0, margin: 0 }}>
-              {characters.map((c) => {
+              {sortedCharacters.map((c) => {
                 const name = c.name || c.char_id
                 const mageloUrl = `${MAGELO_BASE}${encodeURIComponent(name)}`
                 const spent = dkpByCharacterKey.spent[name] ?? dkpByCharacterKey.spent[c.char_id] ?? 0
+                const meta = formatCharacterClassSpentLine(c, spent)
                 return (
                   <li key={c.char_id || c.name} style={{ marginBottom: '0.5rem' }}>
                     <Link to={`/characters/${encodeURIComponent(name)}`}>{name}</Link>
-                    {(c.class_name || c.level) && (
-                      <span style={{ color: '#71717a', fontSize: '0.9rem', marginLeft: '0.5rem' }}>
-                        {[c.class_name, c.level].filter(Boolean).join(' ')}
-                      </span>
-                    )}
-                    {spent > 0 && (
-                      <span style={{ color: '#a1a1aa', fontSize: '0.9rem', marginLeft: '0.5rem' }}>
-                        {' '}{MIDDLE_DOT}{' '}{Number(spent).toFixed(0)} spent
-                      </span>
-                    )}
+                    <span style={{ color: '#71717a', fontSize: '0.9rem', marginLeft: '0.5rem' }}>
+                      {meta}
+                    </span>
                     {' '}{MIDDLE_DOT}{' '}
                     <a href={mageloUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: '0.9rem', color: '#a78bfa' }}>
                       Magelo
@@ -455,7 +461,7 @@ export default function AccountDetail({ isOfficer, profile, session }) {
                                     }
                                   })
                               } else {
-                                const c = characters.find((ch) => (ch.char_id || ch.name) === val)
+                                const c = sortedCharacters.find((ch) => (ch.char_id || ch.name) === val)
                                 const cid = c?.char_id || val
                                 const cname = c?.name || c?.displayName || val
                                 supabase.rpc('update_single_raid_loot_assignment', { p_loot_id: row.id, p_assigned_char_id: cid, p_assigned_character_name: cname })
@@ -475,7 +481,7 @@ export default function AccountDetail({ isOfficer, profile, session }) {
                             style={{ minWidth: '10rem', padding: '0.25rem 0.5rem', background: '#18181b', color: '#e4e4e7', border: '1px solid #27272a', borderRadius: '4px' }}
                           >
                             <option value="">Unassigned</option>
-                            {characters.map((c) => {
+                            {sortedCharacters.map((c) => {
                               const id = c.char_id || c.name
                               const label = c.name || c.char_id
                               return <option key={id} value={id}>{label}</option>

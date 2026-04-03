@@ -32,3 +32,29 @@ export function formatAccountCharacters(accountDisplayName, names) {
   if (other.length === 0) return acc
   return `${acc} (${other.join(', ')})`
 }
+
+const MAX_LEVEL_HIDE_IN_LABEL = 65
+
+/**
+ * Class / level + spent for account character rows (e.g. "Monk 265 spent", "54 monk 120 spent").
+ * Omits level when it is 65; non-maxed levels use lowercase class to match roster style.
+ *
+ * @param {{ class_name?: string, level?: string | number }} c
+ * @param {number} spent
+ * @returns {string}
+ */
+export function formatCharacterClassSpentLine(c, spent) {
+  const spentN = Math.round(Number(spent) || 0)
+  const spentPart = `${spentN} spent`
+  const rawLevel = c?.level
+  const level = rawLevel != null && rawLevel !== '' ? Number(rawLevel) : null
+  const cls = (c?.class_name || '').trim()
+  const hasNumericLevel = level != null && !Number.isNaN(level)
+
+  if (hasNumericLevel && level !== MAX_LEVEL_HIDE_IN_LABEL) {
+    if (cls) return `${level} ${cls.toLowerCase()} ${spentPart}`
+    return `${level} ${spentPart}`
+  }
+  if (cls) return `${cls} ${spentPart}`
+  return spentPart
+}
