@@ -6,7 +6,7 @@
 
 ## What shipped
 
-Officers get **heuristic** bid-interest views for a chosen item: **by raid** (who attended and might care) or **active guild roster** (same active-account rules as global — leave raid id blank on **Bid hints**, or use the dedicated **Global bid** page). Both use spend patterns (last purchase locus, per-toon concentration, balance), optional **Magelo-style upgrade scoring**, and a rough **bid band** capped by account balance. **Bid hints** prefers a **CI-built precomputed upgrade index** (`web/public/bid_forecast_by_item.json`) when present, and falls back to live `class_rankings.json` scoring. Global adds **guild prior-sale reference** per purchase when history exists. This is **not** a bid log or a guarantee of behavior.
+Officers get **heuristic** bid-interest views for a chosen item: **by raid** (who attended and might care) or **active guild roster** (same active-account rules as global — leave raid id blank on **Bid hints**, or use the dedicated **Global bid** page). Both use spend patterns (last purchase locus, per-toon concentration, balance), optional **Magelo-style upgrade scoring**, and a rough **bid band** capped by account balance. **Bid hints** and **Global bid** prefer the **CI-built precomputed upgrade index** (`web/public/bid_forecast_by_item.json`) when present, and fall back to live `class_rankings.json` (or `VITE_CLASS_RANKINGS_URL`) scoring. Global adds **guild prior-sale reference** per purchase when history exists. This is **not** a bid log or a guarantee of behavior.
 
 ## Deploy checklist
 
@@ -17,7 +17,7 @@ Officers get **heuristic** bid-interest views for a chosen item: **by raid** (wh
 2. **Static JSON**
    - `web/public/item_stats.json` — already part of the app.
    - `web/public/dkp_prices.json` — committed snapshot; **refresh** with Magelo `scripts/build_dkp_prices_json.py` (or your pipeline) so sale anchors stay current.
-   - `class_rankings.json` — **not** committed by default (large). Either copy the Magelo-generated file to `web/public/class_rankings.json` or set **`VITE_CLASS_RANKINGS_URL`** to a hosted URL. Without it, **Bid hints** still runs RPC + precompute rows but **live** upgrade fallback is skipped (yellow warning).
+   - `class_rankings.json` — **not** committed by default (large). Either copy the Magelo-generated file to `web/public/class_rankings.json` or set **`VITE_CLASS_RANKINGS_URL`** on Vercel (build-time) to a hosted URL, e.g. `https://ammordius.github.io/NAGD-spell-inventory/class_rankings.json`. Without rankings URL/file, **Bid hints** / **Global bid** still run RPC + precompute rows but **live** upgrade fallback (and Global slot-deep upgrades) need an explicit fetch or stay skipped (yellow warning).
    - **`bid_forecast_by_item.json`** / **`bid_forecast_meta.json`** — guild-scoped **positive upgrade** index (item id → who gains, with slot / stat deltas). Built in CI (see below). The repo ships **empty placeholders** until the workflow runs successfully.
 
 3. **GitHub Actions: precomputed upgrade index** (job `bid_forecast_index` in [`.github/workflows/loot-to-character.yml`](../.github/workflows/loot-to-character.yml))

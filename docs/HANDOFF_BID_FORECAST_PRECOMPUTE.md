@@ -14,7 +14,7 @@
 
 1. **GitHub secret `CLASS_RANKINGS_URL`**  
    - Must return the **same** `class_rankings.json` shape the Magelo export uses (characters + `class_weights` + `focus_candidates`).  
-   - Align with **`VITE_CLASS_RANKINGS_URL`** on Vercel when you want CI and browser fallback scoring to match.  
+   - Align with **`VITE_CLASS_RANKINGS_URL`** on Vercel (build-time) when you want CI and browser fallback scoring to match — you can point both at a hosted file (e.g. `https://ammordius.github.io/NAGD-spell-inventory/class_rankings.json`) instead of committing a large JSON to `web/public/`.  
    - If this secret is missing, **`bid_forecast_index` skips** (no failure); placeholders in `web/public/` stay empty until you fix it.
 
 2. **Existing Supabase secrets** (already used for loot assignment)  

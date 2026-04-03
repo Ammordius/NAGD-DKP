@@ -4,8 +4,10 @@
 -- Requires public.is_officer(); GRANT EXECUTE to authenticated only.
 --
 -- normalize_item_name_for_lookup: keep behavior aligned with web/src/lib/itemNameNormalize.js
--- Optional performance: if LATERAL ref-price lookups are slow, consider a denormalized
--- raid_sale_date on raid_loot plus an index on (normalize_item_name_for_lookup(item_name), raid_sale_date DESC, id DESC).
+-- Ref-price: avg of up to 3 prior guild sales (cost > 0) per normalized item name — computed via
+-- a window over positive-cost rows (fast join for typical purchases). Zero-cost rows use a guarded
+-- scalar subquery (same semantics as the old LATERAL).
+-- Optional: denormalized raid_sale_date on raid_loot + index on (norm_name, raid_sale_date, id) if needed.
 -- =============================================================================
 
 CREATE OR REPLACE FUNCTION public.normalize_item_name_for_lookup(p_name text)
@@ -216,41 +218,72 @@ BEGIN
       ) x
       WHERE x.rn <= 150
     ),
+    guild_positive_ref AS (
+      SELECT
+        gp.loot_id,
+        gp.norm_name,
+        gp.raid_date,
+        avg(gp.cost_num) OVER (
+          PARTITION BY gp.norm_name
+          ORDER BY gp.raid_date ASC NULLS FIRST, gp.loot_id ASC
+          ROWS BETWEEN 3 PRECEDING AND 1 PRECEDING
+        ) AS ref_price_at_sale
+      FROM guild_loot_base gp
+      WHERE gp.cost_num > 0
+    ),
     purchases_with_ref AS (
       SELECT
-        pl.account_id,
-        pl.loot_id,
-        pl.raid_date,
-        pl.item_name,
-        pl.norm_name,
-        pl.cost_num,
-        pl.loot_char_id,
-        pl.loot_character_name,
-        ref.ref_price_at_sale,
+        x.account_id,
+        x.loot_id,
+        x.raid_date,
+        x.item_name,
+        x.norm_name,
+        x.cost_num,
+        x.loot_char_id,
+        x.loot_character_name,
+        x.ref_price_at_sale,
         CASE
-          WHEN ref.ref_price_at_sale IS NOT NULL AND ref.ref_price_at_sale > 0 AND pl.cost_num > 0
-          THEN (pl.cost_num / ref.ref_price_at_sale)::numeric
+          WHEN x.ref_price_at_sale IS NOT NULL AND x.ref_price_at_sale > 0 AND x.cost_num > 0
+          THEN (x.cost_num / x.ref_price_at_sale)::numeric
           ELSE NULL::numeric
         END AS paid_to_ref_ratio
-      FROM purchases_limited pl
-      LEFT JOIN LATERAL (
-        SELECT avg(sub.cost_num) AS ref_price_at_sale
-        FROM (
-          SELECT gl.cost_num
-          FROM guild_loot_base gl
-          WHERE gl.norm_name = pl.norm_name
-            AND gl.cost_num > 0
-            AND (
-              gl.raid_date < pl.raid_date
-              OR (
-                gl.raid_date IS NOT DISTINCT FROM pl.raid_date
-                AND gl.loot_id < pl.loot_id
-              )
+      FROM (
+        SELECT
+          pl.account_id,
+          pl.loot_id,
+          pl.raid_date,
+          pl.item_name,
+          pl.norm_name,
+          pl.cost_num,
+          pl.loot_char_id,
+          pl.loot_character_name,
+          CASE
+            WHEN pl.cost_num > 0 THEN gpr.ref_price_at_sale
+            ELSE (
+              SELECT avg(sub.cost_num)
+              FROM (
+                SELECT gl.cost_num
+                FROM guild_loot_base gl
+                WHERE gl.norm_name = pl.norm_name
+                  AND gl.cost_num > 0
+                  AND (
+                    gl.raid_date < pl.raid_date
+                    OR (
+                      gl.raid_date IS NOT DISTINCT FROM pl.raid_date
+                      AND gl.loot_id < pl.loot_id
+                    )
+                  )
+                ORDER BY gl.raid_date DESC NULLS LAST, gl.loot_id DESC
+                LIMIT 3
+              ) sub
             )
-          ORDER BY gl.raid_date DESC NULLS LAST, gl.loot_id DESC
-          LIMIT 3
-        ) sub
-      ) ref ON true
+          END AS ref_price_at_sale
+        FROM purchases_limited pl
+        LEFT JOIN guild_positive_ref gpr ON pl.cost_num > 0
+          AND gpr.norm_name = pl.norm_name
+          AND gpr.raid_date IS NOT DISTINCT FROM pl.raid_date
+          AND gpr.loot_id = pl.loot_id
+      ) x
     ),
     purchases_json AS (
       SELECT

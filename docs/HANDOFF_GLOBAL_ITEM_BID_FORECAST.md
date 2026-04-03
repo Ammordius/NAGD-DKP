@@ -27,7 +27,8 @@ flowchart TB
     Model[bidForecastModel.js]
     stats[item_stats.json]
     prices[dkp_prices.json]
-    rank[class_rankings.json or VITE URL]
+    pre[bid_forecast_by_item.json]
+    rank[class_rankings.json or VITE URL on demand]
   end
   subgraph supabase [Supabase]
     Fn[officer_global_bid_forecast]
@@ -39,13 +40,14 @@ flowchart TB
   UI --> Eng
   UI --> Model
   stats --> Eng
+  pre --> UI
   rank --> Eng
   prices --> Model
   Fn -->|JSON roster + profiles| UI
 ```
 
 - **Supabase** returns **roster** (accounts → characters) and **account_profiles** (balances, per-toon spend, purchase list with optional `ref_price_at_sale` / `paid_to_ref_ratio`). It does **not** compute “gear upgrades” or “items this toon still needs.”
-- **Browser** resolves the typed item to an id using **`item_stats.json`**, matches each roster character to a **`class_rankings.json`** export row by **name + class**, and runs **Magelo-style scoring** from [`web/src/lib/mageloUpgradeEngine.js`](../web/src/lib/mageloUpgradeEngine.js).
+- **Browser** resolves the typed item to an id using **`item_stats.json`**. It prefers **`bid_forecast_by_item.json`** (CI precompute, same shape as **Bid hints**) for upgrade copy when a row exists for that item + toon; otherwise it matches **`class_rankings.json`** (or the URL behind **`VITE_CLASS_RANKINGS_URL`**) by **name + class** and runs **Magelo-style scoring** from [`web/src/lib/mageloUpgradeEngine.js`](../web/src/lib/mageloUpgradeEngine.js). Full rankings may load **on demand** (fallback rows and **Show top upgrades by slot**).
 
 ## How “would this toon want this item?” is calculated
 
@@ -59,7 +61,7 @@ flowchart TB
 
 5. **Spend / bid band**: **`bidVsMarketFromPurchasesTimeAware`** in [`web/src/lib/bidForecastModel.js`](../web/src/lib/bidForecastModel.js) builds a median **paid / reference** ratio: prefers **`paid_to_ref_ratio`** from the RPC when present, else **`cost / avg(last 3 in dkp_prices.json)`** per purchase when resolvable.
 
-**Important:** There is **no** server-side table of “pending upgrades per character.” Freshness of gear depends on how often **`class_rankings.json`** (or the hosted URL behind **`VITE_CLASS_RANKINGS_URL`**) is regenerated from Magelo.
+**Important:** There is **no** server-side table of “pending upgrades per character.” Freshness of gear depends on how often **`class_rankings.json`** (or the hosted URL behind **`VITE_CLASS_RANKINGS_URL`**) is regenerated from Magelo. When CI has populated **`bid_forecast_by_item.json`**, most Global rows do not need that file in the browser until an officer asks for live fallback or slot-deep upgrades.
 
 ## CI and pipelines
 
@@ -73,6 +75,14 @@ flowchart TB
 
 - **Vercel** deploys whatever is in `web/public/` (and env at build time). No extra CI step is required **for the JSONs to exist** if they are already committed or configured via `VITE_CLASS_RANKINGS_URL`.
 
+### Vercel: class rankings without a huge repo file
+
+You do **not** need to commit multi‑MB **`class_rankings.json`** into `web/public/`. Set a **build-time** env var on Vercel:
+
+- **`VITE_CLASS_RANKINGS_URL`** — full URL to a hosted `class_rankings.json` (same shape as the Magelo export). Example maintained elsewhere: `https://ammordius.github.io/NAGD-spell-inventory/class_rankings.json`.
+
+Align this with GitHub secret **`CLASS_RANKINGS_URL`** when you want CI precompute and browser live fallback to use the **same** export. Officers can still use **Reload Magelo JSON** to refetch after deploy.
+
 ## Deploy and operations checklist (global-specific)
 
 1. **SQL**: Run [`docs/supabase-officer-global-bid-forecast.sql`](supabase-officer-global-bid-forecast.sql) on the **same** Supabase project the app uses (including production).
@@ -80,7 +90,8 @@ flowchart TB
 2. **Static assets**
    - `web/public/item_stats.json` — required to resolve item **names** to ids and for scoring.
    - `web/public/dkp_prices.json` — fallback anchor and static “last 3” style reference when RPC has no prior guild sales for a purchase.
-   - `class_rankings.json` in `web/public/` **or** `VITE_CLASS_RANKINGS_URL` — required for **any** Magelo upgrade line; without it, RPC data still loads but upgrade reasons are skipped (yellow warning).
+   - `web/public/bid_forecast_by_item.json` (from CI) — preferred source of upgrade lines per item on this page; avoids loading full class rankings for most rows.
+   - `class_rankings.json` in `web/public/` **or** `VITE_CLASS_RANKINGS_URL` — needed for **live** scoring when precompute misses, and for **Show top upgrades by slot** (full `inventory`). Not required for RPC-only data.
 
 3. **Keep SQL + JS name normalization aligned**: `public.normalize_item_name_for_lookup` must stay consistent with [`web/src/lib/itemNameNormalize.js`](../web/src/lib/itemNameNormalize.js) for ref-price matching on loot names.
 
@@ -99,11 +110,11 @@ flowchart TB
 | Symptom | Likely cause |
 |---------|----------------|
 | RPC error / permission | SQL not applied, or user not officer (`is_officer()`). |
-| No upgrade lines, yellow warning | No `class_rankings` loaded (file or env URL). |
+| No upgrade lines, yellow warning | No precompute row and no `class_rankings` loaded yet (file, env URL, or use **Reload Magelo JSON**). |
 | “Could not resolve item id” | Item missing from `item_stats.json` or name mismatch vs Allaclone naming. |
 | All `paid_to_ref_ratio` null | First guild sales for those item names, or zero prior sales in `raid_loot`. |
 | Stale gear vs reality | Regenerate / redeploy **`class_rankings.json`** from Magelo. |
-| Slow “Run” on large DB | LATERAL “prior 3 sales” per purchase; consider follow-up index in main handoff doc. |
+| Slow “Run” on large DB | Historically: per-purchase ref-price subqueries; current SQL uses a window over positive-cost guild sales (re-apply [`supabase-officer-global-bid-forecast.sql`](supabase-officer-global-bid-forecast.sql)). If still slow, add indexes / denormalized sale date per main handoff. |
 
 ## Follow-ups (ideas)
 

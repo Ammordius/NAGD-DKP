@@ -42,6 +42,48 @@ function findRankingChar(rankingsChars, attendeeName, attendeeClass) {
   )
 }
 
+function findPrecomputedUpgrade(precomputedPayload, itemId, charName, className) {
+  const list = precomputedPayload?.byItem?.[String(itemId)]
+  if (!list || !Array.isArray(list)) return null
+  const n = normName(charName)
+  const c = normName(className)
+  return list.find((e) => normName(e.name) === n && normName(e.class_name) === c) || null
+}
+
+function precomputedToUpgradeShape(pc) {
+  if (!pc) return null
+  return {
+    eligible: true,
+    isUpgrade: true,
+    slotName: pc.slotName,
+    slotId: pc.slotId,
+    scoreDelta: pc.scoreDelta,
+    hpDelta: pc.hpDelta,
+    currentItemId: pc.currentItemId,
+    currentItemName: pc.currentItemName,
+    candidateName: pc.itemName,
+    fromPrecompute: true,
+    deltasDetail: pc.deltasDetail,
+    focusSpellName: pc.focusSpellName,
+  }
+}
+
+function formatDeltasDetail(d) {
+  if (!d || typeof d !== 'object') return null
+  const parts = []
+  if (d.hpDelta != null) parts.push(`HP ${d.hpDelta > 0 ? '+' : ''}${d.hpDelta}`)
+  if (d.manaDelta != null) parts.push(`Mana ${d.manaDelta > 0 ? '+' : ''}${d.manaDelta}`)
+  if (d.acDelta != null) parts.push(`AC ${d.acDelta > 0 ? '+' : ''}${d.acDelta}`)
+  if (d.svAllDelta != null) parts.push(`Resists (sum) ${d.svAllDelta > 0 ? '+' : ''}${d.svAllDelta}`)
+  if (d.svDeltasByType && typeof d.svDeltasByType === 'object') {
+    const inner = Object.entries(d.svDeltasByType)
+      .filter(([, v]) => v !== 0)
+      .map(([k, v]) => `${k} ${v > 0 ? '+' : ''}${v}`)
+    if (inner.length) parts.push(inner.join(', '))
+  }
+  return parts.length ? parts.join(' · ') : null
+}
+
 function characterQualifiesForUpgradeStrip(profile, charId) {
   if (!profile || !charId) return false
   const share = Number(profile.top_toon_share) || 0
@@ -81,6 +123,10 @@ export default function OfficerGlobalLootBidForecast({ isOfficer }) {
   const [dkpPrices, setDkpPrices] = useState(null)
   const [rankingsData, setRankingsData] = useState(null)
   const [rankingsError, setRankingsError] = useState('')
+  const [precomputedByItem, setPrecomputedByItem] = useState(null)
+  const [precomputedMeta, setPrecomputedMeta] = useState(null)
+  const [precomputedLoadNote, setPrecomputedLoadNote] = useState('')
+  const [precomputeReady, setPrecomputeReady] = useState(false)
   const [upgradeCache, setUpgradeCache] = useState({})
   const [upgradeLoadingKey, setUpgradeLoadingKey] = useState(null)
 
@@ -106,30 +152,58 @@ export default function OfficerGlobalLootBidForecast({ isOfficer }) {
       .catch(() => {
         if (!cancelled) setDkpPrices(null)
       })
+    fetch('/bid_forecast_by_item.json')
+      .then((r) => {
+        if (r.status === 404) return null
+        if (!r.ok) throw new Error(String(r.status))
+        return r.json()
+      })
+      .then((j) => {
+        if (!cancelled) setPrecomputedByItem(j && typeof j === 'object' ? j : null)
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setPrecomputedByItem(null)
+          setPrecomputedLoadNote('No bid_forecast_by_item.json (CI precompute not deployed yet).')
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setPrecomputeReady(true)
+      })
+    fetch('/bid_forecast_meta.json')
+      .then((r) => {
+        if (r.status === 404) return null
+        if (!r.ok) return null
+        return r.json()
+      })
+      .then((j) => {
+        if (!cancelled) setPrecomputedMeta(j && typeof j === 'object' ? j : null)
+      })
+      .catch(() => {
+        if (!cancelled) setPrecomputedMeta(null)
+      })
     return () => {
       cancelled = true
     }
   }, [])
 
-  const loadRankings = useCallback(() => {
+  const fetchRankingsJson = useCallback(async () => {
     setRankingsError('')
-    fetch(CLASS_RANKINGS_URL)
-      .then((r) => {
-        if (!r.ok) throw new Error(`${r.status}`)
-        return r.json()
-      })
-      .then((j) => setRankingsData(j))
-      .catch(() => {
-        setRankingsData(null)
-        setRankingsError(
-          `Could not load class rankings from ${CLASS_RANKINGS_URL}. Set VITE_CLASS_RANKINGS_URL or add class_rankings.json to web/public for upgrade scoring.`,
-        )
-      })
+    const r = await fetch(CLASS_RANKINGS_URL)
+    if (!r.ok) throw new Error(String(r.status))
+    const j = await r.json()
+    setRankingsData(j)
+    return j
   }, [])
 
-  useEffect(() => {
-    loadRankings()
-  }, [loadRankings])
+  const loadRankings = useCallback(() => {
+    fetchRankingsJson().catch(() => {
+      setRankingsData(null)
+      setRankingsError(
+        `Could not load class rankings from ${CLASS_RANKINGS_URL}. Set VITE_CLASS_RANKINGS_URL or add class_rankings.json to web/public for live upgrade fallback or slot lists.`,
+      )
+    })
+  }, [fetchRankingsJson])
 
   const nameToId = useMemo(() => buildNameToItemId(itemStats), [itemStats])
 
@@ -140,16 +214,34 @@ export default function OfficerGlobalLootBidForecast({ isOfficer }) {
     return resolveItemIdFromName(t, nameToId)
   }, [itemInput, nameToId])
 
-  const upgradeCtx = useMemo(() => {
-    if (!itemStats || !rankingsData) return null
-    return {
-      itemStats,
-      classWeights: rankingsData.class_weights || {},
-      focusCandidates: rankingsData.focus_candidates || {},
-      spellFociiList: null,
-      elementalDisplayNames: {},
+  useEffect(() => {
+    if (!precomputeReady || !forecastPayload?.roster || !resolvedItemId || !itemStats || rankingsData != null) {
+      return
     }
-  }, [itemStats, rankingsData])
+    let needsMagelo = false
+    for (const block of forecastPayload.roster) {
+      for (const c of block.characters || []) {
+        const name = (c.name || '').trim()
+        const cls = (c.class_name || '').trim()
+        const pc = findPrecomputedUpgrade(precomputedByItem, resolvedItemId, name, cls)
+        if (!pc) {
+          needsMagelo = true
+          break
+        }
+      }
+      if (needsMagelo) break
+    }
+    if (!needsMagelo) return
+    loadRankings()
+  }, [
+    precomputeReady,
+    forecastPayload,
+    resolvedItemId,
+    itemStats,
+    precomputedByItem,
+    rankingsData,
+    loadRankings,
+  ])
 
   const runForecast = async () => {
     const days = Math.min(730, Math.max(1, parseInt(activityDays, 10) || ACTIVE_DAYS))
@@ -197,9 +289,13 @@ export default function OfficerGlobalLootBidForecast({ isOfficer }) {
         const charName = (a.name || '').trim()
         const className = (a.class_name || '').trim()
 
+        const pc = findPrecomputedUpgrade(precomputedByItem, resolvedItemId, charName, className)
         const mageloChar = findRankingChar(rankingsChars, charName, className)
+
         let upgrade = null
-        if (mageloChar) {
+        if (pc) {
+          upgrade = precomputedToUpgradeShape(pc)
+        } else if (mageloChar) {
           upgrade = evaluateItemUpgradeForCharacter(mageloChar, resolvedItemId, ctx)
         }
 
@@ -223,7 +319,14 @@ export default function OfficerGlobalLootBidForecast({ isOfficer }) {
         const band = estimateBidBand(balance, anchor, bidInfo.medianRatio, upgrade?.scoreDelta)
 
         const reasons = []
-        if (mageloChar && upgrade?.eligible) {
+        if (pc) {
+          reasons.push(
+            `Upgrade vs ${pc.slotName}${pc.currentItemName ? ` (currently ${pc.currentItemName})` : ''}: score Δ ≈ ${pc.scoreDelta?.toFixed?.(3) ?? pc.scoreDelta}; HP Δ ${pc.hpDelta ?? 0}. (Precomputed CI index)`,
+          )
+          if (pc.focusSpellName) reasons.push(`Focus: ${pc.focusSpellName}`)
+          const deltaFmt = formatDeltasDetail(pc.deltasDetail)
+          if (deltaFmt) reasons.push(`Stat deltas: ${deltaFmt}`)
+        } else if (mageloChar && upgrade?.eligible) {
           if (upgrade.isUpgrade) {
             reasons.push(
               `Upgrade vs ${upgrade.slotName}${upgrade.currentItemName ? ` (currently ${upgrade.currentItemName})` : ''}: score Δ ≈ ${upgrade.scoreDelta?.toFixed?.(3) ?? upgrade.scoreDelta}; HP Δ ${upgrade.hpDelta ?? 0}.`,
@@ -233,8 +336,10 @@ export default function OfficerGlobalLootBidForecast({ isOfficer }) {
               `Can equip in ${upgrade.slotName} but Magelo scoring does not show a gain (sidegrade/downgrade vs current).`,
             )
           }
-        } else if (!mageloChar) {
-          reasons.push('No matching Magelo export for this toon — upgrade line skipped.')
+        } else if (!pc && !mageloChar) {
+          reasons.push(
+            'No CI upgrade row and no matching Magelo export for this toon — use Reload Magelo JSON or set VITE_CLASS_RANKINGS_URL for live scoring.',
+          )
         } else if (upgrade && !upgrade.eligible) {
           reasons.push(`Not a candidate for this item: ${upgrade.reason || 'unknown'}.`)
         }
@@ -261,7 +366,7 @@ export default function OfficerGlobalLootBidForecast({ isOfficer }) {
 
         const rowKey = `${accountId}:${charId || charName}`
         const showUpgradeStrip =
-          !!mageloChar && !!upgradeCtx && characterQualifiesForUpgradeStrip(prof, charId)
+          characterQualifiesForUpgradeStrip(prof, charId) && (!!pc || !!mageloChar)
 
         out.push({
           rowKey,
@@ -276,6 +381,7 @@ export default function OfficerGlobalLootBidForecast({ isOfficer }) {
           reasons,
           upgrade,
           hasMagelo: !!mageloChar,
+          hasPrecompute: !!pc,
           mageloChar,
           showUpgradeStrip,
         })
@@ -284,14 +390,45 @@ export default function OfficerGlobalLootBidForecast({ isOfficer }) {
 
     out.sort((x, y) => y.interestScore - x.interestScore)
     return out
-  }, [forecastPayload, resolvedItemId, itemStats, rankingsData, dkpPrices, nameToId, upgradeCtx])
+  }, [forecastPayload, resolvedItemId, itemStats, rankingsData, dkpPrices, nameToId, precomputedByItem])
 
-  const loadUpgradesForRow = (row) => {
+  const loadUpgradesForRow = async (row) => {
     const key = row.rowKey
-    if (upgradeCache[key] || !row.mageloChar || !upgradeCtx) return
+    if (upgradeCache[key] || !itemStats) return
     setUpgradeLoadingKey(key)
     try {
-      const result = computeUpgradesForCharacter(row.mageloChar, 15, false, upgradeCtx)
+      let rd = rankingsData
+      if (!rd) {
+        try {
+          rd = await fetchRankingsJson()
+        } catch {
+          setUpgradeCache((prev) => ({
+            ...prev,
+            [key]: {
+              error:
+                'Could not load class rankings. Set VITE_CLASS_RANKINGS_URL or add class_rankings.json to web/public.',
+            },
+          }))
+          return
+        }
+      }
+      const mageloChar =
+        row.mageloChar || findRankingChar(rd.characters || [], row.charName, row.className)
+      const ctx = {
+        itemStats,
+        classWeights: rd.class_weights || {},
+        focusCandidates: rd.focus_candidates || {},
+        spellFociiList: null,
+        elementalDisplayNames: {},
+      }
+      if (!mageloChar) {
+        setUpgradeCache((prev) => ({
+          ...prev,
+          [key]: { error: 'No Magelo export row for this toon (name + class).' },
+        }))
+        return
+      }
+      const result = computeUpgradesForCharacter(mageloChar, 15, false, ctx)
       setUpgradeCache((prev) => ({ ...prev, [key]: result }))
     } finally {
       setUpgradeLoadingKey(null)
@@ -306,14 +443,19 @@ export default function OfficerGlobalLootBidForecast({ isOfficer }) {
       : itemInput.trim() || '—'
 
   const activityApplied = forecastPayload?.activity_days
+  const stalePrecomputeDays =
+    precomputedMeta?.generated_at != null
+      ? (Date.now() - new Date(precomputedMeta.generated_at).getTime()) / (86400 * 1000)
+      : null
 
   return (
     <div className="container">
       <h1>Global item bid interest (officer)</h1>
       <p style={{ color: '#a1a1aa', marginBottom: '1rem', maxWidth: '52rem' }}>
         Heuristic only: active accounts (recent raid activity or pinned in Admin, same rules as the DKP leaderboard) and
-        their characters vs one item. Uses guild sale history for paid/reference when the database RPC provides it.
-        Not a prediction of bids.{' '}
+        their characters vs one item. Upgrade copy prefers the CI precompute index when present; full Magelo JSON loads
+        only for live fallback or slot-deep upgrades. Uses guild sale history for paid/reference when the database RPC
+        provides it. Not a prediction of bids.{' '}
         <Link to="/officer" style={{ marginLeft: '0.5rem' }}>← Officer</Link>
         {' · '}
         <Link to="/officer/loot-bid-forecast">Bid hints (by raid)</Link>
@@ -351,6 +493,9 @@ export default function OfficerGlobalLootBidForecast({ isOfficer }) {
         </button>
       </div>
 
+      {precomputedLoadNote && (
+        <p style={{ color: '#a1a1aa', marginBottom: '0.5rem', fontSize: '0.9rem' }}>{precomputedLoadNote}</p>
+      )}
       {rankingsError && (
         <p style={{ color: '#fbbf24', marginBottom: '0.75rem' }}>{rankingsError}</p>
       )}
@@ -369,6 +514,12 @@ export default function OfficerGlobalLootBidForecast({ isOfficer }) {
             <>
               {' '}
               · Static anchor (avg last 3 in dkp_prices.json): ~{Math.round(rows[0].anchor)} DKP
+            </>
+          )}
+          {stalePrecomputeDays != null && stalePrecomputeDays > 3 && (
+            <>
+              {' '}
+              · CI upgrade index age: ~{Math.round(stalePrecomputeDays)} days
             </>
           )}
         </p>
@@ -429,7 +580,7 @@ export default function OfficerGlobalLootBidForecast({ isOfficer }) {
                               type="button"
                               className="btn btn-ghost"
                               style={{ fontSize: '0.8rem', padding: '0.2rem 0.5rem' }}
-                              disabled={loadingUp || !upgradeCtx}
+                              disabled={loadingUp || !itemStats}
                               onClick={() => loadUpgradesForRow(r)}
                             >
                               {loadingUp ? 'Computing…' : 'Show top upgrades by slot (Magelo)'}
