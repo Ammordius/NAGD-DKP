@@ -626,19 +626,229 @@ export function scoreItemForUpgrade(itemStats, itemId, norm, focusWeights, focus
 }
 
 /**
- * @param {object} char - { class, inventory: [{ slot_id, item_id, item_name }] }
- * @param {string|number} candidateItemId
- * @param {object} ctx - itemStats, classWeights (by class name), focusCandidates, optional spellFociiList, elementalDisplayNames
+ * Shared class weights + focus maps for upgrade scoring (Magelo class_rankings parity).
+ * @param {object} ctx - itemStats, classWeights, focusCandidates, optional spellFociiList, elementalDisplayNames, focusMultiplier
+ * @returns {{ ok: true, norm, focusWeights, focusValuesByItem, charClass, classAbbrev, itemStats, elementalDisplayNames } | { ok: false, reason: string }}
  */
-export function evaluateItemUpgradeForCharacter(char, candidateItemId, ctx) {
+function prepareCharScoringOrNull(char, ctx) {
   const {
     itemStats,
     classWeights,
     focusCandidates = {},
     spellFociiList = null,
-    elementalDisplayNames = {},
     focusMultiplier = 2.4,
   } = ctx
+  const charClass = char?.class
+  const weights = JSON.parse(JSON.stringify(classWeights[charClass] || {}))
+  if (!weights || Object.keys(weights).length === 0) {
+    return { ok: false, reason: 'no_class_weights' }
+  }
+  const norm = normalizeWeights(weights, focusMultiplier, charClass)
+  const focusWeights = norm.focus || {}
+  const focusValuesByItem = buildFocusValuesByItem(itemStats, focusCandidates, spellFociiList)
+  const classAbbrev = CLASS_TO_ABBREV[charClass] || ''
+  return {
+    ok: true,
+    norm,
+    focusWeights,
+    focusValuesByItem,
+    charClass,
+    classAbbrev,
+    itemStats,
+    elementalDisplayNames: ctx.elementalDisplayNames || {},
+  }
+}
+
+/**
+ * Per-slot upgrade candidates vs equipped gear (same algorithm as magelo/deploy_local/class_rankings.html computeUpgradesForCharacter).
+ * @param {object} char - { class, inventory: [{ slot_id, item_id, item_name }] }
+ * @param {number} maxPerSlot
+ * @param {boolean} includeDowngrades
+ * @param {object} ctx - same as evaluateItemUpgradeForCharacter
+ * @returns {{ bySlot: Array, anyMissing: boolean, error?: string }}
+ */
+export function computeUpgradesForCharacter(char, maxPerSlot, includeDowngrades, ctx) {
+  let m = maxPerSlot
+  if (m == null || m < 1) m = 5
+  if (includeDowngrades == null) includeDowngrades = false
+
+  const prep = prepareCharScoringOrNull(char, ctx)
+  if (!prep.ok) {
+    return { bySlot: [], anyMissing: false, error: prep.reason }
+  }
+
+  const { norm, focusWeights, focusValuesByItem, classAbbrev, itemStats, elementalDisplayNames } = prep
+  const equippedOnly = (char.inventory || []).filter((i) => i.slot_id >= 1 && i.slot_id <= 22)
+  const bySlot = []
+  let anyMissing = false
+
+  for (const inv of equippedOnly) {
+    const slotId = inv.slot_id
+    const slotName = SLOT_NAMES_FOR_UI[slotId] || `Slot ${slotId}`
+    const currentItemId =
+      inv.item_id != null && inv.item_id !== '' ? Number(inv.item_id) : null
+    const currentItemName =
+      inv.item_name || (currentItemId ? `Item ${currentItemId}` : '')
+    let currentScore = 0
+    let currentInData = false
+    const currentStats =
+      currentItemId != null && !Number.isNaN(currentItemId) && itemStats[String(currentItemId)]
+        ? itemStats[String(currentItemId)]
+        : null
+    if (currentStats) {
+      currentInData = true
+      currentScore = scoreItemForUpgrade(
+        currentStats,
+        currentItemId,
+        norm,
+        focusWeights,
+        focusValuesByItem,
+      )
+    } else {
+      anyMissing = true
+    }
+
+    let offhandStats = null
+    let offhandScore = 0
+    if (slotId === 13) {
+      const offhandInv = equippedOnly.find((i) => i.slot_id === 14)
+      const offhandItemId =
+        offhandInv && offhandInv.item_id != null && offhandInv.item_id !== ''
+          ? Number(offhandInv.item_id)
+          : null
+      if (offhandItemId != null && !Number.isNaN(offhandItemId) && itemStats[String(offhandItemId)]) {
+        offhandStats = itemStats[String(offhandItemId)]
+        offhandScore = scoreItemForUpgrade(
+          offhandStats,
+          offhandItemId,
+          norm,
+          focusWeights,
+          focusValuesByItem,
+        )
+      }
+    }
+
+    const otherEquippedIds = new Set(
+      equippedOnly
+        .filter((i) => i.slot_id !== slotId)
+        .map((i) => (i.item_id != null && i.item_id !== '' ? Number(i.item_id) : null))
+        .filter((n) => n != null && !Number.isNaN(n)),
+    )
+    const candidates = []
+    for (const [idStr, stats] of Object.entries(itemStats)) {
+      const id = Number(idStr)
+      if (Number.isNaN(id) || !stats) continue
+      if (!itemMatchesSlot(slotId, stats.slot)) continue
+      if (!itemUsableByClass(stats.classes, classAbbrev)) continue
+      if (slotId === 14 && isItemTwoHanded(stats)) continue
+      if (isItemLore(stats) && otherEquippedIds.has(id)) continue
+      const score = scoreItemForUpgrade(stats, id, norm, focusWeights, focusValuesByItem)
+
+      const is2her = isItemTwoHanded(stats)
+      let baselineScore = currentScore
+      let deltas
+      if (slotId === 13 && is2her) {
+        baselineScore = currentScore + offhandScore
+        const currentRaw = mergeRawStats(getItemRawStats(currentStats), getItemRawStats(offhandStats))
+        deltas = getItemStatDeltasFromRaw(currentRaw, stats)
+      } else {
+        deltas = getItemStatDeltas(currentStats, stats)
+      }
+      const delta = score - baselineScore
+      if (!includeDowngrades && delta <= 0) continue
+
+      const focusSpellName =
+        stats.focusSpellName != null && stats.focusSpellName !== '' ? String(stats.focusSpellName) : ''
+      candidates.push({
+        itemId: id,
+        itemName: stats.name || elementalDisplayNames[String(id)] || `Item ${id}`,
+        score,
+        delta,
+        deltas,
+        focusSpellName,
+      })
+    }
+    candidates.sort((a, b) => b.delta - a.delta)
+    const upgrades = candidates.slice(0, m)
+
+    bySlot.push({
+      slotId,
+      slotName,
+      currentItemName,
+      currentItemId,
+      currentScore,
+      currentInData,
+      upgrades,
+    })
+  }
+
+  const hasSlot14 = bySlot.some((s) => s.slotId === 14)
+  const slot13Entry = bySlot.find((s) => s.slotId === 13)
+  const mainHandIs2H =
+    slot13Entry &&
+    slot13Entry.currentItemId != null &&
+    itemStats[String(slot13Entry.currentItemId)] &&
+    isItemTwoHanded(itemStats[String(slot13Entry.currentItemId)])
+
+  if (!hasSlot14 && mainHandIs2H) {
+    const slotId = 14
+    const slotName = SLOT_NAMES_FOR_UI[slotId] || 'Off Hand'
+    const currentItemId = null
+    const currentItemName = ''
+    const currentScore = 0
+    const currentInData = true
+    const otherEquippedIds = new Set(
+      equippedOnly
+        .filter((i) => i.slot_id !== slotId)
+        .map((i) => (i.item_id != null && i.item_id !== '' ? Number(i.item_id) : null))
+        .filter((n) => n != null && !Number.isNaN(n)),
+    )
+    const candidates = []
+    for (const [idStr, stats] of Object.entries(itemStats)) {
+      const id = Number(idStr)
+      if (Number.isNaN(id) || !stats) continue
+      if (!itemMatchesSlot(slotId, stats.slot)) continue
+      if (!itemUsableByClass(stats.classes, classAbbrev)) continue
+      if (slotId === 14 && isItemTwoHanded(stats)) continue
+      if (isItemLore(stats) && otherEquippedIds.has(id)) continue
+      const score = scoreItemForUpgrade(stats, id, norm, focusWeights, focusValuesByItem)
+      const deltas = getItemStatDeltas(null, stats)
+      const delta = score
+      if (!includeDowngrades && delta <= 0) continue
+      const focusSpellName =
+        stats.focusSpellName != null && stats.focusSpellName !== '' ? String(stats.focusSpellName) : ''
+      candidates.push({
+        itemId: id,
+        itemName: stats.name || elementalDisplayNames[String(id)] || `Item ${id}`,
+        score,
+        delta,
+        deltas,
+        focusSpellName,
+      })
+    }
+    candidates.sort((a, b) => b.delta - a.delta)
+    const upgrades = candidates
+    bySlot.push({
+      slotId,
+      slotName,
+      currentItemName,
+      currentItemId,
+      currentScore,
+      currentInData,
+      upgrades,
+    })
+  }
+
+  return { bySlot, anyMissing }
+}
+
+/**
+ * @param {object} char - { class, inventory: [{ slot_id, item_id, item_name }] }
+ * @param {string|number} candidateItemId
+ * @param {object} ctx - itemStats, classWeights (by class name), focusCandidates, optional spellFociiList, elementalDisplayNames
+ */
+export function evaluateItemUpgradeForCharacter(char, candidateItemId, ctx) {
+  const { itemStats, elementalDisplayNames = {} } = ctx
 
   const idStr = String(candidateItemId)
   const candNum = Number(candidateItemId)
@@ -657,14 +867,12 @@ export function evaluateItemUpgradeForCharacter(char, candidateItemId, ctx) {
     return { eligible: false, reason: 'class_mismatch' }
   }
 
-  const weights = JSON.parse(JSON.stringify(classWeights[charClass] || {}))
-  if (!weights || Object.keys(weights).length === 0) {
-    return { eligible: false, reason: 'no_class_weights' }
+  const prep = prepareCharScoringOrNull(char, ctx)
+  if (!prep.ok) {
+    return { eligible: false, reason: prep.reason }
   }
 
-  const norm = normalizeWeights(weights, focusMultiplier, charClass)
-  const focusWeights = norm.focus || {}
-  const focusValuesByItem = buildFocusValuesByItem(itemStats, focusCandidates, spellFociiList)
+  const { norm, focusWeights, focusValuesByItem } = prep
 
   const equippedOnly = (char.inventory || []).filter((i) => i.slot_id >= 1 && i.slot_id <= 22)
   const getItemName = (itemIdNum) => {

@@ -52,7 +52,38 @@ export function bidVsMarketFromPurchases(purchasesChronological, nameToId, dkpPr
   const medianRatio = sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2
   let label = 'near typical vs recent sales'
   if (medianRatio >= 1.2) label = 'often pays above recent sale prices'
-  else if (medianRatio <= 0.88) label = 'often pays below recent sale prices'
+  else   if (medianRatio <= 0.88) label = 'often pays below recent sale prices'
+  return { medianRatio, ratios, label }
+}
+
+/**
+ * Like bidVsMarketFromPurchases, but uses `paid_to_ref_ratio` from the DB (guild prior sales
+ * at time of purchase) when present on a purchase row; otherwise falls back to dkp_prices.json.
+ * @param {Array<{ item_name?: string, cost?: number, paid_to_ref_ratio?: number|null }>} purchasesChronological
+ */
+export function bidVsMarketFromPurchasesTimeAware(purchasesChronological, nameToId, dkpPrices) {
+  const ratios = []
+  if (!Array.isArray(purchasesChronological)) return { medianRatio: null, ratios: [], label: 'no data' }
+  for (const p of purchasesChronological) {
+    const dbRatio = p?.paid_to_ref_ratio
+    if (dbRatio != null && !Number.isNaN(Number(dbRatio)) && Number(dbRatio) > 0) {
+      ratios.push(Number(dbRatio))
+      continue
+    }
+    const id = resolveItemIdFromName(p.item_name, nameToId)
+    if (!id) continue
+    const ref = avgDkpFromPrices(dkpPrices, id, 3)
+    const cost = Number(p.cost) || 0
+    if (ref == null || ref <= 0 || cost <= 0) continue
+    ratios.push(cost / ref)
+  }
+  if (ratios.length === 0) return { medianRatio: null, ratios: [], label: 'insufficient comparable prices' }
+  const sorted = [...ratios].sort((a, b) => a - b)
+  const mid = Math.floor(sorted.length / 2)
+  const medianRatio = sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2
+  let label = 'near typical vs reference prices'
+  if (medianRatio >= 1.2) label = 'often pays above reference prices'
+  else if (medianRatio <= 0.88) label = 'often pays below reference prices'
   return { medianRatio, ratios, label }
 }
 

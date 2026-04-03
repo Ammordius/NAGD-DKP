@@ -9,7 +9,7 @@ import {
 import {
   archetypeDescription,
   avgDkpFromPrices,
-  bidVsMarketFromPurchases,
+  bidVsMarketFromPurchasesTimeAware,
   buildNameToItemId,
   estimateBidBand,
   lastSpendNarrative,
@@ -175,7 +175,7 @@ export default function OfficerLootBidForecast({ isOfficer }) {
       }
 
       const purchases = Array.isArray(prof?.recent_purchases_desc) ? prof.recent_purchases_desc : []
-      const bidInfo = bidVsMarketFromPurchases(purchases, nameToId, dkpPrices || {})
+      const bidInfo = bidVsMarketFromPurchasesTimeAware(purchases, nameToId, dkpPrices || {})
       const tags = spendArchetypeTags(prof, bidInfo.label, bidInfo.medianRatio)
       const archetypeText = archetypeDescription(tags)
       const balance = prof?.balance != null ? Number(prof.balance) : 0
@@ -249,6 +249,8 @@ export default function OfficerLootBidForecast({ isOfficer }) {
         Heuristic only: who on this raid might care about an item, using linked-account spend patterns (last purchase,
         per-toon concentration, balance) and optional Magelo/class_rankings upgrade scoring. Not a prediction of bids.
         <Link to="/officer" style={{ marginLeft: '0.5rem' }}>← Officer</Link>
+        {' · '}
+        <Link to="/officer/global-loot-bid-forecast">Global (active roster)</Link>
       </p>
 
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', alignItems: 'flex-end', marginBottom: '1rem' }}>
