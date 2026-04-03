@@ -139,23 +139,21 @@ def main() -> int:
             try:
                 from supabase import create_client
                 client = create_client(url, key)
-                acc_ok, acc_err = _call_rpc_with_retries(client, "refresh_account_dkp_summary")
+                # Per-raid uploads already ran refresh_account_dkp_summary_for_raid; full
+                # refresh_account_dkp_summary is redundant here and often hits statement_timeout.
                 dkp_ok, dkp_err = _call_rpc_with_retries(client, "refresh_dkp_summary")
 
                 print("Batch refresh status:")
-                print(f"  account_summary: {'ok' if acc_ok else 'failed'}")
+                print("  account_summary: ok (per-raid refresh_account_dkp_summary_for_raid)")
                 print(f"  dkp_summary: {'ok' if dkp_ok else 'failed'}")
 
-                if not acc_ok or not dkp_ok:
+                if not dkp_ok:
                     print(
-                        "ERROR: batch upload completed inserts but final refresh is incomplete; "
+                        "ERROR: batch upload completed inserts but final refresh_dkp_summary failed; "
                         "run is not synchronized and should be rerun.",
                         file=sys.stderr,
                     )
-                    if not acc_ok:
-                        print(f"  refresh_account_dkp_summary error: {acc_err}", file=sys.stderr)
-                    if not dkp_ok:
-                        print(f"  refresh_dkp_summary error: {dkp_err}", file=sys.stderr)
+                    print(f"  refresh_dkp_summary error: {dkp_err}", file=sys.stderr)
                     return 2
             except Exception as e:
                 print(

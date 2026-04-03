@@ -1262,6 +1262,7 @@ BEGIN
   IF auth.uid() IS NOT NULL AND NOT public.is_officer() THEN
     RAISE EXCEPTION 'Only officers can refresh account DKP summary';
   END IF;
+  SET LOCAL statement_timeout = '600s';
   PERFORM refresh_account_dkp_summary_internal();
 END;
 $$;
