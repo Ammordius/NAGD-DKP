@@ -2,11 +2,12 @@ import { useEffect, useState, useCallback, useMemo, useRef, Fragment } from 'rea
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import useSWRConfig from 'swr'
 import { supabase } from '../lib/supabase'
-import { getDkpMobLoot } from '../lib/staticData'
+import { getDkpMobLoot, getRaidItemSources } from '../lib/staticData'
 import { logOfficerAudit } from '../lib/officerAudit'
 import { formatAccountCharacter, formatAccountCharacters } from '../lib/formatAccountCharacter'
 import { DKP_DATA_KEY } from '../lib/dkpLeaderboard'
 import { groupRaidLootByEvent } from '../lib/groupRaidLootByEvent'
+import { buildItemNameToIdMap, buildLootMobLookups, subgroupLootRowsByMob } from '../lib/lootMobSubgroups'
 
 // --- Parsing ---
 
@@ -124,6 +125,8 @@ export default function Officer({ isOfficer }) {
   const [accountIdToDisplayName, setAccountIdToDisplayName] = useState({})
   const [itemNames, setItemNames] = useState([])
   const [jsonLootItemNames, setJsonLootItemNames] = useState([])
+  const [lootMobJson, setLootMobJson] = useState(null)
+  const [raidItemSourcesJson, setRaidItemSourcesJson] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [mutating, setMutating] = useState(false)
@@ -325,15 +328,19 @@ export default function Officer({ isOfficer }) {
     const names = [...byLower.values()].sort((a, b) => a.localeCompare(b))
     setItemNames(names)
     try {
-      const data = await getDkpMobLoot()
-      if (data) {
+      const [mobData, raidSrc] = await Promise.all([getDkpMobLoot(), getRaidItemSources()])
+      setLootMobJson(mobData)
+      setRaidItemSourcesJson(raidSrc)
+      if (mobData) {
         const fromJson = new Set()
-        Object.values(data).forEach((entry) => {
+        Object.values(mobData).forEach((entry) => {
           ;(entry?.loot || []).forEach((l) => { if (l?.name) fromJson.add(l.name) })
         })
         setJsonLootItemNames([...fromJson])
       } else setJsonLootItemNames([])
     } catch (_) {
+      setLootMobJson(null)
+      setRaidItemSourcesJson(null)
       setJsonLootItemNames([])
     }
     setLoading(false)
@@ -1055,6 +1062,19 @@ export default function Officer({ isOfficer }) {
   }, [eventAttendance])
 
   const lootSections = useMemo(() => groupRaidLootByEvent(loot, events), [loot, events])
+  const officerItemNameToId = useMemo(() => buildItemNameToIdMap(lootMobJson), [lootMobJson])
+  const officerMobLookups = useMemo(
+    () => buildLootMobLookups(lootMobJson, raidItemSourcesJson),
+    [lootMobJson, raidItemSourcesJson]
+  )
+  const lootSectionsWithMobs = useMemo(
+    () =>
+      lootSections.map((section) => ({
+        ...section,
+        mobGroups: subgroupLootRowsByMob(section.rows, officerItemNameToId, officerMobLookups),
+      })),
+    [lootSections, officerItemNameToId, officerMobLookups]
+  )
 
   const filteredItemNames = useMemo(() => {
     const q = lootItemQuery.toLowerCase().trim()
@@ -1600,7 +1620,7 @@ export default function Officer({ isOfficer }) {
               </thead>
               <tbody>
                 {loot.length === 0 && <tr><td colSpan={4}>No loot recorded</td></tr>}
-                {lootSections.map((section) => (
+                {lootSectionsWithMobs.map((section) => (
                   <Fragment key={section.key}>
                     <tr>
                       <td
@@ -1616,41 +1636,62 @@ export default function Officer({ isOfficer }) {
                         {section.title}
                       </td>
                     </tr>
-                    {section.rows.map((row, i) => {
-                      const isEditingCost = editingLootId === row.id
-                      return (
-                        <tr key={row.id || `${section.key}-${i}`}>
-                          <td><Link to={`/items/${encodeURIComponent(row.item_name || '')}`}>{row.item_name || '—'}</Link></td>
-                          <td>
-                            {(() => {
-                              const charName = row.character_name || row.char_id || '—'
-                              const accountId = getAccountId(row.character_name || row.char_id)
-                              const to = accountId ? `/accounts/${accountId}` : `/characters/${encodeURIComponent(charName)}`
-                              return <Link to={to}>{charName}</Link>
-                            })()}
-                          </td>
-                          <td>
-                            {isEditingCost ? (
-                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
-                                <input type="text" value={editingLootCost} onChange={(ev) => setEditingLootCost(ev.target.value)} style={{ width: '4rem', padding: '0.2rem' }} />
-                                <button type="button" className="btn btn-ghost" onClick={() => handleSaveLootCost(row)} disabled={mutating}>Save</button>
-                                <button type="button" className="btn btn-ghost" onClick={() => setEditingLootId(null)}>Cancel</button>
-                              </span>
-                            ) : (
-                              <>
-                                {row.cost}
-                                <button type="button" className="btn btn-ghost" style={{ marginLeft: '0.25rem', fontSize: '0.85rem' }} onClick={() => { setEditingLootId(row.id); setEditingLootCost(row.cost ?? '') }} title="Edit cost">✎</button>
-                              </>
-                            )}
-                          </td>
-                          <td>
-                            {!isEditingCost && (
-                              <button type="button" className="btn btn-ghost" style={{ fontSize: '0.85rem', color: '#f87171' }} onClick={() => handleDeleteLoot(row)}>Remove</button>
-                            )}
-                          </td>
-                        </tr>
-                      )
-                    })}
+                    {section.mobGroups.map((mobGroup) => (
+                      <Fragment key={`${section.key}-${mobGroup.key}`}>
+                        {mobGroup.title != null && (
+                          <tr>
+                            <td
+                              colSpan={4}
+                              style={{
+                                padding: '0.35rem 0.75rem 0.35rem 1.5rem',
+                                backgroundColor: 'rgba(0,0,0,0.12)',
+                                borderBottom: '1px solid #27272a',
+                                fontWeight: 500,
+                                fontSize: '0.9rem',
+                                color: '#a1a1aa',
+                              }}
+                            >
+                              {mobGroup.title}
+                            </td>
+                          </tr>
+                        )}
+                        {mobGroup.rows.map((row, i) => {
+                          const isEditingCost = editingLootId === row.id
+                          return (
+                            <tr key={row.id || `${section.key}-${mobGroup.key}-${i}`}>
+                              <td><Link to={`/items/${encodeURIComponent(row.item_name || '')}`}>{row.item_name || '—'}</Link></td>
+                              <td>
+                                {(() => {
+                                  const charName = row.character_name || row.char_id || '—'
+                                  const accountId = getAccountId(row.character_name || row.char_id)
+                                  const to = accountId ? `/accounts/${accountId}` : `/characters/${encodeURIComponent(charName)}`
+                                  return <Link to={to}>{charName}</Link>
+                                })()}
+                              </td>
+                              <td>
+                                {isEditingCost ? (
+                                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
+                                    <input type="text" value={editingLootCost} onChange={(ev) => setEditingLootCost(ev.target.value)} style={{ width: '4rem', padding: '0.2rem' }} />
+                                    <button type="button" className="btn btn-ghost" onClick={() => handleSaveLootCost(row)} disabled={mutating}>Save</button>
+                                    <button type="button" className="btn btn-ghost" onClick={() => setEditingLootId(null)}>Cancel</button>
+                                  </span>
+                                ) : (
+                                  <>
+                                    {row.cost}
+                                    <button type="button" className="btn btn-ghost" style={{ marginLeft: '0.25rem', fontSize: '0.85rem' }} onClick={() => { setEditingLootId(row.id); setEditingLootCost(row.cost ?? '') }} title="Edit cost">✎</button>
+                                  </>
+                                )}
+                              </td>
+                              <td>
+                                {!isEditingCost && (
+                                  <button type="button" className="btn btn-ghost" style={{ fontSize: '0.85rem', color: '#f87171' }} onClick={() => handleDeleteLoot(row)}>Remove</button>
+                                )}
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </Fragment>
+                    ))}
                   </Fragment>
                 ))}
               </tbody>
