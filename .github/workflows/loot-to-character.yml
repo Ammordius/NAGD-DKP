@@ -153,3 +153,71 @@ jobs:
             git commit -m "chore: update last_raid_loot_count for loot-to-character skip check"
             git push
           fi
+
+  # Guild-scoped upgrade index for officer bid hints (runs even when raid_loot count unchanged — gear updates without new loot).
+  # Requires secrets: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, CLASS_RANKINGS_URL (same JSON as VITE_CLASS_RANKINGS_URL).
+  bid_forecast_index:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      CLASS_RANKINGS_URL: ${{ secrets.CLASS_RANKINGS_URL }}
+    steps:
+      - name: Checkout DKP repo
+        uses: actions/checkout@v4
+
+      - name: Check secrets for bid forecast index
+        id: bf_secrets
+        run: |
+          if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_SERVICE_ROLE_KEY" ] || [ -z "$CLASS_RANKINGS_URL" ]; then
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+            echo "Skipping bid forecast index: need SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, and CLASS_RANKINGS_URL."
+          else
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up Python
+        if: steps.bf_secrets.outputs.ok == 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Python dependencies
+        if: steps.bf_secrets.outputs.ok == 'true'
+        run: pip install -r requirements.txt
+
+      - name: Export active roster for bid forecast
+        if: steps.bf_secrets.outputs.ok == 'true'
+        run: python scripts/export_bid_forecast_roster.py --out data/bid_forecast_roster.json
+
+      - name: Set up Node
+        if: steps.bf_secrets.outputs.ok == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install web dependencies (for Node resolving web/src)
+        if: steps.bf_secrets.outputs.ok == 'true'
+        working-directory: web
+        run: npm ci
+
+      - name: Build bid_forecast_by_item.json
+        if: steps.bf_secrets.outputs.ok == 'true'
+        run: node scripts/build_bid_forecast_by_item.mjs
+
+      - name: Commit bid forecast JSON artifacts
+        if: steps.bf_secrets.outputs.ok == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add web/public/bid_forecast_by_item.json web/public/bid_forecast_meta.json
+          if git diff --staged --quiet; then
+            echo "No bid forecast JSON changes"
+          else
+            git commit -m "chore: refresh bid_forecast_by_item.json (CI guild upgrade index)"
+            git push
+          fi

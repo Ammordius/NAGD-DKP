@@ -17,6 +17,7 @@ import {
   resolveItemIdFromName,
   spendArchetypeTags,
 } from '../lib/bidForecastModel'
+import { ACTIVE_DAYS } from '../lib/dkpLeaderboard'
 
 const CLASS_RANKINGS_URL = import.meta.env.VITE_CLASS_RANKINGS_URL || '/class_rankings.json'
 
@@ -35,12 +36,84 @@ function findRankingChar(rankingsChars, attendeeName, attendeeClass) {
   )
 }
 
+/** Normalize raid vs global RPC payloads into one list of people + account_id. */
+function normalizedForecastPeople(payload) {
+  if (!payload) return []
+  if (Array.isArray(payload.roster)) {
+    const rows = []
+    for (const block of payload.roster) {
+      const aid = block.account_id
+      for (const c of block.characters || []) {
+        rows.push({
+          char_id: (c.char_id || '').trim(),
+          character_name: (c.name || '').trim(),
+          class_name: (c.class_name || '').trim(),
+          account_id: aid,
+        })
+      }
+    }
+    return rows
+  }
+  if (Array.isArray(payload.attendees)) {
+    return payload.attendees.map((a) => ({
+      char_id: (a.char_id || '').trim(),
+      character_name: (a.character_name || '').trim(),
+      class_name: (a.class_name || '').trim(),
+      account_id: a.account_id,
+    }))
+  }
+  return []
+}
+
+function findPrecomputedUpgrade(precomputedPayload, itemId, charName, className) {
+  const list = precomputedPayload?.byItem?.[String(itemId)]
+  if (!list || !Array.isArray(list)) return null
+  const n = normName(charName)
+  const c = normName(className)
+  return list.find((e) => normName(e.name) === n && normName(e.class_name) === c) || null
+}
+
+function precomputedToUpgradeShape(pc) {
+  if (!pc) return null
+  return {
+    eligible: true,
+    isUpgrade: true,
+    slotName: pc.slotName,
+    slotId: pc.slotId,
+    scoreDelta: pc.scoreDelta,
+    hpDelta: pc.hpDelta,
+    currentItemId: pc.currentItemId,
+    currentItemName: pc.currentItemName,
+    candidateName: pc.itemName,
+    fromPrecompute: true,
+    deltasDetail: pc.deltasDetail,
+    focusSpellName: pc.focusSpellName,
+  }
+}
+
+function formatDeltasDetail(d) {
+  if (!d || typeof d !== 'object') return null
+  const parts = []
+  if (d.hpDelta != null) parts.push(`HP ${d.hpDelta > 0 ? '+' : ''}${d.hpDelta}`)
+  if (d.manaDelta != null) parts.push(`Mana ${d.manaDelta > 0 ? '+' : ''}${d.manaDelta}`)
+  if (d.acDelta != null) parts.push(`AC ${d.acDelta > 0 ? '+' : ''}${d.acDelta}`)
+  if (d.svAllDelta != null) parts.push(`Resists (sum) ${d.svAllDelta > 0 ? '+' : ''}${d.svAllDelta}`)
+  if (d.svDeltasByType && typeof d.svDeltasByType === 'object') {
+    const inner = Object.entries(d.svDeltasByType)
+      .filter(([, v]) => v !== 0)
+      .map(([k, v]) => `${k} ${v > 0 ? '+' : ''}${v}`)
+    if (inner.length) parts.push(inner.join(', '))
+  }
+  return parts.length ? parts.join(' · ') : null
+}
+
 export default function OfficerLootBidForecast({ isOfficer }) {
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const raidIdParam = searchParams.get('raid') || ''
 
   const [raidInput, setRaidInput] = useState(raidIdParam)
+  const [activityDays, setActivityDays] = useState(String(ACTIVE_DAYS))
   const [itemInput, setItemInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -49,6 +122,9 @@ export default function OfficerLootBidForecast({ isOfficer }) {
   const [dkpPrices, setDkpPrices] = useState(null)
   const [rankingsData, setRankingsData] = useState(null)
   const [rankingsError, setRankingsError] = useState('')
+  const [precomputedByItem, setPrecomputedByItem] = useState(null)
+  const [precomputedMeta, setPrecomputedMeta] = useState(null)
+  const [precomputedLoadNote, setPrecomputedLoadNote] = useState('')
 
   useEffect(() => {
     if (!isOfficer) navigate('/')
@@ -76,6 +152,33 @@ export default function OfficerLootBidForecast({ isOfficer }) {
       .catch(() => {
         if (!cancelled) setDkpPrices(null)
       })
+    fetch('/bid_forecast_by_item.json')
+      .then((r) => {
+        if (r.status === 404) return null
+        if (!r.ok) throw new Error(String(r.status))
+        return r.json()
+      })
+      .then((j) => {
+        if (!cancelled) setPrecomputedByItem(j && typeof j === 'object' ? j : null)
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setPrecomputedByItem(null)
+          setPrecomputedLoadNote('No bid_forecast_by_item.json (CI precompute not deployed yet).')
+        }
+      })
+    fetch('/bid_forecast_meta.json')
+      .then((r) => {
+        if (r.status === 404) return null
+        if (!r.ok) return null
+        return r.json()
+      })
+      .then((j) => {
+        if (!cancelled) setPrecomputedMeta(j && typeof j === 'object' ? j : null)
+      })
+      .catch(() => {
+        if (!cancelled) setPrecomputedMeta(null)
+      })
     return () => {
       cancelled = true
     }
@@ -92,7 +195,7 @@ export default function OfficerLootBidForecast({ isOfficer }) {
       .catch(() => {
         setRankingsData(null)
         setRankingsError(
-          `Could not load class rankings from ${CLASS_RANKINGS_URL}. Set VITE_CLASS_RANKINGS_URL or add class_rankings.json to web/public for upgrade scoring.`,
+          `Could not load class rankings from ${CLASS_RANKINGS_URL}. Set VITE_CLASS_RANKINGS_URL or add class_rankings.json to web/public for live upgrade scoring (fallback when precompute misses).`,
         )
       })
   }, [])
@@ -112,20 +215,26 @@ export default function OfficerLootBidForecast({ isOfficer }) {
 
   const runForecast = async () => {
     const rid = (raidInput || '').trim()
-    if (!rid) {
-      setError('Enter a raid id.')
-      return
-    }
     setError('')
     setLoading(true)
     setForecastPayload(null)
-    setSearchParams({ raid: rid })
     try {
-      const { data, error: rpcErr } = await supabase.rpc('officer_loot_bid_forecast', {
-        p_raid_id: rid,
-      })
-      if (rpcErr) throw rpcErr
-      setForecastPayload(data || null)
+      if (rid) {
+        setSearchParams({ raid: rid })
+        const { data, error: rpcErr } = await supabase.rpc('officer_loot_bid_forecast', {
+          p_raid_id: rid,
+        })
+        if (rpcErr) throw rpcErr
+        setForecastPayload(data || null)
+      } else {
+        setSearchParams({})
+        const days = Math.min(730, Math.max(1, parseInt(activityDays, 10) || ACTIVE_DAYS))
+        const { data, error: rpcErr } = await supabase.rpc('officer_global_bid_forecast', {
+          p_activity_days: days,
+        })
+        if (rpcErr) throw rpcErr
+        setForecastPayload(data || null)
+      }
     } catch (e) {
       setError(e.message || String(e))
     } finally {
@@ -133,9 +242,13 @@ export default function OfficerLootBidForecast({ isOfficer }) {
     }
   }
 
+  const forecastPeople = useMemo(
+    () => normalizedForecastPeople(forecastPayload),
+    [forecastPayload],
+  )
+
   const rows = useMemo(() => {
-    if (!forecastPayload?.attendees || !resolvedItemId || !itemStats) return []
-    const attendees = forecastPayload.attendees
+    if (!forecastPayload || !resolvedItemId || !itemStats) return []
     const profiles = forecastPayload.account_profiles || {}
     const rankingsChars = rankingsData?.characters || []
     const classWeights = rankingsData?.class_weights || {}
@@ -150,16 +263,20 @@ export default function OfficerLootBidForecast({ isOfficer }) {
     }
 
     const out = []
-    for (const a of attendees) {
-      const charId = (a.char_id || '').trim()
-      const charName = (a.character_name || '').trim()
-      const className = (a.class_name || '').trim()
+    for (const a of forecastPeople) {
+      const charId = a.char_id
+      const charName = a.character_name
+      const className = a.class_name
       const accountId = a.account_id
       const prof = accountId ? profiles[accountId] : null
 
+      const pc = findPrecomputedUpgrade(precomputedByItem, resolvedItemId, charName, className)
       const mageloChar = findRankingChar(rankingsChars, charName, className)
+
       let upgrade = null
-      if (mageloChar) {
+      if (pc) {
+        upgrade = precomputedToUpgradeShape(pc)
+      } else if (mageloChar) {
         upgrade = evaluateItemUpgradeForCharacter(mageloChar, resolvedItemId, ctx)
       }
 
@@ -182,34 +299,51 @@ export default function OfficerLootBidForecast({ isOfficer }) {
       const anchor = avgDkpFromPrices(dkpPrices || {}, resolvedItemId, 3)
       const band = estimateBidBand(balance, anchor, bidInfo.medianRatio, upgrade?.scoreDelta)
 
-      const reasons = []
-      if (mageloChar && upgrade?.eligible) {
-        if (upgrade.isUpgrade) {
-          reasons.push(
-            `Upgrade vs ${upgrade.slotName}${upgrade.currentItemName ? ` (currently ${upgrade.currentItemName})` : ''}: score Δ ≈ ${upgrade.scoreDelta?.toFixed?.(3) ?? upgrade.scoreDelta}; HP Δ ${upgrade.hpDelta ?? 0}.`,
-          )
-        } else {
-          reasons.push(
-            `Can equip in ${upgrade.slotName} but Magelo scoring does not show a gain (sidegrade/downgrade vs current).`,
-          )
+      const summaryLine =
+        pc != null
+          ? `Upgrade vs ${pc.slotName}${pc.currentItemName ? ` (currently ${pc.currentItemName})` : ''}: score Δ ≈ ${pc.scoreDelta?.toFixed?.(3) ?? pc.scoreDelta}; HP Δ ${pc.hpDelta ?? 0}. (Precomputed CI index)`
+          : null
+
+      const detailBullets = []
+      if (summaryLine) detailBullets.push(summaryLine)
+      if (pc?.focusSpellName) detailBullets.push(`Focus: ${pc.focusSpellName}`)
+      const deltaFmt = formatDeltasDetail(pc?.deltasDetail)
+      if (deltaFmt) detailBullets.push(`Stat deltas: ${deltaFmt}`)
+
+      if (!pc) {
+        if (mageloChar && upgrade?.eligible) {
+          if (upgrade.isUpgrade) {
+            detailBullets.push(
+              `Upgrade vs ${upgrade.slotName}${upgrade.currentItemName ? ` (currently ${upgrade.currentItemName})` : ''}: score Δ ≈ ${upgrade.scoreDelta?.toFixed?.(3) ?? upgrade.scoreDelta}; HP Δ ${upgrade.hpDelta ?? 0}.`,
+            )
+          } else {
+            detailBullets.push(
+              `Can equip in ${upgrade.slotName} but Magelo scoring does not show a gain (sidegrade/downgrade vs current).`,
+            )
+          }
+        } else if (!mageloChar) {
+          detailBullets.push('No matching Magelo export for this toon — live upgrade line skipped.')
+        } else if (upgrade && !upgrade.eligible) {
+          detailBullets.push(`Not a candidate for this item: ${upgrade.reason || 'unknown'}.`)
         }
-      } else if (!mageloChar) {
-        reasons.push('No matching Magelo export for this toon — upgrade line skipped.')
-      } else if (upgrade && !upgrade.eligible) {
-        reasons.push(`Not a candidate for this item: ${upgrade.reason || 'unknown'}.`)
       }
 
       if (prof) {
-        reasons.push(lastSpendNarrative(prof, charId))
+        detailBullets.push(lastSpendNarrative(prof, charId))
         const pts = perToonShareNarrative(prof, charId)
-        if (pts) reasons.push(pts)
-        reasons.push(`Account balance (earned − spent): ~${Math.round(balance)} DKP.`)
-        reasons.push(archetypeText)
+        if (pts) detailBullets.push(pts)
+        detailBullets.push(`Account balance (earned − spent): ~${Math.round(balance)} DKP.`)
+        detailBullets.push(archetypeText)
         if (bidInfo.medianRatio != null) {
-          reasons.push(`Vs recent reference prices for matched items: median paid/reference ≈ ${bidInfo.medianRatio.toFixed(2)} (${bidInfo.label}).`)
+          const refLabel = Array.isArray(forecastPayload.roster)
+            ? 'Vs reference prices (guild history when available, else dkp_prices.json)'
+            : 'Vs recent reference prices for matched items'
+          detailBullets.push(
+            `${refLabel}: median paid/reference ≈ ${bidInfo.medianRatio.toFixed(2)} (${bidInfo.label}).`,
+          )
         }
       } else {
-        reasons.push('No linked account — DKP spend profile unavailable.')
+        detailBullets.push('No linked account — DKP spend profile unavailable.')
       }
 
       const interestScore =
@@ -225,15 +359,34 @@ export default function OfficerLootBidForecast({ isOfficer }) {
         tags,
         band,
         anchor,
-        reasons,
+        detailBullets,
         upgrade,
         hasMagelo: !!mageloChar,
+        hasPrecompute: !!pc,
+        summaryLine:
+          summaryLine
+          || (upgrade?.eligible && upgrade?.isUpgrade
+            ? `Upgrade · score Δ ≈ ${upgrade.scoreDelta?.toFixed?.(3) ?? upgrade.scoreDelta}`
+            : upgrade?.eligible === false
+              ? (upgrade.reason || 'Not eligible')
+              : upgrade?.isUpgrade === false
+                ? 'Sidegrade / no gain (live)'
+                : '—'),
       })
     }
 
     out.sort((x, y) => y.interestScore - x.interestScore)
     return out
-  }, [forecastPayload, resolvedItemId, itemStats, rankingsData, dkpPrices, nameToId])
+  }, [
+    forecastPayload,
+    forecastPeople,
+    resolvedItemId,
+    itemStats,
+    rankingsData,
+    dkpPrices,
+    nameToId,
+    precomputedByItem,
+  ])
 
   if (!isOfficer) return null
 
@@ -242,26 +395,46 @@ export default function OfficerLootBidForecast({ isOfficer }) {
       ? itemStats[String(resolvedItemId)].name
       : itemInput.trim() || '—'
 
+  const isGlobalMode = !((raidInput || '').trim())
+  const stalePrecomputeDays =
+    precomputedMeta?.generated_at != null
+      ? (Date.now() - new Date(precomputedMeta.generated_at).getTime()) / (86400 * 1000)
+      : null
+
   return (
     <div className="container">
       <h1>Loot bid interest (officer)</h1>
       <p style={{ color: '#a1a1aa', marginBottom: '1rem', maxWidth: '52rem' }}>
-        Heuristic only: who on this raid might care about an item, using linked-account spend patterns (last purchase,
-        per-toon concentration, balance) and optional Magelo/class_rankings upgrade scoring. Not a prediction of bids.
+        Heuristic only: who might care about an item, using linked-account spend patterns (last purchase,
+        per-toon concentration, balance) and Magelo-style upgrade scoring (precomputed CI index when
+        available, else live class_rankings). Leave raid id blank to use the{' '}
+        <strong style={{ color: '#e4e4e7' }}>active guild roster</strong> (same idea as Global bid). Not a
+        prediction of bids.
         <Link to="/officer" style={{ marginLeft: '0.5rem' }}>← Officer</Link>
         {' · '}
-        <Link to="/officer/global-loot-bid-forecast">Global (active roster)</Link>
+        <Link to="/officer/global-loot-bid-forecast">Global bid</Link>
       </p>
 
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', alignItems: 'flex-end', marginBottom: '1rem' }}>
         <label style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-          <span style={{ fontSize: '0.8rem', color: '#a1a1aa' }}>Raid id</span>
+          <span style={{ fontSize: '0.8rem', color: '#a1a1aa' }}>Raid id (optional)</span>
           <input
             className="input"
             style={{ minWidth: '14rem' }}
             value={raidInput}
             onChange={(e) => setRaidInput(e.target.value)}
-            placeholder="e.g. raid_2025_01_01_abc"
+            placeholder="Blank = active roster"
+          />
+        </label>
+        <label style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+          <span style={{ fontSize: '0.8rem', color: '#a1a1aa' }}>Activity days (blank roster)</span>
+          <input
+            className="input"
+            style={{ minWidth: '6rem' }}
+            value={activityDays}
+            onChange={(e) => setActivityDays(e.target.value)}
+            disabled={!isGlobalMode}
+            title="Used when raid id is empty (officer_global_bid_forecast)"
           />
         </label>
         <label style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
@@ -282,6 +455,17 @@ export default function OfficerLootBidForecast({ isOfficer }) {
         </button>
       </div>
 
+      {precomputedLoadNote && (
+        <p style={{ color: '#fbbf24', marginBottom: '0.5rem', fontSize: '0.9rem' }}>{precomputedLoadNote}</p>
+      )}
+      {precomputedMeta?.generated_at && (
+        <p style={{ color: '#71717a', marginBottom: '0.5rem', fontSize: '0.85rem' }}>
+          Precomputed upgrade index: generated {precomputedMeta.generated_at}
+          {stalePrecomputeDays != null && stalePrecomputeDays > 7
+            ? ` (${Math.floor(stalePrecomputeDays)}d ago — consider refreshing CI)`
+            : ''}
+        </p>
+      )}
       {rankingsError && (
         <p style={{ color: '#fbbf24', marginBottom: '0.75rem' }}>{rankingsError}</p>
       )}
@@ -290,6 +474,9 @@ export default function OfficerLootBidForecast({ isOfficer }) {
       {forecastPayload && resolvedItemId && (
         <p style={{ color: '#a1a1aa', fontSize: '0.9rem', marginBottom: '0.75rem' }}>
           Item: <strong style={{ color: '#e4e4e7' }}>{itemDisplayName}</strong> (id {resolvedItemId})
+          {Array.isArray(forecastPayload.roster) && (
+            <span> · Active roster ({activityDays}d window)</span>
+          )}
           {rows[0]?.anchor != null && (
             <>
               {' '}
@@ -309,18 +496,22 @@ export default function OfficerLootBidForecast({ isOfficer }) {
             <thead>
               <tr>
                 <th>Interest</th>
+                <th>Bid band</th>
                 <th>Character</th>
                 <th>Class</th>
                 <th>Account</th>
                 <th>Tags</th>
-                <th>Bid band (heuristic)</th>
-                <th>Why</th>
+                <th>Upgrade (summary)</th>
+                <th>Detail</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((r) => (
                 <tr key={`${r.charName}-${r.accountId}`}>
                   <td>{Math.round(r.interestScore)}</td>
+                  <td style={{ fontSize: '0.85rem', whiteSpace: 'nowrap' }}>
+                    {r.band.low}–{r.band.high} (mid {r.band.mid})
+                  </td>
                   <td>{r.charName}</td>
                   <td>{r.className || '—'}</td>
                   <td style={{ fontSize: '0.85rem', wordBreak: 'break-all' }}>
@@ -333,17 +524,22 @@ export default function OfficerLootBidForecast({ isOfficer }) {
                   <td style={{ fontSize: '0.8rem', maxWidth: '10rem' }}>
                     {r.tags.length ? r.tags.join(', ') : '—'}
                   </td>
-                  <td style={{ fontSize: '0.85rem', whiteSpace: 'nowrap' }}>
-                    {r.band.low}–{r.band.high} (mid {r.band.mid})
+                  <td style={{ fontSize: '0.8rem', maxWidth: '14rem', verticalAlign: 'top' }}>
+                    {r.summaryLine}
                   </td>
-                  <td style={{ fontSize: '0.8rem', maxWidth: '28rem', verticalAlign: 'top' }}>
-                    <ul style={{ margin: 0, paddingLeft: '1.1rem' }}>
-                      {r.reasons.map((t, i) => (
-                        <li key={i} style={{ marginBottom: '0.25rem' }}>
-                          {t}
-                        </li>
-                      ))}
-                    </ul>
+                  <td style={{ fontSize: '0.8rem', maxWidth: '22rem', verticalAlign: 'top' }}>
+                    <details>
+                      <summary style={{ cursor: 'pointer', color: '#a78bfa' }}>
+                        {r.hasPrecompute ? 'Why (precompute + spend)' : 'Why (spend / live scoring)'}
+                      </summary>
+                      <ul style={{ margin: '0.5rem 0 0', paddingLeft: '1.1rem' }}>
+                        {r.detailBullets.map((t, i) => (
+                          <li key={i} style={{ marginBottom: '0.35rem' }}>
+                            {t}
+                          </li>
+                        ))}
+                      </ul>
+                    </details>
                   </td>
                 </tr>
               ))}
@@ -353,7 +549,9 @@ export default function OfficerLootBidForecast({ isOfficer }) {
       )}
 
       {forecastPayload && resolvedItemId && rows.length === 0 && (
-        <p style={{ color: '#71717a' }}>No attendees or missing item_stats.json.</p>
+        <p style={{ color: '#71717a' }}>
+          No matching characters (wrong item for these classes, or empty roster / attendees).
+        </p>
       )}
     </div>
   )

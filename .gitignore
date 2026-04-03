@@ -38,6 +38,9 @@ Thumbs.db
 raids/
 *.csv
 
+# CI/local intermediate for bid forecast precompute (see scripts/export_bid_forecast_roster.py)
+data/bid_forecast_roster.json
+
 # Item page HTML cache (from fetch_item_pages.py; re-run to refresh)
 data/item_pages/
 

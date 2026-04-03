@@ -1,8 +1,10 @@
 # Handoff: Officer loot bid interest (“Bid hints”)
 
+**Deeper architecture / CI vs Magelo / global ownership:** [HANDOFF_GLOBAL_ITEM_BID_FORECAST.md](HANDOFF_GLOBAL_ITEM_BID_FORECAST.md).
+
 ## What shipped
 
-Officers get **heuristic** bid-interest views for a chosen item: **by raid** (who attended and might care) or **global** (all **active** accounts — recent raid activity or pinned in Admin — and their characters). Both use spend patterns (last purchase locus, per-toon concentration, balance), optional **Magelo-style upgrade scoring** when `class_rankings.json` is available, and a rough **bid band** capped by account balance. Global adds **guild prior-sale reference** per purchase when history exists. This is **not** a bid log or a guarantee of behavior.
+Officers get **heuristic** bid-interest views for a chosen item: **by raid** (who attended and might care) or **active guild roster** (same active-account rules as global — leave raid id blank on **Bid hints**, or use the dedicated **Global bid** page). Both use spend patterns (last purchase locus, per-toon concentration, balance), optional **Magelo-style upgrade scoring**, and a rough **bid band** capped by account balance. **Bid hints** prefers a **CI-built precomputed upgrade index** (`web/public/bid_forecast_by_item.json`) when present, and falls back to live `class_rankings.json` scoring. Global adds **guild prior-sale reference** per purchase when history exists. This is **not** a bid log or a guarantee of behavior.
 
 ## Deploy checklist
 
@@ -13,21 +15,29 @@ Officers get **heuristic** bid-interest views for a chosen item: **by raid** (wh
 2. **Static JSON**
    - `web/public/item_stats.json` — already part of the app.
    - `web/public/dkp_prices.json` — committed snapshot; **refresh** with Magelo `scripts/build_dkp_prices_json.py` (or your pipeline) so sale anchors stay current.
-   - `class_rankings.json` — **not** committed by default (large). Either copy the Magelo-generated file to `web/public/class_rankings.json` or set **`VITE_CLASS_RANKINGS_URL`** to a hosted URL. Without it, the page still runs RPC spend narratives but **skips upgrade scoring** (and shows a yellow warning).
+   - `class_rankings.json` — **not** committed by default (large). Either copy the Magelo-generated file to `web/public/class_rankings.json` or set **`VITE_CLASS_RANKINGS_URL`** to a hosted URL. Without it, **Bid hints** still runs RPC + precompute rows but **live** upgrade fallback is skipped (yellow warning).
+   - **`bid_forecast_by_item.json`** / **`bid_forecast_meta.json`** — guild-scoped **positive upgrade** index (item id → who gains, with slot / stat deltas). Built in CI (see below). The repo ships **empty placeholders** until the workflow runs successfully.
 
-3. **Redeploy the web app** after env/build changes.
+3. **GitHub Actions: precomputed upgrade index** (job `bid_forecast_index` in [`.github/workflows/loot-to-character.yml`](../.github/workflows/loot-to-character.yml))
+   - Runs on the **same schedule and `workflow_dispatch`** as loot-to-character, but **not** gated on new `raid_loot` count (gear can change without new loot).
+   - **Secrets** (in addition to existing Supabase keys): **`CLASS_RANKINGS_URL`** — URL to the **same** `class_rankings.json` the app uses (`VITE_CLASS_RANKINGS_URL`). CI fetches it and filters to the **active guild roster** using [`scripts/export_bid_forecast_roster.py`](../scripts/export_bid_forecast_roster.py) (table reads with `SUPABASE_SERVICE_ROLE_KEY`; does **not** call `officer_global_bid_forecast`, which requires `is_officer()`).
+   - **Build**: [`scripts/build_bid_forecast_by_item.mjs`](../scripts/build_bid_forecast_by_item.mjs) imports [`web/src/lib/mageloUpgradeEngine.js`](../web/src/lib/mageloUpgradeEngine.js) and runs `computeUpgradesForCharacter` per roster-matched Magelo character.
+   - On success, the bot **commits** updated `web/public/bid_forecast_by_item.json` and `bid_forecast_meta.json`.
+
+4. **Redeploy the web app** after env/build changes (or rely on the next commit from CI).
 
 ## Where things live
 
 | Piece | Location |
 |--------|-----------|
-| Route (by raid) | `/officer/loot-bid-forecast` — [`web/src/pages/OfficerLootBidForecast.jsx`](../web/src/pages/OfficerLootBidForecast.jsx) |
+| Route (Bid hints: raid **or** blank raid = active roster) | `/officer/loot-bid-forecast` — [`web/src/pages/OfficerLootBidForecast.jsx`](../web/src/pages/OfficerLootBidForecast.jsx) |
 | Route (active roster) | `/officer/global-loot-bid-forecast` — [`web/src/pages/OfficerGlobalLootBidForecast.jsx`](../web/src/pages/OfficerGlobalLootBidForecast.jsx) |
 | Nav | “Bid hints” / “Global bid” in [`web/src/App.jsx`](../web/src/App.jsx); links from [`web/src/pages/Officer.jsx`](../web/src/pages/Officer.jsx) |
 | Magelo scoring port | [`web/src/lib/mageloUpgradeEngine.js`](../web/src/lib/mageloUpgradeEngine.js) (`evaluateItemUpgradeForCharacter`, `computeUpgradesForCharacter`, etc.) |
 | Heuristics / tags / bid band | [`web/src/lib/bidForecastModel.js`](../web/src/lib/bidForecastModel.js) (`bidVsMarketFromPurchasesTimeAware`, …), [`web/src/lib/itemNameNormalize.js`](../web/src/lib/itemNameNormalize.js) |
 | Active window constant | [`web/src/lib/dkpLeaderboard.js`](../web/src/lib/dkpLeaderboard.js) (`ACTIVE_DAYS`, same idea as global default) |
 | RPC definitions | [`docs/supabase-officer-loot-bid-forecast.sql`](supabase-officer-loot-bid-forecast.sql), [`docs/supabase-officer-global-bid-forecast.sql`](supabase-officer-global-bid-forecast.sql) |
+| CI: roster export + Node index | [`scripts/export_bid_forecast_roster.py`](../scripts/export_bid_forecast_roster.py), [`scripts/build_bid_forecast_by_item.mjs`](../scripts/build_bid_forecast_by_item.mjs) |
 | Schema pointer | Comment at end of [`docs/supabase-schema-full.sql`](supabase-schema-full.sql) |
 
 ## Data model notes (RPC)
@@ -61,7 +71,8 @@ Officers get **heuristic** bid-interest views for a chosen item: **by raid** (wh
 ## Quick test
 
 1. Apply SQL, sign in as an officer.
-2. Open **Bid hints**, enter a real `raid_id`, enter an item **name** or **numeric id**, click **Run**.
-3. Confirm rows, tags, and reasons; confirm linked **Account** opens account detail.
+2. Open **Bid hints**, enter a real `raid_id`, enter an item **name** or **numeric id**, click **Run**; confirm rows, tags, expandable **Detail**, and **Account** link.
+3. Clear **Raid id**, set **Activity days** if needed, **Run** again — should match **Global bid** roster behavior for the same item.
+4. After CI has populated precompute JSON, confirm upgrade summaries show **(Precomputed CI index)** in expanded detail where applicable.
 
-4. **Global**: apply [`docs/supabase-officer-global-bid-forecast.sql`](supabase-officer-global-bid-forecast.sql), open **Global bid**, set activity days (default 120 matches leaderboard), enter an item, **Run**; expand **Show top upgrades by slot** on a row that qualifies (concentrated spend on that toon or recent spend on that toon).
+5. **Global** page: apply [`docs/supabase-officer-global-bid-forecast.sql`](supabase-officer-global-bid-forecast.sql), open **Global bid**, set activity days (default 120 matches leaderboard), enter an item, **Run**; expand **Show top upgrades by slot** on a row that qualifies (concentrated spend on that toon or recent spend on that toon).

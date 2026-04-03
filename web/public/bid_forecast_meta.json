@@ -1,0 +1,6 @@
+{
+  "version": 1,
+  "generated_at": null,
+  "activity_days": 120,
+  "note": "Placeholder until GitHub Actions job bid_forecast_index runs with CLASS_RANKINGS_URL + Supabase secrets."
+}
