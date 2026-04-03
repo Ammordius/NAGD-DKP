@@ -1,5 +1,7 @@
 # Handoff: Officer loot bid interest (“Bid hints”)
 
+**CI precompute + secrets + troubleshooting (short):** [HANDOFF_BID_FORECAST_PRECOMPUTE.md](HANDOFF_BID_FORECAST_PRECOMPUTE.md).
+
 **Deeper architecture / CI vs Magelo / global ownership:** [HANDOFF_GLOBAL_ITEM_BID_FORECAST.md](HANDOFF_GLOBAL_ITEM_BID_FORECAST.md).
 
 ## What shipped
