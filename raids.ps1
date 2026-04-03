@@ -1,6 +1,7 @@
 # Local raid pull & upload (Windows, no make required).
 # Cookie in cookies.txt; Supabase in .env or web/.env.
 # Since-date is read/updated in .raids-since-date (one line YYYY-MM-DD). Default 2026-02-27.
+# Pull-Raids also passes --include-upcoming to pull_raids.py (one extra GET for the upcoming list). Edit Pull-Raids to remove if undesired.
 #
 # Usage (run from repo root in PowerShell):
 #   .\raids.ps1 pull-raids
@@ -57,6 +58,7 @@ function Pull-Raids {
     python $ScriptDir/pull_raids.py `
         --since-date $since `
         --limit-pages $LimitPages `
+        --include-upcoming `
         --cookies-file $Cookies `
         --out-dir $RaidsDir `
         --index $Index `
@@ -178,7 +180,7 @@ function Show-Help {
     @"
 Local raid pull & upload (Windows). Use this instead of make/nmake.
 
-  .\raids.ps1 pull-raids              # page 1, since date in .raids-since-date; also pulls attendees
+  .\raids.ps1 pull-raids              # page 1, since date; merges upcoming list; also pulls attendees
   .\raids.ps1 pull-raids-ids 1598692 1598705
   .\raids.ps1 pull-attendees
   .\raids.ps1 upload-raids

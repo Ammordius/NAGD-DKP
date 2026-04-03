@@ -1,4 +1,5 @@
 # Local raid pull & upload (no GitHub secrets — use cookies.txt and .env)
+# pull-raids passes --include-upcoming (merge upcoming raid list with past). Remove that flag to skip the extra GET.
 #
 # Prereqs:
 #   - cookies.txt in repo root with your GamerLaunch Cookie header (one line). Never commit it.
@@ -47,6 +48,7 @@ pull-raids: check-cookie
 	$(PYTHON) $(SCRIPTS)/pull_raids.py \
 	  --since-date $(SINCE_DATE) \
 	  --limit-pages $(LIMIT_PAGES) \
+	  --include-upcoming \
 	  --cookies-file $(COOKIES) \
 	  --out-dir $(RAIDS_DIR) \
 	  --index $(INDEX) \

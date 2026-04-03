@@ -4,10 +4,13 @@ Pull past raids list from GamerLaunch Rapid Raid, then fetch each raid's details
 
 1) Fetches https://azureguardtakp.gamerlaunch.com/rapid_raid/raids.php?mode=past&gid=547766&ts=3:1
 2) Discovers raid_pool and pagination (1611 raids, 20 per page)
-3) Iterates list pages to collect (raid_pool, raidId, raid_name, date) — or use --raid-ids to skip full scrape
-4) Optionally filter by --since-date (YYYY-MM-DD); only raids on or after this date are fetched (data accurate as of 2026-02-24)
-5) Fetches each raid_details.php page and saves HTML to raids/raid_{raidId}.html
-6) Writes raids_index.csv with one row per raid (raid_id, raid_name, date, attendees, url)
+3) Parses all data-table / forumline blocks on each list page (multiple tabs/sections).
+   Optional --include-upcoming: also fetch mode=upcoming for the same raid_pool and merge.
+   Optional --extra-list-url / --add-raid-from-url for additional sources.
+4) Iterates list pages to collect (raid_pool, raidId, raid_name, date) — or use --raid-ids to skip full scrape
+5) Optionally filter by --since-date (YYYY-MM-DD); only raids on or after this date are fetched (data accurate as of 2026-02-24)
+6) Fetches each raid_details.php page and saves HTML to raids/raid_{raidId}.html
+7) Writes raids_index.csv with one row per raid (raid_id, raid_name, date, attendees, url)
 
 Uses cookies.txt (same as roster/linked-toons scripts). Polite rate limit.
 """
@@ -21,8 +24,8 @@ import time
 import random
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
-from urllib.parse import urlencode, urlparse
+from typing import Dict, List, Optional
+from urllib.parse import parse_qs, urlparse
 
 import requests
 import pandas as pd
@@ -96,36 +99,43 @@ def discover_last_paging_page(html: str) -> int:
     return max_page
 
 
-def parse_raids_from_list_page(html: str, raid_pool: str, gid: str) -> List[dict]:
-    """Parse the data-table of past raids: Raid Name, Date, DKP, Signups."""
-    soup = BeautifulSoup(html, "lxml")
-    table = soup.find("table", class_=re.compile(r"data-table|forumline"))
-    if not table:
-        return []
+def _query_param(href: str, key: str) -> Optional[str]:
+    """Get first query value for key from a relative or absolute URL (case-insensitive key)."""
+    if not href:
+        return None
+    h = href.replace("&amp;", "&")
+    if h.startswith("/"):
+        h = f"https://x.example{h}"
+    try:
+        q = parse_qs(urlparse(h).query)
+    except Exception:
+        return None
+    for k, v in q.items():
+        if k.lower() == key.lower() and v:
+            return v[0].strip()
+    return None
 
+
+def _parse_raid_list_table_rows(table, default_pool: str, gid: str) -> List[dict]:
+    """Parse one data-table block: Raid Name, Date, ..."""
     rows: List[dict] = []
-    header_text = [th.get_text(strip=True) for th in table.find_all("th")]
     trs = table.find_all("tr")[1:]  # skip header
     for tr in trs:
         tds = tr.find_all("td")
         if len(tds) < 2:
             continue
-        # Raid Name column: <a href="/rapid_raid/raid_details.php?raid_pool=562569&raidId=1598641&gid=547766"><b>Name</b></a>
         name_cell = tds[0]
-        a = name_cell.find("a", href=re.compile(r"raid_details\.php.*raidId="))
+        a = name_cell.find("a", href=re.compile(r"raid_details\.php.*raidId=", re.I))
         if not a:
             continue
         href = a.get("href", "")
         raid_name = a.get_text(strip=True)
-        raid_id = None
-        for part in href.replace("&amp;", "&").split("&"):
-            if part.startswith("raidId="):
-                raid_id = part.split("=", 1)[1].strip()
-                break
+        raid_id = _query_param(href, "raidId")
         if not raid_id:
             continue
+        row_pool = _query_param(href, "raid_pool") or default_pool
+        link_gid = _query_param(href, "gid") or gid
 
-        # Date column: <span title="...">Fri Feb 13, 2026 2:00 am</span>
         date_str = ""
         if len(tds) >= 2:
             span = tds[1].find("span")
@@ -134,12 +144,61 @@ def parse_raids_from_list_page(html: str, raid_pool: str, gid: str) -> List[dict
 
         rows.append({
             "raid_id": raid_id,
-            "raid_pool": raid_pool,
+            "raid_pool": row_pool,
             "raid_name": raid_name,
             "date": date_str,
-            "gid": gid,
+            "gid": link_gid,
         })
     return rows
+
+
+def parse_raids_from_list_page(html: str, raid_pool: str, gid: str) -> List[dict]:
+    """Parse all data-table / forumline tables on a raids list page (multiple tabs/sections)."""
+    soup = BeautifulSoup(html, "lxml")
+    tables = soup.find_all("table", class_=re.compile(r"data-table|forumline"))
+    if not tables:
+        return []
+
+    rows: List[dict] = []
+    for table in tables:
+        part = _parse_raid_list_table_rows(table, raid_pool, gid)
+        if part:
+            rows.extend(part)
+    return rows
+
+
+def build_upcoming_list_url(gid: str, raid_pool: str) -> str:
+    """Canonical upcoming raids list (matches second-tab style URLs on the site)."""
+    return f"{PAST_RAIDS_URL}?mode=upcoming&gid={gid}&raid_pool={raid_pool}&ts=2:1"
+
+
+def raid_dict_from_gamerlaunch_url(url: str, fallback_pool: str, fallback_gid: str) -> Optional[dict]:
+    """Extract raid_id and optional raid_pool, gid from a pasted raids.php or raid_details.php URL."""
+    try:
+        p = urlparse(url.strip())
+        qs = parse_qs(p.query)
+    except Exception:
+        return None
+
+    def first(*keys: str) -> Optional[str]:
+        for want in keys:
+            for k, v in qs.items():
+                if k.lower() == want.lower() and v:
+                    return v[0].strip()
+        return None
+
+    rid = first("raidId")
+    if not rid:
+        return None
+    rpool = first("raid_pool") or fallback_pool
+    g = first("gid") or fallback_gid
+    return {
+        "raid_id": rid,
+        "raid_pool": rpool,
+        "raid_name": "",
+        "date": "",
+        "gid": g,
+    }
 
 
 def build_list_page_url(raid_pool: str, gid: str, paging_page: Optional[int]) -> str:
@@ -185,6 +244,25 @@ def main():
     ap.add_argument("--limit-raids", type=int, default=0, help="Max raid details to fetch (0 = all)")
     ap.add_argument("--since-date", type=str, default="", help="Only fetch raids on or after this date (YYYY-MM-DD). Use 2026-02-24 for data-accurate cutoff.")
     ap.add_argument("--raid-ids", type=str, default="", help="Comma-separated raid IDs only (e.g. 1598692,1598705). Skips full list scrape; fetches only these details (needs first page for raid_pool).")
+    ap.add_argument(
+        "--include-upcoming",
+        action="store_true",
+        help="After the first past page, also fetch mode=upcoming list and merge raid rows (same raid_pool).",
+    )
+    ap.add_argument(
+        "--extra-list-url",
+        action="append",
+        default=[],
+        metavar="URL",
+        help="Additional raids.php (or list) URL to fetch and merge (repeatable).",
+    )
+    ap.add_argument(
+        "--add-raid-from-url",
+        action="append",
+        default=[],
+        metavar="URL",
+        help="Add one raid_id (+raid_pool if present) from a pasted GamerLaunch URL (repeatable).",
+    )
     ap.add_argument("--timeout", type=int, default=30, help="Request timeout")
     args = ap.parse_args()
 
@@ -247,6 +325,42 @@ def main():
     else:
         all_raids.extend(parse_raids_from_list_page(html0, raid_pool, gid))
         print(f"Page 0: {len(all_raids)} raids")
+
+        if args.include_upcoming:
+            up_url = build_upcoming_list_url(gid, raid_pool)
+            print(f"Fetching upcoming raids list: {up_url}")
+            try:
+                r_up = session.get(up_url, timeout=args.timeout)
+                r_up.raise_for_status()
+                extra = parse_raids_from_list_page(r_up.text, raid_pool, gid)
+                all_raids.extend(extra)
+                print(f"Upcoming list: +{len(extra)} row(s) (total {len(all_raids)})")
+            except Exception as e:
+                print(f"Upcoming list fetch failed (continuing): {e}", file=sys.stderr)
+            polite_sleep(args.sleep, args.jitter)
+
+        for extra_url in args.extra_list_url or []:
+            u = (extra_url or "").strip()
+            if not u:
+                continue
+            print(f"Fetching extra list: {u}")
+            try:
+                r_ex = session.get(u, timeout=args.timeout)
+                r_ex.raise_for_status()
+                extra = parse_raids_from_list_page(r_ex.text, raid_pool, gid)
+                all_raids.extend(extra)
+                print(f"Extra list: +{len(extra)} row(s) (total {len(all_raids)})")
+            except Exception as e:
+                print(f"Extra list fetch failed: {e}", file=sys.stderr)
+            polite_sleep(args.sleep, args.jitter)
+
+        for pasted in args.add_raid_from_url or []:
+            rd = raid_dict_from_gamerlaunch_url(pasted, raid_pool, gid)
+            if rd:
+                all_raids.append(rd)
+                print(f"From URL: raidId={rd['raid_id']} raid_pool={rd['raid_pool']}")
+            else:
+                print(f"Could not parse raid from URL: {pasted}", file=sys.stderr)
 
     polite_sleep(args.sleep, args.jitter)
 
