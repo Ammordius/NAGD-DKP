@@ -32,6 +32,7 @@ COMMENT ON TABLE account_dkp_summary IS 'DKP totals per account. Refreshed from 
 ALTER TABLE raid_event_attendance ADD COLUMN IF NOT EXISTS account_id TEXT REFERENCES accounts(account_id);
 COMMENT ON COLUMN raid_event_attendance.account_id IS 'Resolved from char_id/character_name via character_account; used for DKP by account.';
 CREATE INDEX IF NOT EXISTS idx_raid_event_attendance_account ON raid_event_attendance(account_id) WHERE account_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_character_account_account_id ON character_account(account_id);
 
 -- 3) raid_attendance_dkp_by_account: per-raid DKP earned by account (for activity page)
 CREATE TABLE IF NOT EXISTS raid_attendance_dkp_by_account (
@@ -301,6 +302,8 @@ BEGIN
     RAISE EXCEPTION 'Only officers can refresh account DKP summary for raid';
   END IF;
 
+  SET LOCAL statement_timeout = '180s';
+
   -- Accounts with attendance in this raid (resolve account_id from char_id/name if null) plus any extra (e.g. removed attendee)
   WITH rea_accounts AS (
     SELECT DISTINCT COALESCE(rea.account_id, (
@@ -323,9 +326,32 @@ BEGIN
     RETURN;
   END IF;
 
-  -- Recompute earned (and periods) for these accounts from ALL their attendance; then UPSERT into account_dkp_summary
+  -- Recompute earned (and periods) for these accounts from ALL their attendance; then UPSERT into account_dkp_summary.
+  -- Restrict raid_event_attendance to rows that belong to target accounts (indexed paths) before resolving account_id.
   INSERT INTO account_dkp_summary (account_id, display_name, earned, spent, earned_30d, earned_60d, last_activity_date, updated_at)
-  WITH rea_one_account AS (
+  WITH rea_for_targets AS (
+    SELECT rea.*
+    FROM raid_event_attendance rea
+    WHERE
+      (rea.account_id IS NOT NULL AND rea.account_id = ANY(target_accounts))
+      OR (
+        rea.char_id IS NOT NULL AND trim(rea.char_id::text) <> ''
+        AND EXISTS (
+          SELECT 1 FROM character_account ca
+          WHERE ca.account_id = ANY(target_accounts) AND ca.char_id = trim(rea.char_id::text)
+        )
+      )
+      OR (
+        (rea.char_id IS NULL OR trim(rea.char_id::text) = '')
+        AND rea.character_name IS NOT NULL AND trim(rea.character_name) <> ''
+        AND EXISTS (
+          SELECT 1 FROM character_account ca
+          INNER JOIN characters c ON c.char_id = ca.char_id
+          WHERE ca.account_id = ANY(target_accounts) AND trim(c.name) = trim(rea.character_name)
+        )
+      )
+  ),
+  rea_one_account AS (
     SELECT rea.raid_id, rea.event_id,
       COALESCE(rea.account_id, (
         SELECT ca.account_id FROM character_account ca
@@ -333,13 +359,7 @@ BEGIN
            OR (rea.character_name IS NOT NULL AND trim(rea.character_name) <> '' AND EXISTS (SELECT 1 FROM characters c WHERE c.char_id = ca.char_id AND trim(c.name) = trim(rea.character_name)))
         LIMIT 1
       )) AS account_id
-    FROM raid_event_attendance rea
-    WHERE COALESCE(rea.account_id, (
-      SELECT ca.account_id FROM character_account ca
-      WHERE (rea.char_id IS NOT NULL AND trim(rea.char_id::text) <> '' AND ca.char_id = trim(rea.char_id::text))
-         OR (rea.character_name IS NOT NULL AND trim(rea.character_name) <> '' AND EXISTS (SELECT 1 FROM characters c WHERE c.char_id = ca.char_id AND trim(c.name) = trim(rea.character_name)))
-      LIMIT 1
-    )) = ANY(target_accounts)
+    FROM rea_for_targets rea
   )
   SELECT
     roa.account_id,
@@ -354,7 +374,7 @@ BEGIN
   LEFT JOIN raid_events re ON re.raid_id = roa.raid_id AND re.event_id = roa.event_id
   LEFT JOIN raids r ON r.raid_id = roa.raid_id
   LEFT JOIN accounts a ON a.account_id = roa.account_id
-  WHERE roa.account_id IS NOT NULL
+  WHERE roa.account_id IS NOT NULL AND roa.account_id = ANY(target_accounts)
   GROUP BY roa.account_id
   ON CONFLICT (account_id) DO UPDATE SET
     earned = EXCLUDED.earned,
@@ -363,7 +383,7 @@ BEGIN
     last_activity_date = GREATEST(COALESCE(account_dkp_summary.last_activity_date, '1970-01-01'::date), COALESCE(EXCLUDED.last_activity_date, '1970-01-01'::date)),
     updated_at = now();
 
-  -- Spent for these accounts: sum from raid_loot (all raids) and UPSERT (add to existing earned row)
+  -- Spent: filter raid_loot to rows touching target accounts before resolving assignment/character_account (avoids full-table scan).
   INSERT INTO account_dkp_summary (account_id, display_name, spent, earned_30d, earned_60d, last_activity_date, updated_at)
   SELECT
     sub.account_id,
@@ -374,22 +394,44 @@ BEGIN
     MAX(raid_date_parsed(r.date_iso)),
     now()
   FROM (
-    SELECT DISTINCT ON (rl.id)
+    SELECT DISTINCT ON (b.id)
       ca.account_id,
       a.display_name,
-      COALESCE((rl.cost::numeric), 0) AS cost_num,
-      rl.raid_id
-    FROM raid_loot rl
-    LEFT JOIN raids r2 ON r2.raid_id = rl.raid_id
-    LEFT JOIN LATERAL (SELECT la.assigned_char_id, la.assigned_character_name FROM loot_assignment la WHERE la.loot_id = rl.id LIMIT 1) la ON true
+      COALESCE((b.cost::numeric), 0) AS cost_num,
+      b.raid_id
+    FROM (
+      SELECT rl.id, rl.raid_id, rl.event_id, rl.item_name, rl.char_id, rl.character_name, rl.cost,
+        la.assigned_char_id, la.assigned_character_name
+      FROM raid_loot rl
+      LEFT JOIN LATERAL (SELECT la.assigned_char_id, la.assigned_character_name FROM loot_assignment la WHERE la.loot_id = rl.id LIMIT 1) la ON true
+      WHERE (
+        EXISTS (
+          SELECT 1 FROM character_account ca0
+          WHERE ca0.account_id = ANY(target_accounts)
+            AND ca0.char_id = COALESCE(NULLIF(trim(la.assigned_char_id), ''), NULLIF(trim(rl.char_id::text), ''))
+            AND COALESCE(NULLIF(trim(la.assigned_char_id), ''), NULLIF(trim(rl.char_id::text), '')) <> ''
+        )
+        OR (
+          COALESCE(NULLIF(trim(la.assigned_char_id), ''), NULLIF(trim(rl.char_id::text), '')) = ''
+          AND COALESCE(trim(la.assigned_character_name), trim(rl.character_name)) <> ''
+          AND EXISTS (
+            SELECT 1 FROM character_account ca0
+            INNER JOIN characters c0 ON c0.char_id = ca0.char_id
+            WHERE ca0.account_id = ANY(target_accounts)
+              AND trim(c0.name) = COALESCE(trim(la.assigned_character_name), trim(rl.character_name))
+          )
+        )
+      )
+    ) b
     LEFT JOIN character_account ca ON (
-      (COALESCE(trim(la.assigned_char_id), trim(rl.char_id::text)) <> '' AND ca.char_id = COALESCE(trim(la.assigned_char_id), trim(rl.char_id::text)))
-      OR (COALESCE(trim(la.assigned_character_name), trim(rl.character_name)) <> '' AND EXISTS (
-        SELECT 1 FROM characters c WHERE c.char_id = ca.char_id AND trim(c.name) = COALESCE(trim(la.assigned_character_name), trim(rl.character_name))
+      (COALESCE(trim(b.assigned_char_id), trim(b.char_id::text)) <> '' AND ca.char_id = COALESCE(trim(b.assigned_char_id), trim(b.char_id::text)))
+      OR (COALESCE(trim(b.assigned_character_name), trim(b.character_name)) <> '' AND EXISTS (
+        SELECT 1 FROM characters c WHERE c.char_id = ca.char_id AND trim(c.name) = COALESCE(trim(b.assigned_character_name), trim(b.character_name))
       ))
     )
     LEFT JOIN accounts a ON a.account_id = ca.account_id
     WHERE ca.account_id IS NOT NULL AND ca.account_id = ANY(target_accounts)
+    ORDER BY b.id
   ) sub
   LEFT JOIN raids r ON r.raid_id = sub.raid_id
   GROUP BY sub.account_id

@@ -34,6 +34,8 @@ DELETE_RETRY_DELAY_SEC = 2
 POSTGREST_TIMEOUT_SEC = 600
 RPC_RETRIES = 3
 RPC_RETRY_DELAY_SEC = 5
+# Per-raid account summary only (no full-table fallback; see _refresh_account_summary_strict).
+ACCOUNT_REFRESH_RPC_RETRIES = 5
 
 
 def _is_transient_refresh_error(exc: Exception) -> bool:
@@ -48,11 +50,14 @@ def _is_transient_refresh_error(exc: Exception) -> bool:
 
 
 def _refresh_account_summary_strict(client, raid_id: str) -> tuple[bool, str]:
-    """Refresh account summary for one raid; fail only if all attempts/fallbacks fail."""
+    """Refresh account summary for one raid via refresh_account_dkp_summary_for_raid only.
+
+    Does not call refresh_account_dkp_summary (full TRUNCATE + rebuild): that is slower and
+    more likely to hit statement_timeout than the per-raid RPC.
+    """
     last_err: Exception | None = None
 
-    # Fast path: per-raid refresh with retries on transient failures.
-    for attempt in range(RPC_RETRIES):
+    for attempt in range(ACCOUNT_REFRESH_RPC_RETRIES):
         try:
             client.rpc("refresh_account_dkp_summary_for_raid", {"p_raid_id": raid_id}).execute()
             return True, "per_raid"
@@ -61,27 +66,11 @@ def _refresh_account_summary_strict(client, raid_id: str) -> tuple[bool, str]:
             err = str(e).lower()
             if "does not exist" in err and "function" in err:
                 break
-            if _is_transient_refresh_error(e) and attempt < RPC_RETRIES - 1:
+            if _is_transient_refresh_error(e) and attempt < ACCOUNT_REFRESH_RPC_RETRIES - 1:
                 print(
                     f"refresh_account_dkp_summary_for_raid timed out/transient "
-                    f"(attempt {attempt + 1}/{RPC_RETRIES}); retrying in {RPC_RETRY_DELAY_SEC}s...",
-                    file=sys.stderr,
-                )
-                time.sleep(RPC_RETRY_DELAY_SEC)
-                continue
-            break
-
-    # Fallback: full account refresh (strict mode requires one to succeed).
-    for attempt in range(RPC_RETRIES):
-        try:
-            client.rpc("refresh_account_dkp_summary").execute()
-            return True, "full_fallback"
-        except Exception as e:
-            last_err = e
-            if _is_transient_refresh_error(e) and attempt < RPC_RETRIES - 1:
-                print(
-                    f"refresh_account_dkp_summary fallback timed out/transient "
-                    f"(attempt {attempt + 1}/{RPC_RETRIES}); retrying in {RPC_RETRY_DELAY_SEC}s...",
+                    f"(attempt {attempt + 1}/{ACCOUNT_REFRESH_RPC_RETRIES}); "
+                    f"retrying in {RPC_RETRY_DELAY_SEC}s...",
                     file=sys.stderr,
                 )
                 time.sleep(RPC_RETRY_DELAY_SEC)
@@ -89,7 +78,7 @@ def _refresh_account_summary_strict(client, raid_id: str) -> tuple[bool, str]:
             break
 
     if last_err is None:
-        last_err = RuntimeError("unknown refresh_account_dkp_summary failure")
+        last_err = RuntimeError("unknown refresh_account_dkp_summary_for_raid failure")
     return False, str(last_err)
 
 
@@ -447,17 +436,20 @@ def main() -> int:
     # Strict: this upload is considered successful only if account summary refresh succeeds.
     account_refresh_ok, account_refresh_mode_or_error = _refresh_account_summary_strict(client, raid_id)
     if account_refresh_ok:
-        if account_refresh_mode_or_error == "per_raid":
-            print("refresh_account_dkp_summary_for_raid() completed.")
-        else:
-            print("refresh_account_dkp_summary() completed (fallback).")
+        print("refresh_account_dkp_summary_for_raid() completed.")
     else:
         print(
             "ERROR: account summary refresh failed; upload is not considered synchronized. "
-            "Rerun this upload after resolving DB timeout/connectivity issues.",
+            "Rerun this upload after deploying the latest refresh_account_dkp_summary_for_raid "
+            "(see docs/fix_refresh_account_dkp_summary_for_raid_perf.sql) or fix DB load/timeouts.",
             file=sys.stderr,
         )
         print(f"Details: {account_refresh_mode_or_error}", file=sys.stderr)
+        print(
+            "Manual full rebuild (officers, SQL editor): "
+            "SET statement_timeout = '600s'; SELECT refresh_account_dkp_summary();",
+            file=sys.stderr,
+        )
         return 2
 
     # Full dkp_summary refresh (earned_30d/60d). Skip when run from batch — batch script does one at end.
