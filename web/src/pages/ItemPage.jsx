@@ -1,5 +1,5 @@
-import { useEffect, useState, useMemo } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useEffect, useState, useMemo, useRef, useCallback } from 'react'
+import { useParams, Link, useSearchParams, useLocation } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useCharToAccountMap } from '../lib/useCharToAccountMap'
 import AssignedLootDisclaimer from '../components/AssignedLootDisclaimer'
@@ -11,6 +11,20 @@ import { ensureElementalArmorLoaded, getMoldInfo, getArmorIdForMoldAndClass, isE
 import { formatAccountCharacter } from '../lib/formatAccountCharacter'
 
 const CLASS_OPTIONS = ['WAR', 'CLR', 'PAL', 'RNG', 'SHD', 'BRD', 'ROG', 'SHM', 'MNK', 'NEC', 'WIZ', 'MAG', 'ENC', 'BST']
+
+const FACT_IN_CHUNK = 100
+const RPC_FALLBACK_MAX = 10
+
+/** True if URL asks to open the inferred second-place section. */
+function queryWantsSecondPlaceOpen(searchParams) {
+  for (const key of ['second_place', 'bid_estimate', 'bid_portfolio']) {
+    const v = searchParams.get(key)
+    if (v === null) continue
+    const s = String(v).trim().toLowerCase()
+    if (s === '' || s === '1' || s === 'true' || s === 'yes') return true
+  }
+  return false
+}
 
 // Build item_name (lowercase) -> item_id from dkp_mob_loot.json
 function buildItemIdMap(mobLoot) {
@@ -146,8 +160,11 @@ function PriceChart({ data, height = 180 }) {
   )
 }
 
-export default function ItemPage() {
+export default function ItemPage({ isOfficer = false }) {
   const { itemNameEncoded } = useParams()
+  const [searchParams] = useSearchParams()
+  const location = useLocation()
+  const secondPlaceSectionRef = useRef(null)
   const { getAccountId, getAccountDisplayName } = useCharToAccountMap()
   const itemName = useMemo(() => (itemNameEncoded ? decodeURIComponent(itemNameEncoded) : ''), [itemNameEncoded])
   const [lootRows, setLootRows] = useState([])
@@ -159,6 +176,70 @@ export default function ItemPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [elementalDataReady, setElementalDataReady] = useState(false)
+
+  const urlSecondPlaceOpen = useMemo(() => queryWantsSecondPlaceOpen(searchParams), [searchParams])
+  const [secondPlaceOpen, setSecondPlaceOpen] = useState(false)
+  const [factByLootId, setFactByLootId] = useState({})
+  const [factLoading, setFactLoading] = useState(false)
+  const [factError, setFactError] = useState('')
+  const [rpcRunnerUpByLootId, setRpcRunnerUpByLootId] = useState({})
+  const [rpcLoading, setRpcLoading] = useState(false)
+
+  useEffect(() => {
+    if (urlSecondPlaceOpen) setSecondPlaceOpen(true)
+  }, [urlSecondPlaceOpen])
+
+  useEffect(() => {
+    if (!urlSecondPlaceOpen || !secondPlaceOpen || loading) return
+    const id = requestAnimationFrame(() => {
+      secondPlaceSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    })
+    return () => cancelAnimationFrame(id)
+  }, [urlSecondPlaceOpen, secondPlaceOpen, loading, lootRows.length])
+
+  useEffect(() => {
+    setFactByLootId({})
+    setFactError('')
+    setRpcRunnerUpByLootId({})
+  }, [itemName])
+
+  const lootIdsForFact = useMemo(() => {
+    const ids = (lootRows || []).map((r) => r.id).filter((id) => id != null)
+    return [...new Set(ids.map((x) => Number(x)))].filter((n) => Number.isFinite(n) && n > 0)
+  }, [lootRows])
+
+  useEffect(() => {
+    if (!isOfficer || !secondPlaceOpen || lootIdsForFact.length === 0) return
+    let cancelled = false
+    setFactLoading(true)
+    setFactError('')
+    ;(async () => {
+      const merged = {}
+      try {
+        for (let i = 0; i < lootIdsForFact.length; i += FACT_IN_CHUNK) {
+          const chunk = lootIdsForFact.slice(i, i + FACT_IN_CHUNK)
+          const { data, error: qErr } = await supabase
+            .from('bid_portfolio_auction_fact')
+            .select('loot_id, runner_up_account_guess')
+            .in('loot_id', chunk)
+          if (cancelled) return
+          if (qErr) {
+            setFactError(qErr.message)
+            return
+          }
+          ;(data || []).forEach((row) => {
+            merged[Number(row.loot_id)] = row.runner_up_account_guess ?? null
+          })
+        }
+        if (!cancelled) setFactByLootId(merged)
+      } finally {
+        if (!cancelled) setFactLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [isOfficer, secondPlaceOpen, lootRows])
 
   useEffect(() => {
     if (!itemName) {
@@ -221,6 +302,36 @@ export default function ItemPage() {
     return { historyByDate: withDate, historyAll: allRows, lastThree: last3, rollingAvg: avg }
   }, [lootRows, raids])
 
+  const loadRpcFallback = useCallback(async () => {
+    if (!isOfficer || factLoading) return
+    const reversed = [...historyAll].reverse()
+    const targets = []
+    for (const row of reversed) {
+      const n = Number(row.id)
+      if (!Number.isFinite(n)) continue
+      if (Object.prototype.hasOwnProperty.call(factByLootId, n)) continue
+      if (Object.prototype.hasOwnProperty.call(rpcRunnerUpByLootId, n)) continue
+      targets.push(n)
+      if (targets.length >= RPC_FALLBACK_MAX) break
+    }
+    if (targets.length === 0) return
+    setRpcLoading(true)
+    const next = { ...rpcRunnerUpByLootId }
+    try {
+      for (const lootId of targets) {
+        const { data, error: rpcErr } = await supabase.rpc('officer_bid_portfolio_for_loot', { p_loot_id: lootId })
+        if (rpcErr) {
+          setFactError(rpcErr.message)
+          break
+        }
+        next[lootId] = data?.runner_up_account_guess ?? null
+      }
+    } finally {
+      setRpcRunnerUpByLootId(next)
+      setRpcLoading(false)
+    }
+  }, [isOfficer, factLoading, historyAll, factByLootId, rpcRunnerUpByLootId])
+
   const itemIdMap = useMemo(() => buildItemIdMap(mobLoot), [mobLoot])
   const raidNameToId = useMemo(() => buildRaidItemNameToId(raidItemSources), [raidItemSources])
   const itemKey = (itemName || '').trim().toLowerCase()
@@ -269,9 +380,21 @@ export default function ItemPage() {
   if (loading) return <div className="container">Loading item…</div>
   if (error) return <div className="container"><span className="error">{error}</span> <Link to="/loot">← Item History</Link></div>
 
+  const secondPlaceLinkTo = `${location.pathname}?second_place=1`
+
   return (
     <div className="container">
-      <p><Link to="/loot">← Item History</Link> · <Link to="/mobs">Raid Items</Link></p>
+      <p>
+        <Link to="/loot">← Item History</Link>
+        {' · '}
+        <Link to="/mobs">Raid Items</Link>
+        {isOfficer && historyAll.length > 0 && (
+          <>
+            {' · '}
+            <Link to={secondPlaceLinkTo}>Inferred 2nd place</Link>
+          </>
+        )}
+      </p>
       <h1 style={{ marginBottom: '0.5rem' }}>
         {takpId != null ? (
           <ItemLink
@@ -327,6 +450,95 @@ export default function ItemPage() {
       )}
 
       {historyByDate.length > 0 && <PriceChart data={historyByDate} />}
+
+      {isOfficer && historyAll.length > 0 && !secondPlaceOpen && (
+        <p style={{ marginBottom: '1rem' }}>
+          <button type="button" className="btn btn-ghost" onClick={() => setSecondPlaceOpen(true)}>
+            Show inferred second place (officers)
+          </button>
+        </p>
+      )}
+
+      {isOfficer && historyAll.length > 0 && secondPlaceOpen && (
+        <div
+          ref={secondPlaceSectionRef}
+          className="card"
+          style={{ marginBottom: '1.25rem', borderLeft: '4px solid #fbbf24' }}
+        >
+          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', justifyContent: 'space-between', gap: '0.5rem' }}>
+            <h2 style={{ marginTop: 0, marginBottom: '0.25rem' }}>Inferred second place (officers)</h2>
+            <button type="button" className="btn btn-ghost" style={{ fontSize: '0.85rem' }} onClick={() => setSecondPlaceOpen(false)}>
+              Hide
+            </button>
+          </div>
+          <p style={{ color: '#a1a1aa', fontSize: '0.875rem', marginTop: 0 }}>
+            Heuristic only: no auction bid log. “Second place” is the richest non-buyer attendee whose reconstructed pool was at least the clearing price (see guild SQL docs).
+          </p>
+          {factError && <p className="error" style={{ marginBottom: '0.5rem' }}>{factError}</p>}
+          {factLoading && <p style={{ color: '#a1a1aa', marginBottom: '0.5rem' }}>Loading cached inference…</p>}
+          <div style={{ overflowX: 'auto' }}>
+            <table>
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Raid</th>
+                  <th>Winner</th>
+                  <th>Cost</th>
+                  <th>Inferred 2nd</th>
+                </tr>
+              </thead>
+              <tbody>
+                {[...historyAll].reverse().map((row, i) => {
+                  const n = Number(row.id)
+                  const hasFact = Number.isFinite(n) && Object.prototype.hasOwnProperty.call(factByLootId, n)
+                  const hasRpc = Number.isFinite(n) && Object.prototype.hasOwnProperty.call(rpcRunnerUpByLootId, n)
+                  let inferred = null
+                  let inferredReady = false
+                  if (hasFact) {
+                    inferred = factByLootId[n]
+                    inferredReady = true
+                  } else if (hasRpc) {
+                    inferred = rpcRunnerUpByLootId[n]
+                    inferredReady = true
+                  }
+                  const charName = row.character_name || row.char_id || '—'
+                  const accountId = getAccountId(row.character_name || row.char_id)
+                  const accountName = getAccountDisplayName?.(row.character_name || row.char_id)
+                  const winnerLabel = formatAccountCharacter(accountName, charName)
+                  const winnerTo = accountId ? `/accounts/${accountId}` : `/characters/${encodeURIComponent(charName)}`
+                  return (
+                    <tr key={row.id ?? i}>
+                      <td>{row.displayDate}</td>
+                      <td>
+                        <Link to={`/raids/${row.raid_id}`}>{raids[row.raid_id]?.raid_name || row.raid_id}</Link>
+                      </td>
+                      <td>
+                        <Link to={winnerTo}>{winnerLabel}</Link>
+                      </td>
+                      <td>{row.cost ?? '—'}</td>
+                      <td>
+                        {!inferredReady && factLoading ? (
+                          <span style={{ color: '#71717a' }}>…</span>
+                        ) : inferred ? (
+                          <Link to={`/accounts/${encodeURIComponent(String(inferred))}`}>{inferred}</Link>
+                        ) : (
+                          '—'
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+          <p style={{ color: '#71717a', fontSize: '0.85rem', marginTop: '0.75rem', marginBottom: '0.5rem' }}>
+            Values come from <code>bid_portfolio_auction_fact</code> when backfilled. If rows are empty, run the portfolio backfill (see repo docs) or load live inference for recent drops (slow).
+          </p>
+          <button type="button" className="btn btn-ghost" disabled={factLoading || rpcLoading} onClick={() => loadRpcFallback()}>
+            {rpcLoading ? 'Loading…' : `Load live inference (up to ${RPC_FALLBACK_MAX} recent drops missing cache)`}
+          </button>
+        </div>
+      )}
 
       <h2>Drop history</h2>
       <AssignedLootDisclaimer compact />

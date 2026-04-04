@@ -4,6 +4,7 @@ import useSWR from 'swr'
 import { supabase } from '../lib/supabase'
 import { useCharToAccountMap } from '../lib/useCharToAccountMap'
 import AssignedLootDisclaimer from '../components/AssignedLootDisclaimer'
+import AccountBiddingPortfolioCard from '../components/AccountBiddingPortfolioCard'
 import DkpSiteDisclaimer from '../components/DkpSiteDisclaimer'
 import ItemLink from '../components/ItemLink'
 import { getDkpMobLoot } from '../lib/staticData'
@@ -654,6 +655,8 @@ export default function AccountDetail({ isOfficer, profile, session }) {
           )}
         </div>
       )}
+
+      {isOfficer && accountId && <AccountBiddingPortfolioCard accountId={accountId} />}
     </div>
   )
 }

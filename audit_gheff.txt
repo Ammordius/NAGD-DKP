@@ -1,0 +1,817 @@
+Gheff
+Earned	Spent	Total	Last Raid	Last 30	Last 60
+2,188	2,128	60	2025-10-28	0/37 (0%)	0/65 (0%)
+
+Current DKP - NAGD Pool commenced 1 Jan 2018 Pool
+Earned	Spent	Total	Last Raid	Last 30	Last 60
+2,178	2,118	60	2025-10-28	0/37 (0%)	0/65 (0%)
+
+Item History
+Item	Spent	Date	Raid Name	Event
+[Cloak of Retribution] 	21	2025-08-07	Time Raid - Spices!!	1 Hour Single/Double Boxing
+[Earthen Bracer of Fortitude] 	49	2025-08-07	Time Raid - Spices!!	1 Hour Single/Double Boxing
+[Timeless Chain Tunic Pattern] 	39	2025-06-12	Time Day 2 6-12-25	1 Hour Single/Double Boxing
+[Belt of Tidal Energy] 	11	2025-03-20	Time Day 2 3-20-25	1 Hour Single/Double Boxing
+[Boots of Despair] 	30	2024-12-17	Time Day 1	1 Hour Single/Double Boxing
+[Whorl of Unnatural Forces] 	33	2024-09-19	Time Loot 4 All	1 Hour Single/Double Boxing
+[Hammer of the Timeweaver] 	26	2024-08-08	Mohr Time B	1 Hour Single/Double Boxing
+[Bracer of Precision] 	18	2024-08-06	Late for TIME	1 Hour Single/Double Boxing
+[Timestone Adorned Ring] 	22	2024-07-11	TimeB Strike	1 Hour Single/Double Boxing
+[Collar of Catastrophe] 	7	2024-07-09	Post Walex Time	1 Hour Single/Double Boxing
+[Prismatic Ring of Resistance] 	56	2024-06-27	Bye Walex Time Raid	1 Hour Single/Double Boxing
+[Protective Sleeves] 	5	2024-06-25	Time Raid	1 Hour Single/Double Boxing
+[Girdle of Intense Durability] 	12	2024-06-11	Time Raid	1 Hour Single/Double Boxing
+[Timeless Chain Tunic Pattern] 	28	2024-05-30	TIME to sink our toofs into it!	1 Hour Single/Double Boxing
+[Girdle of Focus] 	0	2024-05-23	VT GearFest	On-Time attendance
+[Drape of the Unending] 	0	2024-05-14	Dizzy Loot Time	1 Hour Single/Double Boxing
+[Coif of Flowing Time] 	10	2024-05-14	Dizzy Loot Time	1 Hour Single/Double Boxing
+[Leggings of Furious Might] 	20	2024-04-16	Time to Loot!	1 Hour Single/Double Boxing
+[Greatblade of Chaos] 	13	2024-04-16	Time to Loot!	1 Hour Single/Double Boxing
+[Cloak of Retribution] 	11	2024-04-04	YAMTRA - Yet Another Moo TIme Raid Again	1 Hour Single/Double Boxing
+[Winged Storm Boots] 	16	2024-03-19	The March of Times	1 Hour Single/Double Boxing
+[Earring of Temporal Solstice] 	16	2024-03-05	Time .. WHA.. Again??	1 Hour Single/Double Boxing
+[Ifir, Dagger of Fire] 	4	2024-02-27	Fire Raid - Soothing Balm	1 Hour Single/Double Boxing
+[Glowing Steel Shim] 	2	2024-02-21	Baby Flags - MB-TZ-RZ-Agnarr	On-Time attendance
+[Protective Dust Drape] 	2	2024-02-21	Baby Flags - MB-TZ-RZ-Agnarr	On-Time attendance
+[Girdle of Stability] 	10	2024-02-08	Smash Quarm	1 Hour Single/Double Boxing
+[bracelet of darkness] 	3	2024-01-31	VT-Crush-Always-Here	1 Hour Single/Double Boxing
+[Spiked Chain Leggings] 	5	2024-01-31	VT-Crush-Always-Here	1 Hour Single/Double Boxing
+[Hoop of the Enlightened] 	4	2024-01-23	Time_Lewts	On-Time attendance
+[Algae Covered Stiletto] 	2	2024-01-16	Wet and Wild with BONUS MAYONG	1 Hour Single/Double Boxing
+[Bow of the Tempest] 	14	2024-01-09	Time Destroyers	1 Hour Single/Double Boxing
+[Temporal Chainmail Sleeves] 	8	2023-12-26	XmasTime	1 Hour Single/Double Boxing
+[Timespinner, Blade of the Hunter] 	6	2023-12-26	XmasTime	1 Hour Single/Double Boxing
+[Mask of Strategic Insight] 	9	2023-12-12	PoTime	1 Hour Single/Double Boxing
+[Shroud of Survival] 	16	2023-12-06	Time Day 2 LootFest	1 Hour Single/Double Boxing
+[Spool of Woven Time] 	33	2023-12-06	Time Day 2 LootFest	1 Hour Single/Double Boxing
+[shadow footpads] 	3	2023-11-30	VT Choo Choo	On-Time attendance
+[Thorny Chain Helm] 	2	2023-11-26	More_VT_Things	1 Hour Single/Double Boxing
+[the sword of ssraeshza] 	2	2023-11-20	EmpKillers	1 Hour Single/Double Boxing
+[Armguards of the Brute] 	16	2023-10-24	Time Raid	1 Hour Single/Double Boxing
+[Helm of Flowing Time] 	39	2023-10-10	Time for Time	1 Hour Single/Double Boxing
+[Wristband of Echoed Thoughts] 	29	2023-09-27	Dad Joke TIME	1 Hour Single/Double Boxing
+[Band of Primordial Energy] 	31	2023-09-27	Dad Joke TIME	1 Hour Single/Double Boxing
+[Sanguine Gloves] 	3	2023-09-21	VT Clear yet again	1 Hour Single/Double Boxing
+[Lunar Fungus Covered Tunic] 	3	2023-09-21	VT Clear yet again	1 Hour Single/Double Boxing
+[Ring of Immobilization] 	3	2023-09-21	VT Clear yet again	1 Hour Single/Double Boxing
+[Sharkbone Plated Shoulderpads] 	3	2023-06-12	All About that PoWater Face	On-Time attendance
+[Visor of the Berserker] 	47	2023-06-07	Time Night 2	1 Hour Single/Double Boxing
+[Necklace of Reflected Flames] 	3	2023-05-11	Fennin+Minis	1 Hour Single/Double Boxing
+[Simple Ring of Purity] 	15	2023-05-01	PoAir Round2	1 Hour Single/Double Boxing
+[Earring of Eradication] 	9	2023-04-20	VTClear!	1 Hour Single/Double Boxing
+[Shroud of Vigor] 	3	2023-04-13	VT Clarence	1 Hour Single/Double Boxing
+[Cerulean Sleeves] 	6	2023-04-13	VT Clarence	1 Hour Single/Double Boxing
+[Tiny Bone Bracelet] 	9	2023-04-13	VT Clarence	1 Hour Single/Double Boxing
+[Girdle of Focus] 	2	2023-04-13	VT Clarence	On-Time attendance
+[Corrupted Skull Earring] 	2	2023-04-10	Earth Minis + Curse/Emp	1 Hour Single/Double Boxing
+[Double Edged Stormblade] 	4	2023-04-06	RZTW + Agnarr	1 Hour Single/Double Boxing
+[Cloak of Dark Shadows] 	3	2023-03-31	SSRA Night!	On-Time attendance
+[Timeless Silk Robe Pattern] 	19	2023-03-29	PoTime (If Available)	1 Hour Single/Double Boxing
+[Serrated Dart of Energy] 	20	2023-03-29	PoTime (If Available)	1 Hour Single/Double Boxing
+[Innovators Hammer] 	2	2023-03-22	Xana (nonDKP)/MB/TZ/VZ	On-Time attendance
+[Timeless Breastplate Mold] 	47	2023-03-15	PoTime Night 2	1 Hour Single/Double Boxing
+[Time's Antithesis] 	18	2023-03-14	PoTime Lewts!	1 Hour Single/Double Boxing
+[Earring of Eternal Flame] 	12	2023-02-27	Fenin+ Fire Minis FUN	1 Hour Single/Double Boxing
+[Gauntlets of the Burning Prince] 	3	2023-02-22	SolRo	1 Hour Single/Double Boxing
+[Orb of Infinite Terror] 	6	2023-02-09	2/9/23 BERT & SARYN FUN	1 Hour Single/Double Boxing
+[Cloak of the Falling Skies] 	8	2023-01-31	1/31/23 P1/P2/P3/P4	1 Hour Single/Double Boxing
+[Tiny Cap of Sight] 	4	2023-01-25	VT FUN	1 Hour Single/Double Boxing
+[Lightbringers Earring] 	4	2023-01-25	VT FUN	1 Hour Single/Double Boxing
+[Pauldrons of Devastation] 	48	2023-01-19	Plane of Time Day 2	1 Hour Single/Double Boxing
+[Darkened Claw Amulet] 	2	2023-01-18	Vex Thal Fun	1 Hour Single/Double Boxing
+[Hammer of Hours] 	22	2023-01-17	Plane of Time Day 1	1 Hour Single/Double Boxing
+[Shroud of Unholiness] 	2	2023-01-16	MM/cursed/emp	1 Hour Single/Double Boxing
+[Cudgel of Venomous Hatred] 	5	2023-01-03	Plane of Time Day 1	1 Hour Single/Double Boxing
+[Mithril Battle Hammer] 	2	2022-12-29	TOSR	1 Hour Single/Double Boxing
+[Hooded Sanguine Mantle] 	2	2022-12-29	TOSR	1 Hour Single/Double Boxing
+[Gloves of the Unseen] 	7	2022-12-06	PoT Day 1	1 Hour Single/Double Boxing
+[Tactician's Shield] 	12	2022-12-06	PoT Day 1	1 Hour Single/Double Boxing
+[Wand of Temporal Power] 	17	2022-12-06	PoT Day 1	1 Hour Single/Double Boxing
+[Elemental Silk Turban Pattern] 	4	2022-12-02	Fenin + Minis	1 Hour Single/Double Boxing
+[Elemental Chain Sleeve Pattern] 	6	2022-11-28	Fire = Bad	1 Hour Single/Double Boxing
+[phoenix claw talisman] 	2	2022-11-24	Fennin + Minis	1 Hour Single/Double Boxing
+[Cloak of the Falling Skies] 	5	2022-11-22	Time P1-P4	1 Hour Single/Double Boxing
+[Shield of Strife] 	36	2022-11-11	Songtime	1 Hour Single/Double Boxing
+[Coif of Flowing Time] 	19	2022-11-10	time of moo	1 Hour Single/Double Boxing
+[Winged Storm Boots] 	9	2022-11-08	Time P1-P4	1 Hour Single/Double Boxing
+[Cord of Potential] 	18	2022-10-27	Time P4/5	1 Hour Single/Double Boxing
+[Necklace of Celestial Energy] 	11	2022-10-18	Time P1-4	1 Hour Single/Double Boxing
+[Veil of Lost Hopes] 	2	2022-10-11	Time P1-P3+	1 Hour Single/Double Boxing
+[Glowing Chains] 	11	2022-10-04	Time P1-4	1 Hour Single/Double Boxing
+[Necklace of Celestial Energy] 	7	2022-10-04	Time P1-4	1 Hour Single/Double Boxing
+[Elemental Silk Pant Pattern] 	12	2022-10-04	Time P1-4	1 Hour Single/Double Boxing
+[Elemental Silk Bracelet Pattern] 	7	2022-09-28	Water minis	On-Time attendance
+[elemental silk boot pattern] 	2	2022-09-28	Water minis	On-Time attendance
+[Talisman of Tainted Energy] 	17	2022-08-26	ABCDKP	1 Hour Single/Double Boxing
+[Pulsing Emerald Hoop] 	3	2022-08-26	ABCDKP	On-Time attendance
+[Earring of Temporal Solstice] 	18	2022-08-12	All in Friday	1 Hour Single/Double Boxing
+[Slippers of Dark Whispers] 	6	2022-08-10	VT	1 Hour Single/Double Boxing
+[Ring of Evasion] 	14	2022-08-05	Godswilldie	1 Hour Single/Double Boxing
+[Elemental Boot Mold] 	29	2022-08-01	EarthB and Ssra	1 Hour Single/Double Boxing
+[Acrylia Handled Broadsword] 	3	2022-08-01	EarthB and Ssra	1 Hour Single/Double Boxing
+[Smooth Onyx Torque] 	3	2022-07-29	PoTime P1+P4+P5	1 Hour Single/Double Boxing
+[Elemental Vambrace Mold] 	27	2022-07-20	POE B Warlords	1 Hour Single/Double Boxing
+[Elemental Bracer Mold] 	18	2022-07-05	PoE A	1 Hour Single/Double Boxing
+[Hoop of the Enlightened] 	12	2022-06-21	P4 DOWN!	1 Hour Single/Double Boxing
+[Vanazir, Dreamer's Despair] 	36	2022-06-17	Time P1 + P4 x2 DKP	1 Hour Single/Double Boxing
+[Elemental Gauntlet Mold] 	11	2022-06-16	Fire Minnies	1 Hour Single/Double Boxing
+[Wristguard of Keen Vision] 	3	2022-06-09	Thursday Time	1 Hour Single/Double Boxing
+[Cloak of Ferocity] 	8	2022-06-07	6/7/2022 TIME	1 Hour Single/Double Boxing
+[Ring of Force] 	3	2022-05-26	Time P4	On-Time attendance
+[Wristguard of Keen Vision] 	5	2022-05-26	Time P4	On-Time attendance
+[Stein of Falling Tears] 	5	2022-05-23	VT one night only	1 Hour Single/Double Boxing
+[Elemental Greaves Mold] 	44	2022-05-18	Xegony	1 Hour Single/Double Boxing
+[Earring of Battle] 	9	2022-05-17	VT one day only	1 Hour Single/Double Boxing
+[pendant of malosini] 	7	2022-05-17	VT one day only	1 Hour Single/Double Boxing
+[Veil of Warmth] 	4	2022-05-03	MooTime	1 Hour Single/Double Boxing
+[Yttrium Wrapped Leggings] 	6	2022-04-25	Water Minis With a Side Of Seru	1 Hour Single/Double Boxing
+[Yttrium Wrapped Sleeves] 	8	2022-04-25	Water Minis With a Side Of Seru	1 Hour Single/Double Boxing
+[Algae Covered Stiletto] 	9	2022-04-18	Davey Jones Locker	1 Hour Single/Double Boxing
+[Gem Encrusted Axe] 	26	2022-04-18	Davey Jones Locker	1 Hour Single/Double Boxing
+[Entwood Earring]	2	2022-04-11	EARTH RINGS, DAY 1	1 Hour Single/Double Boxing
+[Sceptre of Destruction] 	7	2019-08-08	8 Aug - Kael + ST	1 Hour Single/Double Boxing
+[Salindrite Dagger] 	2	2019-08-08	8 Aug - Kael + ST	1 Hour Single/Double Boxing
+[Orb of satisfaction] 	4	2019-06-07	7June - Rhags, Vex Thal day2	1 Hour Single/Double Boxing
+[Mask of Piety] 	25	2019-05-10	5/10/2019 VEX THAL Day 2	1 Hour Single/Double Boxing
+[bracer of the silent star] 	9	2019-05-07	5/7/2019 VEX THAL (TVX x2)	1 Hour Single/Double Boxing
+[Mask of Tinkering] 	3	2019-04-29	29 April - Sleeper Tomb	On-Time attendance
+[Umbracite Bracer] 	8	2019-04-15	15 April - TVX	1 Hour Single/Double Boxing
+[Tan Silken Bridle] 	5	2019-04-04	4th April - Rhags, Seru	1 Hour Single/Double Boxing
+[Helmet of Shadow] 	10	2019-04-03	3rd April - Vex Thal	On-Time attendance
+[Rune of Judgement] 	12	2019-04-03	3rd April - Vex Thal	On-Time attendance
+[Ssraeshzaen Blood Cord ] 	4	2019-03-31	3/31/2019 EMPEROR & SHEI	1 Hour Single/Double Boxing
+[Ancient Burrower Spine] 	2	2019-03-29	3/29/2019 THO + BURROWER PARASITE	1 Hour Single/Double Boxing
+[Umbracite Bracer] 	15	2019-03-08	3/8/2019 VEX THAL	1 Hour Single/Double Boxing
+[ring of rage] 	9	2019-03-05	4March - Emp Ssra and TVX	1 Hour Single/Double Boxing
+[Flowing Gossamer Cloak] 	4	2019-03-02	2 March - Seru, Shei	1 Hour Single/Double Boxing
+[Tan Silken Bridle] 	4	2019-03-02	2 March - Seru, Shei	On-Time attendance
+[Iron Scroll of War] 	2	2019-02-27	27 Feb - Kael	On-Time attendance
+[The Horn of Hsagra] 	2	2019-02-21	21 Feb 2019 - Kael	On-Time attendance
+[Umbracite Swarm Orb] 	7	2019-02-16	2/16/2019 vex thal	1 Hour Single/Double Boxing
+[Cloudy Steel Mask] 	10	2019-02-16	2/16/2019 vex thal	1 Hour Single/Double Boxing
+[wand of everlasting water] 	4	2019-02-16	2/16/2019 vex thal	1 Hour Single/Double Boxing
+[Cap of the Silent Star] 	2	2019-02-14	2/14/2019 VEX THAL	1 Hour Single/Double Boxing
+[Hammer of the Ironfrost] 	3	2019-02-07	7 Feb - Rhags/AL/XTC/HP	1 Hour Single/Double Boxing
+[Shield of Mental Fortitude] 	25	2019-01-27	Jan 26 - Burrower, Emp, Shei	1 Hour Single/Double Boxing
+[Steel Skin Armplates] 	11	2019-01-22	1/22/19 SLEEPERS TOMB/TVX'S	1 Hour Single/Double Boxing
+[pendant of malosini] 	7	2019-01-09	9Jan - Vex Thal	1 Hour Single/Double Boxing
+[Cudgel of Cowardly Death] 	2	2018-12-27	27dec - Rhags, AL, XTC, HP	1 Hour Single/Double Boxing
+[Spiked Shoulderpads] 	21	2018-12-22	12/22/18 VEX THAL	1 Hour Single/Double Boxing
+[Shield of Energy] 	18	2018-12-22	12/22/18 VEX THAL	1 Hour Single/Double Boxing
+[shaded amice] 	7	2018-12-20	12/20/18 CURSED & TVX'S	1 Hour Single/Double Boxing
+[cloak of destruction] 	16	2018-12-19	12/19/18 Vex Thal	1 Hour Single/Double Boxing
+[Gloves of Dark Summoning] 	8	2018-12-14	14Dec - Vex Thal day2	1 Hour Single/Double Boxing
+[Orb of the Sky] 	3	2018-12-12	12Dec - Vex Thal day1	1 Hour Single/Double Boxing
+[Dark Mace of Thought] 	11	2018-12-12	12Dec - Vex Thal day1	1 Hour Single/Double Boxing
+[Cord of Midnight] 	6	2018-12-03	VEX THAL 12/3/18	1 Hour Single/Double Boxing
+[Scale Mesh Vambraces] 	2	2018-11-27	27Nov - Rhags + AL + VT	On-Time attendance
+[Red Resistance Stone]	2	2018-11-15	15Nov 2pm Euro - ST Rhags	1 Hour Single/Double Boxing
+[Veil of Hidden Thought] 	4	2018-11-07	Thought Horror Overfiend 11/7/18	1 Hour Single/Double Boxing
+[Swiftblade of Zek] 	2	2018-11-02	11/2/18 AVATAR OF WAR	1 Hour Single/Double Boxing
+[Dragons Tear Earring] 	2	2018-11-01	Euro KT + Yeli	1 Hour Single/Double Boxing
+[Breastplate of the Void] 	2	2018-10-29	CURSED & HIGH PRIEST	1 Hour Single/Double Boxing
+[Soul Defiler] 	2	2018-10-19	19 Oct - Trak UDB and Yelinak	1 Hour Single/Double Boxing
+[Silver Lined Sleeves] 	2	2018-10-16	RHAG AL BURROW DOZE	1 Hour Single/Double Boxing
+[Black Tear] 	8	2018-10-16	RHAG AL BURROW DOZE	1 Hour Single/Double Boxing
+[Pristine Jade Idol] 	6	2018-10-12	12 Oct - Rhags, AL	1 Hour Single/Double Boxing
+[Crown of Narandi] 	5	2018-10-09	9 Oct Burrower, Ring10	1 Hour Single/Double Boxing
+[Yelinak's Head] 	17	2018-10-08	RHAGS/AL/ YELI	1 Hour Single/Double Boxing
+[Faded Skull Medallion] 	19	2018-10-04	04Oct - Rhag1/2/AL + Dozekar	1 Hour Single/Double Boxing
+[Righteousness] 	3	2018-08-31	Rhags	1 Hour Single/Double Boxing
+[Shield of Auras] 	21	2018-08-27	Rhag - AL	1 Hour Single/Double Boxing
+[Bile Stained Robes] 	11	2018-08-21	8/21/18 BURROWER	1 Hour Single/Double Boxing
+[Wormhusk Harness] 	2	2018-08-21	8/21/18 BURROWER	1 Hour Single/Double Boxing
+[Shroud of Emerald Vines] 	9	2018-08-18	Snakes - SSRA 8/17	1 Hour Single/Double Boxing
+[serrated tear] 	2	2018-08-15	DOZE AND DRAKES	1 Hour Single/Double Boxing
+[Sage Headdress of Consciousness] 	16	2018-08-14	8/14/18 BURROWER	1 Hour Single/Double Boxing
+[Boots of the Storm] 	15	2018-08-06	8/6/2018 KAEL BOSSES	1 Hour Single/Double Boxing
+[Breastplate of Eradication] 	6	2018-07-26	7/26/2018 KAEL BOSSES & SERU	1 Hour Single/Double Boxing
+[Celestial Essence Robe] 	3	2018-07-12	Yelinak RW Velk 7/12	On-Time attendance
+[Crimson Robe of Alendine] 	2	2018-06-29	29June - PoFear Cazic	1 Hour Single/Double Boxing
+[Runed Tear] 	2	2018-06-28	28June - Dozekar, Drakes, Velk	1 Hour Single/Double Boxing
+[Clawed Guardian Bracer] 	6	2018-06-19	19June - UDB Trak and Sleepers Tomb	1 Hour Single/Double Boxing
+[green resistance stone] 	4	2018-06-13	ST/Velk 6/13	1 Hour Single/Double Boxing
+[Shield of the Clawed Guardian] 	2	2018-06-13	ST/Velk 6/13	1 Hour Single/Double Boxing
+[Orb of the Deep Sea] 	4	2018-06-08	8June - NTOV day1	1 Hour Single/Double Boxing
+[Eye of Narandi] 	2	2018-06-06	6June - Zlandicar, RingWar	1 Hour Single/Double Boxing
+[Faceguard of Bentos the Hero] 	2	2018-06-06	6June - Zlandicar, RingWar	1 Hour Single/Double Boxing
+[Harla Dar's Talisman] 	5	2018-06-01	1June - Harla Dar and Zlandicar	On-Time attendance
+[Poison Tear] 	20	2018-05-29	Doze/Drakes/HoT 5/29	1 Hour Single/Double Boxing
+[Ring of Winter] 	3	2018-05-19	5/19/2018 DAIN	1 Hour Single/Double Boxing
+[White Dragon Scale Sash] 	6	2018-05-15	KT Statue AoW 5/15	1 Hour Single/Double Boxing
+[White Resistance Stone] 	3	2018-05-14	ST & Ring War 5/14	1 Hour Single/Double Boxing
+[Helmet of Rallos Zek] 	16	2018-05-09	Statue & AoW 4/9	1 Hour Single/Double Boxing
+[Spirit Weavers Breastplate]	2	2018-04-21	21 April - Plane of Growth	1 Hour Single/Double Boxing
+[Frostreaver's Velium Crown] 	2	2018-04-16	16April - Dains	1 Hour Single/Double Boxing
+[serrated tear] 	5	2018-04-11	Doze/Drakes/HoT 4/11	1 Hour Single/Double Boxing
+[Breastplate of Eradication] 	16	2018-04-03	KT Statue AoW 4/3	1 Hour Single/Double Boxing
+[Ring of Lightning] 	8	2018-04-03	KT Statue AoW 4/3	On-Time attendance
+[Primal Velium Spear] 	2	2018-03-27	ST	1 Hour Single/Double Boxing
+[Primal Velium Battle Axe] 	2	2018-03-21	3/21/18 SLEEPERS TOMB/TRAKANON	1 Hour Single/Double Boxing
+[primal velium reinforced bow] 	3	2018-03-21	3/21/18 SLEEPERS TOMB/TRAKANON	1 Hour Single/Double Boxing
+[Cracked Claw of Zlandicar] 	2	2018-03-13	13March - Zlandicar and Klandicar	On-Time attendance
+[Axe of the Kromzek Kings] 	3	2018-03-06	6March - Kael KT, Statue, AOW	1 Hour Single/Double Boxing
+
+Raid History
+Raid Name	Raid Date	Earned
+Time Day 1	2025-10-28	5
+Time Day 2	2025-10-02	5
+Time Day 1	2025-09-30	5
+MB + TZ/VZ + Tantisala/Mud/Dust Ring	2025-09-24	4
+Fire Minis + Fennin	2025-09-23	3
+Time Day 1	2025-09-16	5
+Time Day 1	2025-09-02	4
+Time Day 1 8-19-25	2025-08-19	6
+Time Raid - Spices!!	2025-08-07	5
+Time Day 1 8-5-25	2025-08-05	6
+Time Day 1 7-22-25	2025-07-22	3
+Time Day 1 7-8-25	2025-07-08	4
+Time Day 2 6-26-25	2025-06-26	2
+Time Day 1 6-24-25	2025-06-24	5
+Time Day 2 6-12-25	2025-06-12	2
+Plane of Time Day 1: 4-29-25	2025-04-29	6
+Rathe Council 4-22-25	2025-04-22	2
+PoE B Thru Ginto 4-21-25	2025-04-21	2
+Time Day 2 3-20-25	2025-03-20	3
+TIME Day 2 3-6-25	2025-03-06	2
+Time Day 1 3-4-25	2025-03-04	6
+Vex Thal 2-26-25	2025-02-26	3
+Time Day 1 2-18-25	2025-02-18	6
+PoTimeDay 2 LootFest	2025-02-06	4
+Time day 1 2-4-25	2025-02-04	6
+Time Day 1 1-21-25	2025-01-21	6
+Water Minis 1-20-25	2025-01-20	2
+Time Day 2 Post XMAS Hangover	2025-01-09	4
+First 2025 Time Loots	2025-01-07	6
+Rock Ring	2024-12-18	2
+Time Day 1	2024-12-17	6
+MB + RZTW and Dependants	2024-12-10	2
+Mohr Time 4 Kittens	2024-12-05	4
+TIME to save Kittens	2024-12-03	6
+vex thal	2024-11-18	3
+Mohr Time Knights	2024-11-14	3
+Time 4 Alt Gear	2024-11-12	6
+Tower of Dumb Stairs	2024-11-06	4
+TimeB GK Slacks	2024-10-30	2
+Plane of Time Day 1	2024-10-29	5
+TIME GK was late	2024-10-15	5
+Rangers Hate Water Minis + Corinav	2024-10-08	2
+Carprin and Snakes	2024-10-07	2
+TimeB Raid	2024-10-03	3
+Splish Splash MINIS Bath	2024-10-02	2
+Escape from ringworm TIME run	2024-10-01	6
+Rallos, Cursed, Emp	2024-09-26	3
+PoE2 Kill	2024-09-24	2
+Ginto POEB	2024-09-23	2
+Time Loot 4 All	2024-09-19	3
+VT Smashing	2024-09-18	3
+What? Time Day?!?	2024-09-17	6
+VT Funz	2024-09-11	3
+Earth Stuff	2024-09-10	3
+BunchOFlags	2024-09-09	3
+PoTime Day2 Slay the Dragon	2024-09-05	2
+Time Raid 0903	2024-09-03	6
+Drums and Fire	2024-08-28	3
+Time Day 2	2024-08-22	3
+Time to Raid Time	2024-08-20	6
+Fire Raid - Soothing Balm	2024-08-15	3
+SolRo FLAME ON!	2024-08-14	4
+Saryn Dance + Snakes	2024-08-12	3
+Mohr Time B	2024-08-08	4
+Rallos Zek and Mith Marr	2024-08-07	3
+Late for TIME	2024-08-06	6
+PoW Minis	2024-08-05	2
+POW Full Clear	2024-07-31	2
+Poopy Flags	2024-07-29	3
+Brats TIME	2024-07-25	3
+Its TIME Raid!	2024-07-23	6
+Grummas+Carprin+Bertox FUN	2024-07-18	3
+Plane of Earth A Clear	2024-07-16	3
+TimeB Strike	2024-07-11	4
+POEA-Rock Ring	2024-07-10	2
+Post Walex Time	2024-07-09	6
+fire smalls and seru biggie	2024-07-01	3
+Bye Walex Time Raid	2024-06-27	3
+Time Raid	2024-06-25	6
+Damn it's hot outside	2024-06-24	3
+Bye Walex Bye - Air Rings	2024-06-20	4
+Time Day 2	2024-06-13	3
+Time Raid	2024-06-11	6
+water maxis und storm lord ja	2024-06-10	3
+Water Minis & Solro	2024-06-05	3
+Xegony FUN	2024-06-04	2
+VT Run	2024-06-03	3
+TIME to sink our toofs into it!	2024-05-30	3
+PoTime Lewts	2024-05-28	6
+Xegony FUN	2024-05-27	2
+VT GearFest	2024-05-23	3
+Time again	2024-05-16	3
+Dizzy Loot Time	2024-05-14	6
+Water Minis Raid	2024-05-13	2
+wMinis and Buttface	2024-05-09	2
+HoH and LMM	2024-05-07	3
+Fire minis+Fennin FUN	2024-04-25	3
+Extra Booty Time	2024-04-18	6
+Time to Loot!	2024-04-16	7
+Full EarthB: No Rock Left Unturned	2024-04-11	1
+VT Fun	2024-04-10	3
+FlagBacks - Bert und AD	2024-04-09	1
+Revenge of the Luclin Leaders	2024-04-08	3
+YAMTRA - Yet Another Moo TIme Raid Again	2024-04-04	7
+Killing It In Time	2024-04-02	6
+Dress Run - Xegy	2024-04-01	2
+Little Green Snakes + Big Man SS	2024-03-28	3
+Lots of Flags	2024-03-26	3
+Time Day 2 MarchMadness	2024-03-21	6
+The March of Times	2024-03-19	3
+PoWater Bath	2024-03-13	3
+Dusty Drums	2024-03-12	5
+Yep! Time Day2!	2024-03-07	8
+Time .. WHA.. Again??	2024-03-05	5
+PoAir Panty Raid	2024-02-29	2
+PoEarth- Stupid Drums	2024-02-28	2
+Fire Raid - Soothing Balm	2024-02-27	3
+Baby Flags - MB-TZ-RZ-Agnarr	2024-02-21	3
+Time Day 1	2024-02-20	6
+Fyre Lewts	2024-02-19	2
+Fire Kills	2024-02-15	3
+VT Raid	2024-02-13	4
+Saturday Night Time	2024-02-10	1
+Smash Quarm	2024-02-08	7
+TIME for Pets	2024-02-06	7
+VT-Day2-SWARM!!	2024-02-01	3
+VT-Crush-Always-Here	2024-01-31	3
+SSra-Again!	2024-01-30	2
+TimeGear	2024-01-25	8
+Earth 2B	2024-01-24	2
+Time_Lewts	2024-01-23	6
+SSRA-EMP-VTFlags	2024-01-18	2
+Earth Bs	2024-01-17	2
+Wet and Wild with BONUS MAYONG	2024-01-16	3
+Time Yet Again	2024-01-11	7
+Time Destroyers	2024-01-09	7
+PoEb + Water Minis Raid	2024-01-04	2
+PoEb Ginto Smash	2024-01-03	2
+Lucky Last ROCKIN good time	2023-12-30	2
+PoTime Before New Years	2023-12-28	6
+Xmas Drummer Boyz	2023-12-27	2
+XmasTime	2023-12-26	7
+XegyFlags	2023-12-21	2
+Earth Flags	2023-12-20	4
+Fire Flag Run	2023-12-18	3
+PoTime-B-God-Smashers	2023-12-14	7
+PoTime	2023-12-12	7
+Fiery PoF Loots	2023-12-11	2
+FyreFestivle	2023-12-07	2
+Time Day 2 LootFest	2023-12-06	7
+YetMoreTimeLoot	2023-12-05	7
+WhoDaFuQIsKaerilai-VTRun	2023-12-03	3
+VT Choo Choo	2023-11-30	2
+More_VT_Things	2023-11-26	4
+EmpKillers	2023-11-20	2
+TooManySteps	2023-11-15	4
+LastChanceBertLineFLags	2023-11-13	4
+NFL_on_PRIME_TacticsRun	2023-11-09	4
+TimeB Night again	2023-11-08	7
+TimeAfterTime	2023-11-07	7
+Water Minis	2023-11-06	2
+AD-HoH-MM Flags	2023-11-02	3
+Nasty B word Raids	2023-10-30	3
+Time Raid	2023-10-24	7
+PoE Drum Run	2023-10-17	2
+PoE and Time	2023-10-11	7
+Time for Time	2023-10-10	7
+PoFire Funz	2023-10-09	3
+FireFeast	2023-10-03	4
+Dad Joke TIME	2023-09-27	7
+Time.. yet again ><	2023-09-26	7
+VT- Fix The Mage	2023-09-25	3
+VT Clear yet again	2023-09-21	4
+PoTime XXmoLewtsXX	2023-09-13	7
+PoTime xxLEWTSxx	2023-09-12	7
+Curse-EmpRaid	2023-09-11	2
+WhyKillGuildies PoEb	2023-09-06	2
+TimeB Night	2023-08-30	7
+Idalia Time Raid	2023-08-29	7
+Saryn Funz	2023-08-23	2
+Bearracuda	2023-08-22	3
+Rathe Council again	2023-06-28	2
+PoEb + Ginto	2023-06-27	2
+All About that PoWater Face	2023-06-12	3
+Time Night 2	2023-06-07	7
+PoTime Run	2023-06-06	7
+FatBastard+TLucentDragon	2023-06-01	2
+PoE Clear	2023-05-30	4
+P1 Time Raid	2023-05-23	8
+MB and ZeeMobs	2023-05-18	3
+Grummus+Carp+Agnarr	2023-05-16	3
+Minis & Fenin	2023-05-15	3
+Fennin+Minis	2023-05-11	4
+Time Day 2	2023-05-10	9
+Time Raid	2023-05-09	6
+Xegy + non DKP Kael, ST	2023-05-08	2
+PoAir Round2	2023-05-01	2
+Xegy+Praes+Seru	2023-04-27	2
+Time Again x 13141	2023-04-26	9
+A Dream of Time	2023-04-25	5
+Tormenting Nightmares	2023-04-24	3
+VTClear!	2023-04-20	3
+VT Clarence	2023-04-13	4
+PoTime Quarmnights	2023-04-12	6
+PoTime	2023-04-11	5
+Earth Minis + Curse/Emp	2023-04-10	3
+RZTW + Agnarr	2023-04-06	3
+Rathe Council	2023-04-05	3
+PoE B + Ginto	2023-04-04	2
+SSRA Night!	2023-03-31	1
+PoTime (If Available)	2023-03-29	10
+PoTime	2023-03-28	4
+Corinav + Water Minis	2023-03-27	3
+Carprin+Bert	2023-03-23	2
+Xana (nonDKP)/MB/TZ/VZ	2023-03-22	2
+Corinav + Water Minis	2023-03-20	3
+Corinav + Water Minis	2023-03-16	3
+PoTime Night 2	2023-03-15	9
+PoTime Lewts!	2023-03-14	5
+Rock & Mud Rings Fun	2023-03-13	2
+Toliet Run - Grummus/Carprin	2023-03-09	2
+Return to VULAK!	2023-03-08	4
+All Rocks Must Die PoEa Clear	2023-03-07	4
+Rock and Quarm	2023-03-01	9
+TIME p1-4 FUN	2023-02-28	6
+Fenin+ Fire Minis FUN	2023-02-27	3
+2/23/23 POE B THRU GINTO	2023-02-23	2
+SolRo	2023-02-22	4
+Agnarr	2023-02-21	2
+2/20/23 FIRE MINIS	2023-02-20	2
+PoTime Cleanup	2023-02-17	10
+PoTime Thursdays	2023-02-16	4
+Fennin+Fire minis FUN	2023-02-15	3
+Xegony + Seru FUN	2023-02-13	3
+2/9/23 BERT & SARYN FUN	2023-02-09	3
+AD+ HOH+ LMM + FUN	2023-02-08	3
+Xegony+ Seru Fun	2023-02-06	3
+QUARM	2023-02-02	8
+2/1/23 P5/QUARM	2023-02-01	5
+1/31/23 P1/P2/P3/P4	2023-01-31	5
+VT hot Coth+ TVX fun	2023-01-30	2
+MB+RZ+TZ/VZ	2023-01-26	3
+VT FUN	2023-01-25	4
+TT/Grummas/Carprin FUN	2023-01-23	2
+P6 Quarm	2023-01-20	2
+Plane of Time Day 2	2023-01-19	4
+Vex Thal Fun	2023-01-18	4
+Plane of Time Day 1	2023-01-17	6
+MM/cursed/emp	2023-01-16	2
+[ORathe Council	2023-01-11	2
+Quarmpocalypse	2023-01-06	13
+Quarmtime	2023-01-05	4
+MM and Earth?	2023-01-04	3
+Plane of Time Day 1	2023-01-03	4
+Coirnav and minis	2023-01-02	3
+TOSR	2022-12-29	4
+Saryn	2022-12-27	2
+Corny fish	2022-12-26	3
+Quarm 20%	2022-12-22	4
+PHASE 6 moo	2022-12-21	6
+Time Early (is it though?)	2022-12-20	6
+grummus carp bert rockring?	2022-12-19	4
+Ring(s) Earth -	2022-12-16	3
+RZ VZ TZ AGNARR	2022-12-15	1
+POE A full clear	2022-12-13	3
+Time p5	2022-12-08	4
+Dirty Rings PoE A	2022-12-07	3
+PoT Day 1	2022-12-06	5
+MB RTZW	2022-12-05	3
+Fenin + Minis	2022-12-02	4
+Terris	2022-11-30	1
+Saryn	2022-11-30	2
+AD HOH LMM MOO	2022-11-29	4
+Fire = Bad	2022-11-28	4
+Fennin + Minis	2022-11-23	5
+Time P1-P4	2022-11-22	5
+MB - Carp	2022-11-21	2
+random mobs - not backflagging	2022-11-17	3
+Songtime	2022-11-11	2
+time of moo	2022-11-10	3
+Time P1-P4	2022-11-08	5
+Xegony	2022-11-03	2
+VT Raid	2022-11-02	3
+TXD/TVX	2022-11-01	2
+INNYQUARM: THE ULTIMATE SHOWDOWN	2022-10-28	3
+Time P4/5	2022-10-27	5
+Vex Thal	2022-10-26	3
+Time P1-P4	2022-10-25	5
+Time P4-5	2022-10-20	5
+Time P1-4	2022-10-18	5
+POEB minis/Ssra leadership	2022-10-17	3
+poeb	2022-10-13	3
+Ginto	2022-10-12	2
+Time P1-P3+	2022-10-11	4
+Time P1-4	2022-10-04	4
+Coirnav + Minis	2022-10-03	4
+PoTime Inny & Quarm	2022-09-30	6
+Water minis	2022-09-28	2
+SLINKYTIME P1-3	2022-09-27	5
+Time P5 + Quarm	2022-09-23	5
+Time P4+	2022-09-22	4
+Plane of Time P1-4	2022-09-20	6
+POEA Full clear	2022-09-14	4
+PoTime P1+Gods	2022-09-09	3
+PoTime P1+P5	2022-09-08	5
+PoTime P1-P3+more	2022-09-06	6
+PoTime Gods	2022-09-02	5
+Plane of Time	2022-09-01	6
+Burn Burn Burn	2022-08-31	4
+PoTime P1-P3+Bert	2022-08-30	7
+ABCDKP	2022-08-26	7
+Death of DKP channels	2022-08-25	8
+Lord of Hate P5	2022-08-23	7
+PoTime P1+P4 Crush looting	2022-08-19	6
+Time To Kill	2022-08-18	6
+PoTime P1-P3 and more	2022-08-16	9
+All in Friday	2022-08-12	7
+PoTime P1+P4	2022-08-11	3
+VT	2022-08-10	3
+PoTime P1+P3+P5	2022-08-09	4
+Godswilldie	2022-08-05	7
+Bert 1 shot!	2022-08-02	4
+EarthB and Ssra	2022-08-01	3
+PoTime P1+P4+P5	2022-07-29	10
+PoTime P1+P4+	2022-07-28	8
+EarthB and Snakes	2022-07-25	3
+PoTime P1+ Funtimes	2022-07-22	7
+7/21/22 RATHE COUNCIL	2022-07-21	2
+POE B Warlords	2022-07-20	3
+Back to the Future	2022-07-19	3
+Corn and Seru	2022-07-18	4
+Water Minis	2022-07-15	2
+Rathe Council	2022-07-15	2
+Rathe	2022-07-14	4
+7/13/2022 XEGONY	2022-07-13	2
+Coirnav/Minis	2022-07-11	4
+Tower of Boredom	2022-07-07	4
+6/6/2022 COIRNAV AND WATER MINIS	2022-07-06	4
+PoE A	2022-07-05	5
+Dirty Jobs	2022-06-30	5
+RZTW	2022-06-29	2
+The Pain	2022-06-28	2
+Carprin+Bert 6/27/22	2022-06-27	3
+Grummus/Carp/Agnarr	2022-06-23	3
+P4 DOWN!	2022-06-21	6
+Time P1 + P4 x2 DKP	2022-06-17	11
+Fire Minnies	2022-06-16	3
+TIME P1-3	2022-06-14	4
+Thursday Time	2022-06-09	3
+Fennin and friends	2022-06-08	5
+6/7/2022 TIME	2022-06-07	4
+Time p4	2022-06-03	5
+PoTime P1+P4	2022-06-02	7
+TIMETIME P1-3	2022-05-31	4
+Time P4	2022-05-26	9
+Time P1-P3	2022-05-24	4
+VT one night only	2022-05-23	4
+Xegony	2022-05-18	3
+TIEM PLS P1-3	2022-05-17	4
+VT one day only	2022-05-17	4
+TIME!	2022-05-12	5
+Solro Tower	2022-05-11	4
+poeb minis emp cursed	2022-05-09	3
+TimeMoo	2022-05-05	4
+MooTime	2022-05-03	5
+5/2 Saryrn + PoEB Minis	2022-05-02	3
+4/29 - Cursed + Emp + XtC	2022-04-29	2
+rathe for the cure	2022-04-28	4
+4/27 - Agnarr + Earth B Minis + Ginto	2022-04-27	2
+Water Minis With a Side Of Seru	2022-04-25	4
+HOH/MITHMARR	2022-04-22	3
+Time + Fennin	2022-04-21	2
+4/20/22 XEGONY	2022-04-20	2
+Davey Jones Locker	2022-04-18	1
+Crypt + Bert + SERU	2022-04-14	4
+Water Park	2022-04-13	4
+Earth Rings Day 2	2022-04-12	3
+EARTH RINGS, DAY 1	2022-04-11	4
+TIMETIME	2022-04-08	5
+Earth Rings Day 2	2022-04-05	3
+PoE day 1	2022-04-04	3
+Time for a Rematch	2022-04-02	5
+RZTW + Carprin	2022-03-30	3
+Water Stuff	2022-03-28	3
+PoE-B Rathe Council	2022-03-25	3
+SOLRO - maybe	2022-03-21	5
+Saryrn	2022-03-16	2
+Cap and Berty	2022-03-15	1
+RALLOS ZEK THE DEDLORD/AGNAAR	2022-03-11	3
+TT Grummus AD	2022-03-07	1
+3/4/22 CORINAV	2022-03-04	4
+lmm i think? fiik	2022-03-01	2
+vt - inacht says full clear	2022-02-26	4
+2/25/22 HOH, TZ/VZ	2022-02-25	3
+vt and cursed maybe	2022-02-18	3
+fennin !! and carp	2022-02-17	1
+2/16/2022 FIRE!	2022-02-16	1
+Fire Man and MechBeast	2022-02-15	3
+ToSR - Day 1	2022-02-12	4
+VZ/TZ 2/9/22	2022-02-11	1
+MB, RZTW, Grummus	2022-02-07	1
+EMP	2022-02-03	3
+TERRIS 2.0	2022-02-02	2
+8/11/2019 NToV (Ring of Vulak attempt)	2019-08-11	3
+8 Aug - Kael + ST	2019-08-08	3
+6/14/2019 EMP SSRA, SHEI	2019-06-14	2
+6/10/2019 PRAES+ SERU	2019-06-10	2
+7June - Rhags, Vex Thal day2	2019-06-07	3
+6/5/2019 TVX x 2 & DAINS	2019-06-05	4
+3June - Arch Lich x2	2019-06-03	3
+5/14/19 VEX THAL (TVX x2)	2019-05-14	3
+5/10/2019 VEX THAL Day 2	2019-05-10	4
+9 May - Vex Thal day1	2019-05-09	3
+5/7/2019 VEX THAL (TVX x2)	2019-05-07	2
+5/3/2019 PRAES + SERU, RING OF SLIME	2019-05-03	3
+5/1/2019 VEX THAL	2019-05-01	4
+29 April - Sleeper Tomb	2019-04-29	2
+27 April - Emp , Shei	2019-04-27	3
+24 April - Kael and Deep	2019-04-24	2
+4/18/2019 Kael + Burrower + THO	2019-04-18	5
+17 April - Sleepers Tomb bonus raid	2019-04-17	1
+4/16/2019 Arch Lich x 2	2019-04-16	3
+15 April - TVX	2019-04-15	3
+4th April - Rhags, Seru	2019-04-04	4
+3rd April - Vex Thal	2019-04-03	4
+2 April - Dozekar, AC burrower	2019-04-02	2
+3/31/2019 EMPEROR & SHEI	2019-03-31	4
+3/29/2019 THO + BURROWER PARASITE	2019-03-29	3
+3/26/2019 AC BURROWER	2019-03-26	1
+3/22/2019 XTC, HP, CURSED	2019-03-22	2
+21 March - Dozekar + Shei	2019-03-21	3
+15 March - Vex Thal	2019-03-15	3
+3/14/2019 VEX THAL	2019-03-14	4
+12 March - TVX and Cazic	2019-03-12	3
+3/8/2019 VEX THAL	2019-03-08	5
+3/6/2019 VEX THAL	2019-03-06	4
+3/5/2019 KT/STATUE/AOW	2019-03-05	2
+4March - Emp Ssra and TVX	2019-03-04	4
+2 March - Seru, Shei	2019-03-02	4
+27 Feb - Kael	2019-02-27	2
+2/24/2019 EMPEROR	2019-02-24	2
+2/22/2019 SERU/SHEI/IV	2019-02-22	2
+21 Feb 2019 - Kael	2019-02-21	2
+2/17/2019 Vex Thal	2019-02-17	4
+2/16/2019 vex thal	2019-02-16	4
+2/14/2019 VEX THAL	2019-02-14	5
+11 Feb - Rhags, AL, Cursed	2019-02-11	3
+2/9/2019 TVX x 2	2019-02-09	3
+2/8/2019 VEX THAL	2019-02-08	4
+7 Feb - Rhags/AL/XTC/HP	2019-02-07	3
+6 Feb - Vex Thal day1	2019-02-06	5
+2/5/19 Dozekar/Klandi/Zlandi/Burrower	2019-02-05	4
+2/2/19 Emperor practice + Burrower	2019-02-02	3
+30 Jan - burrower, dozekar, aow	2019-01-30	3
+28 Jan - Velks and Sleepers	2019-01-28	3
+Jan 26 - Burrower, Emp, Shei	2019-01-26	3
+1/24/19 DOZE/IV	2019-01-24	3
+1/22/19 SLEEPERS TOMB/TVX'S	2019-01-22	4
+21 Jan - seru and cursed	2019-01-21	3
+1/18/19 VEX THAL	2019-01-18	4
+1/11/19 VEX THAL	2019-01-11	4
+1/10/19 VEX THAL	2019-01-10	3
+9Jan - Vex Thal	2019-01-09	4
+8Jan - Rhags, AL, TVX	2019-01-08	3
+7Jan - Kael	2019-01-07	3
+6Jan - Emp rematch	2019-01-06	2
+1/5/19 EMP SSRA	2019-01-05	3
+1/4/19 RHAGS/AL/XTC/HP	2019-01-04	4
+27dec - Rhags, AL, XTC, HP	2018-12-27	4
+12/22/18 VEX THAL	2018-12-22	4
+12/21/18 VEX THAL	2018-12-21	4
+12/20/18 CURSED & TVX'S	2018-12-20	4
+12/19/18 Vex Thal	2018-12-19	3
+12/17/18 TVX x 2	2018-12-17	3
+14Dec - Vex Thal day2	2018-12-14	5
+12Dec - Vex Thal day1	2018-12-12	4
+12/10/18 VEX THAL	2018-12-10	5
+12/9/18 EMPEROR	2018-12-09	3
+12/5/18 DOZEKAR	2018-12-05	2
+VEX THAL 12/3/18	2018-12-03	4
+1Dec - AC Burrower + Emp Ssra	2018-12-01	2
+29Nov - dozekar, seru	2018-11-29	2
+27Nov - Rhags + AL + VT	2018-11-27	4
+11/19/18 RHAGS & ARCH LICH	2018-11-19	3
+17Nov - Vex Thal learning	2018-11-17	4
+16Nov - XTC and HP	2018-11-16	3
+15Nov - AL and Cursed	2018-11-15	3
+15Nov 2pm Euro - ST Rhags	2018-11-15	5
+12Nov - Orb targets, IV and Lcea	2018-11-12	2
+EMP 2	2018-11-09	3
+8 Nov 2pm Euro - IV and Va`Dyn	2018-11-07	2
+Thought Horror Overfiend 11/7/18	2018-11-07	2
+11/2/18 AVATAR OF WAR	2018-11-02	2
+11/1/18 EMPEROR SSRAESHZA	2018-11-01	3
+Euro KT + Yeli	2018-11-01	5
+CURSED & HIGH PRIEST	2018-10-29	3
+26 Oct - Praes + Inquisitor	2018-10-26	3
+25 Oct 2pm - PoFear Cazic	2018-10-25	3
+10/22/18 High Priest	2018-10-22	2
+19 Oct - Trak UDB and Yelinak	2018-10-19	1
+RHAG AL BURROW DOZE	2018-10-16	5
+PRAESERTUM'S/XTC & HIGH PRIEST	2018-10-14	4
+12 Oct - Rhags, AL	2018-10-12	3
+9 Oct Burrower, Ring10	2018-10-09	3
+RHAGS/AL/ YELI	2018-10-08	5
+04Oct - Rhag1/2/AL + Dozekar	2018-10-04	5
+4Oct - PoFear Cazic	2018-10-04	3
+9/20/18 CURSED & TRAKANON	2018-09-20	4
+KT AOW DOZE	2018-09-18	4
+9/17/18 HIGH PRIEST	2018-09-17	2
+9/12/18 STATUE & AVATAR OF WAR	2018-09-12	2
+9/8/18 XTC & HIGH PRIEST	2018-09-08	4
+9/4/18 AL + Seru	2018-09-04	5
+Rhags	2018-08-31	3
+Seru	2018-08-28	3
+Rhag - AL	2018-08-27	4
+SSRA - AL and SHEI	2018-08-24	2
+8/22/18 RHAG 1 & 2, CURSED CYCLE	2018-08-23	4
+8/21/18 BURROWER	2018-08-21	1
+Snakes - SSRA 8/17	2018-08-17	5
+DOZE AND DRAKES	2018-08-15	2
+8/14/18 BURROWER	2018-08-14	3
+8/12/18 HIGH PRIEST	2018-08-12	4
+8/11/18 ACRYLIA BURROWER	2018-08-11	1
+8/9/2018 DOZE & DRAKES	2018-08-09	2
+Cursed 8/7	2018-08-07	2
+8/6/2018 KAEL BOSSES	2018-08-06	4
+Statue AoW 8/1	2018-08-01	3
+Cursed #3 7/31	2018-07-31	1
+Cursed 7/30 Round2	2018-07-30	2
+Ssra - Cursed cycle	2018-07-29	3
+7/27/2018 SHEI and ITAER VIUS	2018-07-27	5
+7/26/2018 KAEL BOSSES & SERU	2018-07-26	3
+7/23/2018 Velketor and Ring10 War	2018-07-23	4
+Ring War & Velk 7/16	2018-07-16	3
+Yelinak RW Velk 7/12	2018-07-12	4
+Velk, Doze, HoT 7/10	2018-07-10	3
+7/9/18 RING WAR/DAIN X3	2018-07-09	4
+29June - PoFear Cazic	2018-06-29	5
+28June - Dozekar, Drakes, Velk	2018-06-28	3
+KT Statue AoW 6/26	2018-06-26	3
+ST/Velk 6/25	2018-06-25	3
+6/20/18 VINDI/STATUE/AOW	2018-06-20	3
+19June - UDB Trak and Sleepers Tomb	2018-06-19	2
+Kael Clear	2018-06-14	4
+ST/Velk 6/13	2018-06-13	3
+Yeli/Zlandi 6/12	2018-06-12	3
+8June - NTOV day1	2018-06-08	4
+VP 6/7	2018-06-07	3
+6June - Zlandicar, RingWar	2018-06-06	3
+1June - Harla Dar and Zlandicar	2018-06-01	2
+29May - NTOV attempts	2018-05-29	2
+Doze/Drakes/HoT 5/29	2018-05-29	2
+23May - Dozekar, Drakes, UDB Trak	2018-05-23	3
+5/19/2018 DAIN	2018-05-19	2
+Doze/Drakes/HoT 5/17	2018-05-17	3
+KT Statue AoW 5/15	2018-05-15	3
+RW fail	2018-05-14	2
+ST & Ring War 5/14	2018-05-14	2
+Statue & AoW 4/9	2018-05-09	3
+8May - Sleeper's Tomb	2018-05-08	2
+Yelinak + Ring War 4/30	2018-04-30	4
+NToV 4/26	2018-04-26	3
+Zlandi/HD/Ring War 4/25	2018-04-25	3
+21 April - Plane of Growth	2018-04-21	10
+19 April - Yelinak and Ring10 War	2018-04-19	3
+HoT/Doze/Drakes 4/17	2018-04-17	2
+16April - Dains	2018-04-16	1
+VP 4/12	2018-04-12	3
+Doze/Drakes/HoT 4/11	2018-04-11	3
+8April - HoT Drakes	2018-04-08	2
+PoF / UDB April 6th	2018-04-06	4
+Trak 4/4	2018-04-04	2
+KT Statue AoW 4/3	2018-04-03	4
+2April - Sleepers Tomb	2018-04-02	3
+NToV	2018-03-29	5
+Statue & AoW & VP 3/28	2018-03-28	3
+ST	2018-03-27	3
+Velk & Vindi 3/24	2018-03-24	1
+3/22/18 KING TORMAX/AVATAR OF WAR	2018-03-22	4
+3/21/18 SLEEPERS TOMB/TRAKANON	2018-03-21	4
+Zland-Kland-HD	2018-03-19	2
+13March - Zlandicar and Klandicar	2018-03-13	2
+9March - Fear/CT	2018-03-09	5
+6March - Kael KT, Statue, AOW	2018-03-06	4
+28Feb Kael Raid - Statue AOW	2018-02-28	4
+25 Feb - UDB Trak	2018-02-25	2
+23 Feb - Statue, Idol, AOW	2018-02-23	4
+
+Everyeyes (also Gheff)
+Item	Spent	Date	Raid Name	Event
+[Gold Runed Mithril Knife] 	4	2023-05-03	SolRo Run	1 Hour Single/Double Boxing
+[Mask of Resiliance]	6	2023-04-17	TVX + HotCoth Bonus	1 Hour Single/Double Boxing
+
+Raid History
+Raid Name	Raid Date	Earned
+SolRo Run	2023-05-03	4
+Xegy+Praes+Seru	2023-04-27	1
+AD+HoH+LMM	2023-04-19	3
+TVX + HotCoth Bonus	2023-04-17	2
+

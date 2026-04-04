@@ -1,0 +1,655 @@
+{
+  "total_raids": 1617,
+  "recent_days": 1095,
+  "counts_by_type": {
+    "Unclassified": 367,
+    "PoTime": 270,
+    "Elemental": 204,
+    "Vex Thal": 184,
+    "God": 165,
+    "Kael": 148,
+    "Sleeper": 62,
+    "Burrower": 61,
+    "ToV": 58,
+    "Praesertum": 52,
+    "Ssra": 34,
+    "Rathe Council": 11,
+    "Akheva": 1
+  },
+  "recent_counts_by_type": {
+    "PoTime": 152,
+    "Elemental": 146,
+    "Vex Thal": 40,
+    "Rathe Council": 6,
+    "God": 34,
+    "Unclassified": 119,
+    "Praesertum": 14,
+    "Ssra": 4,
+    "Kael": 6,
+    "ToV": 2
+  },
+  "dkp_by_type_recent": {
+    "PoTime": 813.0,
+    "Elemental": 395.0,
+    "Unclassified": 294.0,
+    "Vex Thal": 132.0,
+    "God": 80.0,
+    "Praesertum": 35.0,
+    "Rathe Council": 15.0,
+    "Ssra": 8.0,
+    "Kael": 8.0,
+    "ToV": 8.0
+  },
+  "dkp_by_month_and_type": [
+    {
+      "month": "2026-02",
+      "raid_type": "Elemental",
+      "dkp": 10.0
+    },
+    {
+      "month": "2026-02",
+      "raid_type": "Unclassified",
+      "dkp": 2.0
+    },
+    {
+      "month": "2026-02",
+      "raid_type": "PoTime",
+      "dkp": 17.0
+    },
+    {
+      "month": "2026-02",
+      "raid_type": "Vex Thal",
+      "dkp": 3.0
+    },
+    {
+      "month": "2026-02",
+      "raid_type": "God",
+      "dkp": 2.0
+    },
+    {
+      "month": "2026-01",
+      "raid_type": "Elemental",
+      "dkp": 14.0
+    },
+    {
+      "month": "2026-01",
+      "raid_type": "PoTime",
+      "dkp": 16.0
+    },
+    {
+      "month": "2026-01",
+      "raid_type": "Praesertum",
+      "dkp": 3.0
+    },
+    {
+      "month": "2026-01",
+      "raid_type": "Unclassified",
+      "dkp": 3.0
+    },
+    {
+      "month": "2026-01",
+      "raid_type": "Vex Thal",
+      "dkp": 3.0
+    },
+    {
+      "month": "2025-12",
+      "raid_type": "Unclassified",
+      "dkp": 11.0
+    },
+    {
+      "month": "2025-12",
+      "raid_type": "PoTime",
+      "dkp": 17.0
+    },
+    {
+      "month": "2025-12",
+      "raid_type": "God",
+      "dkp": 4.0
+    },
+    {
+      "month": "2025-12",
+      "raid_type": "Elemental",
+      "dkp": 4.0
+    },
+    {
+      "month": "2025-12",
+      "raid_type": "Vex Thal",
+      "dkp": 7.0
+    },
+    {
+      "month": "2025-11",
+      "raid_type": "God",
+      "dkp": 2.0
+    },
+    {
+      "month": "2025-11",
+      "raid_type": "Praesertum",
+      "dkp": 3.0
+    },
+    {
+      "month": "2025-11",
+      "raid_type": "PoTime",
+      "dkp": 8.0
+    },
+    {
+      "month": "2025-11",
+      "raid_type": "Unclassified",
+      "dkp": 7.0
+    },
+    {
+      "month": "2025-11",
+      "raid_type": "Elemental",
+      "dkp": 10.0
+    },
+    {
+      "month": "2025-10",
+      "raid_type": "Vex Thal",
+      "dkp": 6.0
+    },
+    {
+      "month": "2025-10",
+      "raid_type": "Rathe Council",
+      "dkp": 3.0
+    },
+    {
+      "month": "2025-10",
+      "raid_type": "Elemental",
+      "dkp": 5.0
+    },
+    {
+      "month": "2025-10",
+      "raid_type": "God",
+      "dkp": 4.0
+    },
+    {
+      "month": "2025-10",
+      "raid_type": "PoTime",
+      "dkp": 24.0
+    },
+    {
+      "month": "2025-09",
+      "raid_type": "Elemental",
+      "dkp": 13.0
+    },
+    {
+      "month": "2025-09",
+      "raid_type": "Unclassified",
+      "dkp": 10.0
+    },
+    {
+      "month": "2025-09",
+      "raid_type": "Praesertum",
+      "dkp": 2.0
+    },
+    {
+      "month": "2025-09",
+      "raid_type": "PoTime",
+      "dkp": 25.0
+    },
+    {
+      "month": "2025-08",
+      "raid_type": "Vex Thal",
+      "dkp": 6.0
+    },
+    {
+      "month": "2025-08",
+      "raid_type": "God",
+      "dkp": 8.0
+    },
+    {
+      "month": "2025-08",
+      "raid_type": "Unclassified",
+      "dkp": 6.0
+    },
+    {
+      "month": "2025-08",
+      "raid_type": "Elemental",
+      "dkp": 2.0
+    },
+    {
+      "month": "2025-08",
+      "raid_type": "PoTime",
+      "dkp": 21.0
+    },
+    {
+      "month": "2025-07",
+      "raid_type": "Elemental",
+      "dkp": 14.0
+    },
+    {
+      "month": "2025-07",
+      "raid_type": "God",
+      "dkp": 2.0
+    },
+    {
+      "month": "2025-07",
+      "raid_type": "Praesertum",
+      "dkp": 6.0
+    },
+    {
+      "month": "2025-07",
+      "raid_type": "Unclassified",
+      "dkp": 3.0
+    },
+    {
+      "month": "2025-07",
+      "raid_type": "Vex Thal",
+      "dkp": 4.0
+    },
+    {
+      "month": "2025-07",
+      "raid_type": "PoTime",
+      "dkp": 18.0
+    },
+    {
+      "month": "2025-06",
+      "raid_type": "Elemental",
+      "dkp": 6.0
+    },
+    {
+      "month": "2025-06",
+      "raid_type": "Unclassified",
+      "dkp": 4.0
+    },
+    {
+      "month": "2025-06",
+      "raid_type": "Vex Thal",
+      "dkp": 3.0
+    },
+    {
+      "month": "2025-06",
+      "raid_type": "PoTime",
+      "dkp": 17.0
+    },
+    {
+      "month": "2025-06",
+      "raid_type": "God",
+      "dkp": 2.0
+    },
+    {
+      "month": "2025-05",
+      "raid_type": "PoTime",
+      "dkp": 24.0
+    },
+    {
+      "month": "2025-05",
+      "raid_type": "Elemental",
+      "dkp": 12.0
+    },
+    {
+      "month": "2025-05",
+      "raid_type": "Unclassified",
+      "dkp": 4.0
+    },
+    {
+      "month": "2025-05",
+      "raid_type": "Vex Thal",
+      "dkp": 3.0
+    },
+    {
+      "month": "2025-04",
+      "raid_type": "Rathe Council",
+      "dkp": 2.0
+    },
+    {
+      "month": "2025-04",
+      "raid_type": "Praesertum",
+      "dkp": 2.0
+    },
+    {
+      "month": "2025-04",
+      "raid_type": "God",
+      "dkp": 2.0
+    },
+    {
+      "month": "2025-04",
+      "raid_type": "PoTime",
+      "dkp": 27.0
+    },
+    {
+      "month": "2025-04",
+      "raid_type": "Unclassified",
+      "dkp": 5.0
+    },
+    {
+      "month": "2025-04",
+      "raid_type": "Elemental",
+      "dkp": 5.0
+    },
+    {
+      "month": "2025-04",
+      "raid_type": "Vex Thal",
+      "dkp": 3.0
+    },
+    {
+      "month": "2025-03",
+      "raid_type": "God",
+      "dkp": 6.0
+    },
+    {
+      "month": "2025-03",
+      "raid_type": "PoTime",
+      "dkp": 19.0
+    },
+    {
+      "month": "2025-03",
+      "raid_type": "Unclassified",
+      "dkp": 7.0
+    },
+    {
+      "month": "2025-03",
+      "raid_type": "Vex Thal",
+      "dkp": 3.0
+    },
+    {
+      "month": "2025-03",
+      "raid_type": "Elemental",
+      "dkp": 6.0
+    },
+    {
+      "month": "2025-02",
+      "raid_type": "PoTime",
+      "dkp": 16.0
+    },
+    {
+      "month": "2025-02",
+      "raid_type": "Unclassified",
+      "dkp": 13.0
+    },
+    {
+      "month": "2025-02",
+      "raid_type": "Elemental",
+      "dkp": 8.0
+    },
+    {
+      "month": "2025-02",
+      "raid_type": "Vex Thal",
+      "dkp": 3.0
+    },
+    {
+      "month": "2025-02",
+      "raid_type": "God",
+      "dkp": 3.0
+    },
+    {
+      "month": "2025-01",
+      "raid_type": "God",
+      "dkp": 6.0
+    },
+    {
+      "month": "2025-01",
+      "raid_type": "PoTime",
+      "dkp": 19.0
+    },
+    {
+      "month": "2025-01",
+      "raid_type": "Rathe Council",
+      "dkp": 3.0
+    },
+    {
+      "month": "2025-01",
+      "raid_type": "Elemental",
+      "dkp": 11.0
+    },
+    {
+      "month": "2025-01",
+      "raid_type": "Praesertum",
+      "dkp": 2.0
+    },
+    {
+      "month": "2025-01",
+      "raid_type": "Vex Thal",
+      "dkp": 3.0
+    },
+    {
+      "month": "2024-12",
+      "raid_type": "PoTime",
+      "dkp": 20.0
+    },
+    {
+      "month": "2024-12",
+      "raid_type": "Unclassified",
+      "dkp": 11.0
+    },
+    {
+      "month": "2024-12",
+      "raid_type": "Elemental",
+      "dkp": 10.0
+    },
+    {
+      "month": "2024-12",
+      "raid_type": "Praesertum",
+      "dkp": 2.0
+    },
+    {
+      "month": "2024-11",
+      "raid_type": "Unclassified",
+      "dkp": 10.0
+    },
+    {
+      "month": "2024-11",
+      "raid_type": "PoTime",
+      "dkp": 9.0
+    },
+    {
+      "month": "2024-11",
+      "raid_type": "Elemental",
+      "dkp": 7.0
+    },
+    {
+      "month": "2024-11",
+      "raid_type": "Vex Thal",
+      "dkp": 6.0
+    },
+    {
+      "month": "2024-11",
+      "raid_type": "God",
+      "dkp": 4.0
+    },
+    {
+      "month": "2024-10",
+      "raid_type": "Elemental",
+      "dkp": 12.0
+    },
+    {
+      "month": "2024-10",
+      "raid_type": "Unclassified",
+      "dkp": 14.0
+    },
+    {
+      "month": "2024-10",
+      "raid_type": "God",
+      "dkp": 2.0
+    },
+    {
+      "month": "2024-10",
+      "raid_type": "PoTime",
+      "dkp": 20.0
+    },
+    {
+      "month": "2024-09",
+      "raid_type": "PoTime",
+      "dkp": 21.0
+    },
+    {
+      "month": "2024-09",
+      "raid_type": "Elemental",
+      "dkp": 9.0
+    },
+    {
+      "month": "2024-09",
+      "raid_type": "Vex Thal",
+      "dkp": 10.0
+    },
+    {
+      "month": "2024-09",
+      "raid_type": "Unclassified",
+      "dkp": 7.0
+    },
+    {
+      "month": "2024-09",
+      "raid_type": "Kael",
+      "dkp": 3.0
+    },
+    {
+      "month": "2024-09",
+      "raid_type": "God",
+      "dkp": 2.0
+    },
+    {
+      "month": "2024-08",
+      "raid_type": "Elemental",
+      "dkp": 22.0
+    },
+    {
+      "month": "2024-08",
+      "raid_type": "God",
+      "dkp": 3.0
+    },
+    {
+      "month": "2024-08",
+      "raid_type": "Unclassified",
+      "dkp": 4.0
+    },
+    {
+      "month": "2024-08",
+      "raid_type": "Kael",
+      "dkp": 3.0
+    },
+    {
+      "month": "2024-08",
+      "raid_type": "PoTime",
+      "dkp": 19.0
+    },
+    {
+      "month": "2024-08",
+      "raid_type": "Praesertum",
+      "dkp": 2.0
+    },
+    {
+      "month": "2024-07",
+      "raid_type": "Rathe Council",
+      "dkp": 2.0
+    },
+    {
+      "month": "2024-07",
+      "raid_type": "PoTime",
+      "dkp": 16.0
+    },
+    {
+      "month": "2024-07",
+      "raid_type": "Elemental",
+      "dkp": 9.0
+    },
+    {
+      "month": "2024-07",
+      "raid_type": "Unclassified",
+      "dkp": 17.0
+    },
+    {
+      "month": "2024-07",
+      "raid_type": "Vex Thal",
+      "dkp": 7.0
+    },
+    {
+      "month": "2024-07",
+      "raid_type": "God",
+      "dkp": 3.0
+    },
+    {
+      "month": "2024-06",
+      "raid_type": "Unclassified",
+      "dkp": 2.0
+    },
+    {
+      "month": "2024-06",
+      "raid_type": "PoTime",
+      "dkp": 18.0
+    },
+    {
+      "month": "2024-06",
+      "raid_type": "God",
+      "dkp": 2.0
+    },
+    {
+      "month": "2024-06",
+      "raid_type": "Elemental",
+      "dkp": 18.0
+    },
+    {
+      "month": "2024-06",
+      "raid_type": "Vex Thal",
+      "dkp": 3.0
+    },
+    {
+      "month": "2024-06",
+      "raid_type": "Ssra",
+      "dkp": 2.0
+    },
+    {
+      "month": "2024-05",
+      "raid_type": "Elemental",
+      "dkp": 12.0
+    },
+    {
+      "month": "2024-05",
+      "raid_type": "Unclassified",
+      "dkp": 9.0
+    },
+    {
+      "month": "2024-05",
+      "raid_type": "God",
+      "dkp": 2.0
+    },
+    {
+      "month": "2024-05",
+      "raid_type": "PoTime",
+      "dkp": 31.0
+    },
+    {
+      "month": "2024-05",
+      "raid_type": "Vex Thal",
+      "dkp": 3.0
+    },
+    {
+      "month": "2024-04",
+      "raid_type": "Elemental",
+      "dkp": 12.0
+    },
+    {
+      "month": "2024-04",
+      "raid_type": "God",
+      "dkp": 2.0
+    },
+    {
+      "month": "2024-04",
+      "raid_type": "Vex Thal",
+      "dkp": 6.0
+    },
+    {
+      "month": "2024-04",
+      "raid_type": "Unclassified",
+      "dkp": 5.0
+    },
+    {
+      "month": "2024-04",
+      "raid_type": "PoTime",
+      "dkp": 26.0
+    },
+    {
+      "month": "2024-03",
+      "raid_type": "Unclassified",
+      "dkp": 14.0
+    },
+    {
+      "month": "2024-03",
+      "raid_type": "Elemental",
+      "dkp": 19.0
+    },
+    {
+      "month": "2024-03",
+      "raid_type": "PoTime",
+      "dkp": 20.0
+    }
+  ]
+}

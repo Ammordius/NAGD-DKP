@@ -1,0 +1,110 @@
+10/15	Elemental Helm Mold	Rangerwoodelf
+10/15	Elemental Chain Glove Pattern	Pugnacious
+10/15	Elemental Gauntlet Mold	Jyslia
+10/18	Elemental Silk Turban Pattern	Ammordius
+10/18	Elemental Chain Coif Pattern	Jyslia
+10/18	Elemental Chain Glove Pattern	Rangerwoodelf
+11/7	Fangs of Vyzh`dra	Ammordius
+11/7	Opaline Charm	Rangerwoodelf
+11/7	Wistful Tunic of the Void	Ammordius
+11/8	Elemental Silk Turban Pattern	Rimidal
+11/8	Cudgel of Glowing Clay	Pugnacious
+11/8	Elemental Gauntlet Mold	Ammordius
+11/12	Elemental Helm Mold	Rimidal
+11/12	Elemental Chain Glove Pattern	Ammordius
+11/12/2025 20:27:58	Elemental Leather Glove Pattern	Rangerwoodelf
+11/16/2025	Elemental Chain Boot Pattern	Pugnacious
+11/16/2025 22:12:05	Elemental Chain Glove Pattern	Rangerwoodelf
+11/16/2025	Elemental Silk Boot Pattern	Ammordius
+11/19/2025 21:32:26	Elemental Leather Boot Pattern	Jyslia
+11/19/2025	Elemental Chain Glove Pattern	Pugnacious
+11/19/2025 21:53:37	Elemental Gauntlet Mold	Rangerwoodelf
+12/2/2025 23:22:21	twilight shroud	Pugnacious
+12/2/2025 23:22:21	umbral vambraces	Ammordius
+12/3/2025 0:22:49	cloudy steel mask	Rangerwoodelf
+12/3/2025 0:22:08	earring of battle	Pugnacious
+12/3/2025	Soul Essence of Aten Ha Ra	Rimidal
+12/3/2025	Crimson Runed Mask	Ammordius
+12/3/2025	Torch of Judgment	Pugnacious
+12/3/2025	Mask of Secrets	Rangerwoodelf
+12/10/2025 21:06:49	Elemental Helm Mold	Ammordius
+12/10/2025 21:39:43	Elemental Silk Glove Pattern	Rimidal
+12/10/2025 21:59:48	Elemental Gauntlet Mold	Rimidal
+12/17/2025 23:33:55	tiny cap of sight	Rimidal
+12/17/2025 23:34:25	tiny cap of sight	Rangerwoodelf
+12/17/2025	Sanguine Gloves	Pugnacious
+12/17/2025 23:53:38	Sanguine Gloves	Rangerwoodelf
+12/17/2025 23:56:53	cloak of frozen flames	Ammordius
+12/18/2025 23:08:49	armguard of purity	Pugnacious
+12/18/2025 23:10:23	Cerulean Sleeves	Rangerwoodelf
+12/18/2025 23:20:23	umbral vambraces	Rangerwoodelf
+12/19/2025 0:03:35	Ancient: Greater Concussion	Ammordius
+12/19/2025 0:05:36	slippers of dark whispers	Pugnacious
+12/19/2025 0:43:39	Soul Essence of Aten Ha Ra	Jyslia
+12/19/2025 0:43:39	Robe of Secrets	Rangerwoodelf
+12/19/2025 0:43:48	Leggings of Secrets	Pugnacious
+12/19/2025 0:44:39	Leg Guard of Shadows	Rangerwoodelf
+12/20/2025 16:52:03	nightcaller leggings	Ammordius
+12/20/2025 16:53:45	circlet of disguise	Rangerwoodelf
+12/20/2025 16:54:57	orb of satisfaction	Pugnacious
+12/20/2025 17:50:52	mark of shadows	Pugnacious
+12/20/2025 17:50:56	cloak of the black wind	Jyslia
+12/20/2025 17:50:59	wand of everlasting water	Rangerwoodelf
+12/20/2025 18:32:00	ancient: destruction of ice	Ammordius
+12/20/2025 18:32:00	helmet of shadow	Rangerwoodelf
+12/20/2025 18:32:01	helmet of shadow	Pugnacious
+12/20/2025 18:32:43	thorny chain sleeves	Ammordius
+12/20/2025 19:56:57	mask of resiliance	Pugnacious
+12/20/2025 19:58:06	shadow wind leggings	Ammordius
+12/20/2025 19:58:41	shadow wind leggings	Rangerwoodelf
+1/21/2026 18:47:20	Heavy Yttrium Chestplate	Rimidal
+1/21/2026 18:47:25	Heavy Yttrium Chestplate	Rangerwoodelf
+1/21/2026 18:47:27	Heavy Yttrium Chestplate	Jyslia
+1/24/2026 21:51:43	Elemental Boot Mold	Ammordius
+1/24/2026 22:10:33	Elemental Silk Boot Pattern	Rangerwoodelf
+2/1/2026 12:47:42	Elemental Silk Turban Pattern	Pugnacious
+2/1/2026	Cudgel of Glowing Clay	Ammordius
+2/1/2026 13:23:00	Elemental Silk Boot Pattern	Rangerwoodelf
+2/7/2026 14:25:46	Elemental Chain Boot Pattern	Ammordius
+2/7/2026 14:43:46	Elemental Chain Glove Pattern	Rangerwoodelf
+2/7/2026 14:59:47	twisted twig charm	Jyslia
+2/11/2026	belt of dark thought	Pugnacious
+2/11/2026 18:36:44	belt of dark thought	Ammordius
+2/11/2026 18:37:21	ring of flamewarding	Rangerwoodelf
+2/11/2026 19:35:41	earring of falling stars	Jyslia
+2/11/2026	tiny bone bracelet	Rangerwoodelf
+2/11/2026	tiny bone bracelet	Ammordius
+2/11/2026 22:35:31	crystal shadowsong cloak	Pugnacious
+2/11/2026 22:35:31	cloudy steel mask	Jyslia
+2/11/2026 23:43:32	Mask of Secrets	Ammordius
+2/11/2026 23:43:40	Soul Essence of Aten Ha Ra	Pugnacious
+2/11/2026 23:44:06	Torch of Judgment	Jyslia
+2/11/2026 23:49:57	Gloves of the Crimson Sigil	Rangerwoodelf
+2/13/2026 20:37:03	ring of resistance	Pugnacious
+2/13/2026 20:38:28	shield of energy	Rangerwoodelf
+2/13/2026 20:39:58	shield of energy	Ammordius
+2/13/2026 21:34:19	crown of ambivalence	Ammordius
+2/18/2026 20:41:38	belt of dark thought	Rimidal
+2/18/2026 20:43:47	ring of the crimson bull	Rimidal
+2/18/2026 21:41:37	tiny cap of sight	Pugnacious
+2/18/2026 21:41:37	gloves of warding	Pugnacious
+2/18/2026 21:44:40	earring of falling stars	Rangerwoodelf
+2/18/2026 21:45:23	cloak of glowing embers	Rimidal
+2/18/2026 22:54:02	crystal shadowsong cloak	Jyslia
+2/18/2026 22:19:15	stein of falling stars	Rimidal
+2/18/2026 22:55:45	Cerulean Sleeves	Rimidal
+2/18/2026 23:39:13	earring of battle	Rangerwoodelf
+2/18/2026 23:41:15	dark hand wraps 	Rimidal
+2/18/2026 23:42:26	bone earring of evasion	Pugnacious
+2/19/2026 0:24:53	Tome of Secrets	Rimidal
+2/19/2026 0:32:56	Soul Essence of Aten Ha Ra	Rangerwoodelf
+2/19/2026 0:33:37	Torch of Judgment	Pugnacious
+2/19/2026 0:42:44	Leg Guard of Shadows	Rimidal
+2/20/2026 18:39:05	orb of satisfaction	Rangerwoodelf
+2/20/2026 18:42:42	mask of dark thoughts	Pugnacious
+2/20/2026 19:27:26	crown of ambivalence	Rangerwoodelf
+2/20/2026 19:37:34	thorny chain helm	Rangerwoodelf
+2/20/2026 19:38:13	cloak of the black wind	Rangerwoodelf
+3/7/2026 20:39:39	Elemental Chain Boot Pattern	Rangerwoodelf
+3/7/2026	Cudgel of Glowing Clay	Rangerwoodelf
+3/7/2026	Elemental Chain Coif Pattern	Ammordius

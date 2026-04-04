@@ -5,23 +5,31 @@ One-off export of officer_bid_portfolio_for_loot JSON per raid_loot row (JSONL).
 Requires an **officer** Supabase session: `is_officer()` checks profiles.role for auth.uid().
 Service role JWT does **not** satisfy that check.
 
-Environment:
-  SUPABASE_URL          — project URL
-  SUPABASE_ANON_KEY     — anon key (used as client key; not for privilege escalation)
+Environment (by default loaded from `web/.env` then `web/.env.local` via python-dotenv):
+  SUPABASE_URL or VITE_SUPABASE_URL — project URL
+  SUPABASE_ANON_KEY or VITE_SUPABASE_ANON_KEY — anon key (JSONL export path)
   SUPABASE_ACCESS_TOKEN — JWT from a signed-in **officer** (e.g. Application → Local Storage →
                           supabase.auth.token in browser, use access_token value)
+  SUPABASE_SERVICE_ROLE_KEY or VITE_SUPABASE_SERVICE_ROLE_KEY — for `--db-batch` only
 
 Optional:
   POSTGREST_TIMEOUT_SEC — default 120 (seconds for slow per-loot RPC)
+  POSTGREST_TIMEOUT_PAYLOAD_SEC — default 600 (HTTP client timeout for --db-batch with include_payload=true)
+  BID_PORTFOLIO_PAYLOAD_MAX_CHUNK — default 1; max loot ids per RPC when include_payload=true (raise only if your DB statement_timeout allows it)
 
 Usage:
   python scripts/backfill_bid_portfolio_export.py --out data/bid_portfolio_history.jsonl
   python scripts/backfill_bid_portfolio_export.py --min-loot-id 1 --max-loot-id 500 --out out.jsonl
   python scripts/backfill_bid_portfolio_export.py --loot-ids-file data/loot_ids.txt --out out.jsonl
   python scripts/backfill_bid_portfolio_export.py --db-batch 1 400 false
-  python scripts/backfill_bid_portfolio_export.py --db-batch 401 800 true
+  python scripts/backfill_bid_portfolio_export.py --db-batch 1 400 true
 
 `--db-batch` uses SUPABASE_SERVICE_ROLE_KEY and calls `officer_backfill_bid_portfolio_batch` (third arg: true/false for include_payload).
+The script **splits** `[MIN_ID, MAX_ID]` into chunks of `--db-batch-chunk` (default 50) so each RPC stays under the DB **statement_timeout**.
+With **include_payload=true**, each loot row runs `officer_bid_portfolio_for_loot` inside the batch; the script caps chunk size to **BID_PORTFOLIO_PAYLOAD_MAX_CHUNK** (default **1**) so a single statement does not time out.
+
+For very large backfills, prefer the DB procedure (COMMIT between chunks): in Supabase SQL Editor,
+`CALL public.dba_backfill_bid_portfolio_range(min, max, chunk_size, include_payload);` — see docs/HANDOFF_OFFICER_LOOT_BID_FORECAST.md.
 
 Use small id ranges or modest --loot-ids-file lists to avoid hitting PostgREST/statement timeouts.
 """
@@ -37,6 +45,25 @@ from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parent
+
+
+def _load_env_from_web() -> None:
+    """Populate os.environ from Vite env files (same values as the web app)."""
+    try:
+        from dotenv import load_dotenv
+    except ImportError:
+        return
+    web = REPO_ROOT / "web"
+    load_dotenv(web / ".env")
+    load_dotenv(web / ".env.local", override=True)
+
+
+def _env_first(*names: str) -> str:
+    for n in names:
+        v = os.environ.get(n, "").strip()
+        if v:
+            return v
+    return ""
 
 
 def _load_ids_from_file(path: Path) -> list[int]:
@@ -115,19 +142,31 @@ def main() -> int:
         default=None,
         help="Upsert bid_portfolio_auction_fact via officer_backfill_bid_portfolio_batch using SUPABASE_SERVICE_ROLE_KEY (INCLUDE_PAYLOAD: true/false)",
     )
+    ap.add_argument(
+        "--db-batch-chunk",
+        type=int,
+        default=50,
+        metavar="N",
+        help="Max loot ids per RPC when using --db-batch (default 50; ignored beyond BID_PORTFOLIO_PAYLOAD_MAX_CHUNK when include_payload=true)",
+    )
     args = ap.parse_args()
     if args.db_batch is None and args.out is None:
         print("Provide --out for JSONL export or use --db-batch.", file=sys.stderr)
         return 1
 
-    url = os.environ.get("SUPABASE_URL", "").strip()
-    anon = os.environ.get("SUPABASE_ANON_KEY", "").strip()
-    token = os.environ.get("SUPABASE_ACCESS_TOKEN", "").strip()
-    service = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").strip()
+    _load_env_from_web()
+
+    url = _env_first("SUPABASE_URL", "VITE_SUPABASE_URL")
+    anon = _env_first("SUPABASE_ANON_KEY", "VITE_SUPABASE_ANON_KEY")
+    token = _env_first("SUPABASE_ACCESS_TOKEN")
+    service = _env_first("SUPABASE_SERVICE_ROLE_KEY", "VITE_SUPABASE_SERVICE_ROLE_KEY")
     timeout = int(os.environ.get("POSTGREST_TIMEOUT_SEC", "120"))
 
     if not url:
-        print("Set SUPABASE_URL.", file=sys.stderr)
+        print(
+            "Set SUPABASE_URL (or VITE_SUPABASE_URL) in web/.env or the environment.",
+            file=sys.stderr,
+        )
         return 1
 
     try:
@@ -139,7 +178,10 @@ def main() -> int:
 
     if args.db_batch is not None:
         if not service:
-            print("Set SUPABASE_SERVICE_ROLE_KEY for --db-batch.", file=sys.stderr)
+            print(
+                "Set SUPABASE_SERVICE_ROLE_KEY (or VITE_SUPABASE_SERVICE_ROLE_KEY) for --db-batch.",
+                file=sys.stderr,
+            )
             return 1
         lo, hi, inc = args.db_batch
         include_payload = str(inc).lower() in ("1", "true", "yes", "t")
@@ -148,21 +190,65 @@ def main() -> int:
         except ValueError:
             print("MIN_ID and MAX_ID must be integers.", file=sys.stderr)
             return 1
-        opts = SyncClientOptions(postgrest_client_timeout=max(timeout, 300))
+        chunk = max(1, int(args.db_batch_chunk))
+        if include_payload:
+            cap = int(os.environ.get("BID_PORTFOLIO_PAYLOAD_MAX_CHUNK", "1"))
+            cap = max(1, cap)
+            if chunk > cap:
+                print(
+                    f"include_payload=true: capping --db-batch-chunk from {chunk} to {cap} "
+                    f"(each row runs officer_bid_portfolio_for_loot; set BID_PORTFOLIO_PAYLOAD_MAX_CHUNK to allow larger batches).",
+                    file=sys.stderr,
+                )
+                chunk = cap
+        rest_timeout = max(timeout, 300)
+        if include_payload:
+            rest_timeout = max(
+                rest_timeout,
+                int(os.environ.get("POSTGREST_TIMEOUT_PAYLOAD_SEC", "600")),
+            )
+        opts = SyncClientOptions(postgrest_client_timeout=rest_timeout)
         client = create_client(url, service, options=opts)
-        resp = client.rpc(
-            "officer_backfill_bid_portfolio_batch",
-            {
-                "p_min_loot_id": mn,
-                "p_max_loot_id": mx,
-                "p_include_payload": include_payload,
-            },
-        ).execute()
-        print(resp.data, file=sys.stderr)
+        total_ok = 0
+        total_bad = 0
+        cur = mn
+        while cur <= mx:
+            hi = min(cur + chunk - 1, mx)
+            resp = client.rpc(
+                "officer_backfill_bid_portfolio_batch",
+                {
+                    "p_min_loot_id": cur,
+                    "p_max_loot_id": hi,
+                    "p_include_payload": include_payload,
+                },
+            ).execute()
+            row = resp.data
+            if isinstance(row, list):
+                row = row[0] if row else {}
+            if not isinstance(row, dict):
+                row = {}
+            ok = int(row.get("rows_upserted", 0) or 0)
+            bad = int(row.get("rows_errored", 0) or 0)
+            total_ok += ok
+            total_bad += bad
+            print(
+                f"... chunk loot_id {cur}–{hi}: upserted={ok} errored={bad}",
+                file=sys.stderr,
+            )
+            cur = hi + 1
+            if args.sleep_ms > 0:
+                time.sleep(args.sleep_ms / 1000.0)
+        print(
+            {"rows_upserted": total_ok, "rows_errored": total_bad},
+            file=sys.stderr,
+        )
         return 0
 
     if not anon:
-        print("Set SUPABASE_ANON_KEY.", file=sys.stderr)
+        print(
+            "Set SUPABASE_ANON_KEY (or VITE_SUPABASE_ANON_KEY) in web/.env or the environment.",
+            file=sys.stderr,
+        )
         return 1
     if not token:
         print(

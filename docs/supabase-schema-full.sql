@@ -3118,9 +3118,13 @@ BEGIN
   IF NOT (
     public.is_officer()
     OR nullif(trim(COALESCE(current_setting('request.jwt.claim.role', true), '')), '') = 'service_role'
+    OR session_user IN ('postgres', 'supabase_admin')
   ) THEN
     RAISE EXCEPTION 'officer only';
   END IF;
+
+  -- Pooled connections often use a short statement_timeout; this RPC does many subqueries per attendee.
+  SET LOCAL statement_timeout = '20min';
 
   SELECT gle.raid_id INTO v_raid FROM public.guild_loot_sale_enriched gle WHERE gle.loot_id = p_loot_id;
   IF v_raid IS NULL THEN
@@ -3248,7 +3252,7 @@ END;
 $obpfl$;
 
 COMMENT ON FUNCTION public.officer_bid_portfolio_for_loot(bigint) IS
-  'Officers only: one loot row — enriched sale, sim_mode, per-attendee pool/could_clear/synthetic_max_bid, purchase priors, later_bought_same_norm, runner_up guess.';
+  'Officers only: one loot row — enriched sale, sim_mode, per-attendee pool/could_clear/synthetic_max_bid, purchase priors, later_bought_same_norm, runner_up guess. Uses SET LOCAL statement_timeout = 20min for the call.';
 
 REVOKE ALL ON FUNCTION public.officer_bid_portfolio_for_loot(bigint) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.officer_bid_portfolio_for_loot(bigint) TO authenticated;
@@ -3435,6 +3439,7 @@ BEGIN
   IF NOT (
     public.is_officer()
     OR nullif(trim(COALESCE(current_setting('request.jwt.claim.role', true), '')), '') = 'service_role'
+    OR session_user IN ('postgres', 'supabase_admin')
   ) THEN
     RAISE EXCEPTION 'officer only';
   END IF;
@@ -3442,6 +3447,9 @@ BEGIN
   IF p_min_loot_id IS NULL OR p_max_loot_id IS NULL OR p_min_loot_id > p_max_loot_id THEN
     RAISE EXCEPTION 'invalid loot_id range';
   END IF;
+
+  -- Same as officer_bid_portfolio_for_loot: default pool timeout is too low for payload backfill.
+  SET LOCAL statement_timeout = '20min';
 
   FOR v_gle IN
     SELECT *
@@ -3517,11 +3525,67 @@ END;
 $obfb$;
 
 COMMENT ON FUNCTION public.officer_backfill_bid_portfolio_batch(bigint, bigint, boolean) IS
-  'Officers only: upsert bid_portfolio_auction_fact for loot_id in [min,max]. Use small ranges (e.g. 200–500 rows) to avoid statement timeout. p_include_payload stores full officer_bid_portfolio_for_loot JSON (slow).';
+  'Officers (JWT), service_role, or direct DB session as postgres/supabase_admin: upsert bid_portfolio_auction_fact for loot_id in [min,max]. Raises statement_timeout locally to 20min. p_include_payload stores full officer_bid_portfolio_for_loot JSON (slow). For large backfills from the SQL Editor, prefer CALL dba_backfill_bid_portfolio_range (COMMIT between chunks).';
 
 REVOKE ALL ON FUNCTION public.officer_backfill_bid_portfolio_batch(bigint, bigint, boolean) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.officer_backfill_bid_portfolio_batch(bigint, bigint, boolean) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.officer_backfill_bid_portfolio_batch(bigint, bigint, boolean) TO service_role;
+
+-- Chunked backfill with COMMIT between chunks (SQL Editor / postgres only). Avoids one long transaction and
+-- matches manageable statement timeouts per chunk. Not granted to PostgREST API roles.
+CREATE OR REPLACE PROCEDURE public.dba_backfill_bid_portfolio_range(
+  p_min_loot_id bigint,
+  p_max_loot_id bigint,
+  p_chunk_size integer DEFAULT 50,
+  p_include_payload boolean DEFAULT false
+)
+LANGUAGE plpgsql
+SECURITY INVOKER
+SET search_path = public
+AS $dba$
+DECLARE
+  v_lo bigint;
+  v_hi bigint;
+  r record;
+BEGIN
+  IF p_min_loot_id IS NULL OR p_max_loot_id IS NULL OR p_min_loot_id > p_max_loot_id THEN
+    RAISE EXCEPTION 'invalid loot_id range';
+  END IF;
+  IF p_chunk_size IS NULL OR p_chunk_size < 1 THEN
+    RAISE EXCEPTION 'p_chunk_size must be >= 1';
+  END IF;
+
+  IF session_user NOT IN ('postgres', 'supabase_admin') THEN
+    RAISE EXCEPTION 'dba_backfill_bid_portfolio_range: run only from Supabase SQL Editor (postgres or supabase_admin)';
+  END IF;
+
+  v_lo := p_min_loot_id;
+  WHILE v_lo <= p_max_loot_id LOOP
+    v_hi := LEAST(v_lo + p_chunk_size::bigint - 1, p_max_loot_id);
+    FOR r IN
+      SELECT * FROM public.officer_backfill_bid_portfolio_batch(v_lo, v_hi, p_include_payload)
+    LOOP
+      RAISE NOTICE '[bid_portfolio backfill] loot_id % to %: upserted=% errored=%',
+        v_lo, v_hi, r.rows_upserted, r.rows_errored;
+    END LOOP;
+    COMMIT;
+    v_lo := v_hi + 1;
+  END LOOP;
+END;
+$dba$;
+
+COMMENT ON PROCEDURE public.dba_backfill_bid_portfolio_range(bigint, bigint, integer, boolean) IS
+  'Supabase SQL Editor: CALL dba_backfill_bid_portfolio_range(1, 10000, 50, false); COMMIT after each chunk. Use p_chunk_size=1 when p_include_payload=true.';
+
+REVOKE ALL ON PROCEDURE public.dba_backfill_bid_portfolio_range(bigint, bigint, integer, boolean) FROM PUBLIC;
+GRANT EXECUTE ON PROCEDURE public.dba_backfill_bid_portfolio_range(bigint, bigint, integer, boolean) TO postgres;
+DO $dba_grant$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'supabase_admin') THEN
+    GRANT EXECUTE ON PROCEDURE public.dba_backfill_bid_portfolio_range(bigint, bigint, integer, boolean) TO supabase_admin;
+  END IF;
+END;
+$dba_grant$;
 
 CREATE OR REPLACE FUNCTION public.officer_global_bid_forecast(p_activity_days integer DEFAULT 120)
 RETURNS jsonb

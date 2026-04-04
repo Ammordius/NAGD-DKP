@@ -1632,7 +1632,7 @@ export default function Officer({ isOfficer }) {
                   <th>Item</th>
                   <th>Character</th>
                   <th>Cost</th>
-                  <th style={{ width: '5.5rem' }}>Portfolio</th>
+                  <th style={{ width: '5.5rem' }}>2nd place</th>
                   <th style={{ width: '6rem' }}></th>
                 </tr>
               </thead>
@@ -1701,13 +1701,9 @@ export default function Officer({ isOfficer }) {
                                 )}
                               </td>
                               <td>
-                                {row.id != null ? (
+                                {row.id != null && row.item_name ? (
                                   <Link
-                                    to={
-                                      selectedRaidId
-                                        ? `/officer/bid-portfolio?loot=${row.id}&raid=${encodeURIComponent(selectedRaidId)}`
-                                        : `/officer/bid-portfolio?loot=${row.id}`
-                                    }
+                                    to={`/items/${encodeURIComponent(row.item_name)}?second_place=1`}
                                     style={{ fontSize: '0.85rem' }}
                                   >
                                     View
