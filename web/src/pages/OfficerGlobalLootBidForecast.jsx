@@ -38,6 +38,14 @@ function normName(s) {
   return (s || '').trim().toLowerCase()
 }
 
+function accountLinkLabel(displayName, fallbackCharName, accountId) {
+  const d = String(displayName || '').trim()
+  if (d) return d
+  const c = String(fallbackCharName || '').trim()
+  if (c) return c
+  return accountId && accountId !== '—' ? accountId : '—'
+}
+
 function findRankingChar(rankingsChars, attendeeName, attendeeClass) {
   if (!rankingsChars || !attendeeName) return null
   const n = normName(attendeeName)
@@ -231,6 +239,18 @@ export default function OfficerGlobalLootBidForecast({ isOfficer }) {
           setPrecomputedLoadNote(
             'No CI shard for this item (bid_forecast_items/{id}.json). Live Magelo JSON will be used when needed.',
           )
+        } else if (result.badShape) {
+          setPrecomputedByItem(null)
+          setPrecomputeShardStatus('error')
+          setPrecomputedLoadNote(
+            result.looksLikeHtml
+              ? 'Could not load bid forecast shard (got HTML instead of JSON). Deploy web/public/bid_forecast_items from CI, or fix hosting so .json under /bid_forecast_items/ is not rewritten to index.html.'
+              : 'Could not load bid forecast shard (invalid JSON). Check network or run CI precompute job.',
+          )
+        } else if (result.networkError) {
+          setPrecomputedByItem(null)
+          setPrecomputeShardStatus('error')
+          setPrecomputedLoadNote('Could not load bid forecast shard (network error).')
         } else {
           setPrecomputedByItem(null)
           setPrecomputeShardStatus('error')
@@ -311,6 +331,7 @@ export default function OfficerGlobalLootBidForecast({ isOfficer }) {
     const out = []
     for (const block of roster) {
       const accountId = block.account_id
+      const accountDisplayName = String(block.display_name || '').trim()
       const chars = Array.isArray(block.characters) ? block.characters : []
       const prof = accountId ? profiles[accountId] : null
 
@@ -344,12 +365,12 @@ export default function OfficerGlobalLootBidForecast({ isOfficer }) {
         const bidInfo = bidVsMarketFromPurchasesTimeAware(purchases, nameToId, dkpPrices || {})
         const accountBalance = prof?.balance != null ? Number(prof.balance) : 0
         const toonBalance = prof ? toonBalanceFromProfile(prof, charId) : 0
+        const bidBalance = prof ? accountBalance : 0
         const tags = spendArchetypeTags(prof, bidInfo.label, bidInfo.medianRatio, {
           attendeeCharId: charId || undefined,
-          longSaveBalance: toonBalance,
         })
         const anchor = avgDkpFromPrices(dkpPrices || {}, resolvedItemId, 3)
-        const band = estimateBidBand(toonBalance, anchor, bidInfo.medianRatio, upgrade?.scoreDelta)
+        const band = estimateBidBand(bidBalance, anchor, bidInfo.medianRatio, upgrade?.scoreDelta)
 
         const toonBullets = []
         if (pc) {
@@ -388,7 +409,7 @@ export default function OfficerGlobalLootBidForecast({ isOfficer }) {
 
         let interestScore =
           (upgrade?.isUpgrade ? 50 + Math.min(40, (upgrade.scoreDelta || 0) * 200) : 0)
-          + (prof && toonBalance > 0 ? Math.min(25, toonBalance / 8) : 0)
+          + (prof && bidBalance > 0 ? Math.min(25, bidBalance / 8) : 0)
           + (bidInfo.medianRatio != null && bidInfo.medianRatio >= 1.1 ? 8 : 0)
         interestScore -= interestScoreDormantPenalty(prof, charId, charName)
 
@@ -403,7 +424,7 @@ export default function OfficerGlobalLootBidForecast({ isOfficer }) {
                 : upgrade && !upgrade.eligible
                   ? (upgrade.reason || 'Not eligible')
                   : '—'
-        const oneLineSummary = `${charName || charId || '—'}${className ? ` (${className})` : ''}: ${upgradeShort} · ~${Math.round(toonBalance)} DKP · band ${band.low}–${band.high}`
+        const oneLineSummary = `${charName || charId || '—'}${className ? ` (${className})` : ''}: ${upgradeShort} · ~${Math.round(bidBalance)} DKP · band ${band.low}–${band.high}`
 
         const toonRowKey = `${accountId}:${charId || charName}`
         const showUpgradeStrip =
@@ -415,6 +436,7 @@ export default function OfficerGlobalLootBidForecast({ isOfficer }) {
           charId,
           className,
           accountId: accountId || '—',
+          accountDisplayName,
           interestScore,
           tags,
           band,
@@ -449,6 +471,7 @@ export default function OfficerGlobalLootBidForecast({ isOfficer }) {
           rowKey: g.toonRowKey,
           consolidated: false,
           accountId: g.accountId,
+          accountDisplayName: g.accountDisplayName,
           interestScore: g.interestScore,
           tags: g.tags,
           band: g.band,
@@ -483,6 +506,7 @@ export default function OfficerGlobalLootBidForecast({ isOfficer }) {
           rowKey: `account:${k}`,
           consolidated: true,
           accountId: k,
+          accountDisplayName: g0.accountDisplayName,
           interestScore: maxScore,
           tags: accountTags,
           band: mergeBidBandsForAccountRow(group.map((x) => x.band)),
@@ -849,7 +873,9 @@ export default function OfficerGlobalLootBidForecast({ isOfficer }) {
                   <td style={{ maxWidth: '10rem' }}>{r.classLabel}</td>
                   <td style={{ fontSize: '0.85rem', wordBreak: 'break-all' }}>
                     {r.accountId !== '—' ? (
-                      <Link to={`/accounts/${encodeURIComponent(r.accountId)}`}>Account</Link>
+                      <Link to={`/accounts/${encodeURIComponent(r.accountId)}`}>
+                        {accountLinkLabel(r.accountDisplayName, r.toons[0]?.charName, r.accountId)}
+                      </Link>
                     ) : (
                       '—'
                     )}

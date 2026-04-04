@@ -7,8 +7,8 @@
 | Area | Summary |
 |------|---------|
 | **User-facing** | Officers use **Bid hints** with optional raid id (blank = active roster, same RPC idea as Global bid). Table shows interest, **bid band**, then expandable **Detail** (spend + upgrade narrative). |
-| **Precompute** | `web/public/bid_forecast_by_item.json` maps **item id → list of guild toons** for whom Magelo-style scoring shows a **positive** upgrade vs current gear (slot, score Δ, HP/mana/AC deltas, etc.). |
-| **CI** | GitHub Actions job **`bid_forecast_index`** in [`.github/workflows/loot-to-character.yml`](../.github/workflows/loot-to-character.yml) rebuilds that JSON on the **same cron / manual dispatch** as loot-to-character, but **not** gated on new `raid_loot` (gear changes without new loot still matter). |
+| **Precompute** | `web/public/bid_forecast_items/{itemId}.json` shards (plus `bid_forecast_meta.json`) list guild toons for whom Magelo-style scoring shows a **positive** upgrade vs current gear (slot, score Δ, HP/mana/AC deltas, etc.). |
+| **CI** | GitHub Actions job **`bid_forecast_index`** in [`.github/workflows/loot-to-character.yml`](../.github/workflows/loot-to-character.yml) rebuilds those shards on the **same cron / manual dispatch** as loot-to-character, but **not** gated on new `raid_loot` (gear changes without new loot still matter). |
 
 ## What the next owner must configure
 
@@ -21,7 +21,7 @@
    - `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` — required for [scripts/export_bid_forecast_roster.py](../scripts/export_bid_forecast_roster.py), which mirrors **active account** logic from `officer_global_bid_forecast` via **table reads** (the RPC itself is **not** called in CI because `is_officer()` fails for the service role).
 
 3. **Bot push**  
-   - Workflow uses `contents: write` and commits **`bid_forecast_by_item.json`** + **`bid_forecast_meta.json`** when they change. Ensure the default `GITHUB_TOKEN` is allowed to push to `main` (branch protection may need an exception or use a PAT).
+   - Workflow uses `contents: write` and commits **`web/public/bid_forecast_items/`** + **`bid_forecast_meta.json`** when they change. Ensure the default `GITHUB_TOKEN` is allowed to push to `main` (branch protection may need an exception or use a PAT).
 
 ## Local reproduction
 

@@ -7,17 +7,29 @@ export const BID_FORECAST_SHARD_BASE = '/bid_forecast_items/'
  * @param {{ signal?: AbortSignal }} [opts]
  * @returns {Promise<
  *   | { ok: true; payload: { version?: number; generated_at?: string; activity_days?: number; byItem: Record<string, object[]> } }
- *   | { ok: false; absent?: boolean; status?: number; badShape?: boolean; badId?: boolean }
+ *   | { ok: false; absent?: boolean; status?: number; badShape?: boolean; badId?: boolean; looksLikeHtml?: boolean; networkError?: boolean }
  * >}
  */
 export async function fetchBidForecastPrecomputeShard(itemId, opts = {}) {
   const id = String(itemId ?? '').trim()
   if (!id) return { ok: false, badId: true }
   const url = `${BID_FORECAST_SHARD_BASE}${encodeURIComponent(id)}.json`
-  const r = await fetch(url, { signal: opts.signal })
+  let r
+  try {
+    r = await fetch(url, { signal: opts.signal })
+  } catch {
+    return { ok: false, networkError: true }
+  }
   if (r.status === 404) return { ok: false, absent: true }
   if (!r.ok) return { ok: false, status: r.status }
-  const j = await r.json()
+  const text = await r.text()
+  let j
+  try {
+    j = JSON.parse(text)
+  } catch {
+    const looksLikeHtml = /<\s*!DOCTYPE/i.test(text) || /<\s*html/i.test(text)
+    return { ok: false, badShape: true, looksLikeHtml }
+  }
   const entries = j.entries
   if (!Array.isArray(entries)) return { ok: false, badShape: true }
   return {

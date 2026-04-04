@@ -1774,7 +1774,8 @@ BEGIN
         c.char_id AS resolved_char_id,
         c.name AS resolved_name,
         c.class_name AS class_name,
-        ca.account_id
+        ca.account_id,
+        COALESCE(NULLIF(trim(acct.display_name), ''), '') AS account_display_name
       FROM attendees_raw ar
       LEFT JOIN characters c ON (
         (ar.char_id IS NOT NULL AND c.char_id = ar.char_id)
@@ -1785,6 +1786,7 @@ BEGIN
         )
       )
       LEFT JOIN character_account ca ON ca.char_id = c.char_id
+      LEFT JOIN accounts acct ON acct.account_id = ca.account_id
     ),
     attendee_list AS (
       SELECT jsonb_agg(
@@ -1792,7 +1794,8 @@ BEGIN
           'char_id', COALESCE(resolved_char_id, raw_char_id, ''),
           'character_name', COALESCE(NULLIF(trim(resolved_name), ''), NULLIF(trim(raw_character_name), ''), ''),
           'class_name', COALESCE(class_name, ''),
-          'account_id', account_id
+          'account_id', account_id,
+          'display_name', COALESCE(account_display_name, '')
         )
         ORDER BY COALESCE(NULLIF(trim(resolved_name), ''), NULLIF(trim(raw_character_name), ''))
       ) AS arr
@@ -2106,6 +2109,7 @@ BEGIN
     roster_by_account AS (
       SELECT
         aai.account_id,
+        max(COALESCE(NULLIF(trim(acc.display_name), ''), '')) AS display_name,
         COALESCE(
           jsonb_agg(
             jsonb_build_object(
@@ -2118,6 +2122,7 @@ BEGIN
           '[]'::jsonb
         ) AS characters
       FROM active_account_ids aai
+      LEFT JOIN accounts acc ON acc.account_id = aai.account_id
       LEFT JOIN character_account ca ON ca.account_id = aai.account_id
       LEFT JOIN characters c ON c.char_id = ca.char_id
       GROUP BY aai.account_id
@@ -2126,6 +2131,7 @@ BEGIN
       SELECT jsonb_agg(
         jsonb_build_object(
           'account_id', rba.account_id,
+          'display_name', COALESCE(NULLIF(trim(rba.display_name), ''), ''),
           'characters', rba.characters
         )
         ORDER BY rba.account_id

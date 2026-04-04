@@ -27,7 +27,7 @@ flowchart TB
     Model[bidForecastModel.js]
     stats[item_stats.json]
     prices[dkp_prices.json]
-    pre[bid_forecast_by_item.json]
+    pre[bid_forecast_items/*.json + bid_forecast_meta.json]
     rank[class_rankings.json or VITE URL on demand]
   end
   subgraph supabase [Supabase]
@@ -47,7 +47,7 @@ flowchart TB
 ```
 
 - **Supabase** returns **roster** (accounts → characters) and **account_profiles** (balances, per-toon spend, purchase list with optional `ref_price_at_sale` / `paid_to_ref_ratio`). It does **not** compute “gear upgrades” or “items this toon still needs.”
-- **Browser** resolves the typed item to an id using **`item_stats.json`**. It prefers **`bid_forecast_by_item.json`** (CI precompute, same shape as **Bid hints**) for upgrade copy when a row exists for that item + toon; otherwise it matches **`class_rankings.json`** (or the URL behind **`VITE_CLASS_RANKINGS_URL`**) by **name + class** and runs **Magelo-style scoring** from [`web/src/lib/mageloUpgradeEngine.js`](../web/src/lib/mageloUpgradeEngine.js). Full rankings may load **on demand** (fallback rows and **Show top upgrades by slot**).
+- **Browser** resolves the typed item to an id using **`item_stats.json`**. It prefers **per-item CI shards** under **`/bid_forecast_items/{itemId}.json`** (plus **`bid_forecast_meta.json`**, same pipeline as **Bid hints**) for upgrade copy when a row exists for that item + toon; otherwise it matches **`class_rankings.json`** (or the URL behind **`VITE_CLASS_RANKINGS_URL`**) by **name + class** and runs **Magelo-style scoring** from [`web/src/lib/mageloUpgradeEngine.js`](../web/src/lib/mageloUpgradeEngine.js). Full rankings may load **on demand** (fallback rows and **Show top upgrades by slot**).
 
 ## How “would this toon want this item?” is calculated
 
@@ -61,11 +61,11 @@ flowchart TB
 
 5. **Spend / bid band**: **`bidVsMarketFromPurchasesTimeAware`** in [`web/src/lib/bidForecastModel.js`](../web/src/lib/bidForecastModel.js) builds a median **paid / reference** ratio: prefers **`paid_to_ref_ratio`** from the RPC when present, else **`cost / avg(last 3 in dkp_prices.json)`** per purchase when resolvable.
 
-**Important:** There is **no** server-side table of “pending upgrades per character.” Freshness of gear depends on how often **`class_rankings.json`** (or the hosted URL behind **`VITE_CLASS_RANKINGS_URL`**) is regenerated from Magelo. When CI has populated **`bid_forecast_by_item.json`**, most Global rows do not need that file in the browser until an officer asks for live fallback or slot-deep upgrades.
+**Important:** There is **no** server-side table of “pending upgrades per character.” Freshness of gear depends on how often **`class_rankings.json`** (or the hosted URL behind **`VITE_CLASS_RANKINGS_URL`**) is regenerated from Magelo. When CI has populated **`web/public/bid_forecast_items/`**, most Global rows do not need class rankings in the browser until an officer needs live fallback or slot-deep upgrades.
 
 ## CI and pipelines
 
-- **Bid hints precompute:** The **`bid_forecast_index`** job in [`.github/workflows/loot-to-character.yml`](../.github/workflows/loot-to-character.yml) builds `web/public/bid_forecast_by_item.json` and `bid_forecast_meta.json` (guild roster scope, Magelo upgrade parity via `mageloUpgradeEngine`). Requires repo secret **`CLASS_RANKINGS_URL`**. See [HANDOFF_OFFICER_LOOT_BID_FORECAST.md](HANDOFF_OFFICER_LOOT_BID_FORECAST.md).
+- **Bid hints precompute:** The **`bid_forecast_index`** job in [`.github/workflows/loot-to-character.yml`](../.github/workflows/loot-to-character.yml) builds **`web/public/bid_forecast_items/{itemId}.json`** shards and **`bid_forecast_meta.json`** (guild roster scope, Magelo upgrade parity via `mageloUpgradeEngine`). Requires repo secret **`CLASS_RANKINGS_URL`**. See [HANDOFF_OFFICER_LOOT_BID_FORECAST.md](HANDOFF_OFFICER_LOOT_BID_FORECAST.md).
 
 - **Other GitHub Actions** (`sql-ledger`, `loot-to-character` assignment, db backup/restore) do **not** build `item_stats.json`, `dkp_prices.json`, or `class_rankings.json`. The takp_jsons scripts are documented as **manual / on-demand**; see [`scripts/takp_jsons/README.md`](../scripts/takp_jsons/README.md).
 
@@ -90,7 +90,7 @@ Align this with GitHub secret **`CLASS_RANKINGS_URL`** when you want CI precompu
 2. **Static assets**
    - `web/public/item_stats.json` — required to resolve item **names** to ids and for scoring.
    - `web/public/dkp_prices.json` — fallback anchor and static “last 3” style reference when RPC has no prior guild sales for a purchase.
-   - `web/public/bid_forecast_by_item.json` (from CI) — preferred source of upgrade lines per item on this page; avoids loading full class rankings for most rows.
+   - `web/public/bid_forecast_items/*.json` + `bid_forecast_meta.json` (from CI) — preferred source of upgrade lines per item on this page; avoids loading full class rankings for most rows.
    - `class_rankings.json` in `web/public/` **or** `VITE_CLASS_RANKINGS_URL` — needed for **live** scoring when precompute misses, and for **Show top upgrades by slot** (full `inventory`). Not required for RPC-only data.
 
 3. **Keep SQL + JS name normalization aligned**: `public.normalize_item_name_for_lookup` must stay consistent with [`web/src/lib/itemNameNormalize.js`](../web/src/lib/itemNameNormalize.js) for ref-price matching on loot names.
