@@ -9,15 +9,18 @@ import {
 import {
   avgDkpFromPrices,
   bidVsMarketFromPurchasesTimeAware,
+  buildCharacterBalanceBullet,
   buildNameToItemId,
   buildSharedAccountSpendBullets,
   dormantToonVersusAccountNarrative,
   estimateBidBand,
   interestScoreDormantPenalty,
   lastSpendNarrative,
+  mergeBidBandsForAccountRow,
   perToonShareNarrative,
   resolveItemIdFromName,
   spendArchetypeTags,
+  toonBalanceFromProfile,
 } from '../lib/bidForecastModel'
 import { ACTIVE_DAYS } from '../lib/dkpLeaderboard'
 import { usePersistedState } from '../lib/usePersistedState'
@@ -331,12 +334,14 @@ export default function OfficerLootBidForecast({ isOfficer }) {
 
       const purchases = Array.isArray(prof?.recent_purchases_desc) ? prof.recent_purchases_desc : []
       const bidInfo = bidVsMarketFromPurchasesTimeAware(purchases, nameToId, dkpPrices || {})
+      const accountBalance = prof?.balance != null ? Number(prof.balance) : 0
+      const toonBalance = prof ? toonBalanceFromProfile(prof, charId) : 0
       const tags = spendArchetypeTags(prof, bidInfo.label, bidInfo.medianRatio, {
         attendeeCharId: charId || undefined,
+        longSaveBalance: toonBalance,
       })
-      const balance = prof?.balance != null ? Number(prof.balance) : 0
       const anchor = avgDkpFromPrices(dkpPrices || {}, resolvedItemId, 3)
-      const band = estimateBidBand(balance, anchor, bidInfo.medianRatio, upgrade?.scoreDelta)
+      const band = estimateBidBand(toonBalance, anchor, bidInfo.medianRatio, upgrade?.scoreDelta)
 
       const summaryLinePre =
         pc != null
@@ -368,6 +373,7 @@ export default function OfficerLootBidForecast({ isOfficer }) {
       }
 
       if (prof) {
+        toonDetailBullets.unshift(buildCharacterBalanceBullet(toonBalance))
         const dorm = dormantToonVersusAccountNarrative(prof, charId, charName)
         if (dorm) toonDetailBullets.push(dorm)
         const pts = perToonShareNarrative(prof, charId)
@@ -375,14 +381,9 @@ export default function OfficerLootBidForecast({ isOfficer }) {
         toonDetailBullets.push(lastSpendNarrative(prof, charId))
       }
 
-      const bidRatioLabel = Array.isArray(forecastPayload.roster)
-        ? null
-        : 'Vs recent reference prices for matched items'
-      const sharedBullets = buildSharedAccountSpendBullets(prof, bidInfo, balance, tags, bidRatioLabel)
-
       let interestScore =
         (upgrade?.isUpgrade ? 50 + Math.min(40, (upgrade.scoreDelta || 0) * 200) : 0)
-        + (prof && balance > 0 ? Math.min(25, balance / 8) : 0)
+        + (prof && toonBalance > 0 ? Math.min(25, toonBalance / 8) : 0)
         + (bidInfo.medianRatio != null && bidInfo.medianRatio >= 1.1 ? 8 : 0)
       interestScore -= interestScoreDormantPenalty(prof, charId, charName)
 
@@ -396,6 +397,8 @@ export default function OfficerLootBidForecast({ isOfficer }) {
               ? 'Sidegrade / no gain (live)'
               : '—')
 
+      const oneLineSummary = `${charName || charId || '—'}${className ? ` (${className})` : ''}: ${summaryLine} · ~${Math.round(toonBalance)} DKP · band ${band.low}–${band.high}`
+
       const toonRowKey = `${accountId}:${charId || charName}`
       out.push({
         toonRowKey,
@@ -408,10 +411,11 @@ export default function OfficerLootBidForecast({ isOfficer }) {
         band,
         anchor,
         toonDetailBullets,
-        sharedBullets,
         prof,
         bidInfo,
-        balance,
+        accountBalance,
+        toonBalance,
+        oneLineSummary,
         upgrade,
         hasMagelo: !!mageloChar,
         hasPrecompute: !!pc,
@@ -430,6 +434,9 @@ export default function OfficerLootBidForecast({ isOfficer }) {
     for (const [k, group] of byAccount) {
       if (group.length === 1) {
         const g = group[0]
+        const bidRatioLabel = Array.isArray(forecastPayload.roster)
+          ? null
+          : 'Vs recent reference prices for matched items'
         merged.push({
           rowKey: g.toonRowKey,
           consolidated: false,
@@ -441,8 +448,11 @@ export default function OfficerLootBidForecast({ isOfficer }) {
           charLine: `${g.charName}${g.className ? ` (${g.className})` : ''}`,
           classLabel: g.className || '—',
           summaryLine: g.summaryLine,
+          collapsedSummary: g.oneLineSummary,
           toons: [g],
-          sharedBullets: g.sharedBullets,
+          sharedBullets: buildSharedAccountSpendBullets(g.prof, g.bidInfo, g.tags, bidRatioLabel, {
+            includeAccountPoolLine: false,
+          }),
           hasPrecompute: g.hasPrecompute,
         })
       } else {
@@ -456,24 +466,30 @@ export default function OfficerLootBidForecast({ isOfficer }) {
         const sharedBullets = buildSharedAccountSpendBullets(
           g0.prof,
           g0.bidInfo,
-          g0.balance,
           accountTags,
           bidRatioLabel,
+          {
+            includeAccountPoolLine: true,
+            accountPoolBalance: Number(g0.prof?.balance) || 0,
+          },
         )
         const maxScore = Math.max(...group.map((x) => x.interestScore))
+        const primary = group.reduce((a, b) => (a.interestScore >= b.interestScore ? a : b))
+        const collapsedSummary = `${primary.oneLineSummary} · +${group.length - 1} more on account`
         merged.push({
           rowKey: `account:${k}`,
           consolidated: true,
           accountId: k,
           interestScore: maxScore,
           tags: accountTags,
-          band: g0.band,
+          band: mergeBidBandsForAccountRow(group.map((x) => x.band)),
           anchor: g0.anchor,
           charLine: group
             .map((g) => `${g.charName}${g.className ? ` (${g.className})` : ''}`)
             .join(' · '),
           classLabel: group.map((g) => g.className || '—').join(', '),
           summaryLine: group.map((g) => `${g.charName}: ${g.summaryLine}`).join(' · '),
+          collapsedSummary,
           toons: group,
           sharedBullets,
           hasPrecompute: group.some((g) => g.hasPrecompute),
@@ -650,8 +666,11 @@ export default function OfficerLootBidForecast({ isOfficer }) {
               {rows.map((r) => (
                 <tr key={r.rowKey}>
                   <td>{Math.round(r.interestScore)}</td>
-                  <td style={{ fontSize: '0.85rem', whiteSpace: 'nowrap' }}>
+                  <td style={{ fontSize: '0.85rem', whiteSpace: 'nowrap' }} title={r.band?.note || undefined}>
                     {r.band.low}–{r.band.high} (mid {r.band.mid})
+                    {r.consolidated && r.band?.note ? (
+                      <span style={{ color: '#71717a', fontSize: '0.72rem', marginLeft: '0.25rem' }}>(span)</span>
+                    ) : null}
                   </td>
                   <td style={{ maxWidth: '14rem' }}>{r.charLine}</td>
                   <td style={{ maxWidth: '10rem' }}>{r.classLabel}</td>
@@ -668,43 +687,26 @@ export default function OfficerLootBidForecast({ isOfficer }) {
                   <td style={{ fontSize: '0.8rem', maxWidth: '14rem', verticalAlign: 'top' }}>
                     {r.summaryLine}
                   </td>
-                  <td style={{ fontSize: '0.8rem', maxWidth: '22rem', verticalAlign: 'top' }}>
-                    <details>
-                      <summary style={{ cursor: 'pointer', color: '#a78bfa' }}>
-                        {r.hasPrecompute ? 'Why (precompute + spend)' : 'Why (spend / live scoring)'}
+                  <td style={{ fontSize: '0.8rem', maxWidth: '28rem', verticalAlign: 'top' }}>
+                    <details style={{ maxWidth: '28rem' }}>
+                      <summary
+                        style={{
+                          cursor: 'pointer',
+                          color: '#d4d4d8',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                          listStyle: 'none',
+                        }}
+                        title={r.collapsedSummary}
+                      >
+                        {r.collapsedSummary}
                       </summary>
                       <div style={{ marginTop: '0.5rem' }}>
-                        {r.toons.map((t, idx) => (
-                          <div
-                            key={t.toonRowKey}
-                            style={{
-                              marginBottom: r.toons.length > 1 ? '0.65rem' : 0,
-                              paddingBottom: r.toons.length > 1 ? '0.65rem' : 0,
-                              borderBottom:
-                                r.toons.length > 1 && idx < r.toons.length - 1
-                                  ? '1px solid #3f3f46'
-                                  : undefined,
-                            }}
-                          >
-                            {r.consolidated && r.toons.length > 1 && (
-                              <div style={{ fontWeight: 600, color: '#d4d4d8', marginBottom: '0.35rem' }}>
-                                {t.charName}
-                                {t.className ? ` (${t.className})` : ''}
-                              </div>
-                            )}
-                            <ul style={{ margin: 0, paddingLeft: '1.1rem' }}>
-                              {t.toonDetailBullets.map((text, i) => (
-                                <li key={i} style={{ marginBottom: '0.35rem' }}>
-                                  {text}
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                        ))}
                         {r.sharedBullets.length > 0 && (
                           <ul
                             style={{
-                              margin: r.toons.some((t) => t.toonDetailBullets.length) ? '0.5rem 0 0' : '0.25rem 0 0',
+                              margin: '0 0 0.5rem',
                               paddingLeft: '1.1rem',
                               color: '#a1a1aa',
                             }}
@@ -715,6 +717,41 @@ export default function OfficerLootBidForecast({ isOfficer }) {
                               </li>
                             ))}
                           </ul>
+                        )}
+                        {!r.consolidated || r.toons.length === 1 ? (
+                          <ul style={{ margin: 0, paddingLeft: '1.1rem' }}>
+                            {r.toons[0].toonDetailBullets.map((text, i) => (
+                              <li key={i} style={{ marginBottom: '0.35rem' }}>
+                                {text}
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          r.toons.map((t) => (
+                            <details key={t.toonRowKey} style={{ marginTop: '0.65rem' }}>
+                              <summary
+                                style={{
+                                  cursor: 'pointer',
+                                  color: '#e4e4e7',
+                                  fontWeight: 600,
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  whiteSpace: 'nowrap',
+                                  listStyle: 'none',
+                                }}
+                                title={t.oneLineSummary}
+                              >
+                                {t.oneLineSummary}
+                              </summary>
+                              <ul style={{ margin: '0.35rem 0 0', paddingLeft: '1.1rem' }}>
+                                {t.toonDetailBullets.map((text, i) => (
+                                  <li key={i} style={{ marginBottom: '0.35rem' }}>
+                                    {text}
+                                  </li>
+                                ))}
+                              </ul>
+                            </details>
+                          ))
                         )}
                       </div>
                     </details>

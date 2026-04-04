@@ -10,15 +10,18 @@ import {
 import {
   avgDkpFromPrices,
   bidVsMarketFromPurchasesTimeAware,
+  buildCharacterBalanceBullet,
   buildNameToItemId,
   buildSharedAccountSpendBullets,
   dormantToonVersusAccountNarrative,
   estimateBidBand,
   interestScoreDormantPenalty,
   lastSpendNarrative,
+  mergeBidBandsForAccountRow,
   perToonShareNarrative,
   resolveItemIdFromName,
   spendArchetypeTags,
+  toonBalanceFromProfile,
 } from '../lib/bidForecastModel'
 import { ACTIVE_DAYS } from '../lib/dkpLeaderboard'
 import { usePersistedState } from '../lib/usePersistedState'
@@ -316,12 +319,14 @@ export default function OfficerGlobalLootBidForecast({ isOfficer }) {
 
         const purchases = Array.isArray(prof?.recent_purchases_desc) ? prof.recent_purchases_desc : []
         const bidInfo = bidVsMarketFromPurchasesTimeAware(purchases, nameToId, dkpPrices || {})
+        const accountBalance = prof?.balance != null ? Number(prof.balance) : 0
+        const toonBalance = prof ? toonBalanceFromProfile(prof, charId) : 0
         const tags = spendArchetypeTags(prof, bidInfo.label, bidInfo.medianRatio, {
           attendeeCharId: charId || undefined,
+          longSaveBalance: toonBalance,
         })
-        const balance = prof?.balance != null ? Number(prof.balance) : 0
         const anchor = avgDkpFromPrices(dkpPrices || {}, resolvedItemId, 3)
-        const band = estimateBidBand(balance, anchor, bidInfo.medianRatio, upgrade?.scoreDelta)
+        const band = estimateBidBand(toonBalance, anchor, bidInfo.medianRatio, upgrade?.scoreDelta)
 
         const toonBullets = []
         if (pc) {
@@ -350,6 +355,7 @@ export default function OfficerGlobalLootBidForecast({ isOfficer }) {
         }
 
         if (prof) {
+          toonBullets.unshift(buildCharacterBalanceBullet(toonBalance))
           const dorm = dormantToonVersusAccountNarrative(prof, charId, charName)
           if (dorm) toonBullets.push(dorm)
           const pts = perToonShareNarrative(prof, charId)
@@ -357,13 +363,24 @@ export default function OfficerGlobalLootBidForecast({ isOfficer }) {
           toonBullets.push(lastSpendNarrative(prof, charId))
         }
 
-        const sharedBullets = buildSharedAccountSpendBullets(prof, bidInfo, balance, tags, null)
-
         let interestScore =
           (upgrade?.isUpgrade ? 50 + Math.min(40, (upgrade.scoreDelta || 0) * 200) : 0)
-          + (prof && balance > 0 ? Math.min(25, balance / 8) : 0)
+          + (prof && toonBalance > 0 ? Math.min(25, toonBalance / 8) : 0)
           + (bidInfo.medianRatio != null && bidInfo.medianRatio >= 1.1 ? 8 : 0)
         interestScore -= interestScoreDormantPenalty(prof, charId, charName)
+
+        const upgradeShort = pc
+          ? `Upgrade vs ${pc.slotName} (score Δ ${pc.scoreDelta?.toFixed?.(2) ?? pc.scoreDelta})`
+          : mageloChar && upgrade?.eligible && upgrade.isUpgrade
+            ? `Upgrade (score Δ ${upgrade.scoreDelta?.toFixed?.(2) ?? upgrade.scoreDelta})`
+            : mageloChar && upgrade?.eligible
+              ? 'Equip / sidegrade'
+              : !pc && !mageloChar
+                ? 'No Magelo / precompute'
+                : upgrade && !upgrade.eligible
+                  ? (upgrade.reason || 'Not eligible')
+                  : '—'
+        const oneLineSummary = `${charName || charId || '—'}${className ? ` (${className})` : ''}: ${upgradeShort} · ~${Math.round(toonBalance)} DKP · band ${band.low}–${band.high}`
 
         const toonRowKey = `${accountId}:${charId || charName}`
         const showUpgradeStrip =
@@ -380,10 +397,11 @@ export default function OfficerGlobalLootBidForecast({ isOfficer }) {
           band,
           anchor,
           toonBullets,
-          sharedBullets,
           prof,
           bidInfo,
-          balance,
+          accountBalance,
+          toonBalance,
+          oneLineSummary,
           upgrade,
           hasMagelo: !!mageloChar,
           hasPrecompute: !!pc,
@@ -414,8 +432,11 @@ export default function OfficerGlobalLootBidForecast({ isOfficer }) {
           anchor: g.anchor,
           charLine: `${g.charName}${g.className ? ` (${g.className})` : ''}`,
           classLabel: g.className || '—',
+          collapsedSummary: g.oneLineSummary,
           toons: [g],
-          sharedBullets: g.sharedBullets,
+          sharedBullets: buildSharedAccountSpendBullets(g.prof, g.bidInfo, g.tags, null, {
+            includeAccountPoolLine: false,
+          }),
         })
       } else {
         const g0 = group[0]
@@ -425,23 +446,29 @@ export default function OfficerGlobalLootBidForecast({ isOfficer }) {
         const sharedBullets = buildSharedAccountSpendBullets(
           g0.prof,
           g0.bidInfo,
-          g0.balance,
           accountTags,
           null,
+          {
+            includeAccountPoolLine: true,
+            accountPoolBalance: Number(g0.prof?.balance) || 0,
+          },
         )
         const maxScore = Math.max(...group.map((x) => x.interestScore))
+        const primary = group.reduce((a, b) => (a.interestScore >= b.interestScore ? a : b))
+        const collapsedSummary = `${primary.oneLineSummary} · +${group.length - 1} more on account`
         merged.push({
           rowKey: `account:${k}`,
           consolidated: true,
           accountId: k,
           interestScore: maxScore,
           tags: accountTags,
-          band: g0.band,
+          band: mergeBidBandsForAccountRow(group.map((x) => x.band)),
           anchor: g0.anchor,
           charLine: group
             .map((g) => `${g.charName}${g.className ? ` (${g.className})` : ''}`)
             .join(' · '),
           classLabel: group.map((g) => g.className || '—').join(', '),
+          collapsedSummary,
           toons: group,
           sharedBullets,
         })
@@ -513,6 +540,147 @@ export default function OfficerGlobalLootBidForecast({ isOfficer }) {
     } finally {
       setUpgradeLoadingKey(null)
     }
+  }
+
+  const renderWhyUpgradesCell = (r) => {
+    const summaryStyle = {
+      cursor: 'pointer',
+      color: '#d4d4d8',
+      overflow: 'hidden',
+      textOverflow: 'ellipsis',
+      whiteSpace: 'nowrap',
+      listStyle: 'none',
+    }
+    const sharedUl =
+      r.sharedBullets.length > 0 ? (
+        <ul
+          style={{
+            margin: '0 0 0.5rem',
+            paddingLeft: '1.1rem',
+            color: '#a1a1aa',
+          }}
+        >
+          {r.sharedBullets.map((text, i) => (
+            <li key={`s-${i}`} style={{ marginBottom: '0.25rem' }}>
+              {text}
+            </li>
+          ))}
+        </ul>
+      ) : null
+
+    const toonBulletsUl = (t) => (
+      <ul style={{ margin: 0, paddingLeft: '1.1rem' }}>
+        {t.toonBullets.map((text, i) => (
+          <li key={i} style={{ marginBottom: '0.25rem' }}>
+            {text}
+          </li>
+        ))}
+      </ul>
+    )
+
+    const mageloBlock = (t) => {
+      const cached = upgradeCache[t.toonRowKey]
+      const loadingUp = upgradeLoadingKey === t.toonRowKey
+      if (!t.showUpgradeStrip) return null
+      return (
+        <div style={{ marginTop: '0.5rem' }}>
+          {!cached && (
+            <button
+              type="button"
+              className="btn btn-ghost"
+              style={{ fontSize: '0.8rem', padding: '0.2rem 0.5rem' }}
+              disabled={loadingUp || !itemStats}
+              onClick={() => loadUpgradesForToon(t)}
+            >
+              {loadingUp
+                ? 'Computing…'
+                : r.consolidated && r.toons.length > 1
+                  ? `Magelo upgrades (${t.charName})`
+                  : 'Show top upgrades by slot (Magelo)'}
+            </button>
+          )}
+          {cached?.error && <p style={{ color: '#fbbf24', margin: '0.25rem 0 0' }}>{cached.error}</p>}
+          {cached && !cached.error && cached.bySlot?.length > 0 && (
+            <div style={{ marginTop: '0.5rem' }}>
+              {cached.bySlot.map((slot) => (
+                <div key={slot.slotId} style={{ marginBottom: '0.75rem' }}>
+                  <div style={{ fontWeight: 600, color: '#d4d4d8' }}>
+                    {slot.slotName}
+                    {slot.currentItemName ? ` · current: ${slot.currentItemName}` : ''}
+                  </div>
+                  {slot.upgrades?.length ? (
+                    <ul
+                      style={{
+                        margin: '0.25rem 0 0',
+                        paddingLeft: '1.1rem',
+                        color: '#a1a1aa',
+                      }}
+                    >
+                      {slot.upgrades.map((u) => (
+                        <li key={u.itemId}>
+                          {u.itemName}{' '}
+                          <span style={{ color: '#86efac' }}>Δ {u.delta?.toFixed?.(2) ?? u.delta}</span>
+                          {u.deltas?.hpDelta
+                            ? ` · HP ${u.deltas.hpDelta > 0 ? '+' : ''}${u.deltas.hpDelta}`
+                            : ''}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p style={{ margin: '0.25rem 0 0', color: '#71717a' }}>No scored upgrades in pool.</p>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )
+    }
+
+    if (!r.consolidated || r.toons.length === 1) {
+      const t = r.toons[0]
+      return (
+        <details style={{ maxWidth: '36rem' }}>
+          <summary style={summaryStyle} title={r.collapsedSummary}>
+            {r.collapsedSummary}
+          </summary>
+          <div style={{ marginTop: '0.5rem', fontSize: '0.8rem' }}>
+            {sharedUl}
+            {toonBulletsUl(t)}
+            {mageloBlock(t)}
+          </div>
+        </details>
+      )
+    }
+
+    return (
+      <details style={{ maxWidth: '36rem' }}>
+        <summary style={summaryStyle} title={r.collapsedSummary}>
+          {r.collapsedSummary}
+        </summary>
+        <div style={{ marginTop: '0.5rem', fontSize: '0.8rem' }}>
+          {sharedUl}
+          {r.toons.map((t) => (
+            <details key={t.toonRowKey} style={{ marginTop: '0.65rem' }}>
+              <summary
+                style={{
+                  ...summaryStyle,
+                  color: '#e4e4e7',
+                  fontWeight: 600,
+                }}
+                title={t.oneLineSummary}
+              >
+                {t.oneLineSummary}
+              </summary>
+              <div style={{ marginTop: '0.35rem' }}>
+                {toonBulletsUl(t)}
+                {mageloBlock(t)}
+              </div>
+            </details>
+          ))}
+        </div>
+      </details>
+    )
   }
 
   if (!isOfficer) return null
@@ -653,122 +821,14 @@ export default function OfficerGlobalLootBidForecast({ isOfficer }) {
                   <td style={{ fontSize: '0.8rem', maxWidth: '10rem' }}>
                     {r.tags.length ? r.tags.join(', ') : '—'}
                   </td>
-                  <td style={{ fontSize: '0.85rem', whiteSpace: 'nowrap' }}>
+                  <td style={{ fontSize: '0.85rem', whiteSpace: 'nowrap' }} title={r.band?.note || undefined}>
                     {r.band.low}–{r.band.high} (mid {r.band.mid})
+                    {r.consolidated && r.band?.note ? (
+                      <span style={{ color: '#71717a', fontSize: '0.72rem', marginLeft: '0.25rem' }}>(span)</span>
+                    ) : null}
                   </td>
-                  <td style={{ fontSize: '0.8rem', maxWidth: '32rem', verticalAlign: 'top' }}>
-                    {r.toons.map((t, idx) => {
-                      const cached = upgradeCache[t.toonRowKey]
-                      const loadingUp = upgradeLoadingKey === t.toonRowKey
-                      const sub =
-                        r.consolidated && r.toons.length > 1
-                          ? `${t.charName}${t.className ? ` (${t.className})` : ''}`
-                          : null
-                      return (
-                        <div
-                          key={t.toonRowKey}
-                          style={{
-                            marginBottom: r.toons.length > 1 ? '0.75rem' : 0,
-                            paddingBottom: r.toons.length > 1 ? '0.75rem' : 0,
-                            borderBottom:
-                              r.toons.length > 1 && idx < r.toons.length - 1
-                                ? '1px solid #3f3f46'
-                                : undefined,
-                          }}
-                        >
-                          {sub && (
-                            <div style={{ fontWeight: 600, color: '#d4d4d8', marginBottom: '0.35rem' }}>
-                              {sub}
-                            </div>
-                          )}
-                          <ul style={{ margin: 0, paddingLeft: '1.1rem' }}>
-                            {t.toonBullets.map((text, i) => (
-                              <li key={i} style={{ marginBottom: '0.25rem' }}>
-                                {text}
-                              </li>
-                            ))}
-                          </ul>
-                          {t.showUpgradeStrip && (
-                            <div style={{ marginTop: '0.5rem' }}>
-                              {!cached && (
-                                <button
-                                  type="button"
-                                  className="btn btn-ghost"
-                                  style={{ fontSize: '0.8rem', padding: '0.2rem 0.5rem' }}
-                                  disabled={loadingUp || !itemStats}
-                                  onClick={() => loadUpgradesForToon(t)}
-                                >
-                                  {loadingUp
-                                    ? 'Computing…'
-                                    : r.consolidated && r.toons.length > 1
-                                      ? `Magelo upgrades (${t.charName})`
-                                      : 'Show top upgrades by slot (Magelo)'}
-                                </button>
-                              )}
-                              {cached?.error && (
-                                <p style={{ color: '#fbbf24', margin: '0.25rem 0 0' }}>{cached.error}</p>
-                              )}
-                              {cached && !cached.error && cached.bySlot?.length > 0 && (
-                                <div style={{ marginTop: '0.5rem' }}>
-                                  {cached.bySlot.map((slot) => (
-                                    <div key={slot.slotId} style={{ marginBottom: '0.75rem' }}>
-                                      <div style={{ fontWeight: 600, color: '#d4d4d8' }}>
-                                        {slot.slotName}
-                                        {slot.currentItemName
-                                          ? ` · current: ${slot.currentItemName}`
-                                          : ''}
-                                      </div>
-                                      {slot.upgrades?.length ? (
-                                        <ul
-                                          style={{
-                                            margin: '0.25rem 0 0',
-                                            paddingLeft: '1.1rem',
-                                            color: '#a1a1aa',
-                                          }}
-                                        >
-                                          {slot.upgrades.map((u) => (
-                                            <li key={u.itemId}>
-                                              {u.itemName}{' '}
-                                              <span style={{ color: '#86efac' }}>
-                                                Δ {u.delta?.toFixed?.(2) ?? u.delta}
-                                              </span>
-                                              {u.deltas?.hpDelta
-                                                ? ` · HP ${u.deltas.hpDelta > 0 ? '+' : ''}${u.deltas.hpDelta}`
-                                                : ''}
-                                            </li>
-                                          ))}
-                                        </ul>
-                                      ) : (
-                                        <p style={{ margin: '0.25rem 0 0', color: '#71717a' }}>
-                                          No scored upgrades in pool.
-                                        </p>
-                                      )}
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      )
-                    })}
-                    {r.sharedBullets.length > 0 && (
-                      <ul
-                        style={{
-                          margin: r.toons.some((t) => t.toonBullets.length || t.showUpgradeStrip)
-                            ? '0.5rem 0 0'
-                            : 0,
-                          paddingLeft: '1.1rem',
-                          color: '#a1a1aa',
-                        }}
-                      >
-                        {r.sharedBullets.map((text, i) => (
-                          <li key={`s-${i}`} style={{ marginBottom: '0.25rem' }}>
-                            {text}
-                          </li>
-                        ))}
-                      </ul>
-                    )}
+                  <td style={{ fontSize: '0.8rem', maxWidth: '36rem', verticalAlign: 'top' }}>
+                    {renderWhyUpgradesCell(r)}
                   </td>
                 </tr>
               ))}

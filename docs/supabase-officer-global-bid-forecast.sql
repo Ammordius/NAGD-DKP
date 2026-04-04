@@ -334,6 +334,32 @@ BEGIN
       FROM per_toon
       GROUP BY account_id
     ),
+    -- Lifetime DKP earned per roster character (raid_attendance_dkp.character_key is char_id or name)
+    per_toon_earned_agg AS (
+      SELECT
+        ca.account_id,
+        NULLIF(trim(c.char_id::text), '') AS char_id,
+        COALESCE(SUM(rad.dkp_earned), 0)::numeric AS earned
+      FROM active_account_ids aai
+      INNER JOIN character_account ca ON ca.account_id = aai.account_id
+      INNER JOIN characters c ON c.char_id = ca.char_id AND c.char_id IS NOT NULL
+      INNER JOIN raid_attendance_dkp rad ON (
+        rad.character_key = NULLIF(trim(c.char_id::text), '')
+        OR (
+          COALESCE(NULLIF(trim(c.name), ''), '') <> ''
+          AND rad.character_key = trim(c.name)
+        )
+      )
+      GROUP BY ca.account_id, NULLIF(trim(c.char_id::text), '')
+    ),
+    per_toon_earned_json AS (
+      SELECT
+        account_id,
+        jsonb_object_agg(char_id::text, earned) AS per_toon_earned
+      FROM per_toon_earned_agg
+      WHERE char_id IS NOT NULL
+      GROUP BY account_id
+    ),
     profiles AS (
       SELECT jsonb_object_agg(
         d.account_id,
@@ -356,6 +382,7 @@ BEGIN
             ELSE (CURRENT_DATE - pal.last_date)::int
           END,
           'per_toon_spent', COALESCE(pt.per_toon, '{}'::jsonb),
+          'per_toon_earned', COALESCE(pte.per_toon_earned, '{}'::jsonb),
           'top_toon_share', COALESCE(pts.top_toon_share, 0),
           'total_spent_tracked', COALESCE(pat.total_spent, 0),
           'purchase_count', COALESCE(pat.purchase_count, 0),
@@ -365,6 +392,7 @@ BEGIN
       FROM dkp d
       LEFT JOIN per_account_last pal ON pal.account_id = d.account_id
       LEFT JOIN per_toon_json pt ON pt.account_id = d.account_id
+      LEFT JOIN per_toon_earned_json pte ON pte.account_id = d.account_id
       LEFT JOIN per_account_top_share pts ON pts.account_id = d.account_id
       LEFT JOIN per_account_totals pat ON pat.account_id = d.account_id
       LEFT JOIN purchases_json pj ON pj.account_id = d.account_id
@@ -379,7 +407,7 @@ END;
 $$;
 
 COMMENT ON FUNCTION public.officer_global_bid_forecast(integer) IS
-  'Officers only: active accounts (recent activity or pinned) with roster characters + spend profiles including ref_price_at_sale per purchase.';
+  'Officers only: active accounts (recent activity or pinned) with roster characters + spend profiles including per_toon_earned (raid_attendance_dkp), per_toon_spent, ref_price_at_sale per purchase.';
 
 REVOKE ALL ON FUNCTION public.normalize_item_name_for_lookup(text) FROM PUBLIC;
 

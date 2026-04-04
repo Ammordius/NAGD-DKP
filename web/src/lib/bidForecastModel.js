@@ -89,14 +89,18 @@ export function bidVsMarketFromPurchasesTimeAware(purchasesChronological, nameTo
 
 /** @param {object} [archetypeOpts]
  * @param {string} [archetypeOpts.attendeeCharId] — when set, funnel_main only if this toon is top spender
- * @param {boolean} [archetypeOpts.accountLevelArchetype] — when true, funnel_main uses account-wide share (consolidated row) */
+ * @param {boolean} [archetypeOpts.accountLevelArchetype] — when true, funnel_main uses account-wide share (consolidated row)
+ * @param {number} [archetypeOpts.longSaveBalance] — balance for long_save_candidate (defaults to profile.balance) */
 export function spendArchetypeTags(profile, bidLabel, medianRatio, archetypeOpts = {}) {
   const tags = []
   const share = Number(profile?.top_toon_share) || 0
   const pc = Number(profile?.purchase_count) || 0
-  const bal = Number(profile?.balance) || 0
   const days = profile?.days_since_last_spend
-  const { attendeeCharId, accountLevelArchetype } = archetypeOpts
+  const { attendeeCharId, accountLevelArchetype, longSaveBalance } = archetypeOpts
+  const bal =
+    longSaveBalance != null && !Number.isNaN(Number(longSaveBalance))
+      ? Number(longSaveBalance)
+      : Number(profile?.balance) || 0
 
   const funnelCandidate = share >= 0.72 && pc >= 2
   if (funnelCandidate) {
@@ -116,6 +120,29 @@ export function spendArchetypeTags(profile, bidLabel, medianRatio, archetypeOpts
   }
 
   return [...new Set(tags)]
+}
+
+/** Lifetime DKP earned on this character (sum of raid_attendance_dkp rows keyed by char id or name). */
+export function toonEarnedFromProfile(profile, charId) {
+  const m = profile?.per_toon_earned
+  if (!m || typeof m !== 'object' || charId == null || String(charId).trim() === '') return 0
+  const id = String(charId).trim()
+  const v = m[id] ?? m[charId]
+  return Number(v) || 0
+}
+
+/** Lifetime DKP spent on assigned loot for this character (per loot_char_id). */
+export function toonSpentFromProfile(profile, charId) {
+  const m = profile?.per_toon_spent
+  if (!m || typeof m !== 'object' || charId == null || String(charId).trim() === '') return 0
+  const id = String(charId).trim()
+  const v = m[id] ?? m[charId]
+  return Number(v) || 0
+}
+
+/** Attendance earned minus loot spent on this character (matches /accounts assignment + attendance keys). */
+export function toonBalanceFromProfile(profile, charId) {
+  return toonEarnedFromProfile(profile, charId) - toonSpentFromProfile(profile, charId)
 }
 
 /** Char id with highest lifetime spend in profile.per_toon_spent, or null */
@@ -194,14 +221,23 @@ export function interestScoreDormantPenalty(profile, charId, charName) {
 /**
  * Context when spend history is not on this character (or is much older than account-level activity).
  */
-/** Shared account lines (balance, archetype, bid vs ref); used once per account row. */
-export function buildSharedAccountSpendBullets(prof, bidInfo, balance, tagsForArchetype, bidRatioLabel) {
+/**
+ * Account-wide context: optional shared pool line, archetype, bid vs ref. Per-character balance is separate
+ * (see buildCharacterBalanceBullet).
+ * @param {object} [opts]
+ * @param {number} [opts.accountPoolBalance] — account_dkp_summary net (shared pool)
+ * @param {boolean} [opts.includeAccountPoolLine] — when true, emit pool line (e.g. multi-toon rows)
+ */
+export function buildSharedAccountSpendBullets(prof, bidInfo, tagsForArchetype, bidRatioLabel, opts = {}) {
+  const { accountPoolBalance, includeAccountPoolLine } = opts
   const shared = []
   const label =
     bidRatioLabel ||
     'Vs reference prices (guild history when available, else dkp_prices.json)'
   if (prof) {
-    shared.push(`Account balance (earned − spent): ~${Math.round(Number(balance) || 0)} DKP.`)
+    if (includeAccountPoolLine && accountPoolBalance != null && !Number.isNaN(Number(accountPoolBalance))) {
+      shared.push(`Account pool (earned − spent, shared): ~${Math.round(Number(accountPoolBalance))} DKP.`)
+    }
     shared.push(archetypeDescription(tagsForArchetype))
     if (bidInfo?.medianRatio != null) {
       shared.push(`${label}: median paid/ref ≈ ${bidInfo.medianRatio.toFixed(2)} (${bidInfo.label}).`)
@@ -210,6 +246,10 @@ export function buildSharedAccountSpendBullets(prof, bidInfo, balance, tagsForAr
     shared.push('No linked account — DKP spend profile unavailable.')
   }
   return shared
+}
+
+export function buildCharacterBalanceBullet(toonBalance) {
+  return `Character balance (attendance earned − loot spent on this character): ~${Math.round(Number(toonBalance) || 0)} DKP.`
 }
 
 export function dormantToonVersusAccountNarrative(profile, charId, charName) {
@@ -249,6 +289,23 @@ export function archetypeDescription(tags) {
 /**
  * Heuristic bid band: min(balance, anchor * aggressiveness factor), with low/mid/high.
  */
+/** Combined band for a consolidated account row (min low, max high, mean mid). */
+export function mergeBidBandsForAccountRow(bands) {
+  if (!Array.isArray(bands) || bands.length === 0) {
+    return { low: 0, high: 0, mid: 0, note: '' }
+  }
+  if (bands.length === 1) return bands[0]
+  const lows = bands.map((b) => Number(b?.low) || 0)
+  const highs = bands.map((b) => Number(b?.high) || 0)
+  const mids = bands.map((b) => Number(b?.mid) || 0)
+  return {
+    low: Math.min(...lows),
+    high: Math.max(...highs),
+    mid: Math.round(mids.reduce((a, b) => a + b, 0) / mids.length),
+    note: 'Span across toons on this account.',
+  }
+}
+
 export function estimateBidBand(balance, anchorPrice, medianBidRatio, scoreDelta) {
   const b = Math.max(0, Number(balance) || 0)
   const a = anchorPrice != null && !Number.isNaN(Number(anchorPrice)) ? Number(anchorPrice) : null
