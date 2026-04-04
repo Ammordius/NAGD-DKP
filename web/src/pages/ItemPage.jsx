@@ -165,7 +165,7 @@ export default function ItemPage({ isOfficer = false }) {
   const [searchParams] = useSearchParams()
   const location = useLocation()
   const secondPlaceSectionRef = useRef(null)
-  const { getAccountId, getAccountDisplayName, getDisplayNameForAccountId } = useCharToAccountMap()
+  const { getAccountId, getAccountDisplayName, getDisplayNameForAccountId, getRepresentativeCharNameForAccount } = useCharToAccountMap()
   const itemName = useMemo(() => (itemNameEncoded ? decodeURIComponent(itemNameEncoded) : ''), [itemNameEncoded])
   const [lootRows, setLootRows] = useState([])
   const [raids, setRaids] = useState({})
@@ -521,7 +521,10 @@ export default function ItemPage({ isOfficer = false }) {
                           <span style={{ color: '#71717a' }}>…</span>
                         ) : inferred ? (
                           <Link to={`/accounts/${encodeURIComponent(String(inferred))}`}>
-                            {getDisplayNameForAccountId(inferred) ?? String(inferred)}
+                            {formatAccountCharacter(
+                              getDisplayNameForAccountId(inferred),
+                              getRepresentativeCharNameForAccount?.(inferred) ?? '',
+                            )}
                           </Link>
                         ) : (
                           '—'

@@ -13,6 +13,7 @@ export function formatAccountCharacter(accountName, characterName) {
   const char = (characterName ?? '').trim()
   if (!acc) return char || '—'
   if (char === acc) return acc
+  if (!char) return acc
   return `${acc} (${char})`
 }
 
