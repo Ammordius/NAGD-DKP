@@ -41,7 +41,8 @@ async function fetchCharToAccountMap() {
 /**
  * Fetches character_account, characters, and accounts to build char_id/name -> account_id and account display name.
  * Uses SWR so multiple components share one request (dedupingInterval 60s).
- * Returns getAccountId(charIdOrName), getAccountDisplayName(charIdOrName), and loading flag.
+ * Returns getAccountId(charIdOrName), getAccountDisplayName(charIdOrName),
+ * getDisplayNameForAccountId(accountId), and loading flag.
  */
 export function useCharToAccountMap() {
   const { data, isLoading } = useSWR(CHAR_TO_ACCOUNT_KEY, fetchCharToAccountMap, {
@@ -70,5 +71,20 @@ export function useCharToAccountMap() {
     }
   }, [charToAccount, accountIdToDisplayName])
 
-  return { getAccountId, getAccountDisplayName, loading: isLoading }
+  const getDisplayNameForAccountId = useMemo(() => {
+    return (accountId) => {
+      if (accountId == null || accountId === '') return null
+      const trimmed = String(accountId).trim()
+      if (trimmed === '') return null
+      const n = Number(trimmed)
+      return (
+        accountIdToDisplayName[accountId] ??
+        (Number.isFinite(n) ? accountIdToDisplayName[n] : undefined) ??
+        accountIdToDisplayName[trimmed] ??
+        null
+      )
+    }
+  }, [accountIdToDisplayName])
+
+  return { getAccountId, getAccountDisplayName, getDisplayNameForAccountId, loading: isLoading }
 }
