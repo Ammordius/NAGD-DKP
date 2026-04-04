@@ -1,5 +1,7 @@
 # Second bidder inference — MVP spec (internal)
 
+**Single eligibility pipeline:** `build_candidate_pool` (attendance, reconstructed pool thresholds, optional `eligible_char_pairs` from `item_stats` + loot JSON name maps + character CSVs) is shared by batch scoring and by [`runner_up_unified.resolve_runner_up_for_event`](../scripts/second_bidder_model/runner_up_unified.py) (`max_pool` or `scored` rank). SQL `bid_portfolio_runner_up_guess` is deprecated for officer UX; populate `bid_portfolio_auction_fact.runner_up_*` from Python.
+
 ## A. Problem statement
 
 **Target quantity:** For a historical guild loot sale (positive DKP price, known winner), estimate a **distribution over accounts** for who was most plausibly the **second-highest serious bidder**, written informally as P(second bidder | item, player, context).
@@ -23,6 +25,7 @@
 3. `pool_rule`: reconstructed `pool_before >= max(config.min_pool_absolute, config.min_pool_ratio * winning_price)` and, if `require_pool_ge_clearing`, `pool_before >= winning_price - config.clearing_epsilon`
 4. `eligible` (optional): if `event.eligible_account_ids` is provided, `account_id ∈ eligible_account_ids`
 5. `item_eligible_lane` (optional): if `event.eligible_char_pairs` is provided, the account must have at least one character in the same **plausibility set** used for scoring (attendance-linked `char_id`s ∪ prior revealed spend / win lanes in `KnowledgeState`) whose pair `(account_id, char_id)` lies in `eligible_char_pairs`
+6. `item_eligible_attending_lane` (optional): if `SecondBidderConfig.require_item_eligible_attending_lane_for_pool` is **true** and `eligible_char_pairs` is provided, replace the set in (5) with **attendance-linked `char_id`s only** (characters on this raid’s attendance for that account). Same pair-membership rule: some `(account_id, char_id)` must lie in `eligible_char_pairs`. Default is **false** so boxers with an off-raid eligible alt still pass the pool gate when their plausibility set includes that alt. Batch/sample CLI: `--require-attending-eligible-lane`.
 
 **Thresholds (defaults in `SecondBidderConfig`):**
 
@@ -30,6 +33,7 @@
 - `min_pool_absolute` — floor in DKP
 - `require_pool_ge_clearing` — if true, must cover full clearing price (minus epsilon)
 - `clearing_epsilon` — small slack for reconstruction noise
+- `require_item_eligible_attending_lane_for_pool` — if true (with `eligible_char_pairs`), stricter pool: item-eligible character must be **on raid attendance** (see (6))
 
 **Exclusions:** Every filtered-out attendee gets a short reason string for debugging.
 

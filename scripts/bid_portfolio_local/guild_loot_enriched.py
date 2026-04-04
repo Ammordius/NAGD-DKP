@@ -4,11 +4,18 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
-from typing import Dict, List, Optional, Tuple, Any
+from typing import Any, Dict, List, Optional, Tuple
 
 from .load_csv import BackupSnapshot
 from .normalize import normalize_item_name_for_lookup, raid_date_parsed
 from .resolve import buyer_account_id_for_loot_row, parse_cost_num
+
+
+def enriched_guild_sale_sort_key(e: "EnrichedLoot") -> Tuple:
+    """Match guild_loot_sale_enriched ORDER BY raid_date ASC NULLS FIRST, loot_id ASC."""
+    if e.raid_date is None:
+        return (0, e.loot_id)
+    return (1, e.raid_date, e.loot_id)
 
 
 @dataclass

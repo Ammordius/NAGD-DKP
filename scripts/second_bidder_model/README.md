@@ -4,6 +4,8 @@ Proxy model for P(second bidder | item, context) with **no auction log** and **n
 
 **Character-aware revision:** scores combine **account DKP posture** with **per-character** revealed spend (from **known prior purchases** in rolling state, union attendance `char_id`s when present), lane share, dormancy, and (prior-only) item-family fit; see [`docs/SECOND_BIDDER_CHARACTER_AWARE_SPEC.md`](../../docs/SECOND_BIDDER_CHARACTER_AWARE_SPEC.md).
 
+**Unified runner-up:** [`runner_up_unified.py`](runner_up_unified.py) (`resolve_runner_up_for_event`) shares **`build_candidate_pool`** with batch scoring; [`compute_bid_portfolio_from_csv.py`](../compute_bid_portfolio_from_csv.py) uses it for **`bid_portfolio_auction_fact.runner_up_*`** (default **max_pool** rank; optional **scored**).
+
 ## Run tests
 
 From repo root:
@@ -95,6 +97,8 @@ Add `--include-character-debug` to JSONL lines if you want `character_debug` / `
 By default the batch runner loads repo `data/item_stats.json` + `data/dkp_mob_loot.json` for class/level eligibility (stderr note if missing). Use `--no-item-stats` to skip, or `--item-stats` / `--mob-loot-json` / `--raid-sources-json` to override paths. When item rules are known, missing CSV `class_name` mapping or missing `level` makes a lane **ineligible** unless you pass **`--permissive-missing-char-class-level`** (legacy backups).
 
 Optional `--eligibility-json path.json` loads `eligible_by_loot_id` / `eligible_chars_by_loot_id` (see [`docs/HANDOFF_SECOND_BIDDER_MVP.md`](../../docs/HANDOFF_SECOND_BIDDER_MVP.md)); character pairs are **intersected** with derived stats-based pairs when both apply.
+
+**Stricter pool:** batch and sample support **`--require-attending-eligible-lane`** (`SecondBidderConfig.require_item_eligible_attending_lane_for_pool`): when eligibility pairs apply, only accounts with an item-eligible character **on that raid’s attendance** stay in the candidate pool (default uses the wider plausibility set: attendance ∪ prior spend / wins).
 
 Batch JSONL candidates include **`top_eligible_char_id`** (best item-eligible attending lane per ranked account); [`scripts/upload_second_bidder_runner_up.py`](../../scripts/upload_second_bidder_runner_up.py) writes it to **`bid_portfolio_auction_fact.runner_up_char_guess`**.
 

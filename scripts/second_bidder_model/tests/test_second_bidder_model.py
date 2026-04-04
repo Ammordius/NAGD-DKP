@@ -720,6 +720,39 @@ class TestPoolExclusionEligiblePairs(unittest.TestCase):
         cands, excl = build_candidate_pool(ev, MockBC(pools), SecondBidderConfig(), empty_state())
         self.assertIn("war_acct", cands)
 
+    def test_strict_attending_lane_excludes_off_raid_eligible_alt(self):
+        """Plausibility set can include an off-raid eligible alt; strict mode does not."""
+        st = empty_state()
+        st.account_char_spent[("boxer", "clr1")] = 100.0
+        st.account_total_spent["boxer"] = 100.0
+        ev = LootSaleEvent(
+            event_index=0,
+            loot_id=10,
+            raid_id="r1",
+            event_id=None,
+            raid_date=None,
+            norm_name="x",
+            item_name="Priest item",
+            winning_price=100.0,
+            buyer_account_id="buyer",
+            buyer_char_id=None,
+            attendee_account_ids={"buyer", "boxer", "war_acct"},
+            attendee_account_to_chars={"boxer": {"bard1"}, "war_acct": {"war1"}},
+            eligible_char_pairs={("boxer", "clr1"), ("war_acct", "war1")},
+        )
+        pools = {(10, "buyer"): 500.0, (10, "boxer"): 200.0, (10, "war_acct"): 200.0}
+        cands, _excl = build_candidate_pool(ev, MockBC(pools), SecondBidderConfig(), st)
+        self.assertIn("boxer", cands)
+        cands2, excl2 = build_candidate_pool(
+            ev,
+            MockBC(pools),
+            SecondBidderConfig(require_item_eligible_attending_lane_for_pool=True),
+            st,
+        )
+        self.assertNotIn("boxer", cands2)
+        self.assertEqual(excl2.get("boxer"), "no_item_eligible_attending_lane")
+        self.assertIn("war_acct", cands2)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -4,8 +4,9 @@ Patch bid_portfolio_auction_fact.runner_up_account_guess and runner_up_char_gues
 second_bidder JSONL (produced by run_second_bidder_batch.py / serialize.prediction_result_to_json_dict).
 
 Uses the **model's** top non-buyer candidate (candidates[0].account_id) and optional
-top_eligible_char_id (item-eligible attending lane). That is **not** the same algorithm
-as SQL public.bid_portfolio_runner_up_guess (max pool among attendees who could clear price).
+top_eligible_char_id (item-eligible attending lane). Eligibility matches
+``compute_bid_portfolio_from_csv`` / ``build_candidate_pool``; ranking is **scored** (may
+differ from CSV default **max_pool** rank for the same loot_id).
 
 Uses SUPABASE_SERVICE_ROLE_KEY (or VITE_SUPABASE_SERVICE_ROLE_KEY) and SUPABASE_URL /
 VITE_SUPABASE_URL from web/.env (same pattern as scripts/upload_bid_portfolio_fact.py).

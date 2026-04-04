@@ -89,9 +89,9 @@ Historical **heuristics only** — there is still **no auction log**. Objects li
 | `bid_forecast_attendees_resolved_for_scope(raid_id, pin_event_id)` | Internal: attendee rows with account resolution; **same rules** as by-raid v2 (tic-scoped when that event has attendance). Used by v2 and portfolio RPCs. |
 | `attendee_accounts_for_loot(loot_id)` | Internal: distinct attendee `account_id` for that loot row’s event scope. |
 | `account_balance_before_loot(loot_id, account_id)` | Internal: reconstructed pool immediately before that loot row (parity with [`simulateBalancesBeforeLootRow`](../web/src/lib/bidForecastModel.js)). |
-| `bid_portfolio_runner_up_guess(loot_id)` | Internal: non-buyer attendee with **maximum** `pool_before` among those with `pool_before >= clearing price`; tie-break `account_id`. |
-| `officer_bid_portfolio_for_loot(loot_id)` | Officers: JSON — sale enrichment, `sim_mode`, per-attendee `pool_before`, `could_clear`, `synthetic_max_bid` (= `LEAST(pool, P-1)` teaching scaffold), historic medians (`median_paid_prior`, `median_paid_to_ref_prior`), `later_bought_same_norm`, `runner_up_account_guess`. |
-| `officer_account_bidding_portfolio(account_id, from_date, to_date)` | Officers: aggregates over `raid_date` range — wins, DKP on wins, `auction_rows_present`, `could_clear_but_not_buyer_count`, `runner_up_guess_count`, sum of synthetic max bids when present and not buyer, avg `paid_to_ref` on wins. |
+| `bid_portfolio_runner_up_guess(loot_id)` | **Deprecated** for product use: class-unaware max-pool heuristic (ad-hoc SQL only). |
+| `officer_bid_portfolio_for_loot(loot_id)` | Officers: JSON — sale enrichment, `sim_mode`, per-attendee `pool_before`, `could_clear`, `synthetic_max_bid` (= `LEAST(pool, P-1)` teaching scaffold), historic medians (`median_paid_prior`, `median_paid_to_ref_prior`), `later_bought_same_norm`, **`runner_up_account_guess` / `runner_up_char_guess` read from `bid_portfolio_auction_fact`** (NULL until Python CSV/JSONL backfill). |
+| `officer_account_bidding_portfolio(account_id, from_date, to_date)` | Officers: aggregates over `raid_date` range — wins, DKP on wins, `auction_rows_present`, `could_clear_but_not_buyer_count`, `runner_up_guess_count` (**compares account to fact `runner_up_account_guess`**), sum of synthetic max bids when present and not buyer, avg `paid_to_ref` on wins. |
 | `bid_portfolio_auction_fact` | Optional table: denormalized row per `loot_id` (runner-up guess, next guild sale columns, optional full `payload` JSON). Officer RLS only. |
 | `officer_backfill_bid_portfolio_batch(min_id, max_id, include_payload)` | Upsert fact rows for **`loot_id` in range** (officers, **service_role**, or **postgres / supabase_admin** in SQL Editor). Per-call **`SET LOCAL statement_timeout = '20min'`**. Large jobs: chunk from the client or use **`dba_backfill_bid_portfolio_range`** (**COMMIT** between chunks). **`include_payload=true`** is **much** heavier (often **chunk size 1**). |
 | `dba_backfill_bid_portfolio_range(...)` | **Procedure** (SQL Editor only): loops **`officer_backfill_bid_portfolio_batch`** with **`COMMIT`** after each slice. |
@@ -99,7 +99,7 @@ Historical **heuristics only** — there is still **no auction log**. Objects li
 **Assumptions (explicit):**
 
 - `synthetic_max_bid` does **not** prove anyone bid `P-1`; it is a labeled scaffold.
-- `runner_up_account_guess` is **not** a true second-price winner when many attendees could pay `P`; it picks the richest eligible non-buyer by pool-before.
+- Stored `runner_up_*` fields are **Python-unified** guesses (item_stats + character CSV eligibility, then max_pool or scored rank); they are **not** true second-highest bids without an auction log.
 - Attendees and pools use **raid/tic data only** — no Magelo / current gear.
 
 **Apply:** run the updated canonical schema (or equivalent migration) on Supabase so these objects exist alongside `officer_loot_bid_forecast_v2`.

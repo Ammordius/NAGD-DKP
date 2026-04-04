@@ -3087,7 +3087,7 @@ END;
 $bru$;
 
 COMMENT ON FUNCTION public.bid_portfolio_runner_up_guess(bigint) IS
-  'Heuristic: attendee (not buyer) with max pool before auction among those with pool >= clearing price; tie-break account_id.';
+  'DEPRECATED for product use: class-unaware max-pool heuristic. Officer UI and bid_portfolio_auction_fact.runner_up_* should come from Python compute_bid_portfolio_from_csv (unified item_stats + character CSV eligibility). Kept for ad-hoc SQL only.';
 
 REVOKE ALL ON FUNCTION public.bid_portfolio_runner_up_guess(bigint) FROM PUBLIC;
 
@@ -3105,6 +3105,7 @@ DECLARE
   v_p numeric;
   v_buyer text;
   v_runner text;
+  v_runner_char text;
   v_pool numeric;
   v_could_clear boolean;
   v_syn numeric;
@@ -3136,7 +3137,12 @@ BEGIN
   SELECT gle.cost_num, gle.buyer_account_id INTO v_p, v_buyer
   FROM public.guild_loot_sale_enriched gle WHERE gle.loot_id = p_loot_id;
 
-  v_runner := public.bid_portfolio_runner_up_guess(p_loot_id);
+  v_runner := NULL;
+  v_runner_char := NULL;
+  SELECT bpf.runner_up_account_guess, bpf.runner_up_char_guess
+  INTO v_runner, v_runner_char
+  FROM public.bid_portfolio_auction_fact bpf
+  WHERE bpf.loot_id = p_loot_id;
 
   FOR r IN
     SELECT DISTINCT a.account_id FROM public.attendee_accounts_for_loot(p_loot_id) a
@@ -3241,18 +3247,19 @@ BEGIN
     'sim_mode', CASE WHEN v_use_per_event THEN 'per_event' ELSE 'raid_level' END,
     'sale', COALESCE(v_sale, '{}'::jsonb),
     'runner_up_account_guess', v_runner,
+    'runner_up_char_guess', v_runner_char,
     'attendees', v_att,
     'notes', jsonb_build_array(
       'Heuristic only: no auction log.',
       'synthetic_max_bid uses LEAST(pool, P-1) for teaching scaffold.',
-      'runner_up_account_guess = max pool among non-buyer attendees with pool >= P.'
+      'runner_up_* read from bid_portfolio_auction_fact when present (Python unified pipeline); NULL until CSV/batch backfill.'
     )
   );
 END;
 $obpfl$;
 
 COMMENT ON FUNCTION public.officer_bid_portfolio_for_loot(bigint) IS
-  'Officers only: one loot row — enriched sale, sim_mode, per-attendee pool/could_clear/synthetic_max_bid, purchase priors, later_bought_same_norm, runner_up guess. Uses SET LOCAL statement_timeout = 20min for the call.';
+  'Officers only: one loot row — enriched sale, sim_mode, per-attendee pool/could_clear/synthetic_max_bid, purchase priors, later_bought_same_norm, runner_up from bid_portfolio_auction_fact. Uses SET LOCAL statement_timeout = 20min for the call.';
 
 REVOKE ALL ON FUNCTION public.officer_bid_portfolio_for_loot(bigint) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.officer_bid_portfolio_for_loot(bigint) TO authenticated;
@@ -3323,7 +3330,10 @@ BEGIN
         v_could_clear_lost := v_could_clear_lost + 1;
         v_syn_sum := v_syn_sum + LEAST(v_pool, GREATEST(0::numeric, v_p - 1));
       END IF;
-      v_runner := public.bid_portfolio_runner_up_guess(rec.loot_id);
+      v_runner := NULL;
+      SELECT bpf.runner_up_account_guess INTO v_runner
+      FROM public.bid_portfolio_auction_fact bpf
+      WHERE bpf.loot_id = rec.loot_id;
       IF v_runner IS NOT DISTINCT FROM v_aid THEN
         v_runner_hits := v_runner_hits + 1;
       END IF;
@@ -3343,7 +3353,7 @@ BEGIN
     'avg_paid_to_ref_on_wins', CASE WHEN v_ref_n > 0 THEN (v_ref_sum / v_ref_n)::numeric ELSE NULL END,
     'notes', jsonb_build_array(
       'auction_rows_present counts loot rows where account appears in attendee resolution for that row event scope.',
-      'runner_up_guess_count uses same heuristic as officer_bid_portfolio_for_loot.'
+      'runner_up_guess_count compares account to bid_portfolio_auction_fact.runner_up_account_guess (Python backfill).'
     )
   );
 END;
@@ -3386,13 +3396,13 @@ CREATE INDEX IF NOT EXISTS idx_bid_portfolio_auction_fact_norm
   ON public.bid_portfolio_auction_fact (norm_name);
 
 COMMENT ON TABLE public.bid_portfolio_auction_fact IS
-  'Optional denormalized row per raid_loot for bidding heuristics (runner-up guess, next guild sale of same item). Backfill with officer_backfill_bid_portfolio_batch in small id ranges. runner_up_char_guess is set by second-bidder JSONL upload (model lane); SQL backfill leaves it unchanged when NULL.';
+  'Optional denormalized row per raid_loot for bidding heuristics (runner-up guess, next guild sale of same item). runner_up_* from Python compute_bid_portfolio_from_csv or upload_second_bidder_runner_up; officer_backfill_bid_portfolio_batch inserts NULL runner columns (use CSV pipeline to fill).';
 
 COMMENT ON COLUMN public.bid_portfolio_auction_fact.runner_up_account_guess IS
-  'Inferred second-bidder account_id (max-pool heuristic from bid_portfolio_runner_up_guess, or overwritten by Python second-bidder JSONL upload).';
+  'Inferred second-bidder account_id from Python unified pipeline (compute_bid_portfolio_from_csv and/or run_second_bidder_batch JSONL upload); officer SQL no longer computes this.';
 
 COMMENT ON COLUMN public.bid_portfolio_auction_fact.runner_up_char_guess IS
-  'Optional characters.char_id: model top item-eligible attending lane from upload_second_bidder_runner_up; NULL when only SQL/CSV max-pool backfill ran.';
+  'Optional characters.char_id: item-eligible attending lane from unified Python pipeline or second-bidder JSONL upload.';
 
 -- Existing databases before this column: ALTER TABLE public.bid_portfolio_auction_fact ADD COLUMN IF NOT EXISTS runner_up_char_guess text;
 
@@ -3501,7 +3511,7 @@ BEGIN
         v_gle.buyer_account_id,
         v_gle.ref_price_at_sale,
         v_gle.paid_to_ref_ratio,
-        public.bid_portfolio_runner_up_guess(v_gle.loot_id),
+        NULL,
         NULL,
         v_gle.next_guild_sale_loot_id,
         v_gle.next_guild_sale_buyer_account_id,
@@ -3518,8 +3528,14 @@ BEGIN
         buyer_account_id = EXCLUDED.buyer_account_id,
         ref_price_at_sale = EXCLUDED.ref_price_at_sale,
         paid_to_ref_ratio = EXCLUDED.paid_to_ref_ratio,
-        runner_up_account_guess = EXCLUDED.runner_up_account_guess,
-        runner_up_char_guess = COALESCE(EXCLUDED.runner_up_char_guess, bid_portfolio_auction_fact.runner_up_char_guess),
+        runner_up_account_guess = COALESCE(
+          EXCLUDED.runner_up_account_guess,
+          bid_portfolio_auction_fact.runner_up_account_guess
+        ),
+        runner_up_char_guess = COALESCE(
+          EXCLUDED.runner_up_char_guess,
+          bid_portfolio_auction_fact.runner_up_char_guess
+        ),
         next_guild_sale_loot_id = EXCLUDED.next_guild_sale_loot_id,
         next_guild_sale_buyer_account_id = EXCLUDED.next_guild_sale_buyer_account_id,
         payload = CASE WHEN v_inc THEN EXCLUDED.payload ELSE bid_portfolio_auction_fact.payload END,
@@ -3537,7 +3553,7 @@ END;
 $obfb$;
 
 COMMENT ON FUNCTION public.officer_backfill_bid_portfolio_batch(bigint, bigint, boolean) IS
-  'Officers (JWT), service_role, or direct DB session as postgres/supabase_admin: upsert bid_portfolio_auction_fact for loot_id in [min,max]. Raises statement_timeout locally to 20min. p_include_payload stores full officer_bid_portfolio_for_loot JSON (slow). Inserts NULL runner_up_char_guess; on conflict, runner_up_char_guess is COALESCE(EXCLUDED, existing) so prior JSONL char lane is preserved. For large backfills from the SQL Editor, prefer CALL dba_backfill_bid_portfolio_range (COMMIT between chunks).';
+  'Officers (JWT), service_role, or direct DB session as postgres/supabase_admin: upsert bid_portfolio_auction_fact for loot_id in [min,max]. Raises statement_timeout locally to 20min. p_include_payload stores full officer_bid_portfolio_for_loot JSON (slow). Inserts NULL runner columns; on conflict, runner_up_* = COALESCE(EXCLUDED, existing) so Python CSV/JSONL backfill is not wiped. For large backfills from the SQL Editor, prefer CALL dba_backfill_bid_portfolio_range (COMMIT between chunks).';
 
 REVOKE ALL ON FUNCTION public.officer_backfill_bid_portfolio_batch(bigint, bigint, boolean) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.officer_backfill_bid_portfolio_batch(bigint, bigint, boolean) TO authenticated;

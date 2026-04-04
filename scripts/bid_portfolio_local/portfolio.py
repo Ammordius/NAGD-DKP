@@ -10,7 +10,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from .attendees import attendee_account_ids_for_loot
 from .balance_before_loot import BalanceCalculator
-from .guild_loot_enriched import EnrichedLoot
+from .guild_loot_enriched import EnrichedLoot, enriched_guild_sale_sort_key
 from .load_csv import BackupSnapshot
 
 
@@ -18,13 +18,6 @@ def _median(xs: List[float]) -> Optional[float]:
     if not xs:
         return None
     return float(statistics.median(xs))
-
-
-def enriched_guild_sale_sort_key(e: EnrichedLoot) -> Tuple:
-    """Match guild_loot_sale_enriched ORDER BY raid_date ASC NULLS FIRST, loot_id ASC."""
-    if e.raid_date is None:
-        return (0, e.loot_id)
-    return (1, e.raid_date, e.loot_id)
 
 
 def _strictly_before(
@@ -62,31 +55,53 @@ def _strictly_after(
     return eid > cid
 
 
+def runner_up_account_and_char_guess(
+    bc: BalanceCalculator,
+    snap: BackupSnapshot,
+    gle: EnrichedLoot,
+    *,
+    event_by_loot_id: Optional[Dict[int, Any]] = None,
+    state: Any = None,
+    config: Any = None,
+    rank_mode: str = "max_pool",
+) -> Tuple[Optional[str], Optional[str]]:
+    """Unified runner-up using item_stats + character CSVs (via LootSaleEvent eligibility).
+
+    When event_by_loot_id / state are omitted, uses an empty knowledge state (single-row
+    approximation: item-eligible lanes use attending characters only).
+    """
+    from pathlib import Path
+
+    from second_bidder_model.config import SecondBidderConfig
+    from second_bidder_model.item_stats_eligibility import try_load_item_eligibility_bundle
+    from second_bidder_model.prepare import prepare_second_bidder_events
+    from second_bidder_model.runner_up_unified import resolve_runner_up_for_event
+    from second_bidder_model.state import empty_state
+
+    repo_root = Path(__file__).resolve().parent.parent.parent
+    bundle = try_load_item_eligibility_bundle(repo_root)
+    ev_obj = None
+    if event_by_loot_id is not None:
+        ev_obj = event_by_loot_id.get(gle.loot_id)
+    if ev_obj is None:
+        events = prepare_second_bidder_events(snap, item_eligibility_bundle=bundle)
+        ev_obj = next((e for e in events if e.loot_id == gle.loot_id), None)
+    if ev_obj is None:
+        return None, None
+    st = state if state is not None else empty_state()
+    cfg = config if config is not None else SecondBidderConfig()
+    return resolve_runner_up_for_event(
+        ev_obj, st, bc, cfg, rank_mode=rank_mode  # type: ignore[arg-type]
+    )
+
+
 def runner_up_account_guess(
     bc: BalanceCalculator,
     snap: BackupSnapshot,
     gle: EnrichedLoot,
 ) -> Optional[str]:
-    p = gle.cost_num
-    buyer = gle.buyer_account_id
-    if p is None or p <= 0:
-        return None
-    attendees = attendee_account_ids_for_loot(snap, gle.raid_id, gle.event_id)
-    best: Optional[str] = None
-    best_pool: Optional[float] = None
-    for aid in attendees:
-        if not aid or aid == buyer:
-            continue
-        pool = bc.balance_before(gle.loot_id, aid)
-        if pool is None or pool < p:
-            continue
-        if best is None:
-            best = aid
-            best_pool = pool
-        elif pool > best_pool or (pool == best_pool and aid < best):
-            best = aid
-            best_pool = pool
-    return best
+    acc, _c = runner_up_account_and_char_guess(bc, snap, gle)
+    return acc
 
 
 @dataclass
@@ -164,12 +179,29 @@ def officer_bid_portfolio_for_loot_payload(
     bc: BalanceCalculator,
     gle: EnrichedLoot,
     indexes: PortfolioIndexes,
+    *,
+    runner_up_account_guess: Optional[str] = None,
+    runner_up_char_guess: Optional[str] = None,
+    event_by_loot_id: Optional[Dict[int, Any]] = None,
+    state: Any = None,
+    config: Any = None,
+    runner_up_rank_mode: str = "max_pool",
 ) -> Dict[str, Any]:
     use_per_event = snap.raid_has_event_attendance(gle.raid_id)
     sim_mode = "per_event" if use_per_event else "raid_level"
     p = gle.cost_num
     buyer = gle.buyer_account_id
-    runner = runner_up_account_guess(bc, snap, gle)
+    if runner_up_account_guess is None:
+        runner_up_account_guess, runner_up_char_guess = runner_up_account_and_char_guess(
+            bc,
+            snap,
+            gle,
+            event_by_loot_id=event_by_loot_id,
+            state=state,
+            config=config,
+            rank_mode=runner_up_rank_mode,
+        )
+    runner = runner_up_account_guess
     attendees: List[Dict[str, Any]] = []
     for aid in sorted(attendee_account_ids_for_loot(snap, gle.raid_id, gle.event_id)):
         pool = bc.balance_before(gle.loot_id, aid)
@@ -199,11 +231,12 @@ def officer_bid_portfolio_for_loot_payload(
         "sim_mode": sim_mode,
         "sale": sale_object(gle),
         "runner_up_account_guess": runner,
+        "runner_up_char_guess": runner_up_char_guess,
         "attendees": attendees,
         "notes": [
             "Heuristic only: no auction log.",
             "synthetic_max_bid uses LEAST(pool, P-1) for teaching scaffold.",
-            "runner_up_account_guess = max pool among non-buyer attendees with pool >= P.",
+            "runner_up_* uses Python unified pool (item_stats + character CSVs) then max_pool or scored rank mode.",
         ],
     }
 
@@ -213,6 +246,7 @@ def fact_row(
     runner: Optional[str],
     payload: Optional[Dict[str, Any]],
     computed_at: Optional[str] = None,
+    runner_char: Optional[str] = None,
 ) -> Dict[str, Any]:
     if computed_at is None:
         computed_at = datetime.now(timezone.utc).isoformat()
@@ -228,7 +262,7 @@ def fact_row(
         "ref_price_at_sale": gle.ref_price_at_sale,
         "paid_to_ref_ratio": gle.paid_to_ref_ratio,
         "runner_up_account_guess": runner,
-        "runner_up_char_guess": None,
+        "runner_up_char_guess": runner_char,
         "next_guild_sale_loot_id": gle.next_guild_sale_loot_id,
         "next_guild_sale_buyer_account_id": gle.next_guild_sale_buyer_account_id,
         "computed_at": computed_at,

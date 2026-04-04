@@ -5,7 +5,7 @@ import { useCharToAccountMap } from '../lib/useCharToAccountMap'
 import AssignedLootDisclaimer from '../components/AssignedLootDisclaimer'
 import ItemLink from '../components/ItemLink'
 import ItemCard from '../components/ItemCard'
-import { getItemStats } from '../lib/itemStats'
+import { getItemStats, itemHasClassRestrictions } from '../lib/itemStats'
 import { getDkpMobLoot, getRaidItemSources } from '../lib/staticData'
 import { ensureElementalArmorLoaded, getMoldInfo, getArmorIdForMoldAndClass, isElementalMold } from '../lib/elementalArmor'
 import { formatAccountCharacter } from '../lib/formatAccountCharacter'
@@ -327,7 +327,10 @@ export default function ItemPage({ isOfficer = false }) {
           setFactError(rpcErr.message)
           break
         }
-        next[lootId] = data?.runner_up_account_guess ?? null
+        next[lootId] = {
+          runner_up_account_guess: data?.runner_up_account_guess ?? null,
+          runner_up_char_guess: data?.runner_up_char_guess ?? null,
+        }
       }
     } finally {
       setRpcRunnerUpByLootId(next)
@@ -475,11 +478,12 @@ export default function ItemPage({ isOfficer = false }) {
             </button>
           </div>
           <p style={{ color: '#a1a1aa', fontSize: '0.875rem', marginTop: 0 }}>
-            No auction bid log: this is a guess. Cached rows may come from the second-bidder model (class/level-aware when you upload JSONL) or from the older SQL/CSV heuristic (richest non-buyer attendee by{' '}
-            <strong>account</strong>
-            {' '}DKP pool before the sale, among those who could clear the price).{' '}
+            No auction bid log: this is a guess. Runner-up uses the unified Python pipeline (item stats + character CSVs for class/level gates, same pool as second-bidder batch) then max-pool or scored rank; stored in{' '}
+            <code>bid_portfolio_auction_fact</code>.{' '}
             <strong>pool_before</strong>
-            {' '}is always account-level, not the named character’s balance. When present, the character shown after the model upload is the model’s item-eligible attending lane; otherwise the name is only a representative toon for that account.
+            {' '}is always account-level, not the named character’s balance. When present, the character shown after the model upload is the model’s item-eligible attending lane; otherwise the name is only a representative toon for that account. For{' '}
+            <strong>class-restricted</strong>
+            {' '}items, if there is no cached character lane we show the <strong>account only</strong> (no random attending toon) so we do not imply that person could equip the item.
           </p>
           {factError && <p className="error" style={{ marginBottom: '0.5rem' }}>{factError}</p>}
           {factLoading && <p style={{ color: '#a1a1aa', marginBottom: '0.5rem' }}>Loading cached inference…</p>}
@@ -508,8 +512,9 @@ export default function ItemPage({ isOfficer = false }) {
                     inferredCharId = f?.runner_up_char_guess ?? null
                     inferredReady = true
                   } else if (hasRpc) {
-                    inferredAccount = rpcRunnerUpByLootId[n]
-                    inferredCharId = null
+                    const rpc = rpcRunnerUpByLootId[n]
+                    inferredAccount = rpc?.runner_up_account_guess ?? null
+                    inferredCharId = rpc?.runner_up_char_guess ?? null
                     inferredReady = true
                   }
                   const charName = row.character_name || row.char_id || '—'
@@ -531,13 +536,27 @@ export default function ItemPage({ isOfficer = false }) {
                         {!inferredReady && factLoading ? (
                           <span style={{ color: '#71717a' }}>…</span>
                         ) : inferredAccount ? (
-                          <Link to={`/accounts/${encodeURIComponent(String(inferredAccount))}`}>
+                          <Link
+                            to={`/accounts/${encodeURIComponent(String(inferredAccount))}`}
+                            title={
+                              !inferredCharId && itemHasClassRestrictions(itemStats)
+                                ? 'Account-level guess only: no item-eligible character on this raid’s attendance in cache (or SQL/CSV path). The named account may still have an eligible alt not on this raid.'
+                                : undefined
+                            }
+                          >
                             {formatAccountCharacter(
                               getDisplayNameForAccountId(inferredAccount),
-                              inferredCharId
-                                ? (getCharacterNameForCharId(inferredCharId) || String(inferredCharId))
-                                : (getRepresentativeCharNameForAccount?.(inferredAccount) ?? ''),
+                              !inferredCharId && itemHasClassRestrictions(itemStats)
+                                ? ''
+                                : inferredCharId
+                                  ? (getCharacterNameForCharId(inferredCharId) || String(inferredCharId))
+                                  : (getRepresentativeCharNameForAccount?.(inferredAccount) ?? ''),
                             )}
+                            {!inferredCharId && itemHasClassRestrictions(itemStats) ? (
+                              <span style={{ color: '#71717a', fontWeight: 400, marginLeft: '0.35rem', fontSize: '0.8em' }}>
+                                (account only)
+                              </span>
+                            ) : null}
                           </Link>
                         ) : (
                           '—'
@@ -550,7 +569,7 @@ export default function ItemPage({ isOfficer = false }) {
             </table>
           </div>
           <p style={{ color: '#71717a', fontSize: '0.85rem', marginTop: '0.75rem', marginBottom: '0.5rem' }}>
-            Values come from <code>bid_portfolio_auction_fact</code> (upload second-bidder JSONL for model guesses + <code>runner_up_char_guess</code>). SQL/CSV backfill fills account guesses only. If rows are empty, run the portfolio backfill (see repo docs) or load live inference for recent drops (slow; uses max-pool heuristic).
+            Values come from <code>bid_portfolio_auction_fact</code> (Python <code>compute_bid_portfolio_from_csv</code> or second-bidder JSONL upload). Live RPC reads the same fact row when present. If empty, run CSV compute + upload or JSONL upload (see repo docs).
           </p>
           <button type="button" className="btn btn-ghost" disabled={factLoading || rpcLoading} onClick={() => loadRpcFallback()}>
             {rpcLoading ? 'Loading…' : `Load live inference (up to ${RPC_FALLBACK_MAX} recent drops missing cache)`}

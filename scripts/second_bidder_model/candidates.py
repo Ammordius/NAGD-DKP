@@ -4,7 +4,10 @@ from typing import Dict, List, Set, Tuple
 
 from bid_portfolio_local.balance_before_loot import BalanceCalculator
 
-from .character_plausibility import get_player_characters_for_plausibility
+from .character_plausibility import (
+    get_attending_characters,
+    get_player_characters_for_plausibility,
+)
 from .config import SecondBidderConfig
 from .state import KnowledgeState
 from .types import LootSaleEvent
@@ -43,10 +46,15 @@ def build_candidate_pool(
             exclusions[aid] = "pool_below_threshold"
             continue
         if event.eligible_char_pairs is not None:
-            chars = get_player_characters_for_plausibility(aid, event, state)
             pairs = event.eligible_char_pairs
+            if config.require_item_eligible_attending_lane_for_pool:
+                chars = get_attending_characters(aid, event)
+                excl_reason = "no_item_eligible_attending_lane"
+            else:
+                chars = get_player_characters_for_plausibility(aid, event, state)
+                excl_reason = "no_item_eligible_character_lane"
             if not any((aid, str(cid).strip()) in pairs for cid in chars):
-                exclusions[aid] = "no_item_eligible_character_lane"
+                exclusions[aid] = excl_reason
                 continue
         candidates.append(aid)
     return candidates, exclusions

@@ -2,7 +2,7 @@
 
 ## Why this exists
 
-`dba_backfill_bid_portfolio_range` / `officer_backfill_bid_portfolio_batch` can time out in Supabase SQL Editor (heavy per-loot work, session/proxy limits). This path recomputes **`guild_loot_sale_enriched` semantics**, **`account_balance_before_loot`**, **`officer_bid_portfolio_for_loot`**, and **`bid_portfolio_auction_fact`** columns **offline** from a CSV backup, then **upserts** via PostgREST (fast batches).
+`dba_backfill_bid_portfolio_range` / `officer_backfill_bid_portfolio_batch` can time out in Supabase SQL Editor (heavy per-loot work, session/proxy limits). This path recomputes **`guild_loot_sale_enriched` semantics**, **`account_balance_before_loot`**, **`officer_bid_portfolio_for_loot`-shaped payload** (optional), and **`bid_portfolio_auction_fact`** columns **offline** from a CSV backup, then **upserts** via PostgREST (fast batches). **`runner_up_*`** on the fact row come from the **unified Python eligibility + rank** in [`compute_bid_portfolio_from_csv.py`](../scripts/compute_bid_portfolio_from_csv.py), not from SQL `bid_portfolio_runner_up_guess`.
 
 Canonical behavior reference: [`docs/supabase-schema-full.sql`](supabase-schema-full.sql). Officer-facing overview: [`docs/HANDOFF_OFFICER_LOOT_BID_FORECAST.md`](HANDOFF_OFFICER_LOOT_BID_FORECAST.md) (Historical backfill **Option D**).
 
@@ -13,7 +13,7 @@ Canonical behavior reference: [`docs/supabase-schema-full.sql`](supabase-schema-
 | Core library | [`scripts/bid_portfolio_local/`](../scripts/bid_portfolio_local/) (`normalize`, `load_csv`, `guild_loot_enriched`, `attendees`, `balance_before_loot`, `portfolio`, `resolve`) |
 | Compute JSONL | [`scripts/compute_bid_portfolio_from_csv.py`](../scripts/compute_bid_portfolio_from_csv.py) |
 | Upload | [`scripts/upload_bid_portfolio_fact.py`](../scripts/upload_bid_portfolio_fact.py) |
-| Runner-up only (Python second-bidder JSONL → `runner_up_account_guess`) | [`scripts/upload_second_bidder_runner_up.py`](../scripts/upload_second_bidder_runner_up.py); see [`HANDOFF_SECOND_BIDDER_MVP.md`](HANDOFF_SECOND_BIDDER_MVP.md) |
+| Optional: overwrite runner-up with scored batch JSONL | [`scripts/upload_second_bidder_runner_up.py`](../scripts/upload_second_bidder_runner_up.py); see [`HANDOFF_SECOND_BIDDER_MVP.md`](HANDOFF_SECOND_BIDDER_MVP.md) |
 
 ## Required CSVs (in `--backup-dir`)
 

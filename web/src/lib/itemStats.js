@@ -73,4 +73,14 @@ export function itemUsableByClass(stats, cls) {
   return classes.includes(String(cls).toUpperCase())
 }
 
+/** True when item stats specify a non-universal class list (aligns with item_stats_eligibility.item_stats_has_class_restrictions). */
+export function itemHasClassRestrictions(stats) {
+  if (!stats || typeof stats !== 'object') return false
+  const raw = stats.classes
+  if (raw == null || typeof raw !== 'string') return false
+  const u = raw.trim().toUpperCase()
+  if (!u || u === 'ALL') return false
+  return u.split(/\s+/).filter(Boolean).length > 0
+}
+
 export { TAKP_ITEM_BASE, TAKP_SPELL_BASE }

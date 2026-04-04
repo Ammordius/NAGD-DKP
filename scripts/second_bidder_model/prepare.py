@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from typing import Dict, List, Optional, Set, Tuple
 
-from bid_portfolio_local.guild_loot_enriched import build_guild_loot_sale_enriched
+from bid_portfolio_local.guild_loot_enriched import (
+    build_guild_loot_sale_enriched,
+    enriched_guild_sale_sort_key,
+)
 from bid_portfolio_local.load_csv import BackupSnapshot
-from bid_portfolio_local.portfolio import enriched_guild_sale_sort_key
 
 from .attendance_map import attendee_account_char_map_for_loot
 from .item_stats_eligibility import (

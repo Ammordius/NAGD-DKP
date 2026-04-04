@@ -43,9 +43,19 @@ def main() -> None:
         action="store_true",
         help="Missing CSV class/level counts as eligible when item has rules (legacy backups)",
     )
+    p.add_argument(
+        "--require-attending-eligible-lane",
+        action="store_true",
+        help=(
+            "When item eligibility pairs are in use: require an item-eligible character on raid "
+            "attendance (stricter pool than default)."
+        ),
+    )
     args = p.parse_args()
 
-    cfg = SecondBidderConfig()
+    cfg = SecondBidderConfig(
+        require_item_eligible_attending_lane_for_pool=args.require_attending_eligible_lane,
+    )
     prep_kw = {}
     if args.eligibility_json is not None:
         from second_bidder_model.eligibility_io import load_eligibility_json
@@ -63,6 +73,11 @@ def main() -> None:
             REPO_ROOT,
             permissive_missing_char_class_level=args.permissive_missing_char_class_level,
         )
+        if item_bundle is None:
+            print(
+                "WARNING: item eligibility bundle not loaded; class/level gates from item_stats disabled.",
+                file=sys.stderr,
+            )
     preds = run_from_backup(
         str(args.backup_dir.resolve()),
         cfg,

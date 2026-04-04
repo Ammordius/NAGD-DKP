@@ -167,6 +167,14 @@ def main() -> int:
             "eligible (legacy backups). Default is fail-closed when item has class/level rules."
         ),
     )
+    ap.add_argument(
+        "--require-attending-eligible-lane",
+        action="store_true",
+        help=(
+            "When item eligibility pairs are in use: only keep accounts that have an item-eligible "
+            "character on this raid's attendance (stricter than default plausibility-set gate)."
+        ),
+    )
     args = ap.parse_args()
 
     ck_path = args.checkpoint or Path(str(args.out) + ".second_bidder_checkpoint.pkl")
@@ -204,7 +212,9 @@ def main() -> int:
                 file=sys.stderr,
             )
 
-    cfg = SecondBidderConfig()
+    cfg = SecondBidderConfig(
+        require_item_eligible_attending_lane_for_pool=args.require_attending_eligible_lane,
+    )
     t0 = time.perf_counter()
     snap = load_backup(backup)
     elig_acc = elig_chars = None
@@ -225,8 +235,10 @@ def main() -> int:
         )
         if item_bundle is None:
             print(
-                "Note: item_stats / dkp_mob_loot not loaded — class/level gating from JSON only "
-                "(use default data paths or drop --no-item-stats).",
+                "WARNING: item eligibility bundle not loaded (missing data/item_stats.json or "
+                "data/dkp_mob_loot.json under repo root). Runner-up candidate pools skip class/level "
+                "gates from item_stats unless --eligibility-json supplies pairs. Fix paths or pass "
+                "--no-item-stats only if intentional.",
                 file=sys.stderr,
             )
     events = prepare_second_bidder_events(

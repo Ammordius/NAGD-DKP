@@ -61,6 +61,9 @@ class SecondBidderConfig:
     inactive_player_char_floor: float = 1e-8
     empty_attendee_chars_multiplier: float = 0.02
     exclude_accounts_with_no_attendee_chars: bool = False
+    # When True and eligible_char_pairs is set, require an item-eligible character who was
+    # on this raid's attendance (not only an off-raid alt in the plausibility set).
+    require_item_eligible_attending_lane_for_pool: bool = False
     character_aggregation: CharacterAggregation = "max"
     aggregation_top_k: int = 2
     logsumexp_temperature: float = 1.0
