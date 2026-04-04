@@ -215,7 +215,6 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add web/public/bid_forecast_meta.json web/public/bid_forecast_items/
-          git add -u -- web/public/bid_forecast_by_item.json
           if git diff --staged --quiet; then
             echo "No bid forecast JSON changes"
           else
