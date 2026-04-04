@@ -26,8 +26,9 @@ All factors use **KnowledgeState strictly before** the current sale (sequential 
 ### Eligibility gates
 
 - **Account-level (existing):** If `eligible_account_ids` is set, account must be in the set (else excluded in `build_candidate_pool`).
-- **Character-level (optional):** If `eligible_chars_by_loot_id[loot_id]` is set, only pairs `(account_id, char_id)` in that set get `elig_gate = 1`; others get `elig_gate = 0` (excluded from aggregation).
-- **Fallback:** If character-level map is absent, `elig_gate = 1` for all attending characters once the account passed the account filter.
+- **Character-level:** `event.eligible_char_pairs` may come from (a) **derived** class/level checks using `characters.csv` + `item_stats.json` + name→`item_id` from `dkp_mob_loot.json` (and optional `raid_item_sources.json`), (b) **Magelo JSON** via `eligible_chars_by_loot_id`, or (c) **intersection** of (a) and (b) when both supply pairs for that sale. If the item name does not resolve to stats, the derived set is omitted (permissive).
+- **Pool exclusion:** When `eligible_char_pairs` is set, `build_candidate_pool` drops attendee accounts that have **no** scoring-time character lane in that set (same plausibility union as lane scoring).
+- **Fallback:** If `eligible_char_pairs` is `None`, `elig_gate = 1` for all lanes (subject to account filter only).
 
 ### Active toon strength (revealed investment)
 

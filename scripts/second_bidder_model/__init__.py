@@ -9,6 +9,7 @@ from .pipeline import (
     run_from_backup,
     run_sequential_predictions,
 )
+from .item_stats_eligibility import ItemStatsEligibilityBundle, try_load_item_eligibility_bundle
 from .prepare import prepare_second_bidder_events
 from .state import KnowledgeState, empty_state, update_knowledge_state
 from .types import LootSaleEvent, PredictionResult, ScoredCandidate
@@ -28,4 +29,6 @@ __all__ = [
     "run_from_backup",
     "format_event_report",
     "evaluate_second_bidder_predictions",
+    "ItemStatsEligibilityBundle",
+    "try_load_item_eligibility_bundle",
 ]

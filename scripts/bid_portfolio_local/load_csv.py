@@ -38,6 +38,9 @@ class BackupSnapshot:
     name_to_char_ids: Dict[str, List[str]] = field(default_factory=dict)
     lower_name_to_char_ids: Dict[str, List[str]] = field(default_factory=dict)
     character_names: Dict[str, str] = field(default_factory=dict)
+    # From characters.csv (optional columns; used for item eligibility in second-bidder)
+    character_class_name: Dict[str, str] = field(default_factory=dict)
+    character_level: Dict[str, int] = field(default_factory=dict)
 
     def raid_has_event_attendance(self, raid_id: str) -> bool:
         return bool(self.raid_event_attendance.get(raid_id))
@@ -93,6 +96,15 @@ def load_backup(backup_dir: Path) -> BackupSnapshot:
     for row in _read_csv(d / "characters.csv"):
         cid = _f(row, "char_id")
         name = _f(row, "name")
+        cls = _f(row, "class_name")
+        if cid and cls:
+            snap.character_class_name[cid] = cls
+        lvl_raw = _f(row, "level")
+        if cid and lvl_raw:
+            try:
+                snap.character_level[cid] = int(float(lvl_raw))
+            except ValueError:
+                pass
         if cid:
             snap.character_names[cid] = name
         if cid and name:

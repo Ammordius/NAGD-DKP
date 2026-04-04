@@ -18,6 +18,28 @@ def _revealed_char_spend_sum(account_id: str, state: KnowledgeState) -> float:
     )
 
 
+def _prior_same_item_win_count(
+    account_id: str,
+    item_name: str,
+    state: KnowledgeState,
+    before_event_index: int,
+) -> float:
+    """Prior wins of this exact item_name on any character of the account (no leakage)."""
+    it = (item_name or "").strip()
+    if not it:
+        return 0.0
+    n = 0
+    for (a, _cid), hist in state.char_win_history.items():
+        if a != account_id:
+            continue
+        for idx, _norm, iname, _p in hist:
+            if idx >= before_event_index:
+                continue
+            if (iname or "").strip() == it:
+                n += 1
+    return float(n)
+
+
 def _max_revealed_char_spend(account_id: str, state: KnowledgeState) -> float:
     """Largest prior per-character spend on this account (revealed investment lane ceiling)."""
     m = 0.0
@@ -92,11 +114,15 @@ def compute_propensity_raw(
     wins = int(state.account_win_count.get(account_id, 0))
     attended = int(state.account_loot_events_attended.get(account_id, 0))
     win_rate = float(wins) / float(max(1, attended))
+    prior_same = _prior_same_item_win_count(
+        account_id, event.item_name, state, event.event_index
+    )
     return {
         "same_norm_recency": same,
         "any_recency": anyw,
         "attending_toon_spend": spend,
         "win_rate_over_attended_loot_sales": win_rate,
+        "prior_same_item_wins": prior_same,
     }
 
 

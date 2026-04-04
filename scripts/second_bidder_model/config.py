@@ -29,10 +29,11 @@ class SecondBidderConfig:
     )
     propensity_weights: dict = field(
         default_factory=lambda: {
-            "same_norm_recency": 0.4,
-            "any_recency": 0.2,
-            "attending_toon_spend": 0.2,
-            "win_rate_over_attended_loot_sales": 0.2,
+            "same_norm_recency": 0.35,
+            "any_recency": 0.18,
+            "attending_toon_spend": 0.18,
+            "win_rate_over_attended_loot_sales": 0.18,
+            "prior_same_item_wins": 0.11,
         }
     )
     competitiveness_weights: dict = field(

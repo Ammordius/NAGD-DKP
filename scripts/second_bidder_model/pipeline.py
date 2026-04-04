@@ -8,6 +8,7 @@ from bid_portfolio_local.load_csv import BackupSnapshot
 from .candidates import build_candidate_pool
 from .config import SecondBidderConfig
 from .features import build_feature_bundles
+from .item_stats_eligibility import ItemStatsEligibilityBundle
 from .prepare import prepare_second_bidder_events
 from .scoring import normalize_candidate_scores, score_candidate
 from .state import KnowledgeState, empty_state, update_knowledge_state
@@ -22,7 +23,7 @@ def predict_second_bidder_for_event(
     *,
     debug: bool = False,
 ) -> PredictionResult:
-    candidates, exclusions = build_candidate_pool(event, bc, config)
+    candidates, exclusions = build_candidate_pool(event, bc, config, state)
     dbg: Dict[str, Any] = {}
     if not candidates:
         return PredictionResult(
@@ -150,6 +151,7 @@ def run_from_backup(
     config: Optional[SecondBidderConfig] = None,
     *,
     debug_first_n: int = 0,
+    item_eligibility_bundle: Optional[ItemStatsEligibilityBundle] = None,
     **prepare_kwargs: Any,
 ) -> List[PredictionResult]:
     from pathlib import Path
@@ -158,7 +160,10 @@ def run_from_backup(
 
     snap = load_backup(Path(backup_dir))
     cfg = config or SecondBidderConfig()
-    events = prepare_second_bidder_events(snap, **prepare_kwargs)
+    kw = dict(prepare_kwargs)
+    if item_eligibility_bundle is not None:
+        kw["item_eligibility_bundle"] = item_eligibility_bundle
+    events = prepare_second_bidder_events(snap, **kw)
     return run_sequential_predictions(
         events,
         snap,

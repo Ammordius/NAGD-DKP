@@ -40,10 +40,11 @@ print(format_event_report(preds[0]))
 
 Optional: pass into `prepare_second_bidder_events` / `run_from_backup(...)`:
 
+- `item_eligibility_bundle=try_load_item_eligibility_bundle(repo_root)` — class/level gates from `data/item_stats.json` + mob loot name map + `characters.csv` (default in batch/sample when files exist).
 - `eligible_by_loot_id={loot_id: {"acc1", "acc2"}}` — account-level “could use” filter.
-- `eligible_chars_by_loot_id={loot_id: {("acc1", "char_uuid"), ...}}` — per-character eligibility (recommended when Magelo can resolve toon + item).
+- `eligible_chars_by_loot_id={loot_id: {("acc1", "char_uuid"), ...}}` — per-character eligibility (Magelo); **intersected** with derived pairs when both are set.
 
-Tune lane thresholds and aggregation on `SecondBidderConfig` (`min_active_char_lifetime_spend`, `min_char_share_of_account_spend`, `character_aggregation`, `w_character`, …).
+Tune lane thresholds and aggregation on `SecondBidderConfig` (`min_active_char_lifetime_spend`, `min_char_share_of_account_spend`, `character_aggregation`, `w_character`, …). Propensity includes `prior_same_item_wins` (same exact `item_name` in prior `char_win_history`).
 
 ## Modules
 
@@ -59,6 +60,8 @@ Tune lane thresholds and aggregation on `SecondBidderConfig` (`min_active_char_l
 | `debug.py` | Human-readable report |
 | `evaluate.py` | Optional rank metrics when labels exist |
 | `serialize.py` | JSON-safe rows for batch export |
+| `eligibility_io.py` | Optional Magelo JSON maps |
+| `item_stats_eligibility.py` | CSV class/level + `item_stats.json` → pairs |
 
 ## Sample CLI
 
@@ -89,7 +92,9 @@ python scripts/run_second_bidder_batch.py "C:\TAKP\dkp\backup-2026-04-02\backup"
 
 Add `--include-character-debug` to JSONL lines if you want `character_debug` / `player_debug` on each ranked candidate (larger files).
 
-Optional `--eligibility-json path.json` loads `eligible_by_loot_id` / `eligible_chars_by_loot_id` (see [`docs/HANDOFF_SECOND_BIDDER_MVP.md`](../../docs/HANDOFF_SECOND_BIDDER_MVP.md) and `eligibility_io.py`).
+By default the batch runner loads repo `data/item_stats.json` + `data/dkp_mob_loot.json` for class/level eligibility (stderr note if missing). Use `--no-item-stats` to skip, or `--item-stats` / `--mob-loot-json` / `--raid-sources-json` to override paths.
+
+Optional `--eligibility-json path.json` loads `eligible_by_loot_id` / `eligible_chars_by_loot_id` (see [`docs/HANDOFF_SECOND_BIDDER_MVP.md`](../../docs/HANDOFF_SECOND_BIDDER_MVP.md)); character pairs are **intersected** with derived stats-based pairs when both apply.
 
 Resume (append to the same `--out`, reuse checkpoint next to the file unless you passed `--checkpoint`):
 

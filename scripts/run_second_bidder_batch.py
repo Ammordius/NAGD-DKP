@@ -38,12 +38,14 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 SCRIPT_DIR = Path(__file__).resolve().parent
+REPO_ROOT = SCRIPT_DIR.parent
 sys.path.insert(0, str(SCRIPT_DIR))
 
 from bid_portfolio_local.load_csv import load_backup
 
 from second_bidder_model import SecondBidderConfig
 from second_bidder_model.eligibility_io import load_eligibility_json
+from second_bidder_model.item_stats_eligibility import try_load_item_eligibility_bundle
 from second_bidder_model.pipeline import iter_sequential_predictions
 from second_bidder_model.prepare import prepare_second_bidder_events
 from second_bidder_model.serialize import prediction_result_to_json_dict
@@ -131,8 +133,31 @@ def main() -> int:
         default=None,
         help=(
             "Optional JSON with eligible_by_loot_id and/or eligible_chars_by_loot_id "
-            "(see docs/HANDOFF_SECOND_BIDDER_MVP.md)"
+            "(see docs/HANDOFF_SECOND_BIDDER_MVP.md). Merged with item-stats pairs via intersection."
         ),
+    )
+    ap.add_argument(
+        "--no-item-stats",
+        action="store_true",
+        help="Do not load repo data/item_stats.json + dkp_mob_loot for class/level eligibility",
+    )
+    ap.add_argument(
+        "--item-stats",
+        type=Path,
+        default=None,
+        help="Override path to item_stats.json (default: <repo>/data/item_stats.json)",
+    )
+    ap.add_argument(
+        "--mob-loot-json",
+        type=Path,
+        default=None,
+        help="Override path to dkp_mob_loot.json (default: <repo>/data/dkp_mob_loot.json)",
+    )
+    ap.add_argument(
+        "--raid-sources-json",
+        type=Path,
+        default=None,
+        help="Optional raid_item_sources.json (default: <repo>/raid_item_sources.json if present)",
     )
     args = ap.parse_args()
 
@@ -181,10 +206,25 @@ def main() -> int:
             print(f"Eligibility file not found: {p}", file=sys.stderr)
             return 1
         elig_acc, elig_chars = load_eligibility_json(p)
+    item_bundle = None
+    if not args.no_item_stats:
+        item_bundle = try_load_item_eligibility_bundle(
+            REPO_ROOT,
+            item_stats_path=args.item_stats.resolve() if args.item_stats else None,
+            mob_loot_path=args.mob_loot_json.resolve() if args.mob_loot_json else None,
+            raid_sources_path=args.raid_sources_json.resolve() if args.raid_sources_json else None,
+        )
+        if item_bundle is None:
+            print(
+                "Note: item_stats / dkp_mob_loot not loaded — class/level gating from JSON only "
+                "(use default data paths or drop --no-item-stats).",
+                file=sys.stderr,
+            )
     events = prepare_second_bidder_events(
         snap,
         eligible_by_loot_id=elig_acc,
         eligible_chars_by_loot_id=elig_chars,
+        item_eligibility_bundle=item_bundle,
     )
     total = len(events)
     if total == 0:

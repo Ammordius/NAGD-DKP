@@ -4,7 +4,7 @@
 
 **Target quantity:** For a historical guild loot sale (positive DKP price, known winner), estimate a **distribution over accounts** for who was most plausibly the **second-highest serious bidder**, written informally as P(second bidder | item, player, context).
 
-**Observable (typical):** attendance (raid / tic scope), winner and price, cumulative purchase history over time, optional static “this account has a toon that could use item X” from external JSON (not historical gear).
+**Observable (typical):** attendance (raid / tic scope), winner and price, cumulative purchase history over time, character `class_name` / `level` from `characters.csv`, static item class/level from `item_stats.json` (TAKP AllaClone parse), optional Magelo-style eligibility JSON (intersected with derived pairs when both are present).
 
 **Not observable:** Actual bid logs, historical equipped gear, true willingness-to-pay.
 
@@ -14,7 +14,7 @@
 
 ## B. Candidate pool reconstruction
 
-**Function:** `build_candidate_pool(event, state, config) -> (candidates, exclusion_notes)`
+**Function:** `build_candidate_pool(event, bc, state, config) -> (candidates, exclusion_notes)`
 
 **Hard filters (configurable):**
 
@@ -22,6 +22,7 @@
 2. `not_winner`: `account_id ≠ buyer_account_id`
 3. `pool_rule`: reconstructed `pool_before >= max(config.min_pool_absolute, config.min_pool_ratio * winning_price)` and, if `require_pool_ge_clearing`, `pool_before >= winning_price - config.clearing_epsilon`
 4. `eligible` (optional): if `event.eligible_account_ids` is provided, `account_id ∈ eligible_account_ids`
+5. `item_eligible_lane` (optional): if `event.eligible_char_pairs` is provided, the account must have at least one character in the same **plausibility set** used for scoring (attendance-linked `char_id`s ∪ prior revealed spend / win lanes in `KnowledgeState`) whose pair `(account_id, char_id)` lies in `eligible_char_pairs`
 
 **Thresholds (defaults in `SecondBidderConfig`):**
 

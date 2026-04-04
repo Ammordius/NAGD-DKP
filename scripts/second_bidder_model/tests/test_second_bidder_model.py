@@ -30,6 +30,10 @@ from second_bidder_model.pipeline import (
 from second_bidder_model.prepare import prepare_second_bidder_events
 from second_bidder_model.types import FeatureBundle, PredictionResult, ScoredCandidate
 from second_bidder_model.scoring import normalize_candidate_scores
+from second_bidder_model.item_stats_eligibility import (
+    char_meets_item_stats,
+    merge_eligible_char_pairs,
+)
 from second_bidder_model.state import KnowledgeState, empty_state, update_knowledge_state
 from second_bidder_model.types import LootSaleEvent
 
@@ -167,7 +171,7 @@ class TestCandidatePool(unittest.TestCase):
             (10, "rich"): 200.0,
             (10, "poor"): 30.0,
         }
-        cands, excl = build_candidate_pool(ev, MockBC(pools), cfg)
+        cands, excl = build_candidate_pool(ev, MockBC(pools), cfg, empty_state())
         self.assertIn("rich", cands)
         self.assertNotIn("poor", cands)
         self.assertIn("poor", excl)
@@ -213,6 +217,7 @@ class TestNoFutureLeakage(unittest.TestCase):
             cfg,
         )
         self.assertAlmostEqual(raw0["same_norm_recency"], 0.0, places=6)
+        self.assertEqual(raw0["prior_same_item_wins"], 0.0)
         update_knowledge_state(st, ev_future)
         # After future win committed, history exists ? but scoring past event_0 should use empty state only in pipeline order
 
@@ -254,6 +259,34 @@ class TestNoFutureLeakage(unittest.TestCase):
             cfg,
         )
         self.assertGreater(raw["same_norm_recency"], 0.0)
+
+    def test_prior_same_item_wins_counts_only_matching_name_before_index(self):
+        st = KnowledgeState()
+        st.char_win_history[("A", "x")] = [
+            (0, "boots", "Boots of Time", 10.0),
+            (0, "boots", "Other Boots", 5.0),
+        ]
+        cfg = SecondBidderConfig()
+        raw = compute_propensity_raw(
+            "A",
+            LootSaleEvent(
+                event_index=1,
+                loot_id=2,
+                raid_id="r",
+                event_id=None,
+                raid_date=None,
+                norm_name="boots",
+                item_name="Boots of Time",
+                winning_price=20.0,
+                buyer_account_id="B",
+                buyer_char_id="y",
+                attendee_account_ids={"A", "B"},
+                attendee_account_to_chars={},
+            ),
+            st,
+            cfg,
+        )
+        self.assertEqual(raw["prior_same_item_wins"], 1.0)
 
 
 class TestEvaluateMetrics(unittest.TestCase):
@@ -567,6 +600,74 @@ class TestCharacterAwareScoring(unittest.TestCase):
         ids = {r["char_id"] for r in sc.character_debug}
         self.assertIn("main", ids)
         self.assertGreater(sc.player_debug["raw_character_agg"], 0.0)
+
+
+class TestItemStatsEligibility(unittest.TestCase):
+    def test_merge_eligible_char_pairs_intersection(self):
+        d = {("A", "c1"), ("B", "c2")}
+        j = {("A", "c1")}
+        self.assertEqual(merge_eligible_char_pairs(d, j), {("A", "c1")})
+        self.assertEqual(merge_eligible_char_pairs(None, j), j)
+        self.assertEqual(merge_eligible_char_pairs(d, None), d)
+
+    def test_char_meets_required_level(self):
+        snap = BackupSnapshot(Path("."))
+        snap.character_level["c1"] = 60
+        snap.character_class_name["c1"] = "Warrior"
+        stats = {"classes": "WAR PAL", "requiredLevel": 65}
+        self.assertFalse(char_meets_item_stats(snap, "c1", stats))
+        snap.character_level["c1"] = 65
+        self.assertTrue(char_meets_item_stats(snap, "c1", stats))
+
+    def test_char_wrong_class_fails(self):
+        snap = BackupSnapshot(Path("."))
+        snap.character_class_name["nec1"] = "Necromancer"
+        snap.character_level["nec1"] = 70
+        stats = {"classes": "WAR PAL RNG", "requiredLevel": 1}
+        self.assertFalse(char_meets_item_stats(snap, "nec1", stats))
+
+
+class TestPoolExclusionEligiblePairs(unittest.TestCase):
+    def test_excludes_when_no_attendee_char_in_eligible_pairs(self):
+        ev = LootSaleEvent(
+            event_index=0,
+            loot_id=10,
+            raid_id="r1",
+            event_id=None,
+            raid_date=date(2024, 1, 1),
+            norm_name="ear",
+            item_name="Silver Hoop",
+            winning_price=100.0,
+            buyer_account_id="buyer",
+            buyer_char_id="c_buyer",
+            attendee_account_ids={"buyer", "mage_acct"},
+            attendee_account_to_chars={"mage_acct": {"mage1"}},
+            eligible_char_pairs={("war_acct", "war1")},
+        )
+        pools = {(10, "buyer"): 500.0, (10, "mage_acct"): 200.0}
+        cands, excl = build_candidate_pool(ev, MockBC(pools), SecondBidderConfig(), empty_state())
+        self.assertNotIn("mage_acct", cands)
+        self.assertEqual(excl.get("mage_acct"), "no_item_eligible_character_lane")
+
+    def test_includes_when_pair_matches_attendance_char(self):
+        ev = LootSaleEvent(
+            event_index=0,
+            loot_id=10,
+            raid_id="r1",
+            event_id=None,
+            raid_date=None,
+            norm_name="ear",
+            item_name="Silver Hoop",
+            winning_price=100.0,
+            buyer_account_id="buyer",
+            buyer_char_id=None,
+            attendee_account_ids={"buyer", "war_acct"},
+            attendee_account_to_chars={"war_acct": {"war1"}},
+            eligible_char_pairs={("war_acct", "war1")},
+        )
+        pools = {(10, "war_acct"): 200.0, (10, "buyer"): 1.0}
+        cands, excl = build_candidate_pool(ev, MockBC(pools), SecondBidderConfig(), empty_state())
+        self.assertIn("war_acct", cands)
 
 
 if __name__ == "__main__":

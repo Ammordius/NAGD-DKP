@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
+REPO_ROOT = SCRIPT_DIR.parent
 sys.path.insert(0, str(SCRIPT_DIR))
 
 from second_bidder_model import (
@@ -32,6 +33,11 @@ def main() -> None:
         default=None,
         help="Optional JSON for eligible_by_loot_id / eligible_chars_by_loot_id (see HANDOFF_SECOND_BIDDER_MVP)",
     )
+    p.add_argument(
+        "--no-item-stats",
+        action="store_true",
+        help="Do not load repo data/item_stats.json for class/level eligibility",
+    )
     args = p.parse_args()
 
     cfg = SecondBidderConfig()
@@ -44,10 +50,16 @@ def main() -> None:
             prep_kw["eligible_by_loot_id"] = ea
         if ec is not None:
             prep_kw["eligible_chars_by_loot_id"] = ec
+    item_bundle = None
+    if not args.no_item_stats:
+        from second_bidder_model.item_stats_eligibility import try_load_item_eligibility_bundle
+
+        item_bundle = try_load_item_eligibility_bundle(REPO_ROOT)
     preds = run_from_backup(
         str(args.backup_dir.resolve()),
         cfg,
         debug_first_n=1 if args.debug else 0,
+        item_eligibility_bundle=item_bundle,
         **prep_kw,
     )
     if not preds:

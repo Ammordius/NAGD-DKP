@@ -92,11 +92,21 @@ Prefer a **full** `bid_portfolio_auction_fact` row from [`scripts/compute_bid_po
 
 **After the first real upsert**, spot-check one `loot_id` that already had a full BPF row: columns such as `buyer_account_id` or `payload` should still match the pre-upload row if your PostgREST version only updates fields present in the upsert body. If anything else is nulled, switch to a DB-only `UPDATE` workflow or ask for a follow-up fix.
 
+## Class / level eligibility (`item_stats.json` + CSV)
+
+By default, batch and sample CLIs load **[`data/item_stats.json`](../data/item_stats.json)** (TAKP item classes + `requiredLevel`) and **[`data/dkp_mob_loot.json`](../data/dkp_mob_loot.json)** to map normalized `item_name` → `item_id`, then build `eligible_char_pairs` from **`characters.csv` `class_name` / `level`** (loaded in [`scripts/bid_portfolio_local/load_csv.py`](../scripts/bid_portfolio_local/load_csv.py)). Optional **[`raid_item_sources.json`](../raid_item_sources.json)** adds more name→id coverage when the file exists.
+
+- **Disable:** `--no-item-stats` on [`run_second_bidder_batch.py`](../scripts/run_second_bidder_batch.py) or [`run_second_bidder_sample.py`](../scripts/run_second_bidder_sample.py).
+- **Overrides:** `--item-stats`, `--mob-loot-json`, `--raid-sources-json` on the batch script.
+- **Merge with Magelo:** If you also pass `--eligibility-json`, **character** eligibility sets are **intersected** (tightest wins).
+
+Implementation: [`scripts/second_bidder_model/item_stats_eligibility.py`](../scripts/second_bidder_model/item_stats_eligibility.py), `prepare_second_bidder_events(..., item_eligibility_bundle=...)`.
+
 ## Eligibility map (`eligible_by_loot_id`)
 
 Optional filter for “could use this item” from **external** data (Magelo, `bid_forecast_items`, etc.). Passed through `prepare_second_bidder_events` / `run_from_backup`.
 
-**Batch CLI:** pass `--eligibility-json path.json` to [`scripts/run_second_bidder_batch.py`](../scripts/run_second_bidder_batch.py) (or `--eligibility-json` on [`scripts/run_second_bidder_sample.py`](../scripts/run_second_bidder_sample.py)). The file is parsed by [`scripts/second_bidder_model/eligibility_io.py`](../scripts/second_bidder_model/eligibility_io.py).
+**Batch CLI:** pass `--eligibility-json path.json` to [`scripts/run_second_bidder_batch.py`](../scripts/run_second_bidder_batch.py) (or `--eligibility-json` on [`scripts/run_second_bidder_sample.py`](../scripts/run_second_bidder_sample.py)). The file is parsed by [`scripts/second_bidder_model/eligibility_io.py`](../scripts/second_bidder_model/eligibility_io.py). Character pairs from this file are **intersected** with derived CSV+`item_stats` pairs when both are in use.
 
 **JSON shape** (one object; each top-level key is optional):
 
@@ -134,6 +144,6 @@ When you have a map `loot_id → true_second_bidder_account_id`, use `evaluate_s
 ## Follow-ups (optional)
 
 - Store full per-event JSON in a dedicated table or `payload` merge (not implemented; today only `runner_up_account_guess` + `computed_at` via [`upload_second_bidder_runner_up.py`](../scripts/upload_second_bidder_runner_up.py)).
-- Feed `eligible_by_loot_id` from the Magelo / bid-forecast JSON pipeline.
+- Feed `eligible_by_loot_id` from the Magelo / bid-forecast JSON pipeline (still useful to tighten account-level filters alongside `item_stats` pairs).
 - Tune `SecondBidderConfig` weights from labeled samples (rare).
 - Compare side-by-side with officer UI / `runner_up_account_guess` for the same `loot_id` when validating UX.

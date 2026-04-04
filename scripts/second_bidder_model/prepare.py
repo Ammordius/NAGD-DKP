@@ -7,6 +7,12 @@ from bid_portfolio_local.load_csv import BackupSnapshot
 from bid_portfolio_local.portfolio import enriched_guild_sale_sort_key
 
 from .attendance_map import attendee_account_char_map_for_loot
+from .item_stats_eligibility import (
+    ItemStatsEligibilityBundle,
+    eligible_char_pairs_for_item_name,
+    merge_eligible_char_pairs,
+    normalize_item_name_for_lookup,
+)
 from .types import LootSaleEvent
 
 
@@ -17,6 +23,7 @@ def prepare_second_bidder_events(
     require_positive_price: bool = True,
     eligible_by_loot_id: Optional[Dict[int, Set[str]]] = None,
     eligible_chars_by_loot_id: Optional[Dict[int, Set[Tuple[str, str]]]] = None,
+    item_eligibility_bundle: Optional[ItemStatsEligibilityBundle] = None,
 ) -> List[LootSaleEvent]:
     enriched_list, _by_id = build_guild_loot_sale_enriched(snap)
     rows = list(enriched_list)
@@ -30,6 +37,18 @@ def prepare_second_bidder_events(
     for rl in snap.raid_loot:
         loot_by_id[int(rl["id"])] = rl
 
+    derived_pairs_by_norm_item: Dict[str, Optional[Set[Tuple[str, str]]]] = {}
+    if item_eligibility_bundle is not None:
+        seen_norm: Set[str] = set()
+        for e in rows:
+            nk = normalize_item_name_for_lookup(e.item_name)
+            if not nk or nk in seen_norm:
+                continue
+            seen_norm.add(nk)
+            derived_pairs_by_norm_item[nk] = eligible_char_pairs_for_item_name(
+                snap, item_eligibility_bundle, e.item_name
+            )
+
     events: List[LootSaleEvent] = []
     for i, e in enumerate(rows):
         rl = loot_by_id.get(e.loot_id, {})
@@ -38,9 +57,15 @@ def prepare_second_bidder_events(
         elig = None
         if eligible_by_loot_id is not None and e.loot_id in eligible_by_loot_id:
             elig = set(eligible_by_loot_id[e.loot_id])
-        elig_chars = None
+        json_chars = None
         if eligible_chars_by_loot_id is not None and e.loot_id in eligible_chars_by_loot_id:
-            elig_chars = set(eligible_chars_by_loot_id[e.loot_id])
+            json_chars = set(eligible_chars_by_loot_id[e.loot_id])
+        if item_eligibility_bundle is not None:
+            nk = normalize_item_name_for_lookup(e.item_name)
+            derived = derived_pairs_by_norm_item.get(nk)
+        else:
+            derived = None
+        elig_chars = merge_eligible_char_pairs(derived, json_chars)
         events.append(
             LootSaleEvent(
                 event_index=i,
