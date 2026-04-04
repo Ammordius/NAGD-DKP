@@ -1,4 +1,4 @@
-import { normalizeItemNameForLookup } from './itemNameNormalize'
+import { normalizeItemNameForLookup } from './itemNameNormalize.js'
 
 /** Build normalized name -> first matching item id from item_stats */
 export function buildNameToItemId(itemStats) {
@@ -122,13 +122,30 @@ export function spendArchetypeTags(profile, bidLabel, medianRatio, archetypeOpts
   return [...new Set(tags)]
 }
 
-/** Lifetime DKP earned on this character (sum of raid_attendance_dkp rows keyed by char id or name). */
-export function toonEarnedFromProfile(profile, charId) {
-  const m = profile?.per_toon_earned
+/** DKP earned on this character for the current raid only (officer_loot_bid_forecast_v2). */
+export function toonEarnedThisRaidFromProfile(profile, charId) {
+  const m = profile?.per_toon_earned_this_raid
   if (!m || typeof m !== 'object' || charId == null || String(charId).trim() === '') return 0
   const id = String(charId).trim()
   const v = m[id] ?? m[charId]
   return Number(v) || 0
+}
+
+/**
+ * Lifetime DKP earned on this character (global RPC), or this-raid earned when only per_toon_earned_this_raid is present (v2).
+ */
+export function toonEarnedFromProfile(profile, charId) {
+  const id = String(charId || '').trim()
+  if (!id) return 0
+  const m = profile?.per_toon_earned
+  if (m && typeof m === 'object') {
+    if (Object.prototype.hasOwnProperty.call(m, id) || Object.prototype.hasOwnProperty.call(m, charId)) {
+      const v = m[id] ?? m[charId]
+      return Number(v) || 0
+    }
+    return 0
+  }
+  return toonEarnedThisRaidFromProfile(profile, charId)
 }
 
 /** Lifetime DKP spent on assigned loot for this character (per loot_char_id). */
@@ -252,6 +269,10 @@ export function buildCharacterBalanceBullet(toonBalance) {
   return `Character balance (attendance earned − loot spent on this character): ~${Math.round(Number(toonBalance) || 0)} DKP.`
 }
 
+export function buildCharacterRaidTicEarnedBullet(earnedThisRaidOnToon) {
+  return `DKP earned this raid on this character (tics): ~${Math.round(Number(earnedThisRaidOnToon) || 0)}.`
+}
+
 export function dormantToonVersusAccountNarrative(profile, charId, charName) {
   if (!profile) return ''
   const purchases = Array.isArray(profile.recent_purchases_desc) ? profile.recent_purchases_desc : []
@@ -362,4 +383,157 @@ export function perToonShareNarrative(profile, attendeeCharId) {
     s += ` This toon accounts for ~${Math.round(share * 100)}% of that spend.`
   }
   return s
+}
+
+/**
+ * Opening pool per account before this loot row: B_now + spent_this_raid − earned_this_raid, then walk tics/loot.
+ * @param {object} params
+ * @param {Array<{ account_id: string, earned_this_raid?: number, spent_this_raid?: number }>} params.accountRollup
+ * @param {Record<string, number>} params.balanceByAccount — account_dkp_summary net (earned − spent)
+ * @param {'per_event'|'raid_level'} params.simMode
+ * @param {Array<{ event_id: string, event_order: number }>} params.eventsOrdered
+ * @param {Array<{ account_id: string, event_id: string, dkp_earned: number }>} params.perEventEarned
+ * @param {Array<{ loot_id: number, event_id?: string, event_order?: number, cost?: number, buyer_account_id?: string|null }>} params.lootTimeline
+ * @param {number|string} params.targetLootId
+ * @returns {Record<string, number>}
+ */
+export function simulateBalancesBeforeLootRow(params) {
+  const {
+    accountRollup = [],
+    balanceByAccount = {},
+    simMode,
+    eventsOrdered = [],
+    perEventEarned = [],
+    lootTimeline = [],
+    targetLootId,
+  } = params
+
+  const targetId = Number(targetLootId)
+  if (Number.isNaN(targetId)) return {}
+
+  const rollupMap = new Map()
+  for (const r of accountRollup) {
+    const aid = String(r.account_id || '')
+    if (!aid) continue
+    rollupMap.set(aid, {
+      earned: Number(r.earned_this_raid) || 0,
+      spent: Number(r.spent_this_raid) || 0,
+    })
+  }
+
+  const balances = new Map()
+  const accountKeys = new Set([
+    ...Object.keys(balanceByAccount),
+    ...rollupMap.keys(),
+  ])
+  for (const aid of accountKeys) {
+    const bal = Number(balanceByAccount[aid]) || 0
+    const r = rollupMap.get(aid) || { earned: 0, spent: 0 }
+    balances.set(aid, bal + r.spent - r.earned)
+  }
+
+  const applyCredit = (accountId, amount) => {
+    const aid = String(accountId || '')
+    if (!aid || !amount) return
+    balances.set(aid, (balances.get(aid) || 0) + Number(amount))
+  }
+
+  const applySpend = (accountId, cost) => {
+    const aid = String(accountId || '')
+    if (!aid) return
+    const c = Number(cost) || 0
+    if (!c) return
+    balances.set(aid, (balances.get(aid) || 0) - c)
+  }
+
+  const timeline = [...lootTimeline].sort((a, b) => {
+    const oa = Number(a.event_order) || 2147483647
+    const ob = Number(b.event_order) || 2147483647
+    if (oa !== ob) return oa - ob
+    return Number(a.loot_id) - Number(b.loot_id)
+  })
+
+  if (simMode === 'raid_level') {
+    for (const [aid, r] of rollupMap) {
+      applyCredit(aid, r.earned)
+    }
+    for (const row of timeline) {
+      if (Number(row.loot_id) === targetId) break
+      applySpend(row.buyer_account_id, row.cost)
+    }
+    return Object.fromEntries(balances)
+  }
+
+  const eventList = [...eventsOrdered].sort(
+    (a, b) => (Number(a.event_order) || 2147483647) - (Number(b.event_order) || 2147483647),
+  )
+  const processed = new Set()
+  for (const ev of eventList) {
+    const eid = String(ev.event_id ?? '')
+    for (const row of perEventEarned) {
+      if (String(row.event_id ?? '') === eid) {
+        applyCredit(row.account_id, row.dkp_earned)
+      }
+    }
+    const evLoot = timeline
+      .filter((r) => String(r.event_id ?? '') === eid)
+      .sort((a, b) => Number(a.loot_id) - Number(b.loot_id))
+    for (const row of evLoot) {
+      if (Number(row.loot_id) === targetId) {
+        return Object.fromEntries(balances)
+      }
+      applySpend(row.buyer_account_id, row.cost)
+    }
+    processed.add(eid)
+  }
+
+  const orphanLoot = timeline
+    .filter((r) => !processed.has(String(r.event_id ?? '')))
+    .sort((a, b) => Number(a.loot_id) - Number(b.loot_id))
+  for (const row of orphanLoot) {
+    if (Number(row.loot_id) === targetId) {
+      return Object.fromEntries(balances)
+    }
+    applySpend(row.buyer_account_id, row.cost)
+  }
+
+  return Object.fromEntries(balances)
+}
+
+/**
+ * Best-effort: rank upgrade-positive attendees by scoreDelta; first with pool ≥ clearing price “wins” at price P.
+ * @param {Array<{ toonRowKey: string, accountId: string, scoreDelta?: number, upgrade?: { isUpgrade?: boolean } }>} candidates
+ * @param {Record<string, number>} balancesAtAuction
+ * @param {number} clearingPrice
+ */
+export function estimateBidReconstructionHeuristic(candidates, balancesAtAuction, clearingPrice) {
+  const P = Math.max(0, Number(clearingPrice) || 0)
+  const sorted = [...candidates]
+    .filter((c) => c.upgrade?.isUpgrade)
+    .sort((a, b) => (Number(b.scoreDelta) || 0) - (Number(a.scoreDelta) || 0))
+
+  const byKey = new Map()
+  let winner = null
+  for (const c of sorted) {
+    const aid = String(c.accountId || '')
+    const avail = Number(balancesAtAuction[aid]) || 0
+    let label = ''
+    let role = 'interested'
+    if (P <= 0) {
+      label = '— (no clearing price)'
+      role = 'no_price'
+    } else if (!winner && avail >= P) {
+      winner = { ...c, available: avail }
+      label = `~${Math.round(P)} (clearing)`
+      role = 'winner_guess'
+    } else if (avail >= P) {
+      label = `≤${Math.round(P)} (lower upgrade rank vs guess)`
+      role = 'outbid_rank'
+    } else {
+      label = `≤${Math.round(avail)} (short of ${Math.round(P)})`
+      role = 'priced_out'
+    }
+    byKey.set(c.toonRowKey, { label, role, available: avail })
+  }
+  return { winner, byToonRowKey: byKey }
 }

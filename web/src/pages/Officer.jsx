@@ -1120,7 +1120,15 @@ export default function Officer({ isOfficer }) {
       <h1>Officer – Raid management</h1>
       <p style={{ color: '#a1a1aa' }}>
         Add raids from Discord, paste DKP tics (channel lists), add loot manually or from logs. All edits require officer permissions.{' '}
-        <Link to="/officer/loot-bid-forecast">Loot bid interest (by raid)</Link>
+        <Link
+          to={
+            selectedRaidId
+              ? `/officer/loot-bid-forecast?raid=${encodeURIComponent(selectedRaidId)}`
+              : '/officer/loot-bid-forecast'
+          }
+        >
+          Loot bid interest (by raid)
+        </Link>
         {' · '}
         <Link to="/officer/global-loot-bid-forecast">Global item bid (active roster)</Link>
         {' '}(heuristic, officer-only).

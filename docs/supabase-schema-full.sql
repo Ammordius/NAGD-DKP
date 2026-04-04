@@ -2015,6 +2015,531 @@ COMMENT ON FUNCTION public.officer_loot_bid_forecast(text) IS
 REVOKE ALL ON FUNCTION public.officer_loot_bid_forecast(text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.officer_loot_bid_forecast(text) TO authenticated;
 
+-- v2: union attendees when per-event data is incomplete; raid-scoped per_toon_earned; loot timeline + rollups for bid reconstruction UI.
+CREATE OR REPLACE FUNCTION public.officer_loot_bid_forecast_v2(
+  p_raid_id text,
+  p_loot_id bigint DEFAULT NULL
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_raid text := trim(p_raid_id);
+  v_use_per_event boolean;
+  v_scope_event_id text := NULL;
+  v_scope_event_has_att boolean;
+BEGIN
+  IF NOT public.is_officer() THEN
+    RAISE EXCEPTION 'officer only';
+  END IF;
+
+  IF v_raid = '' THEN
+    RAISE EXCEPTION 'raid_id required';
+  END IF;
+
+  IF p_loot_id IS NOT NULL THEN
+    SELECT NULLIF(trim(rl.event_id::text), '')
+    INTO v_scope_event_id
+    FROM raid_loot rl
+    WHERE rl.id = p_loot_id AND rl.raid_id = v_raid;
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'loot_id not found for this raid';
+    END IF;
+  END IF;
+
+  SELECT EXISTS (SELECT 1 FROM raid_event_attendance WHERE raid_id = v_raid LIMIT 1) INTO v_use_per_event;
+
+  v_scope_event_has_att := false;
+  IF v_use_per_event AND v_scope_event_id IS NOT NULL THEN
+    SELECT EXISTS (
+      SELECT 1 FROM raid_event_attendance rea
+      WHERE rea.raid_id = v_raid AND rea.event_id = v_scope_event_id
+      LIMIT 1
+    ) INTO v_scope_event_has_att;
+  END IF;
+
+  RETURN (
+    WITH
+    attendees_from_events AS (
+      SELECT DISTINCT
+        NULLIF(trim(rea.char_id::text), '') AS char_id,
+        NULLIF(trim(rea.character_name::text), '') AS character_name
+      FROM raid_event_attendance rea
+      WHERE v_use_per_event AND rea.raid_id = v_raid
+    ),
+    attendees_from_raid_level AS (
+      SELECT DISTINCT
+        NULLIF(trim(ra.char_id::text), ''),
+        NULLIF(trim(ra.character_name::text), '')
+      FROM raid_attendance ra
+      WHERE ra.raid_id = v_raid
+    ),
+    attendees_raw AS (
+      SELECT DISTINCT
+        NULLIF(trim(rea.char_id::text), '') AS char_id,
+        NULLIF(trim(rea.character_name::text), '') AS character_name
+      FROM raid_event_attendance rea
+      WHERE v_use_per_event
+        AND v_scope_event_id IS NOT NULL
+        AND v_scope_event_has_att
+        AND rea.raid_id = v_raid
+        AND rea.event_id = v_scope_event_id
+      UNION ALL
+      SELECT fe.char_id, fe.character_name
+      FROM attendees_from_events fe
+      WHERE v_use_per_event
+        AND NOT (v_scope_event_id IS NOT NULL AND v_scope_event_has_att)
+      UNION ALL
+      SELECT fr.char_id, fr.character_name
+      FROM attendees_from_raid_level fr
+      WHERE v_use_per_event
+        AND NOT (v_scope_event_id IS NOT NULL AND v_scope_event_has_att)
+      UNION ALL
+      SELECT fr.char_id, fr.character_name
+      FROM attendees_from_raid_level fr
+      WHERE NOT v_use_per_event
+    ),
+    attendees_raw_dedup AS (
+      SELECT DISTINCT ON (
+        COALESCE(char_id, ''),
+        lower(trim(COALESCE(character_name, '')))
+      )
+        char_id,
+        character_name
+      FROM attendees_raw
+      WHERE char_id IS NOT NULL OR character_name IS NOT NULL
+      ORDER BY
+        COALESCE(char_id, ''),
+        lower(trim(COALESCE(character_name, ''))),
+        char_id NULLS LAST
+    ),
+    attendees_resolved AS (
+      SELECT
+        ar.char_id AS raw_char_id,
+        ar.character_name AS raw_character_name,
+        c.char_id AS resolved_char_id,
+        c.name AS resolved_name,
+        c.class_name AS class_name,
+        ca.account_id,
+        COALESCE(NULLIF(trim(acct.display_name), ''), '') AS account_display_name
+      FROM attendees_raw_dedup ar
+      LEFT JOIN characters c ON (
+        (ar.char_id IS NOT NULL AND c.char_id = ar.char_id)
+        OR (
+          ar.char_id IS NULL
+          AND ar.character_name IS NOT NULL
+          AND lower(trim(c.name)) = lower(trim(ar.character_name))
+        )
+      )
+      LEFT JOIN character_account ca ON ca.char_id = c.char_id
+      LEFT JOIN accounts acct ON acct.account_id = ca.account_id
+    ),
+    attendee_list AS (
+      SELECT jsonb_agg(
+        jsonb_build_object(
+          'char_id', COALESCE(resolved_char_id, raw_char_id, ''),
+          'character_name', COALESCE(NULLIF(trim(resolved_name), ''), NULLIF(trim(raw_character_name), ''), ''),
+          'class_name', COALESCE(class_name, ''),
+          'account_id', account_id,
+          'display_name', COALESCE(account_display_name, '')
+        )
+        ORDER BY COALESCE(NULLIF(trim(resolved_name), ''), NULLIF(trim(raw_character_name), ''))
+      ) AS arr
+      FROM attendees_resolved
+    ),
+    account_ids AS (
+      SELECT DISTINCT account_id
+      FROM attendees_resolved
+      WHERE account_id IS NOT NULL
+    ),
+    loot_for_accounts AS (
+      SELECT DISTINCT ON (rl.id)
+        ca.account_id,
+        rl.id AS loot_id,
+        public.raid_date_parsed(r.date_iso) AS raid_date,
+        rl.item_name,
+        rl.cost::text AS cost_text,
+        NULLIF(trim(ca.char_id::text), '') AS loot_char_id,
+        COALESCE(
+          NULLIF(trim(la.assigned_character_name), ''),
+          NULLIF(trim(rl.character_name), ''),
+          NULLIF(trim(ch.name), '')
+        ) AS loot_character_name
+      FROM raid_loot rl
+      JOIN raids r ON r.raid_id = rl.raid_id
+      LEFT JOIN LATERAL (
+        SELECT la0.assigned_char_id, la0.assigned_character_name
+        FROM loot_assignment la0
+        WHERE la0.loot_id = rl.id
+        LIMIT 1
+      ) la ON true
+      LEFT JOIN character_account ca ON (
+        (COALESCE(trim(la.assigned_char_id), trim(rl.char_id::text)) <> ''
+          AND ca.char_id = COALESCE(trim(la.assigned_char_id), trim(rl.char_id::text)))
+        OR (
+          COALESCE(trim(la.assigned_character_name), trim(rl.character_name)) <> ''
+          AND EXISTS (
+            SELECT 1
+            FROM characters c2
+            WHERE c2.char_id = ca.char_id
+              AND trim(c2.name) = COALESCE(trim(la.assigned_character_name), trim(rl.character_name))
+          )
+        )
+      )
+      LEFT JOIN characters ch ON ch.char_id = ca.char_id
+      WHERE ca.account_id IN (SELECT account_id FROM account_ids)
+      ORDER BY rl.id, ca.account_id
+    ),
+    loot_numeric AS (
+      SELECT
+        account_id,
+        loot_id,
+        raid_date,
+        item_name,
+        CASE
+          WHEN cost_text IS NULL OR trim(cost_text) = '' THEN 0::numeric
+          ELSE COALESCE(
+            NULLIF(regexp_replace(trim(cost_text), '[^0-9.\-]', '', 'g'), '')::numeric,
+            0::numeric
+          )
+        END AS cost_num,
+        loot_char_id,
+        loot_character_name
+      FROM loot_for_accounts
+    ),
+    per_account_last AS (
+      SELECT DISTINCT ON (account_id)
+        account_id,
+        raid_date AS last_date,
+        item_name AS last_item_name,
+        cost_num AS last_cost,
+        loot_char_id AS last_char_id,
+        loot_character_name AS last_character_name
+      FROM loot_numeric
+      ORDER BY account_id, raid_date DESC NULLS LAST, loot_id DESC
+    ),
+    per_toon AS (
+      SELECT account_id, loot_char_id AS char_id, sum(cost_num) AS spent
+      FROM loot_numeric
+      WHERE loot_char_id IS NOT NULL
+      GROUP BY account_id, loot_char_id
+    ),
+    per_account_totals AS (
+      SELECT account_id, sum(cost_num) AS total_spent, count(*)::int AS purchase_count
+      FROM loot_numeric
+      GROUP BY account_id
+    ),
+    per_account_top_share AS (
+      SELECT
+        ai.account_id,
+        CASE
+          WHEN COALESCE(pat.total_spent, 0) <= 0 THEN 0::numeric
+          ELSE COALESCE(
+            (SELECT max(s.spent) FROM per_toon s WHERE s.account_id = ai.account_id),
+            0::numeric
+          ) / pat.total_spent
+        END AS top_toon_share
+      FROM account_ids ai
+      LEFT JOIN per_account_totals pat ON pat.account_id = ai.account_id
+    ),
+    dkp AS (
+      SELECT
+        a.account_id,
+        COALESCE(s.earned, 0)::numeric AS earned,
+        COALESCE(s.spent, 0)::numeric AS spent
+      FROM account_ids ai
+      JOIN accounts a ON a.account_id = ai.account_id
+      LEFT JOIN account_dkp_summary s ON s.account_id = a.account_id
+    ),
+    purchases_limited AS (
+      SELECT *
+      FROM (
+        SELECT
+          ln.*,
+          row_number() OVER (PARTITION BY account_id ORDER BY raid_date DESC NULLS LAST, loot_id DESC) AS rn
+        FROM loot_numeric ln
+      ) x
+      WHERE x.rn <= 150
+    ),
+    purchases_json AS (
+      SELECT
+        account_id,
+        jsonb_agg(
+          jsonb_build_object(
+            'raid_date', raid_date,
+            'item_name', item_name,
+            'cost', cost_num,
+            'char_id', loot_char_id,
+            'character_name', loot_character_name
+          )
+          ORDER BY raid_date ASC NULLS FIRST, loot_id ASC
+        ) AS purchases
+      FROM purchases_limited
+      GROUP BY account_id
+    ),
+    per_toon_json AS (
+      SELECT
+        account_id,
+        jsonb_object_agg(char_id, spent) AS per_toon
+      FROM per_toon
+      GROUP BY account_id
+    ),
+    per_toon_earned_agg AS (
+      SELECT
+        ca.account_id,
+        NULLIF(trim(c.char_id::text), '') AS char_id,
+        COALESCE(SUM(rad.dkp_earned), 0)::numeric AS earned
+      FROM account_ids ai
+      INNER JOIN character_account ca ON ca.account_id = ai.account_id
+      INNER JOIN characters c ON c.char_id = ca.char_id AND c.char_id IS NOT NULL
+      INNER JOIN raid_attendance_dkp rad ON (
+        rad.raid_id = v_raid
+        AND (
+          rad.character_key = NULLIF(trim(c.char_id::text), '')
+          OR (
+            COALESCE(NULLIF(trim(c.name), ''), '') <> ''
+            AND rad.character_key = trim(c.name)
+          )
+        )
+      )
+      GROUP BY ca.account_id, NULLIF(trim(c.char_id::text), '')
+    ),
+    per_toon_earned_json AS (
+      SELECT
+        account_id,
+        jsonb_object_agg(char_id::text, earned) AS per_toon_earned_this_raid
+      FROM per_toon_earned_agg
+      WHERE char_id IS NOT NULL
+      GROUP BY account_id
+    ),
+    profiles AS (
+      SELECT jsonb_object_agg(
+        d.account_id,
+        jsonb_build_object(
+          'earned', d.earned,
+          'spent', d.spent,
+          'balance', d.earned - d.spent,
+          'last_purchase', CASE
+            WHEN pal.last_date IS NULL THEN NULL
+            ELSE jsonb_build_object(
+              'raid_date', pal.last_date,
+              'item_name', pal.last_item_name,
+              'cost', pal.last_cost,
+              'char_id', COALESCE(pal.last_char_id, ''),
+              'character_name', COALESCE(pal.last_character_name, '')
+            )
+          END,
+          'days_since_last_spend', CASE
+            WHEN pal.last_date IS NULL THEN NULL
+            ELSE (CURRENT_DATE - pal.last_date)::int
+          END,
+          'per_toon_spent', COALESCE(pt.per_toon, '{}'::jsonb),
+          'per_toon_earned_this_raid', COALESCE(pte.per_toon_earned_this_raid, '{}'::jsonb),
+          'top_toon_share', COALESCE(pts.top_toon_share, 0),
+          'total_spent_tracked', COALESCE(pat.total_spent, 0),
+          'purchase_count', COALESCE(pat.purchase_count, 0),
+          'recent_purchases_desc', COALESCE(pj.purchases, '[]'::jsonb)
+        )
+      ) AS obj
+      FROM dkp d
+      LEFT JOIN per_account_last pal ON pal.account_id = d.account_id
+      LEFT JOIN per_toon_json pt ON pt.account_id = d.account_id
+      LEFT JOIN per_toon_earned_json pte ON pte.account_id = d.account_id
+      LEFT JOIN per_account_top_share pts ON pts.account_id = d.account_id
+      LEFT JOIN per_account_totals pat ON pat.account_id = d.account_id
+      LEFT JOIN purchases_json pj ON pj.account_id = d.account_id
+    ),
+    loot_row_buyer AS (
+      SELECT
+        rl.id AS loot_id,
+        rl.raid_id,
+        NULLIF(trim(rl.event_id::text), '') AS event_id,
+        rl.item_name,
+        rl.cost::text AS cost_text,
+        ca.account_id AS buyer_account_id
+      FROM raid_loot rl
+      LEFT JOIN LATERAL (
+        SELECT la0.assigned_char_id, la0.assigned_character_name
+        FROM loot_assignment la0
+        WHERE la0.loot_id = rl.id
+        LIMIT 1
+      ) la ON true
+      LEFT JOIN character_account ca ON (
+        (COALESCE(trim(la.assigned_char_id), trim(rl.char_id::text)) <> ''
+          AND ca.char_id = COALESCE(trim(la.assigned_char_id), trim(rl.char_id::text)))
+        OR (
+          COALESCE(trim(la.assigned_character_name), trim(rl.character_name)) <> ''
+          AND EXISTS (
+            SELECT 1
+            FROM characters c2
+            WHERE c2.char_id = ca.char_id
+              AND trim(c2.name) = COALESCE(trim(la.assigned_character_name), trim(rl.character_name))
+          )
+        )
+      )
+      WHERE rl.raid_id = v_raid
+    ),
+    loot_timeline AS (
+      SELECT jsonb_agg(
+        jsonb_build_object(
+          'loot_id', lb.loot_id,
+          'event_id', COALESCE(lb.event_id, ''),
+          'event_order', COALESCE(re.event_order, 2147483647),
+          'item_name', lb.item_name,
+          'cost',
+            CASE
+              WHEN lb.cost_text IS NULL OR trim(lb.cost_text) = '' THEN 0::numeric
+              ELSE COALESCE(
+                NULLIF(regexp_replace(trim(lb.cost_text), '[^0-9.\-]', '', 'g'), '')::numeric,
+                0::numeric
+              )
+            END,
+          'buyer_account_id', lb.buyer_account_id
+        )
+        ORDER BY COALESCE(re.event_order, 2147483647), lb.loot_id
+      ) AS arr
+      FROM loot_row_buyer lb
+      LEFT JOIN raid_events re ON re.raid_id = lb.raid_id AND re.event_id = lb.event_id
+    ),
+    raid_events_ordered AS (
+      SELECT jsonb_agg(
+        jsonb_build_object(
+          'event_id', re.event_id,
+          'event_order', COALESCE(re.event_order, 2147483647)
+        )
+        ORDER BY COALESCE(re.event_order, 2147483647), re.event_id
+      ) AS arr
+      FROM raid_events re
+      WHERE re.raid_id = v_raid
+    ),
+    per_event_earned_rows AS (
+      SELECT
+        x.aid AS account_id,
+        rea.event_id,
+        SUM(COALESCE(NULLIF(regexp_replace(trim(re.dkp_value::text), '[^0-9.\-]', '', 'g'), '')::numeric, 0::numeric)) AS dkp_earned
+      FROM raid_event_attendance rea
+      JOIN raid_events re ON re.raid_id = rea.raid_id AND re.event_id = rea.event_id
+      INNER JOIN LATERAL (
+        SELECT ca.account_id AS aid
+        FROM character_account ca
+        WHERE (
+            rea.char_id IS NOT NULL
+            AND trim(rea.char_id::text) <> ''
+            AND ca.char_id = trim(rea.char_id::text)
+          )
+          OR (
+            rea.character_name IS NOT NULL
+            AND trim(rea.character_name) <> ''
+            AND EXISTS (
+              SELECT 1
+              FROM characters c
+              WHERE c.char_id = ca.char_id
+                AND trim(c.name) = trim(rea.character_name)
+            )
+          )
+        LIMIT 1
+      ) x ON true
+      WHERE rea.raid_id = v_raid
+      GROUP BY x.aid, rea.event_id
+    ),
+    per_event_earned_json AS (
+      SELECT COALESCE(
+        jsonb_agg(
+          jsonb_build_object(
+            'account_id', account_id,
+            'event_id', event_id,
+            'dkp_earned', dkp_earned
+          )
+        ),
+        '[]'::jsonb
+      ) AS arr
+      FROM per_event_earned_rows
+    ),
+    account_raid_rollup AS (
+      SELECT COALESCE(
+        jsonb_agg(
+          jsonb_build_object(
+            'account_id', aid.account_id,
+            'earned_this_raid', COALESCE(rad.dkp_earned, 0::numeric),
+            'spent_this_raid', COALESCE(sp.spent, 0::numeric)
+          )
+        ),
+        '[]'::jsonb
+      ) AS arr
+      FROM account_ids aid
+      LEFT JOIN raid_attendance_dkp_by_account rad
+        ON rad.raid_id = v_raid AND rad.account_id = aid.account_id
+      LEFT JOIN (
+        SELECT
+          lb.buyer_account_id AS account_id,
+          SUM(
+            CASE
+              WHEN lb.cost_text IS NULL OR trim(lb.cost_text) = '' THEN 0::numeric
+              ELSE COALESCE(
+                NULLIF(regexp_replace(trim(lb.cost_text), '[^0-9.\-]', '', 'g'), '')::numeric,
+                0::numeric
+              )
+            END
+          ) AS spent
+        FROM loot_row_buyer lb
+        WHERE lb.buyer_account_id IS NOT NULL
+        GROUP BY lb.buyer_account_id
+      ) sp ON sp.account_id = aid.account_id
+    ),
+    loot_context_row AS (
+      SELECT
+        lb.loot_id,
+        lb.event_id,
+        lb.item_name,
+        CASE
+          WHEN lb.cost_text IS NULL OR trim(lb.cost_text) = '' THEN 0::numeric
+          ELSE COALESCE(
+            NULLIF(regexp_replace(trim(lb.cost_text), '[^0-9.\-]', '', 'g'), '')::numeric,
+            0::numeric
+          )
+        END AS cost_num,
+        COALESCE(re.event_order, 2147483647) AS event_order
+      FROM loot_row_buyer lb
+      LEFT JOIN raid_events re ON re.raid_id = lb.raid_id AND re.event_id = lb.event_id
+      WHERE p_loot_id IS NOT NULL AND lb.loot_id = p_loot_id
+      LIMIT 1
+    )
+    SELECT jsonb_build_object(
+      'raid_id', v_raid,
+      'attendees', COALESCE((SELECT arr FROM attendee_list), '[]'::jsonb),
+      'account_profiles', COALESCE((SELECT obj FROM profiles), '{}'::jsonb),
+      'loot_context', CASE
+        WHEN p_loot_id IS NULL THEN NULL::jsonb
+        ELSE (
+          SELECT jsonb_build_object(
+            'loot_id', lr.loot_id,
+            'event_id', COALESCE(lr.event_id, ''),
+            'item_name', lr.item_name,
+            'cost', lr.cost_num,
+            'event_order', lr.event_order
+          )
+          FROM loot_context_row lr
+          LIMIT 1
+        )
+      END,
+      'loot_timeline', COALESCE((SELECT arr FROM loot_timeline), '[]'::jsonb),
+      'raid_events_ordered', COALESCE((SELECT arr FROM raid_events_ordered), '[]'::jsonb),
+      'per_event_earned', (SELECT arr FROM per_event_earned_json),
+      'account_raid_rollup', (SELECT arr FROM account_raid_rollup),
+      'sim_mode', CASE WHEN v_use_per_event THEN 'per_event' ELSE 'raid_level' END
+    )
+  );
+END;
+$$;
+
+COMMENT ON FUNCTION public.officer_loot_bid_forecast_v2(text, bigint) IS
+  'Officers only: v1-style attendees/profiles plus raid loot timeline, per-event DKP credits, account raid rollup, optional loot_context for bid reconstruction. per_toon_earned_this_raid is scoped to this raid.';
+
+REVOKE ALL ON FUNCTION public.officer_loot_bid_forecast_v2(text, bigint) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.officer_loot_bid_forecast_v2(text, bigint) TO authenticated;
+
 CREATE OR REPLACE FUNCTION public.normalize_item_name_for_lookup(p_name text)
 RETURNS text
 LANGUAGE sql

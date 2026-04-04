@@ -8,10 +8,15 @@
 
 Officers get **heuristic** bid-interest views for a chosen item: **by raid** (who attended and might care) or **active guild roster** (same active-account rules as global — leave raid id blank on **Bid hints**, or use the dedicated **Global bid** page). Both use spend patterns (last purchase locus, per-toon concentration, balance), optional **Magelo-style upgrade scoring**, and a rough **bid band** capped by account balance. **Bid hints** and **Global bid** prefer the **CI-built precomputed upgrade index** (`web/public/bid_forecast_by_item.json`) when present, and fall back to live `class_rankings.json` (or `VITE_CLASS_RANKINGS_URL`) scoring. Global adds **guild prior-sale reference** per purchase when history exists. This is **not** a bid log or a guarantee of behavior.
 
+### Raid bid reconstruction (v2)
+
+**By-raid** flow calls **`officer_loot_bid_forecast_v2`**. Officers can pick a **recent raid** from a dropdown, an optional **loot row** (recorded clearing price), and an item; the UI shows **Pool @ item** (reconstructed account DKP before that auction) and **Est. bid (heur.)** (upgrade rank vs clearing price). Simulation uses `balance + spent_this_raid − earned_this_raid` as opening pool before the raid, then walks **tics** (`per_event` mode) or full-raid earn (`raid_level` mode) plus prior loot in order. **Officer → Loot bid interest** passes `?raid=` when a raid is selected in the officer raid dropdown. **Apply v2 in Supabase** before relying on by-raid **Run**; otherwise the RPC is missing.
+
 ## Deploy checklist
 
 1. **Apply SQL in Supabase** (once per project): run the canonical [`docs/supabase-schema-full.sql`](supabase-schema-full.sql). Near the end it defines the bid-forecast objects:
-   - `public.officer_loot_bid_forecast(p_raid_id text)` (`SECURITY DEFINER`, `is_officer()`).
+   - `public.officer_loot_bid_forecast(p_raid_id text)` (`SECURITY DEFINER`, `is_officer()`) — legacy; **by-raid UI uses v2**.
+   - `public.officer_loot_bid_forecast_v2(p_raid_id text, p_loot_id bigint DEFAULT NULL)` — attendees (union when per-event data is incomplete; tic-scoped when loot row pins an event with attendance), profiles with **`per_toon_earned_this_raid`**, plus **`loot_timeline`**, **`raid_events_ordered`**, **`per_event_earned`**, **`account_raid_rollup`**, optional **`loot_context`**, **`sim_mode`**.
    - `public.normalize_item_name_for_lookup(text)` (internal, `IMMUTABLE`) and `public.officer_global_bid_forecast(p_activity_days int DEFAULT 120)` (`SECURITY DEFINER`, `is_officer()`). `GRANT EXECUTE` on the RPCs only (`authenticated`); the normalizer has no execute grant for clients.
 
 2. **Static JSON**
@@ -33,6 +38,8 @@ Officers get **heuristic** bid-interest views for a chosen item: **by raid** (wh
 | Piece | Location |
 |--------|-----------|
 | Route (Bid hints: raid **or** blank raid = active roster) | `/officer/loot-bid-forecast` — [`web/src/pages/OfficerLootBidForecast.jsx`](../web/src/pages/OfficerLootBidForecast.jsx) |
+| Wallet sim + bid heuristic | [`web/src/lib/bidForecastModel.js`](../web/src/lib/bidForecastModel.js) (`simulateBalancesBeforeLootRow`, `estimateBidReconstructionHeuristic`) |
+| Unit tests (`npm test` in `web/`) | [`web/src/lib/bidForecastRaidSim.test.js`](../web/src/lib/bidForecastRaidSim.test.js) |
 | Route (active roster) | `/officer/global-loot-bid-forecast` — [`web/src/pages/OfficerGlobalLootBidForecast.jsx`](../web/src/pages/OfficerGlobalLootBidForecast.jsx) |
 | Nav | “Bid hints” / “Global bid” in [`web/src/App.jsx`](../web/src/App.jsx); links from [`web/src/pages/Officer.jsx`](../web/src/pages/Officer.jsx) |
 | Magelo scoring port | [`web/src/lib/mageloUpgradeEngine.js`](../web/src/lib/mageloUpgradeEngine.js) (`evaluateItemUpgradeForCharacter`, `computeUpgradesForCharacter`, etc.) |
@@ -43,6 +50,14 @@ Officers get **heuristic** bid-interest views for a chosen item: **by raid** (wh
 | Canonical schema | [`docs/supabase-schema-full.sql`](supabase-schema-full.sql) |
 
 ## Data model notes (RPC)
+
+### `officer_loot_bid_forecast_v2` (by-raid UI)
+
+- **Attendees:** If the chosen **loot row** maps to an `event_id` that has **`raid_event_attendance`** rows, roster is **that tic only**. Otherwise, with per-event mode, **union** of all `raid_event_attendance` for the raid plus **`raid_attendance`** (deduped). Without per-event rows, **`raid_attendance`** only.
+- **Profiles:** Same spend/balance shape as before, but **`per_toon_earned_this_raid`** replaces lifetime `per_toon_earned` for this RPC (raid-scoped earned per toon).
+- **Reconstruction payloads:** `loot_timeline` (ordered loot with buyer account), `per_event_earned`, `raid_events_ordered`, `account_raid_rollup` (`earned_this_raid` / `spent_this_raid` per account), `sim_mode` (`per_event` vs `raid_level`).
+
+### `officer_loot_bid_forecast` (legacy)
 
 - Attendees: distinct rows from **`raid_event_attendance`** for the raid if any exist; else **`raid_attendance`**.
 - Characters/classes: `LEFT JOIN characters` on `char_id` or **case-insensitive name** match.
@@ -65,16 +80,18 @@ Officers get **heuristic** bid-interest views for a chosen item: **by raid** (wh
 
 ## Follow-ups (if you want to extend)
 
-- Add **by-raid** `ref_price_at_sale` to `officer_loot_bid_forecast` if you want the same time-aware ratios on the raid-scoped page without duplicating logic client-side.
+- Add **by-raid** `ref_price_at_sale` to **`officer_loot_bid_forecast_v2`** (or v1) if you want the same time-aware ratios on the raid-scoped page without duplicating logic client-side.
 - Expression or denormalized index on `(normalize_item_name_for_lookup(item_name), raid_date, id)` if global RPC latency is high (many LATERAL lookups).
 - Add `spell_focii_level65.json` (or equivalent) to the web bundle if focus scoring should match Magelo HTML exactly in edge cases.
 - Optional: officer audit log entry when “Run” is clicked (privacy/forensics).
 
 ## Quick test
 
-1. Apply SQL, sign in as an officer.
-2. Open **Bid hints**, enter a real `raid_id`, enter an item **name** or **numeric id**, click **Run**; confirm rows, tags, expandable **Detail**, and **Account** link.
-3. Clear **Raid id**, set **Activity days** if needed, **Run** again — should match **Global bid** roster behavior for the same item.
-4. After CI has populated precompute JSON, confirm upgrade summaries show **(Precomputed CI index)** in expanded detail where applicable.
-
-5. **Global** page: with schema applied (step 1), open **Global bid**, set activity days (default 120 matches leaderboard), enter an item, **Run**; expand **Show top upgrades by slot** on a row that qualifies (concentrated spend on that toon or recent spend on that toon).
+1. Apply SQL (including **`officer_loot_bid_forecast_v2`**), sign in as an officer.
+2. Open **Bid hints**, enter a real `raid_id` (or use **Recent raid**), enter an item **name** or **numeric id**, click **Run**; confirm rows, tags, expandable **Detail**, and **Account** link.
+3. Optional: choose a **Loot row**, **Run** again; confirm **Pool @ item**, **Est. bid (heur.)**, and the reconstruction summary (guessed winner by upgrade rank + pool).
+4. From **Officer**, select a raid and open **Loot bid interest** — URL should include `?raid=…` and the raid field should be prefilled.
+5. Clear **Raid id**, set **Activity days** if needed, **Run** again — should match **Global bid** roster behavior for the same item.
+6. After CI has populated precompute JSON, confirm upgrade summaries show **(Precomputed CI index)** in expanded detail where applicable.
+7. **Global** page: with schema applied (step 1), open **Global bid**, set activity days (default 120 matches leaderboard), enter an item, **Run**; expand **Show top upgrades by slot** on a row that qualifies (concentrated spend on that toon or recent spend on that toon).
+8. From `web/`, run **`npm test`** to exercise bid simulation helpers.

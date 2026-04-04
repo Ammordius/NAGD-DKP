@@ -10,17 +10,21 @@ import {
   avgDkpFromPrices,
   bidVsMarketFromPurchasesTimeAware,
   buildCharacterBalanceBullet,
+  buildCharacterRaidTicEarnedBullet,
   buildNameToItemId,
   buildSharedAccountSpendBullets,
   dormantToonVersusAccountNarrative,
   estimateBidBand,
+  estimateBidReconstructionHeuristic,
   interestScoreDormantPenalty,
   lastSpendNarrative,
   mergeBidBandsForAccountRow,
   perToonShareNarrative,
   resolveItemIdFromName,
+  simulateBalancesBeforeLootRow,
   spendArchetypeTags,
   toonBalanceFromProfile,
+  toonEarnedThisRaidFromProfile,
 } from '../lib/bidForecastModel'
 import { fetchBidForecastPrecomputeShard } from '../lib/bidForecastPrecomputeFetch'
 import { ACTIVE_DAYS } from '../lib/dkpLeaderboard'
@@ -131,6 +135,9 @@ export default function OfficerLootBidForecast({ isOfficer }) {
   const raidIdParam = searchParams.get('raid') || ''
 
   const [raidInput, setRaidInput] = useState(raidIdParam)
+  const [raidsForSelect, setRaidsForSelect] = useState([])
+  const [lootOptions, setLootOptions] = useState([])
+  const [lootSelectValue, setLootSelectValue] = useState('')
   const [activityDays, setActivityDays] = useState(String(ACTIVE_DAYS))
   const [itemInput, setItemInput] = useState('')
   const [loading, setLoading] = useState(false)
@@ -153,6 +160,44 @@ export default function OfficerLootBidForecast({ isOfficer }) {
   useEffect(() => {
     setRaidInput(raidIdParam)
   }, [raidIdParam])
+
+  useEffect(() => {
+    if (!isOfficer) return
+    let cancelled = false
+    supabase
+      .from('raids')
+      .select('raid_id, raid_name, date_iso, date')
+      .order('date_iso', { ascending: false })
+      .limit(120)
+      .then(({ data, error: qErr }) => {
+        if (cancelled || qErr) return
+        setRaidsForSelect(Array.isArray(data) ? data : [])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [isOfficer])
+
+  useEffect(() => {
+    const rid = (raidInput || '').trim()
+    if (!rid || !isOfficer) {
+      setLootOptions([])
+      return
+    }
+    let cancelled = false
+    supabase
+      .from('raid_loot')
+      .select('id, item_name, event_id, cost')
+      .eq('raid_id', rid)
+      .order('id', { ascending: true })
+      .then(({ data, error: qErr }) => {
+        if (cancelled || qErr) return
+        setLootOptions(Array.isArray(data) ? data : [])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [raidInput, isOfficer])
 
   useEffect(() => {
     let cancelled = false
@@ -305,8 +350,12 @@ export default function OfficerLootBidForecast({ isOfficer }) {
     try {
       if (rid) {
         setSearchParams({ raid: rid })
-        const { data, error: rpcErr } = await supabase.rpc('officer_loot_bid_forecast', {
+        const lootIdNum = parseInt(lootSelectValue, 10)
+        const pLoot =
+          lootSelectValue !== '' && !Number.isNaN(lootIdNum) && lootIdNum > 0 ? lootIdNum : null
+        const { data, error: rpcErr } = await supabase.rpc('officer_loot_bid_forecast_v2', {
           p_raid_id: rid,
+          p_loot_id: pLoot,
         })
         if (rpcErr) throw rpcErr
         setForecastPayload(data || null)
@@ -331,12 +380,14 @@ export default function OfficerLootBidForecast({ isOfficer }) {
     [forecastPayload],
   )
 
-  const rows = useMemo(() => {
-    if (!forecastPayload || !resolvedItemId || !itemStats) return []
+  const { rows, reconMeta } = useMemo(() => {
+    const empty = { rows: [], reconMeta: null }
+    if (!forecastPayload || !resolvedItemId || !itemStats) return empty
     const profiles = forecastPayload.account_profiles || {}
     const rankingsChars = rankingsData?.characters || []
     const classWeights = rankingsData?.class_weights || {}
     const focusCandidates = rankingsData?.focus_candidates || {}
+    const isV2 = Array.isArray(forecastPayload.loot_timeline)
 
     const ctx = {
       itemStats,
@@ -417,7 +468,13 @@ export default function OfficerLootBidForecast({ isOfficer }) {
       }
 
       if (prof) {
-        toonDetailBullets.unshift(buildCharacterBalanceBullet(toonBalance))
+        if (isV2) {
+          toonDetailBullets.unshift(
+            buildCharacterRaidTicEarnedBullet(toonEarnedThisRaidFromProfile(prof, charId)),
+          )
+        } else {
+          toonDetailBullets.unshift(buildCharacterBalanceBullet(toonBalance))
+        }
         const dorm = dormantToonVersusAccountNarrative(prof, charId, charName)
         if (dorm) toonDetailBullets.push(dorm)
         const pts = perToonShareNarrative(prof, charId)
@@ -465,7 +522,49 @@ export default function OfficerLootBidForecast({ isOfficer }) {
         hasMagelo: !!mageloChar,
         hasPrecompute: !!pc,
         summaryLine,
+        scoreDelta: upgrade?.scoreDelta,
       })
+    }
+
+    let balancesAtAuction = null
+    let bidWinner = null
+    const lootCtx = forecastPayload.loot_context
+    if (isV2 && lootCtx && lootCtx.loot_id != null) {
+      const rollup = forecastPayload.account_raid_rollup || []
+      const balanceByAccount = Object.fromEntries(
+        Object.entries(profiles).map(([id, p]) => [id, Number(p?.balance) || 0]),
+      )
+      balancesAtAuction = simulateBalancesBeforeLootRow({
+        accountRollup: rollup,
+        balanceByAccount,
+        simMode: forecastPayload.sim_mode === 'per_event' ? 'per_event' : 'raid_level',
+        eventsOrdered: forecastPayload.raid_events_ordered || [],
+        perEventEarned: forecastPayload.per_event_earned || [],
+        lootTimeline: forecastPayload.loot_timeline || [],
+        targetLootId: lootCtx.loot_id,
+      })
+      const { winner, byToonRowKey } = estimateBidReconstructionHeuristic(
+        out,
+        balancesAtAuction,
+        Number(lootCtx.cost) || 0,
+      )
+      bidWinner = winner
+      for (const r of out) {
+        const aid = r.accountId && r.accountId !== '—' ? String(r.accountId) : ''
+        r.poolAtAuction =
+          balancesAtAuction != null && aid
+            ? Math.round(balancesAtAuction[aid] ?? 0)
+            : null
+        const est = byToonRowKey.get(r.toonRowKey)
+        r.estBidLabel =
+          est?.label
+          ?? (r.upgrade?.isUpgrade ? '—' : '— (no upgrade)')
+      }
+    } else {
+      for (const r of out) {
+        r.poolAtAuction = null
+        r.estBidLabel = null
+      }
     }
 
     const byAccount = new Map()
@@ -500,6 +599,8 @@ export default function OfficerLootBidForecast({ isOfficer }) {
             includeAccountPoolLine: false,
           }),
           hasPrecompute: g.hasPrecompute,
+          poolAtAuction: g.poolAtAuction,
+          estBidLabel: g.estBidLabel,
         })
       } else {
         const g0 = group[0]
@@ -540,6 +641,8 @@ export default function OfficerLootBidForecast({ isOfficer }) {
           toons: group,
           sharedBullets,
           hasPrecompute: group.some((g) => g.hasPrecompute),
+          poolAtAuction: primary.poolAtAuction,
+          estBidLabel: [...new Set(group.map((x) => x.estBidLabel).filter(Boolean))].join(' · ') || null,
         })
       }
     }
@@ -565,7 +668,17 @@ export default function OfficerLootBidForecast({ isOfficer }) {
       }
       return b.interestScore - a.interestScore
     })
-    return merged
+    const recon =
+      isV2 && lootCtx && lootCtx.loot_id != null
+        ? {
+            winner: bidWinner,
+            clearingPrice: Number(lootCtx.cost) || 0,
+            simMode: forecastPayload.sim_mode || 'raid_level',
+            itemName: lootCtx.item_name || '',
+          }
+        : null
+
+    return { rows: merged, reconMeta: recon }
   }, [
     forecastPayload,
     forecastPeople,
@@ -598,8 +711,9 @@ export default function OfficerLootBidForecast({ isOfficer }) {
         Heuristic only: who might care about an item, using linked-account spend patterns (last purchase,
         per-toon concentration, balance) and Magelo-style upgrade scoring (precomputed CI index when
         available, else live class_rankings). Leave raid id blank to use the{' '}
-        <strong style={{ color: '#e4e4e7' }}>active guild roster</strong> (same idea as Global bid). Not a
-        prediction of bids.
+        <strong style={{ color: '#e4e4e7' }}>active guild roster</strong> (same idea as Global bid). With a
+        raid and optional <strong style={{ color: '#e4e4e7' }}>loot row</strong>, the table adds an account
+        pool at that auction and a rough bid guess from upgrade rank vs clearing price — not a bid log.
         <Link to="/officer" style={{ marginLeft: '0.5rem' }}>← Officer</Link>
         {' · '}
         <Link to="/officer/global-loot-bid-forecast">Global bid</Link>
@@ -612,9 +726,34 @@ export default function OfficerLootBidForecast({ isOfficer }) {
             className="input"
             style={{ minWidth: '14rem' }}
             value={raidInput}
-            onChange={(e) => setRaidInput(e.target.value)}
+            onChange={(e) => {
+              setRaidInput(e.target.value)
+              setLootSelectValue('')
+            }}
             placeholder="Blank = active roster"
           />
+        </label>
+        <label style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+          <span style={{ fontSize: '0.8rem', color: '#a1a1aa' }}>Recent raid</span>
+          <select
+            className="input"
+            style={{ minWidth: '18rem' }}
+            value={raidsForSelect.some((r) => r.raid_id === raidInput) ? raidInput : ''}
+            onChange={(e) => {
+              const v = e.target.value
+              if (v) {
+                setRaidInput(v)
+                setLootSelectValue('')
+              }
+            }}
+          >
+            <option value="">— Pick to fill raid id —</option>
+            {raidsForSelect.map((r) => (
+              <option key={r.raid_id} value={r.raid_id}>
+                {(r.date_iso || r.date || '—') + ' · ' + (r.raid_name || r.raid_id)}
+              </option>
+            ))}
+          </select>
         </label>
         <label style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
           <span style={{ fontSize: '0.8rem', color: '#a1a1aa' }}>Activity days (blank roster)</span>
@@ -627,6 +766,29 @@ export default function OfficerLootBidForecast({ isOfficer }) {
             title="Used when raid id is empty (officer_global_bid_forecast)"
           />
         </label>
+        {!isGlobalMode && (
+          <label style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+            <span style={{ fontSize: '0.8rem', color: '#a1a1aa' }}>Loot row (optional)</span>
+            <select
+              className="input"
+              style={{ minWidth: '20rem' }}
+              value={lootSelectValue}
+              onChange={(e) => {
+                const v = e.target.value
+                setLootSelectValue(v)
+                const row = lootOptions.find((x) => String(x.id) === v)
+                if (row?.item_name) setItemInput(String(row.item_name))
+              }}
+            >
+              <option value="">— For clearing price + pool walk —</option>
+              {lootOptions.map((l) => (
+                <option key={l.id} value={String(l.id)}>
+                  #{l.id} {l.item_name} ({l.cost ?? '—'} DKP)
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         <label style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
           <span style={{ fontSize: '0.8rem', color: '#a1a1aa' }}>Item (name or id)</span>
           <input
@@ -677,6 +839,25 @@ export default function OfficerLootBidForecast({ isOfficer }) {
       )}
       {error && <p style={{ color: '#f87171', marginBottom: '0.75rem' }}>{error}</p>}
 
+      {reconMeta && (
+        <p style={{ color: '#a1a1aa', fontSize: '0.9rem', marginBottom: '0.75rem', maxWidth: '52rem' }}>
+          <strong style={{ color: '#e4e4e7' }}>Bid reconstruction (heuristic):</strong> clearing price{' '}
+          {reconMeta.clearingPrice} DKP on “{reconMeta.itemName}”. Simulation mode:{' '}
+          <code style={{ color: '#d4d4d8' }}>{reconMeta.simMode}</code>
+          {reconMeta.winner ? (
+            <>
+              . Guessed winner by upgrade rank + account pool at that moment:{' '}
+              <strong style={{ color: '#e4e4e7' }}>{reconMeta.winner.charName}</strong>.
+            </>
+          ) : (
+            <>
+              . No upgrade-positive attendee had enough pool for the clearing price, or clearing price was
+              zero.
+            </>
+          )}
+        </p>
+      )}
+
       {forecastPayload && resolvedItemId && (
         <p style={{ color: '#a1a1aa', fontSize: '0.9rem', marginBottom: '0.75rem' }}>
           Item: <strong style={{ color: '#e4e4e7' }}>{itemDisplayName}</strong> (id {resolvedItemId})
@@ -703,6 +884,8 @@ export default function OfficerLootBidForecast({ isOfficer }) {
               <tr>
                 <th>Interest</th>
                 <th>Bid band</th>
+                {reconMeta ? <th>Pool @ item</th> : null}
+                {reconMeta ? <th>Est. bid (heur.)</th> : null}
                 <th>Character</th>
                 <th>Class</th>
                 <th>Account</th>
@@ -721,6 +904,16 @@ export default function OfficerLootBidForecast({ isOfficer }) {
                       <span style={{ color: '#71717a', fontSize: '0.72rem', marginLeft: '0.25rem' }}>(span)</span>
                     ) : null}
                   </td>
+                  {reconMeta ? (
+                    <td style={{ fontSize: '0.85rem', whiteSpace: 'nowrap' }}>
+                      {r.poolAtAuction != null ? r.poolAtAuction : '—'}
+                    </td>
+                  ) : null}
+                  {reconMeta ? (
+                    <td style={{ fontSize: '0.8rem', maxWidth: '12rem', verticalAlign: 'top' }}>
+                      {r.estBidLabel ?? '—'}
+                    </td>
+                  ) : null}
                   <td style={{ maxWidth: '14rem' }}>{r.charLine}</td>
                   <td style={{ maxWidth: '10rem' }}>{r.classLabel}</td>
                   <td style={{ fontSize: '0.85rem', wordBreak: 'break-all' }}>
