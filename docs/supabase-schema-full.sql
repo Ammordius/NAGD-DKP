@@ -3388,6 +3388,12 @@ CREATE INDEX IF NOT EXISTS idx_bid_portfolio_auction_fact_norm
 COMMENT ON TABLE public.bid_portfolio_auction_fact IS
   'Optional denormalized row per raid_loot for bidding heuristics (runner-up guess, next guild sale of same item). Backfill with officer_backfill_bid_portfolio_batch in small id ranges. runner_up_char_guess is set by second-bidder JSONL upload (model lane); SQL backfill leaves it unchanged when NULL.';
 
+COMMENT ON COLUMN public.bid_portfolio_auction_fact.runner_up_account_guess IS
+  'Inferred second-bidder account_id (max-pool heuristic from bid_portfolio_runner_up_guess, or overwritten by Python second-bidder JSONL upload).';
+
+COMMENT ON COLUMN public.bid_portfolio_auction_fact.runner_up_char_guess IS
+  'Optional characters.char_id: model top item-eligible attending lane from upload_second_bidder_runner_up; NULL when only SQL/CSV max-pool backfill ran.';
+
 -- Existing databases before this column: ALTER TABLE public.bid_portfolio_auction_fact ADD COLUMN IF NOT EXISTS runner_up_char_guess text;
 
 ALTER TABLE public.bid_portfolio_auction_fact ENABLE ROW LEVEL SECURITY;
@@ -3531,7 +3537,7 @@ END;
 $obfb$;
 
 COMMENT ON FUNCTION public.officer_backfill_bid_portfolio_batch(bigint, bigint, boolean) IS
-  'Officers (JWT), service_role, or direct DB session as postgres/supabase_admin: upsert bid_portfolio_auction_fact for loot_id in [min,max]. Raises statement_timeout locally to 20min. p_include_payload stores full officer_bid_portfolio_for_loot JSON (slow). For large backfills from the SQL Editor, prefer CALL dba_backfill_bid_portfolio_range (COMMIT between chunks).';
+  'Officers (JWT), service_role, or direct DB session as postgres/supabase_admin: upsert bid_portfolio_auction_fact for loot_id in [min,max]. Raises statement_timeout locally to 20min. p_include_payload stores full officer_bid_portfolio_for_loot JSON (slow). Inserts NULL runner_up_char_guess; on conflict, runner_up_char_guess is COALESCE(EXCLUDED, existing) so prior JSONL char lane is preserved. For large backfills from the SQL Editor, prefer CALL dba_backfill_bid_portfolio_range (COMMIT between chunks).';
 
 REVOKE ALL ON FUNCTION public.officer_backfill_bid_portfolio_batch(bigint, bigint, boolean) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.officer_backfill_bid_portfolio_batch(bigint, bigint, boolean) TO authenticated;
