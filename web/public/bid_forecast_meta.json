@@ -1,7 +1,9 @@
 {
   "version": 1,
-  "generated_at": "2026-04-03T23:14:08.938Z",
+  "generated_at": "2026-04-04T01:02:01.464Z",
   "activity_days": 120,
+  "sharded": true,
+  "shards_dir": "bid_forecast_items",
   "rankings_hash": "1565dffc34558b0d",
   "item_stats_hash": "a1583535e37a7d8d",
   "magelo_characters_total": 3202,
