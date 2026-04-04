@@ -1628,15 +1628,21 @@ export default function Officer({ isOfficer }) {
             <h3 style={{ marginTop: '1.25rem' }}>Loot</h3>
             <table>
               <thead>
-                <tr><th>Item</th><th>Character</th><th>Cost</th><th style={{ width: '6rem' }}></th></tr>
+                <tr>
+                  <th>Item</th>
+                  <th>Character</th>
+                  <th>Cost</th>
+                  <th style={{ width: '5.5rem' }}>Portfolio</th>
+                  <th style={{ width: '6rem' }}></th>
+                </tr>
               </thead>
               <tbody>
-                {loot.length === 0 && <tr><td colSpan={4}>No loot recorded</td></tr>}
+                {loot.length === 0 && <tr><td colSpan={5}>No loot recorded</td></tr>}
                 {lootSectionsWithMobs.map((section) => (
                   <Fragment key={section.key}>
                     <tr>
                       <td
-                        colSpan={4}
+                        colSpan={5}
                         style={{
                           padding: '0.5rem 0.75rem',
                           backgroundColor: 'rgba(0,0,0,0.25)',
@@ -1653,7 +1659,7 @@ export default function Officer({ isOfficer }) {
                         {mobGroup.title != null && (
                           <tr>
                             <td
-                              colSpan={4}
+                              colSpan={5}
                               style={{
                                 padding: '0.35rem 0.75rem 0.35rem 1.5rem',
                                 backgroundColor: 'rgba(0,0,0,0.12)',
@@ -1692,6 +1698,22 @@ export default function Officer({ isOfficer }) {
                                     {row.cost}
                                     <button type="button" className="btn btn-ghost" style={{ marginLeft: '0.25rem', fontSize: '0.85rem' }} onClick={() => { setEditingLootId(row.id); setEditingLootCost(row.cost ?? '') }} title="Edit cost">✎</button>
                                   </>
+                                )}
+                              </td>
+                              <td>
+                                {row.id != null ? (
+                                  <Link
+                                    to={
+                                      selectedRaidId
+                                        ? `/officer/bid-portfolio?loot=${row.id}&raid=${encodeURIComponent(selectedRaidId)}`
+                                        : `/officer/bid-portfolio?loot=${row.id}`
+                                    }
+                                    style={{ fontSize: '0.85rem' }}
+                                  >
+                                    View
+                                  </Link>
+                                ) : (
+                                  '—'
                                 )}
                               </td>
                               <td>
