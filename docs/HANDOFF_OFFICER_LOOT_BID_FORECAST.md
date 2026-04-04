@@ -48,6 +48,49 @@ Officers get **heuristic** bid-interest views for a chosen item: **by raid** (wh
 | RPC definitions | [`docs/supabase-schema-full.sql`](supabase-schema-full.sql) (Officer bid forecast RPCs section) |
 | CI: roster export + Node index | [`scripts/export_bid_forecast_roster.py`](../scripts/export_bid_forecast_roster.py), [`scripts/build_bid_forecast_by_item.mjs`](../scripts/build_bid_forecast_by_item.mjs) |
 | Canonical schema | [`docs/supabase-schema-full.sql`](supabase-schema-full.sql) |
+| Bidding portfolio (SQL) | View `guild_loot_sale_enriched`; table `bid_portfolio_auction_fact`; RPCs `officer_bid_portfolio_for_loot`, `officer_account_bidding_portfolio`, `officer_backfill_bid_portfolio_batch`; export script [`scripts/backfill_bid_portfolio_export.py`](../scripts/backfill_bid_portfolio_export.py) (see **Bidding portfolio scaffold** + **Historical backfill** below) |
+
+## Bidding portfolio scaffold (SQL, officers)
+
+Historical **heuristics only** — there is still **no auction log**. Objects live in [`docs/supabase-schema-full.sql`](supabase-schema-full.sql) next to the other bid-forecast definitions.
+
+| Object | Role |
+|--------|------|
+| `guild_loot_sale_enriched` | View: each `raid_loot` row with `norm_name`, `ref_price_at_sale` (avg of up to 3 prior guild sales of that name), `paid_to_ref_ratio`, `buyer_account_id`, **`next_guild_sale_loot_id` / `next_guild_sale_buyer_account_id`** (next guild sale of same `norm_name`, by `raid_date` then `loot_id`). |
+| `bid_forecast_attendees_resolved_for_scope(raid_id, pin_event_id)` | Internal: attendee rows with account resolution; **same rules** as by-raid v2 (tic-scoped when that event has attendance). Used by v2 and portfolio RPCs. |
+| `attendee_accounts_for_loot(loot_id)` | Internal: distinct attendee `account_id` for that loot row’s event scope. |
+| `account_balance_before_loot(loot_id, account_id)` | Internal: reconstructed pool immediately before that loot row (parity with [`simulateBalancesBeforeLootRow`](../web/src/lib/bidForecastModel.js)). |
+| `bid_portfolio_runner_up_guess(loot_id)` | Internal: non-buyer attendee with **maximum** `pool_before` among those with `pool_before >= clearing price`; tie-break `account_id`. |
+| `officer_bid_portfolio_for_loot(loot_id)` | Officers: JSON — sale enrichment, `sim_mode`, per-attendee `pool_before`, `could_clear`, `synthetic_max_bid` (= `LEAST(pool, P-1)` teaching scaffold), historic medians (`median_paid_prior`, `median_paid_to_ref_prior`), `later_bought_same_norm`, `runner_up_account_guess`. |
+| `officer_account_bidding_portfolio(account_id, from_date, to_date)` | Officers: aggregates over `raid_date` range — wins, DKP on wins, `auction_rows_present`, `could_clear_but_not_buyer_count`, `runner_up_guess_count`, sum of synthetic max bids when present and not buyer, avg `paid_to_ref` on wins. |
+| `bid_portfolio_auction_fact` | Optional table: denormalized row per `loot_id` (runner-up guess, next guild sale columns, optional full `payload` JSON). Officer RLS only. |
+| `officer_backfill_bid_portfolio_batch(min_id, max_id, include_payload)` | Officers: upsert fact rows for each `loot_id` in range. Use **small ranges** (often **200–500** rows) per call to avoid PostgREST / statement timeouts. `include_payload=true` stores full `officer_bid_portfolio_for_loot` JSON (much slower). |
+
+**Assumptions (explicit):**
+
+- `synthetic_max_bid` does **not** prove anyone bid `P-1`; it is a labeled scaffold.
+- `runner_up_account_guess` is **not** a true second-price winner when many attendees could pay `P`; it picks the richest eligible non-buyer by pool-before.
+- Attendees and pools use **raid/tic data only** — no Magelo / current gear.
+
+**Apply:** run the updated canonical schema (or equivalent migration) on Supabase so these objects exist alongside `officer_loot_bid_forecast_v2`.
+
+## Historical backfill (batched, officers)
+
+Large “recompute everything” jobs must be **chunked**. Each `officer_bid_portfolio_for_loot` call does attendee × subquery work; Supabase/PostgREST **statement timeouts** (often on the order of seconds for pooled connections) apply **per request**.
+
+**Option A — JSONL export (no new table rows):** run [`scripts/backfill_bid_portfolio_export.py`](../scripts/backfill_bid_portfolio_export.py) with `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and **`SUPABASE_ACCESS_TOKEN`** set to a JWT for a user who is an **officer** in `profiles` (service role does **not** pass `is_officer()`). Use `--min-loot-id` / `--max-loot-id` or `--loot-ids-file` in modest sizes; tune `POSTGREST_TIMEOUT_SEC` (default 120) if needed.
+
+**Option B — persist in Postgres:** after applying schema, run repeated **small** batches via PostgREST (recommended) or the CLI helper:
+
+`python scripts/backfill_bid_portfolio_export.py --db-batch 1 400 false`
+
+Uses **`SUPABASE_SERVICE_ROLE_KEY`** (and `SUPABASE_URL`); the RPC also allows **`service_role`** JWT in addition to officers. Equivalent SQL (only works when `auth.uid()` / JWT claims are set for your session — often **not** in the bare Supabase SQL editor):
+
+`SELECT * FROM officer_backfill_bid_portfolio_batch(1, 400, false);`
+
+Then advance the range (e.g. `401`–`800`). Third argument `true` fills `payload` with the full per-loot JSON (heavier). Failed rows increment `rows_errored` and are skipped so one bad `loot_id` does not abort the batch.
+
+**`later_bought_same_norm` vs next guild sale:** per-attendee `later_bought_same_norm` (in `officer_bid_portfolio_for_loot`) means *that account* bought the same normalized item later. **`next_guild_sale_*`** on the view / fact table is the **next guild-wide** sale of that `norm_name` after this row (whoever won).
 
 ## Data model notes (RPC)
 
@@ -80,7 +123,8 @@ Officers get **heuristic** bid-interest views for a chosen item: **by raid** (wh
 
 ## Follow-ups (if you want to extend)
 
-- Add **by-raid** `ref_price_at_sale` to **`officer_loot_bid_forecast_v2`** (or v1) if you want the same time-aware ratios on the raid-scoped page without duplicating logic client-side.
+- Wire the officer UI to **`officer_bid_portfolio_for_loot`** / **`officer_account_bidding_portfolio`** if you want portfolio output in-app (data is already available via RPC).
+- Add **by-raid** `ref_price_at_sale` to **`officer_loot_bid_forecast_v2`** (or v1) if you want the same time-aware ratios on the raid-scoped page without duplicating logic client-side — or read from **`guild_loot_sale_enriched`** / reuse the view’s columns in a thin RPC.
 - Expression or denormalized index on `(normalize_item_name_for_lookup(item_name), raid_date, id)` if global RPC latency is high (many LATERAL lookups).
 - Add `spell_focii_level65.json` (or equivalent) to the web bundle if focus scoring should match Magelo HTML exactly in edge cases.
 - Optional: officer audit log entry when “Run” is clicked (privacy/forensics).
@@ -95,3 +139,5 @@ Officers get **heuristic** bid-interest views for a chosen item: **by raid** (wh
 6. After CI has populated precompute JSON, confirm upgrade summaries show **(Precomputed CI index)** in expanded detail where applicable.
 7. **Global** page: with schema applied (step 1), open **Global bid**, set activity days (default 120 matches leaderboard), enter an item, **Run**; expand **Show top upgrades by slot** on a row that qualifies (concentrated spend on that toon or recent spend on that toon).
 8. From `web/`, run **`npm test`** to exercise bid simulation helpers.
+9. **Bidding portfolio:** as an officer, call **`officer_bid_portfolio_for_loot`** with a real `loot_id`; confirm `sale` (including `next_guild_sale_*`), `attendees`, and `runner_up_account_guess`. Call **`officer_account_bidding_portfolio`** with an `account_id` and a **narrow date range** first (unbounded scans all loot and can be slow).
+10. **Backfill:** run **`SELECT * FROM officer_backfill_bid_portfolio_batch(...)`** on a small id range; confirm `bid_portfolio_auction_fact` rows, or run **`scripts/backfill_bid_portfolio_export.py`** with an officer JWT and a small id range to produce JSONL.

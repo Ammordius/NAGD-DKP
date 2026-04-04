@@ -2029,7 +2029,6 @@ DECLARE
   v_raid text := trim(p_raid_id);
   v_use_per_event boolean;
   v_scope_event_id text := NULL;
-  v_scope_event_has_att boolean;
 BEGIN
   IF NOT public.is_officer() THEN
     RAISE EXCEPTION 'officer only';
@@ -2051,90 +2050,18 @@ BEGIN
 
   SELECT EXISTS (SELECT 1 FROM raid_event_attendance WHERE raid_id = v_raid LIMIT 1) INTO v_use_per_event;
 
-  v_scope_event_has_att := false;
-  IF v_use_per_event AND v_scope_event_id IS NOT NULL THEN
-    SELECT EXISTS (
-      SELECT 1 FROM raid_event_attendance rea
-      WHERE rea.raid_id = v_raid AND rea.event_id = v_scope_event_id
-      LIMIT 1
-    ) INTO v_scope_event_has_att;
-  END IF;
-
   RETURN (
     WITH
-    attendees_from_events AS (
-      SELECT DISTINCT
-        NULLIF(trim(rea.char_id::text), '') AS char_id,
-        NULLIF(trim(rea.character_name::text), '') AS character_name
-      FROM raid_event_attendance rea
-      WHERE v_use_per_event AND rea.raid_id = v_raid
-    ),
-    attendees_from_raid_level AS (
-      SELECT DISTINCT
-        NULLIF(trim(ra.char_id::text), ''),
-        NULLIF(trim(ra.character_name::text), '')
-      FROM raid_attendance ra
-      WHERE ra.raid_id = v_raid
-    ),
-    attendees_raw AS (
-      SELECT DISTINCT
-        NULLIF(trim(rea.char_id::text), '') AS char_id,
-        NULLIF(trim(rea.character_name::text), '') AS character_name
-      FROM raid_event_attendance rea
-      WHERE v_use_per_event
-        AND v_scope_event_id IS NOT NULL
-        AND v_scope_event_has_att
-        AND rea.raid_id = v_raid
-        AND rea.event_id = v_scope_event_id
-      UNION ALL
-      SELECT fe.char_id, fe.character_name
-      FROM attendees_from_events fe
-      WHERE v_use_per_event
-        AND NOT (v_scope_event_id IS NOT NULL AND v_scope_event_has_att)
-      UNION ALL
-      SELECT fr.char_id, fr.character_name
-      FROM attendees_from_raid_level fr
-      WHERE v_use_per_event
-        AND NOT (v_scope_event_id IS NOT NULL AND v_scope_event_has_att)
-      UNION ALL
-      SELECT fr.char_id, fr.character_name
-      FROM attendees_from_raid_level fr
-      WHERE NOT v_use_per_event
-    ),
-    attendees_raw_dedup AS (
-      SELECT DISTINCT ON (
-        COALESCE(char_id, ''),
-        lower(trim(COALESCE(character_name, '')))
-      )
-        char_id,
-        character_name
-      FROM attendees_raw
-      WHERE char_id IS NOT NULL OR character_name IS NOT NULL
-      ORDER BY
-        COALESCE(char_id, ''),
-        lower(trim(COALESCE(character_name, ''))),
-        char_id NULLS LAST
-    ),
     attendees_resolved AS (
       SELECT
-        ar.char_id AS raw_char_id,
-        ar.character_name AS raw_character_name,
-        c.char_id AS resolved_char_id,
-        c.name AS resolved_name,
-        c.class_name AS class_name,
-        ca.account_id,
-        COALESCE(NULLIF(trim(acct.display_name), ''), '') AS account_display_name
-      FROM attendees_raw_dedup ar
-      LEFT JOIN characters c ON (
-        (ar.char_id IS NOT NULL AND c.char_id = ar.char_id)
-        OR (
-          ar.char_id IS NULL
-          AND ar.character_name IS NOT NULL
-          AND lower(trim(c.name)) = lower(trim(ar.character_name))
-        )
-      )
-      LEFT JOIN character_account ca ON ca.char_id = c.char_id
-      LEFT JOIN accounts acct ON acct.account_id = ca.account_id
+        x.raw_char_id,
+        x.raw_character_name,
+        x.resolved_char_id,
+        x.resolved_name,
+        x.class_name,
+        x.account_id,
+        x.account_display_name
+      FROM public.bid_forecast_attendees_resolved_for_scope(v_raid, v_scope_event_id) x
     ),
     attendee_list AS (
       SELECT jsonb_agg(
@@ -2577,6 +2504,1024 @@ $fn$;
 
 COMMENT ON FUNCTION public.normalize_item_name_for_lookup(text) IS
   'Normalized item name for cross-table matching; keep in sync with web/src/lib/itemNameNormalize.js.';
+
+-- Guild-wide sale rows with reference price (avg of up to 3 prior positive-cost sales per norm_name) and buyer account.
+CREATE OR REPLACE VIEW public.guild_loot_sale_enriched WITH (security_invoker = true) AS
+WITH guild_loot_base AS (
+  SELECT
+    rl.id AS loot_id,
+    rl.raid_id,
+    NULLIF(trim(rl.event_id::text), '') AS event_id,
+    rl.item_name,
+    public.normalize_item_name_for_lookup(rl.item_name) AS norm_name,
+    public.raid_date_parsed(r.date_iso) AS raid_date,
+    CASE
+      WHEN rl.cost IS NULL OR trim(rl.cost::text) = '' THEN 0::numeric
+      ELSE COALESCE(
+        NULLIF(regexp_replace(trim(rl.cost::text), '[^0-9.\-]', '', 'g'), '')::numeric,
+        0::numeric
+      )
+    END AS cost_num,
+    rl.cost::text AS cost_text
+  FROM raid_loot rl
+  JOIN raids r ON r.raid_id = rl.raid_id
+  WHERE rl.item_name IS NOT NULL AND trim(rl.item_name) <> ''
+),
+buyer AS (
+  SELECT DISTINCT ON (rl.id)
+    rl.id AS loot_id,
+    ca.account_id AS buyer_account_id
+  FROM raid_loot rl
+  LEFT JOIN LATERAL (
+    SELECT la0.assigned_char_id, la0.assigned_character_name
+    FROM loot_assignment la0
+    WHERE la0.loot_id = rl.id
+    LIMIT 1
+  ) la ON true
+  LEFT JOIN character_account ca ON (
+    (COALESCE(trim(la.assigned_char_id), trim(rl.char_id::text)) <> ''
+      AND ca.char_id = COALESCE(trim(la.assigned_char_id), trim(rl.char_id::text)))
+    OR (
+      COALESCE(trim(la.assigned_character_name), trim(rl.character_name)) <> ''
+      AND EXISTS (
+        SELECT 1
+        FROM characters c2
+        WHERE c2.char_id = ca.char_id
+          AND trim(c2.name) = COALESCE(trim(la.assigned_character_name), trim(rl.character_name))
+      )
+    )
+  )
+  ORDER BY rl.id, ca.account_id
+),
+guild_positive_ref AS (
+  SELECT
+    gp.loot_id,
+    gp.norm_name,
+    gp.raid_date,
+    avg(gp.cost_num) OVER (
+      PARTITION BY gp.norm_name
+      ORDER BY gp.raid_date ASC NULLS FIRST, gp.loot_id ASC
+      ROWS BETWEEN 3 PRECEDING AND 1 PRECEDING
+    ) AS ref_price_at_sale
+  FROM guild_loot_base gp
+  WHERE gp.cost_num > 0
+),
+guild_loot_core AS (
+  SELECT
+    glb.loot_id,
+    glb.raid_id,
+    glb.event_id,
+    glb.item_name,
+    glb.norm_name,
+    glb.raid_date,
+    glb.cost_num,
+    glb.cost_text,
+    b.buyer_account_id,
+    CASE
+      WHEN glb.cost_num > 0 THEN gpr.ref_price_at_sale
+      ELSE NULL::numeric
+    END AS ref_price_at_sale,
+    CASE
+      WHEN glb.cost_num > 0 AND gpr.ref_price_at_sale IS NOT NULL AND gpr.ref_price_at_sale > 0
+      THEN (glb.cost_num / gpr.ref_price_at_sale)::numeric
+      ELSE NULL::numeric
+    END AS paid_to_ref_ratio
+  FROM guild_loot_base glb
+  LEFT JOIN buyer b ON b.loot_id = glb.loot_id
+  LEFT JOIN guild_positive_ref gpr ON glb.cost_num > 0
+    AND gpr.loot_id = glb.loot_id
+)
+SELECT
+  c.loot_id,
+  c.raid_id,
+  c.event_id,
+  c.item_name,
+  c.norm_name,
+  c.raid_date,
+  c.cost_num,
+  c.cost_text,
+  c.buyer_account_id,
+  c.ref_price_at_sale,
+  c.paid_to_ref_ratio,
+  LEAD(c.loot_id) OVER (
+    PARTITION BY c.norm_name
+    ORDER BY c.raid_date ASC NULLS FIRST, c.loot_id ASC
+  ) AS next_guild_sale_loot_id,
+  LEAD(c.buyer_account_id) OVER (
+    PARTITION BY c.norm_name
+    ORDER BY c.raid_date ASC NULLS FIRST, c.loot_id ASC
+  ) AS next_guild_sale_buyer_account_id
+FROM guild_loot_core c;
+
+COMMENT ON VIEW public.guild_loot_sale_enriched IS
+  'All raid_loot rows with parsed cost, norm_name, ref_price_at_sale (3 prior sales), paid_to_ref_ratio, buyer_account_id, and next guild sale of same norm_name (LEAD by raid_date, loot_id).';
+
+GRANT SELECT ON public.guild_loot_sale_enriched TO authenticated;
+GRANT SELECT ON public.guild_loot_sale_enriched TO anon;
+
+-- Shared attendee resolution for bid forecast v2 and bidding portfolio (same rules as former v2 CTEs).
+CREATE OR REPLACE FUNCTION public.bid_forecast_attendees_resolved_for_scope(
+  p_raid_id text,
+  p_pin_event_id text
+)
+RETURNS TABLE (
+  raw_char_id text,
+  raw_character_name text,
+  resolved_char_id text,
+  resolved_name text,
+  class_name text,
+  account_id text,
+  account_display_name text
+)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $bfatt$
+  WITH
+  vars AS (
+    SELECT
+      trim(p_raid_id) AS rid,
+      EXISTS (SELECT 1 FROM raid_event_attendance rea WHERE rea.raid_id = trim(p_raid_id) LIMIT 1) AS use_per_event,
+      NULLIF(trim(COALESCE(p_pin_event_id, '')), '') AS scope_event_id
+  ),
+  vars2 AS (
+    SELECT
+      v.rid,
+      v.use_per_event,
+      v.scope_event_id,
+      (
+        v.use_per_event
+        AND v.scope_event_id IS NOT NULL
+        AND EXISTS (
+          SELECT 1
+          FROM raid_event_attendance rea
+          WHERE rea.raid_id = v.rid AND rea.event_id = v.scope_event_id
+          LIMIT 1
+        )
+      ) AS scope_event_has_att
+    FROM vars v
+  ),
+  attendees_from_events AS (
+    SELECT DISTINCT
+      NULLIF(trim(rea.char_id::text), '') AS char_id,
+      NULLIF(trim(rea.character_name::text), '') AS character_name
+    FROM raid_event_attendance rea
+    CROSS JOIN vars2 x
+    WHERE x.use_per_event AND rea.raid_id = x.rid
+  ),
+  attendees_from_raid_level AS (
+    SELECT DISTINCT
+      NULLIF(trim(ra.char_id::text), '') AS char_id,
+      NULLIF(trim(ra.character_name::text), '') AS character_name
+    FROM raid_attendance ra
+    CROSS JOIN vars2 x
+    WHERE ra.raid_id = x.rid
+  ),
+  attendees_raw AS (
+    SELECT DISTINCT
+      NULLIF(trim(rea.char_id::text), '') AS char_id,
+      NULLIF(trim(rea.character_name::text), '') AS character_name
+    FROM raid_event_attendance rea
+    CROSS JOIN vars2 x
+    WHERE x.use_per_event
+      AND x.scope_event_id IS NOT NULL
+      AND x.scope_event_has_att
+      AND rea.raid_id = x.rid
+      AND rea.event_id = x.scope_event_id
+    UNION ALL
+    SELECT fe.char_id, fe.character_name
+    FROM attendees_from_events fe
+    CROSS JOIN vars2 x
+    WHERE x.use_per_event
+      AND NOT (x.scope_event_id IS NOT NULL AND x.scope_event_has_att)
+    UNION ALL
+    SELECT fr.char_id, fr.character_name
+    FROM attendees_from_raid_level fr
+    CROSS JOIN vars2 x
+    WHERE x.use_per_event
+      AND NOT (x.scope_event_id IS NOT NULL AND x.scope_event_has_att)
+    UNION ALL
+    SELECT fr.char_id, fr.character_name
+    FROM attendees_from_raid_level fr
+    CROSS JOIN vars2 x
+    WHERE NOT x.use_per_event
+  ),
+  attendees_raw_dedup AS (
+    SELECT DISTINCT ON (
+      COALESCE(char_id, ''),
+      lower(trim(COALESCE(character_name, '')))
+    )
+      char_id,
+      character_name
+    FROM attendees_raw
+    WHERE char_id IS NOT NULL OR character_name IS NOT NULL
+    ORDER BY
+      COALESCE(char_id, ''),
+      lower(trim(COALESCE(character_name, ''))),
+      char_id NULLS LAST
+  )
+  SELECT
+    ar.char_id AS raw_char_id,
+    ar.character_name AS raw_character_name,
+    c.char_id AS resolved_char_id,
+    c.name AS resolved_name,
+    c.class_name AS class_name,
+    ca.account_id,
+    COALESCE(NULLIF(trim(acct.display_name), ''), '') AS account_display_name
+  FROM attendees_raw_dedup ar
+  LEFT JOIN characters c ON (
+    (ar.char_id IS NOT NULL AND c.char_id = ar.char_id)
+    OR (
+      ar.char_id IS NULL
+      AND ar.character_name IS NOT NULL
+      AND lower(trim(c.name)) = lower(trim(ar.character_name))
+    )
+  )
+  LEFT JOIN character_account ca ON ca.char_id = c.char_id
+  LEFT JOIN accounts acct ON acct.account_id = ca.account_id;
+$bfatt$;
+
+COMMENT ON FUNCTION public.bid_forecast_attendees_resolved_for_scope(text, text) IS
+  'Internal: raid attendees with character/account resolution; pin event_id when that tic has attendance (matches officer_loot_bid_forecast_v2).';
+
+REVOKE ALL ON FUNCTION public.bid_forecast_attendees_resolved_for_scope(text, text) FROM PUBLIC;
+
+CREATE OR REPLACE FUNCTION public.attendee_accounts_for_loot(p_loot_id bigint)
+RETURNS TABLE (account_id text)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $afl$
+  SELECT DISTINCT ar.account_id
+  FROM raid_loot rl
+  CROSS JOIN LATERAL public.bid_forecast_attendees_resolved_for_scope(
+    rl.raid_id,
+    NULLIF(trim(rl.event_id::text), '')
+  ) ar
+  WHERE rl.id = p_loot_id
+    AND ar.account_id IS NOT NULL;
+$afl$;
+
+COMMENT ON FUNCTION public.attendee_accounts_for_loot(bigint) IS
+  'Internal: distinct attendee account_ids for a loot row (event-scoped when that tic has attendance).';
+
+REVOKE ALL ON FUNCTION public.attendee_accounts_for_loot(bigint) FROM PUBLIC;
+
+-- Pool before a loot row auction (parity with web/src/lib/bidForecastModel.js simulateBalancesBeforeLootRow).
+CREATE OR REPLACE FUNCTION public.account_balance_before_loot(
+  p_loot_id bigint,
+  p_account_id text
+)
+RETURNS numeric
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $abb$
+DECLARE
+  v_raid text;
+  v_target bigint := p_loot_id;
+  v_aid text := trim(p_account_id);
+  v_use_per_event boolean;
+  v_sim_mode text;
+  v_bal numeric;
+  v_earned_raid numeric;
+  v_spent_raid numeric;
+  v_opening numeric;
+  ev_rec record;
+  loot_rec record;
+  v_event_id text;
+  v_per_event numeric;
+  v_buyer text;
+BEGIN
+  IF v_aid = '' THEN
+    RETURN NULL;
+  END IF;
+
+  SELECT rl.raid_id INTO v_raid
+  FROM raid_loot rl
+  WHERE rl.id = p_loot_id;
+
+  IF v_raid IS NULL THEN
+    RETURN NULL;
+  END IF;
+
+  SELECT EXISTS (SELECT 1 FROM raid_event_attendance WHERE raid_id = v_raid LIMIT 1) INTO v_use_per_event;
+  v_sim_mode := CASE WHEN v_use_per_event THEN 'per_event' ELSE 'raid_level' END;
+
+  SELECT COALESCE(s.earned, 0)::numeric - COALESCE(s.spent, 0)::numeric
+  INTO v_bal
+  FROM accounts a
+  LEFT JOIN account_dkp_summary s ON s.account_id = a.account_id
+  WHERE a.account_id = v_aid;
+
+  IF v_bal IS NULL THEN
+    v_bal := 0::numeric;
+  END IF;
+
+  SELECT COALESCE(rad.dkp_earned, 0::numeric) INTO v_earned_raid
+  FROM raid_attendance_dkp_by_account rad
+  WHERE rad.raid_id = v_raid AND rad.account_id = v_aid;
+
+  SELECT COALESCE(SUM(
+    CASE
+      WHEN lb.cost_text IS NULL OR trim(lb.cost_text) = '' THEN 0::numeric
+      ELSE COALESCE(
+        NULLIF(regexp_replace(trim(lb.cost_text), '[^0-9.\-]', '', 'g'), '')::numeric,
+        0::numeric
+      )
+    END
+  ), 0::numeric) INTO v_spent_raid
+  FROM (
+    SELECT rl.id AS loot_id, rl.cost::text AS cost_text
+    FROM raid_loot rl
+    LEFT JOIN LATERAL (
+      SELECT la0.assigned_char_id, la0.assigned_character_name
+      FROM loot_assignment la0
+      WHERE la0.loot_id = rl.id
+      LIMIT 1
+    ) la ON true
+    LEFT JOIN character_account ca ON (
+      (COALESCE(trim(la.assigned_char_id), trim(rl.char_id::text)) <> ''
+        AND ca.char_id = COALESCE(trim(la.assigned_char_id), trim(rl.char_id::text)))
+      OR (
+        COALESCE(trim(la.assigned_character_name), trim(rl.character_name)) <> ''
+        AND EXISTS (
+          SELECT 1 FROM characters c2
+          WHERE c2.char_id = ca.char_id
+            AND trim(c2.name) = COALESCE(trim(la.assigned_character_name), trim(rl.character_name))
+        )
+      )
+    )
+    WHERE rl.raid_id = v_raid AND ca.account_id = v_aid
+  ) lb;
+
+  v_opening := v_bal + COALESCE(v_spent_raid, 0) - COALESCE(v_earned_raid, 0);
+
+  IF v_sim_mode = 'raid_level' THEN
+    v_opening := v_opening + COALESCE(v_earned_raid, 0);
+    FOR loot_rec IN
+      SELECT
+        rl.id AS loot_id,
+        CASE
+          WHEN rl.cost IS NULL OR trim(rl.cost::text) = '' THEN 0::numeric
+          ELSE COALESCE(
+            NULLIF(regexp_replace(trim(rl.cost::text), '[^0-9.\-]', '', 'g'), '')::numeric,
+            0::numeric
+          )
+        END AS cost_num,
+        ca.account_id AS buyer_account_id,
+        COALESCE(re.event_order, 2147483647) AS event_order
+      FROM raid_loot rl
+      LEFT JOIN raid_events re ON re.raid_id = rl.raid_id AND re.event_id = rl.event_id
+      LEFT JOIN LATERAL (
+        SELECT la0.assigned_char_id, la0.assigned_character_name
+        FROM loot_assignment la0
+        WHERE la0.loot_id = rl.id
+        LIMIT 1
+      ) la ON true
+      LEFT JOIN character_account ca ON (
+        (COALESCE(trim(la.assigned_char_id), trim(rl.char_id::text)) <> ''
+          AND ca.char_id = COALESCE(trim(la.assigned_char_id), trim(rl.char_id::text)))
+        OR (
+          COALESCE(trim(la.assigned_character_name), trim(rl.character_name)) <> ''
+          AND EXISTS (
+            SELECT 1 FROM characters c2
+            WHERE c2.char_id = ca.char_id
+              AND trim(c2.name) = COALESCE(trim(la.assigned_character_name), trim(rl.character_name))
+          )
+        )
+      )
+      WHERE rl.raid_id = v_raid
+      ORDER BY COALESCE(re.event_order, 2147483647), rl.id
+    LOOP
+      IF loot_rec.loot_id = v_target THEN
+        RETURN v_opening;
+      END IF;
+      IF loot_rec.buyer_account_id = v_aid AND loot_rec.cost_num <> 0 THEN
+        v_opening := v_opening - loot_rec.cost_num;
+      END IF;
+    END LOOP;
+    RETURN v_opening;
+  END IF;
+
+  -- per_event
+  FOR ev_rec IN
+    SELECT re.event_id, COALESCE(re.event_order, 2147483647) AS event_order
+    FROM raid_events re
+    WHERE re.raid_id = v_raid
+    ORDER BY COALESCE(re.event_order, 2147483647), re.event_id
+  LOOP
+    v_event_id := ev_rec.event_id;
+    SELECT COALESCE(SUM(
+      COALESCE(NULLIF(regexp_replace(trim(re2.dkp_value::text), '[^0-9.\-]', '', 'g'), '')::numeric, 0::numeric)
+    ), 0::numeric)
+    INTO v_per_event
+    FROM raid_event_attendance rea
+    JOIN raid_events re2 ON re2.raid_id = rea.raid_id AND re2.event_id = rea.event_id
+    INNER JOIN LATERAL (
+      SELECT ca.account_id AS aid
+      FROM character_account ca
+      WHERE (
+          rea.char_id IS NOT NULL AND trim(rea.char_id::text) <> ''
+          AND ca.char_id = trim(rea.char_id::text)
+        )
+        OR (
+          rea.character_name IS NOT NULL AND trim(rea.character_name) <> ''
+          AND EXISTS (
+            SELECT 1 FROM characters c
+            WHERE c.char_id = ca.char_id AND trim(c.name) = trim(rea.character_name)
+          )
+        )
+      LIMIT 1
+    ) x ON true
+    WHERE rea.raid_id = v_raid AND rea.event_id = v_event_id AND x.aid = v_aid;
+
+    v_opening := v_opening + COALESCE(v_per_event, 0);
+
+    FOR loot_rec IN
+      SELECT
+        rl.id AS loot_id,
+        CASE
+          WHEN rl.cost IS NULL OR trim(rl.cost::text) = '' THEN 0::numeric
+          ELSE COALESCE(
+            NULLIF(regexp_replace(trim(rl.cost::text), '[^0-9.\-]', '', 'g'), '')::numeric,
+            0::numeric
+          )
+        END AS cost_num,
+        ca.account_id AS buyer_account_id
+      FROM raid_loot rl
+      LEFT JOIN LATERAL (
+        SELECT la0.assigned_char_id, la0.assigned_character_name
+        FROM loot_assignment la0
+        WHERE la0.loot_id = rl.id
+        LIMIT 1
+      ) la ON true
+      LEFT JOIN character_account ca ON (
+        (COALESCE(trim(la.assigned_char_id), trim(rl.char_id::text)) <> ''
+          AND ca.char_id = COALESCE(trim(la.assigned_char_id), trim(rl.char_id::text)))
+        OR (
+          COALESCE(trim(la.assigned_character_name), trim(rl.character_name)) <> ''
+          AND EXISTS (
+            SELECT 1 FROM characters c2
+            WHERE c2.char_id = ca.char_id
+              AND trim(c2.name) = COALESCE(trim(la.assigned_character_name), trim(rl.character_name))
+          )
+        )
+      )
+      WHERE rl.raid_id = v_raid AND rl.event_id IS NOT DISTINCT FROM v_event_id
+      ORDER BY rl.id
+    LOOP
+      IF loot_rec.loot_id = v_target THEN
+        RETURN v_opening;
+      END IF;
+      IF loot_rec.buyer_account_id = v_aid AND loot_rec.cost_num <> 0 THEN
+        v_opening := v_opening - loot_rec.cost_num;
+      END IF;
+    END LOOP;
+  END LOOP;
+
+  -- Orphan loot (event not in raid_events or empty event_id): match JS orphan pass
+  FOR loot_rec IN
+    SELECT
+      rl.id AS loot_id,
+      CASE
+        WHEN rl.cost IS NULL OR trim(rl.cost::text) = '' THEN 0::numeric
+        ELSE COALESCE(
+          NULLIF(regexp_replace(trim(rl.cost::text), '[^0-9.\-]', '', 'g'), '')::numeric,
+          0::numeric
+        )
+      END AS cost_num,
+      ca.account_id AS buyer_account_id,
+      COALESCE(re.event_order, 2147483647) AS event_order
+    FROM raid_loot rl
+    LEFT JOIN raid_events re ON re.raid_id = rl.raid_id AND re.event_id = rl.event_id
+    LEFT JOIN LATERAL (
+      SELECT la0.assigned_char_id, la0.assigned_character_name
+      FROM loot_assignment la0
+      WHERE la0.loot_id = rl.id
+      LIMIT 1
+    ) la ON true
+    LEFT JOIN character_account ca ON (
+      (COALESCE(trim(la.assigned_char_id), trim(rl.char_id::text)) <> ''
+        AND ca.char_id = COALESCE(trim(la.assigned_char_id), trim(rl.char_id::text)))
+      OR (
+        COALESCE(trim(la.assigned_character_name), trim(rl.character_name)) <> ''
+        AND EXISTS (
+          SELECT 1 FROM characters c2
+          WHERE c2.char_id = ca.char_id
+            AND trim(c2.name) = COALESCE(trim(la.assigned_character_name), trim(rl.character_name))
+        )
+      )
+    )
+    WHERE rl.raid_id = v_raid
+      AND NOT EXISTS (
+        SELECT 1 FROM raid_events re2
+        WHERE re2.raid_id = rl.raid_id AND re2.event_id IS NOT DISTINCT FROM rl.event_id
+      )
+    ORDER BY COALESCE(re.event_order, 2147483647), rl.id
+  LOOP
+    IF loot_rec.loot_id = v_target THEN
+      RETURN v_opening;
+    END IF;
+    IF loot_rec.buyer_account_id = v_aid AND loot_rec.cost_num <> 0 THEN
+      v_opening := v_opening - loot_rec.cost_num;
+    END IF;
+  END LOOP;
+
+  RETURN v_opening;
+END;
+$abb$;
+
+COMMENT ON FUNCTION public.account_balance_before_loot(bigint, text) IS
+  'Internal: reconstructed DKP pool for an account immediately before the given loot row (matches bidForecastModel simulateBalancesBeforeLootRow).';
+
+REVOKE ALL ON FUNCTION public.account_balance_before_loot(bigint, text) FROM PUBLIC;
+
+CREATE OR REPLACE FUNCTION public.bid_portfolio_runner_up_guess(p_loot_id bigint)
+RETURNS text
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $bru$
+DECLARE
+  v_p numeric;
+  v_buyer text;
+  v_best text;
+  v_best_pool numeric := NULL;
+  v_pool numeric;
+  r record;
+BEGIN
+  SELECT gle.cost_num, gle.buyer_account_id
+  INTO v_p, v_buyer
+  FROM public.guild_loot_sale_enriched gle
+  WHERE gle.loot_id = p_loot_id;
+
+  IF v_p IS NULL OR v_p <= 0 THEN
+    RETURN NULL;
+  END IF;
+
+  FOR r IN
+    SELECT a.account_id
+    FROM public.attendee_accounts_for_loot(p_loot_id) a
+  LOOP
+    IF r.account_id IS NULL OR r.account_id = v_buyer THEN
+      CONTINUE;
+    END IF;
+    v_pool := public.account_balance_before_loot(p_loot_id, r.account_id);
+    IF v_pool IS NULL OR v_pool < v_p THEN
+      CONTINUE;
+    END IF;
+    IF v_best IS NULL OR v_pool > v_best_pool
+       OR (v_pool = v_best_pool AND r.account_id < v_best) THEN
+      v_best_pool := v_pool;
+      v_best := r.account_id;
+    END IF;
+  END LOOP;
+
+  RETURN v_best;
+END;
+$bru$;
+
+COMMENT ON FUNCTION public.bid_portfolio_runner_up_guess(bigint) IS
+  'Heuristic: attendee (not buyer) with max pool before auction among those with pool >= clearing price; tie-break account_id.';
+
+REVOKE ALL ON FUNCTION public.bid_portfolio_runner_up_guess(bigint) FROM PUBLIC;
+
+CREATE OR REPLACE FUNCTION public.officer_bid_portfolio_for_loot(p_loot_id bigint)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $obpfl$
+DECLARE
+  v_raid text;
+  v_use_per_event boolean;
+  v_sale jsonb;
+  v_att jsonb := '[]'::jsonb;
+  v_p numeric;
+  v_buyer text;
+  v_runner text;
+  v_pool numeric;
+  v_could_clear boolean;
+  v_syn numeric;
+  v_prior_median numeric;
+  v_prior_cnt int;
+  v_prior_ratio_med numeric;
+  v_later_id bigint;
+  v_later_flag boolean;
+  r record;
+BEGIN
+  IF NOT (
+    public.is_officer()
+    OR nullif(trim(COALESCE(current_setting('request.jwt.claim.role', true), '')), '') = 'service_role'
+  ) THEN
+    RAISE EXCEPTION 'officer only';
+  END IF;
+
+  SELECT gle.raid_id INTO v_raid FROM public.guild_loot_sale_enriched gle WHERE gle.loot_id = p_loot_id;
+  IF v_raid IS NULL THEN
+    RAISE EXCEPTION 'loot_id not found';
+  END IF;
+
+  SELECT EXISTS (SELECT 1 FROM raid_event_attendance WHERE raid_id = v_raid LIMIT 1) INTO v_use_per_event;
+
+  SELECT gle.cost_num, gle.buyer_account_id INTO v_p, v_buyer
+  FROM public.guild_loot_sale_enriched gle WHERE gle.loot_id = p_loot_id;
+
+  v_runner := public.bid_portfolio_runner_up_guess(p_loot_id);
+
+  FOR r IN
+    SELECT DISTINCT a.account_id FROM public.attendee_accounts_for_loot(p_loot_id) a
+  LOOP
+    v_pool := public.account_balance_before_loot(p_loot_id, r.account_id);
+    v_could_clear := (v_p IS NOT NULL AND v_p > 0 AND v_pool IS NOT NULL AND v_pool >= v_p);
+    v_syn := CASE
+      WHEN v_p IS NOT NULL AND v_p > 0 AND v_pool IS NOT NULL THEN
+        LEAST(v_pool, GREATEST(0::numeric, v_p - 1))
+      ELSE NULL::numeric
+    END;
+
+    SELECT
+      percentile_cont(0.5) WITHIN GROUP (ORDER BY sub.cost_num),
+      count(*)::int
+    INTO v_prior_median, v_prior_cnt
+    FROM (
+      SELECT g2.cost_num
+      FROM public.guild_loot_sale_enriched g2
+      WHERE g2.buyer_account_id = r.account_id
+        AND g2.cost_num > 0
+        AND (
+          g2.raid_date < (SELECT gle2.raid_date FROM public.guild_loot_sale_enriched gle2 WHERE gle2.loot_id = p_loot_id)
+          OR (
+            g2.raid_date IS NOT DISTINCT FROM (SELECT gle2.raid_date FROM public.guild_loot_sale_enriched gle2 WHERE gle2.loot_id = p_loot_id)
+            AND g2.loot_id < p_loot_id
+          )
+        )
+    ) sub;
+
+    SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY sub.ratio)
+    INTO v_prior_ratio_med
+    FROM (
+      SELECT pr.paid_to_ref_ratio AS ratio
+      FROM public.guild_loot_sale_enriched pr
+      WHERE pr.buyer_account_id = r.account_id
+        AND pr.cost_num > 0
+        AND pr.paid_to_ref_ratio IS NOT NULL
+        AND (
+          pr.raid_date < (SELECT gle2.raid_date FROM public.guild_loot_sale_enriched gle2 WHERE gle2.loot_id = p_loot_id)
+          OR (
+            pr.raid_date IS NOT DISTINCT FROM (SELECT gle2.raid_date FROM public.guild_loot_sale_enriched gle2 WHERE gle2.loot_id = p_loot_id)
+            AND pr.loot_id < p_loot_id
+          )
+        )
+    ) sub;
+
+    SELECT g3.loot_id INTO v_later_id
+    FROM public.guild_loot_sale_enriched g3
+    WHERE g3.buyer_account_id = r.account_id
+      AND g3.norm_name = (SELECT gle3.norm_name FROM public.guild_loot_sale_enriched gle3 WHERE gle3.loot_id = p_loot_id)
+      AND g3.cost_num > 0
+      AND (
+        g3.raid_date > (SELECT gle4.raid_date FROM public.guild_loot_sale_enriched gle4 WHERE gle4.loot_id = p_loot_id)
+        OR (
+          g3.raid_date IS NOT DISTINCT FROM (SELECT gle4.raid_date FROM public.guild_loot_sale_enriched gle4 WHERE gle4.loot_id = p_loot_id)
+          AND g3.loot_id > p_loot_id
+        )
+      )
+    ORDER BY g3.raid_date ASC NULLS FIRST, g3.loot_id ASC
+    LIMIT 1;
+
+    v_later_flag := v_later_id IS NOT NULL;
+
+    v_att := v_att || jsonb_build_array(
+      jsonb_build_object(
+        'account_id', r.account_id,
+        'pool_before', v_pool,
+        'could_clear', v_could_clear,
+        'synthetic_max_bid', v_syn,
+        'is_buyer', (r.account_id IS NOT DISTINCT FROM v_buyer),
+        'median_paid_prior', v_prior_median,
+        'purchase_count_prior', COALESCE(v_prior_cnt, 0),
+        'median_paid_to_ref_prior', v_prior_ratio_med,
+        'later_bought_same_norm', COALESCE(v_later_flag, false),
+        'first_later_loot_id', v_later_id
+      )
+    );
+  END LOOP;
+
+  SELECT jsonb_build_object(
+    'loot_id', gle.loot_id,
+    'raid_id', gle.raid_id,
+    'event_id', gle.event_id,
+    'item_name', gle.item_name,
+    'norm_name', gle.norm_name,
+    'raid_date', gle.raid_date,
+    'cost_num', gle.cost_num,
+    'cost_text', gle.cost_text,
+    'buyer_account_id', gle.buyer_account_id,
+    'ref_price_at_sale', gle.ref_price_at_sale,
+    'paid_to_ref_ratio', gle.paid_to_ref_ratio,
+    'next_guild_sale_loot_id', gle.next_guild_sale_loot_id,
+    'next_guild_sale_buyer_account_id', gle.next_guild_sale_buyer_account_id
+  ) INTO v_sale
+  FROM public.guild_loot_sale_enriched gle
+  WHERE gle.loot_id = p_loot_id;
+
+  RETURN jsonb_build_object(
+    'loot_id', p_loot_id,
+    'raid_id', v_raid,
+    'sim_mode', CASE WHEN v_use_per_event THEN 'per_event' ELSE 'raid_level' END,
+    'sale', COALESCE(v_sale, '{}'::jsonb),
+    'runner_up_account_guess', v_runner,
+    'attendees', v_att,
+    'notes', jsonb_build_array(
+      'Heuristic only: no auction log.',
+      'synthetic_max_bid uses LEAST(pool, P-1) for teaching scaffold.',
+      'runner_up_account_guess = max pool among non-buyer attendees with pool >= P.'
+    )
+  );
+END;
+$obpfl$;
+
+COMMENT ON FUNCTION public.officer_bid_portfolio_for_loot(bigint) IS
+  'Officers only: one loot row — enriched sale, sim_mode, per-attendee pool/could_clear/synthetic_max_bid, purchase priors, later_bought_same_norm, runner_up guess.';
+
+REVOKE ALL ON FUNCTION public.officer_bid_portfolio_for_loot(bigint) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.officer_bid_portfolio_for_loot(bigint) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.officer_bid_portfolio_for_loot(bigint) TO service_role;
+
+CREATE OR REPLACE FUNCTION public.officer_account_bidding_portfolio(
+  p_account_id text,
+  p_from_date date DEFAULT NULL,
+  p_to_date date DEFAULT NULL
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $oabp$
+DECLARE
+  v_aid text := trim(p_account_id);
+  v_wins int := 0;
+  v_win_dkp numeric := 0;
+  v_present int := 0;
+  v_could_clear_lost int := 0;
+  v_runner_hits int := 0;
+  v_syn_sum numeric := 0;
+  v_ref_sum numeric := 0;
+  v_ref_n int := 0;
+  rec record;
+  v_p numeric;
+  v_buyer text;
+  v_pool numeric;
+  v_runner text;
+BEGIN
+  IF NOT public.is_officer() THEN
+    RAISE EXCEPTION 'officer only';
+  END IF;
+
+  IF v_aid = '' THEN
+    RAISE EXCEPTION 'account_id required';
+  END IF;
+
+  FOR rec IN
+    SELECT gle.*
+    FROM public.guild_loot_sale_enriched gle
+    WHERE (p_from_date IS NULL OR gle.raid_date >= p_from_date)
+      AND (p_to_date IS NULL OR gle.raid_date <= p_to_date)
+  LOOP
+    IF rec.buyer_account_id IS NOT DISTINCT FROM v_aid THEN
+      v_wins := v_wins + 1;
+      v_win_dkp := v_win_dkp + COALESCE(rec.cost_num, 0);
+      IF rec.paid_to_ref_ratio IS NOT NULL THEN
+        v_ref_sum := v_ref_sum + rec.paid_to_ref_ratio;
+        v_ref_n := v_ref_n + 1;
+      END IF;
+    END IF;
+
+    IF EXISTS (
+      SELECT 1
+      FROM public.bid_forecast_attendees_resolved_for_scope(
+        rec.raid_id,
+        rec.event_id
+      ) ar
+      WHERE ar.account_id IS NOT DISTINCT FROM v_aid
+    ) THEN
+      v_present := v_present + 1;
+      v_p := rec.cost_num;
+      v_buyer := rec.buyer_account_id;
+      v_pool := public.account_balance_before_loot(rec.loot_id, v_aid);
+      IF v_p > 0 AND v_buyer IS DISTINCT FROM v_aid AND v_pool IS NOT NULL AND v_pool >= v_p THEN
+        v_could_clear_lost := v_could_clear_lost + 1;
+        v_syn_sum := v_syn_sum + LEAST(v_pool, GREATEST(0::numeric, v_p - 1));
+      END IF;
+      v_runner := public.bid_portfolio_runner_up_guess(rec.loot_id);
+      IF v_runner IS NOT DISTINCT FROM v_aid THEN
+        v_runner_hits := v_runner_hits + 1;
+      END IF;
+    END IF;
+  END LOOP;
+
+  RETURN jsonb_build_object(
+    'account_id', v_aid,
+    'from_date', p_from_date,
+    'to_date', p_to_date,
+    'loot_rows_won', v_wins,
+    'total_dkp_spent_on_wins', v_win_dkp,
+    'auction_rows_present', v_present,
+    'could_clear_but_not_buyer_count', v_could_clear_lost,
+    'runner_up_guess_count', v_runner_hits,
+    'sum_synthetic_max_bid_when_present_non_buyer', v_syn_sum,
+    'avg_paid_to_ref_on_wins', CASE WHEN v_ref_n > 0 THEN (v_ref_sum / v_ref_n)::numeric ELSE NULL END,
+    'notes', jsonb_build_array(
+      'auction_rows_present counts loot rows where account appears in attendee resolution for that row event scope.',
+      'runner_up_guess_count uses same heuristic as officer_bid_portfolio_for_loot.'
+    )
+  );
+END;
+$oabp$;
+
+COMMENT ON FUNCTION public.officer_account_bidding_portfolio(text, date, date) IS
+  'Officers only: aggregate bidding-portfolio stats for one account over raid_date range (guild_loot_sale_enriched + attendee scope per row).';
+
+REVOKE ALL ON FUNCTION public.officer_account_bidding_portfolio(text, date, date) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.officer_account_bidding_portfolio(text, date, date) TO authenticated;
+
+-- Materialized bidding-portfolio facts (optional backfill for analytics; batch via officer_backfill_bid_portfolio_batch).
+CREATE TABLE IF NOT EXISTS public.bid_portfolio_auction_fact (
+  loot_id bigint PRIMARY KEY REFERENCES raid_loot(id) ON DELETE CASCADE,
+  raid_id text,
+  event_id text,
+  raid_date date,
+  item_name text,
+  norm_name text,
+  cost_num numeric,
+  buyer_account_id text,
+  ref_price_at_sale numeric,
+  paid_to_ref_ratio numeric,
+  runner_up_account_guess text,
+  next_guild_sale_loot_id bigint,
+  next_guild_sale_buyer_account_id text,
+  payload jsonb,
+  computed_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_bid_portfolio_auction_fact_raid_date
+  ON public.bid_portfolio_auction_fact (raid_date);
+CREATE INDEX IF NOT EXISTS idx_bid_portfolio_auction_fact_buyer
+  ON public.bid_portfolio_auction_fact (buyer_account_id);
+CREATE INDEX IF NOT EXISTS idx_bid_portfolio_auction_fact_runner_up
+  ON public.bid_portfolio_auction_fact (runner_up_account_guess)
+  WHERE runner_up_account_guess IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_bid_portfolio_auction_fact_norm
+  ON public.bid_portfolio_auction_fact (norm_name);
+
+COMMENT ON TABLE public.bid_portfolio_auction_fact IS
+  'Optional denormalized row per raid_loot for bidding heuristics (runner-up guess, next guild sale of same item). Backfill with officer_backfill_bid_portfolio_batch in small id ranges.';
+
+ALTER TABLE public.bid_portfolio_auction_fact ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Officers select bid_portfolio_auction_fact" ON public.bid_portfolio_auction_fact;
+CREATE POLICY "Officers select bid_portfolio_auction_fact"
+  ON public.bid_portfolio_auction_fact FOR SELECT TO authenticated
+  USING (public.is_officer());
+
+DROP POLICY IF EXISTS "Officers insert bid_portfolio_auction_fact" ON public.bid_portfolio_auction_fact;
+CREATE POLICY "Officers insert bid_portfolio_auction_fact"
+  ON public.bid_portfolio_auction_fact FOR INSERT TO authenticated
+  WITH CHECK (public.is_officer());
+
+DROP POLICY IF EXISTS "Officers update bid_portfolio_auction_fact" ON public.bid_portfolio_auction_fact;
+CREATE POLICY "Officers update bid_portfolio_auction_fact"
+  ON public.bid_portfolio_auction_fact FOR UPDATE TO authenticated
+  USING (public.is_officer())
+  WITH CHECK (public.is_officer());
+
+DROP POLICY IF EXISTS "Officers delete bid_portfolio_auction_fact" ON public.bid_portfolio_auction_fact;
+CREATE POLICY "Officers delete bid_portfolio_auction_fact"
+  ON public.bid_portfolio_auction_fact FOR DELETE TO authenticated
+  USING (public.is_officer());
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.bid_portfolio_auction_fact TO authenticated;
+
+DROP POLICY IF EXISTS "Service role full bid_portfolio_auction_fact" ON public.bid_portfolio_auction_fact;
+CREATE POLICY "Service role full bid_portfolio_auction_fact"
+  ON public.bid_portfolio_auction_fact FOR ALL TO service_role
+  USING (true) WITH CHECK (true);
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.bid_portfolio_auction_fact TO service_role;
+
+CREATE OR REPLACE FUNCTION public.officer_backfill_bid_portfolio_batch(
+  p_min_loot_id bigint,
+  p_max_loot_id bigint,
+  p_include_payload boolean DEFAULT false
+)
+RETURNS TABLE (rows_upserted integer, rows_errored integer)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $obfb$
+DECLARE
+  v_gle record;
+  v_payload jsonb;
+  v_ok int := 0;
+  v_bad int := 0;
+  v_inc boolean := COALESCE(p_include_payload, false);
+BEGIN
+  IF NOT (
+    public.is_officer()
+    OR nullif(trim(COALESCE(current_setting('request.jwt.claim.role', true), '')), '') = 'service_role'
+  ) THEN
+    RAISE EXCEPTION 'officer only';
+  END IF;
+
+  IF p_min_loot_id IS NULL OR p_max_loot_id IS NULL OR p_min_loot_id > p_max_loot_id THEN
+    RAISE EXCEPTION 'invalid loot_id range';
+  END IF;
+
+  FOR v_gle IN
+    SELECT *
+    FROM public.guild_loot_sale_enriched gle
+    WHERE gle.loot_id >= p_min_loot_id AND gle.loot_id <= p_max_loot_id
+    ORDER BY gle.loot_id
+  LOOP
+    BEGIN
+      v_payload := NULL;
+      IF v_inc THEN
+        v_payload := public.officer_bid_portfolio_for_loot(v_gle.loot_id);
+      END IF;
+
+      INSERT INTO public.bid_portfolio_auction_fact (
+        loot_id,
+        raid_id,
+        event_id,
+        raid_date,
+        item_name,
+        norm_name,
+        cost_num,
+        buyer_account_id,
+        ref_price_at_sale,
+        paid_to_ref_ratio,
+        runner_up_account_guess,
+        next_guild_sale_loot_id,
+        next_guild_sale_buyer_account_id,
+        payload,
+        computed_at
+      )
+      VALUES (
+        v_gle.loot_id,
+        v_gle.raid_id,
+        v_gle.event_id,
+        v_gle.raid_date,
+        v_gle.item_name,
+        v_gle.norm_name,
+        v_gle.cost_num,
+        v_gle.buyer_account_id,
+        v_gle.ref_price_at_sale,
+        v_gle.paid_to_ref_ratio,
+        public.bid_portfolio_runner_up_guess(v_gle.loot_id),
+        v_gle.next_guild_sale_loot_id,
+        v_gle.next_guild_sale_buyer_account_id,
+        v_payload,
+        now()
+      )
+      ON CONFLICT (loot_id) DO UPDATE SET
+        raid_id = EXCLUDED.raid_id,
+        event_id = EXCLUDED.event_id,
+        raid_date = EXCLUDED.raid_date,
+        item_name = EXCLUDED.item_name,
+        norm_name = EXCLUDED.norm_name,
+        cost_num = EXCLUDED.cost_num,
+        buyer_account_id = EXCLUDED.buyer_account_id,
+        ref_price_at_sale = EXCLUDED.ref_price_at_sale,
+        paid_to_ref_ratio = EXCLUDED.paid_to_ref_ratio,
+        runner_up_account_guess = EXCLUDED.runner_up_account_guess,
+        next_guild_sale_loot_id = EXCLUDED.next_guild_sale_loot_id,
+        next_guild_sale_buyer_account_id = EXCLUDED.next_guild_sale_buyer_account_id,
+        payload = CASE WHEN v_inc THEN EXCLUDED.payload ELSE bid_portfolio_auction_fact.payload END,
+        computed_at = EXCLUDED.computed_at;
+
+      v_ok := v_ok + 1;
+    EXCEPTION
+      WHEN OTHERS THEN
+        v_bad := v_bad + 1;
+    END;
+  END LOOP;
+
+  RETURN QUERY SELECT v_ok, v_bad;
+END;
+$obfb$;
+
+COMMENT ON FUNCTION public.officer_backfill_bid_portfolio_batch(bigint, bigint, boolean) IS
+  'Officers only: upsert bid_portfolio_auction_fact for loot_id in [min,max]. Use small ranges (e.g. 200–500 rows) to avoid statement timeout. p_include_payload stores full officer_bid_portfolio_for_loot JSON (slow).';
+
+REVOKE ALL ON FUNCTION public.officer_backfill_bid_portfolio_batch(bigint, bigint, boolean) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.officer_backfill_bid_portfolio_batch(bigint, bigint, boolean) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.officer_backfill_bid_portfolio_batch(bigint, bigint, boolean) TO service_role;
 
 CREATE OR REPLACE FUNCTION public.officer_global_bid_forecast(p_activity_days integer DEFAULT 120)
 RETURNS jsonb
