@@ -3604,6 +3604,9 @@ BEGIN
     RAISE EXCEPTION 'p_activity_days must be between 1 and 730';
   END IF;
 
+  -- Pooled connections often use a short statement_timeout; this RPC scans guild loot and attendance.
+  SET LOCAL statement_timeout = '20min';
+
   RETURN (
     WITH active_by_date AS (
       SELECT DISTINCT s.account_id
@@ -3932,7 +3935,7 @@ END;
 $$;
 
 COMMENT ON FUNCTION public.officer_global_bid_forecast(integer) IS
-  'Officers only: active accounts (recent activity or pinned) with roster characters + spend profiles including per_toon_earned (raid_attendance_dkp), per_toon_spent, ref_price_at_sale per purchase (paid rows only; zero-cost purchases omit ref to avoid full-table subqueries).';
+  'Officers only: active accounts (recent activity or pinned) with roster characters + spend profiles including per_toon_earned (raid_attendance_dkp), per_toon_spent, ref_price_at_sale per purchase (paid rows only; zero-cost purchases omit ref to avoid full-table subqueries). Uses SET LOCAL statement_timeout = 20min for the call.';
 
 REVOKE ALL ON FUNCTION public.normalize_item_name_for_lookup(text) FROM PUBLIC;
 

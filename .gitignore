@@ -41,6 +41,9 @@ raids/
 # CI/local intermediate for bid forecast precompute (see scripts/export_bid_forecast_roster.py)
 data/bid_forecast_roster.json
 
+# Large second-bidder model output (upload via scripts/upload_second_bidder_runner_up.py; do not commit)
+data/second_bidder.jsonl
+
 # Item page HTML cache (from fetch_item_pages.py; re-run to refresh)
 data/item_pages/
 
