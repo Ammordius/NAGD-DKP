@@ -20,6 +20,10 @@ Usage:
   python scripts/upload_second_bidder_runner_up.py --in data/second_bidder.jsonl --dry-run
   python scripts/upload_second_bidder_runner_up.py --in data/second_bidder.jsonl --empty-candidates null
 
+If the database has no runner_up_char_guess column yet, either add it (see HANDOFF_SECOND_BIDDER_MVP.md)
+or pass --omit-runner-up-char-column. Without the column, the script retries the batch without that field
+after the first PGRST204 schema error.
+
 By default, rows whose loot_id is not in the remote raid_loot table are skipped (FK).
 """
 
@@ -34,6 +38,11 @@ from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parent
+
+try:
+    from postgrest.exceptions import APIError as _PostgrestAPIError
+except ImportError:
+    _PostgrestAPIError = None
 
 
 def _load_env_from_web() -> None:
@@ -76,11 +85,31 @@ def _fetch_remote_raid_loot_ids(client, *, page_size: int = 1000) -> set[int]:
     return ids
 
 
+def _rows_without_runner_up_char(rows: list[dict]) -> list[dict]:
+    out = []
+    for r in rows:
+        d = {k: v for k, v in r.items() if k != "runner_up_char_guess"}
+        out.append(d)
+    return out
+
+
+def _is_missing_runner_up_char_schema_error(exc: BaseException) -> bool:
+    """PostgREST PGRST204 when column is absent from schema cache."""
+    payload = exc.args[0] if getattr(exc, "args", None) else None
+    if not isinstance(payload, dict):
+        return False
+    if payload.get("code") != "PGRST204":
+        return False
+    msg = str(payload.get("message", ""))
+    return "runner_up_char_guess" in msg
+
+
 def _row_from_record(
     rec: dict,
     *,
     empty_candidates: str,
     computed_at: str,
+    include_runner_up_char: bool,
 ) -> dict | None:
     """
     Build a PostgREST row dict, or None if this JSONL line should not produce an upsert.
@@ -100,12 +129,14 @@ def _row_from_record(
     if not cands:
         if empty_candidates == "skip":
             return None
-        return {
+        row: dict = {
             "loot_id": lid,
             "runner_up_account_guess": None,
-            "runner_up_char_guess": None,
             "computed_at": computed_at,
         }
+        if include_runner_up_char:
+            row["runner_up_char_guess"] = None
+        return row
 
     first = cands[0]
     if not isinstance(first, dict):
@@ -115,12 +146,14 @@ def _row_from_record(
     char_guess = first.get("top_eligible_char_id")
     runner_char = None if char_guess is None else str(char_guess).strip() or None
 
-    return {
+    row = {
         "loot_id": lid,
         "runner_up_account_guess": runner,
-        "runner_up_char_guess": runner_char,
         "computed_at": computed_at,
     }
+    if include_runner_up_char:
+        row["runner_up_char_guess"] = runner_char
+    return row
 
 
 def _flush_batch(
@@ -128,15 +161,41 @@ def _flush_batch(
     batch_by_id: dict[int, dict],
     *,
     dry_run: bool,
-) -> int:
+    include_runner_up_char: bool,
+) -> tuple[int, bool]:
+    """Upsert batch. Returns (row_count, include_runner_up_char for subsequent batches)."""
     if not batch_by_id:
-        return 0
+        return 0, include_runner_up_char
     rows = list(batch_by_id.values())
     batch_by_id.clear()
+    if not include_runner_up_char:
+        rows = _rows_without_runner_up_char(rows)
     if dry_run:
-        return len(rows)
-    client.table("bid_portfolio_auction_fact").upsert(rows, on_conflict="loot_id").execute()
-    return len(rows)
+        return len(rows), include_runner_up_char
+
+    tbl = client.table("bid_portfolio_auction_fact")
+    try:
+        tbl.upsert(rows, on_conflict="loot_id").execute()
+    except Exception as e:
+        if (
+            include_runner_up_char
+            and _PostgrestAPIError is not None
+            and isinstance(e, _PostgrestAPIError)
+            and _is_missing_runner_up_char_schema_error(e)
+        ):
+            print(
+                "Note: runner_up_char_guess is missing from PostgREST schema cache; "
+                "retrying without that column. Add it when ready:\n"
+                "  ALTER TABLE public.bid_portfolio_auction_fact "
+                "ADD COLUMN IF NOT EXISTS runner_up_char_guess text;\n"
+                "Then reload the API schema (Supabase Dashboard) if the error persists.",
+                file=sys.stderr,
+            )
+            stripped = _rows_without_runner_up_char(rows)
+            tbl.upsert(stripped, on_conflict="loot_id").execute()
+            return len(stripped), False
+        raise
+    return len(rows), include_runner_up_char
 
 
 def main() -> int:
@@ -166,6 +225,11 @@ def main() -> int:
         "--dry-run",
         action="store_true",
         help="Parse file and print stats; no Supabase calls",
+    )
+    ap.add_argument(
+        "--omit-runner-up-char-column",
+        action="store_true",
+        help="Do not send runner_up_char_guess (DB column not migrated yet; avoids PGRST204)",
     )
     args = ap.parse_args()
 
@@ -202,6 +266,7 @@ def main() -> int:
         )
         print(f"... found {len(existing_loot)} raid_loot row(s)", file=sys.stderr)
 
+    include_runner_up_char = not args.omit_runner_up_char_column
     batch_by_id: dict[int, dict] = {}
     total_upserted = 0
     skipped_fk = 0
@@ -235,6 +300,7 @@ def main() -> int:
                 rec,
                 empty_candidates=args.empty_candidates,
                 computed_at=computed_at,
+                include_runner_up_char=include_runner_up_char,
             )
             if row is None:
                 cands = rec.get("candidates")
@@ -259,12 +325,22 @@ def main() -> int:
                 sample.append(dict(row))
 
             if len(batch_by_id) >= max(1, args.batch_size):
-                n = _flush_batch(client, batch_by_id, dry_run=args.dry_run)
+                n, include_runner_up_char = _flush_batch(
+                    client,
+                    batch_by_id,
+                    dry_run=args.dry_run,
+                    include_runner_up_char=include_runner_up_char,
+                )
                 total_upserted += n
                 if not args.dry_run:
                     print(f"... upserted {total_upserted} row(s)", file=sys.stderr)
 
-    n = _flush_batch(client, batch_by_id, dry_run=args.dry_run)
+    n, _ = _flush_batch(
+        client,
+        batch_by_id,
+        dry_run=args.dry_run,
+        include_runner_up_char=include_runner_up_char,
+    )
     total_upserted += n
     if not args.dry_run and n:
         print(f"... upserted {total_upserted} row(s)", file=sys.stderr)
