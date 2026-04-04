@@ -22,6 +22,7 @@ import {
   spendArchetypeTags,
   toonBalanceFromProfile,
 } from '../lib/bidForecastModel'
+import { fetchBidForecastPrecomputeShard } from '../lib/bidForecastPrecomputeFetch'
 import { ACTIVE_DAYS } from '../lib/dkpLeaderboard'
 import { usePersistedState } from '../lib/usePersistedState'
 
@@ -131,7 +132,8 @@ export default function OfficerLootBidForecast({ isOfficer }) {
   const [precomputedByItem, setPrecomputedByItem] = useState(null)
   const [precomputedMeta, setPrecomputedMeta] = useState(null)
   const [precomputedLoadNote, setPrecomputedLoadNote] = useState('')
-  const [precomputeReady, setPrecomputeReady] = useState(false)
+  /** idle | loading | ready | absent | error — per-item shard under /bid_forecast_items/{id}.json */
+  const [precomputeShardStatus, setPrecomputeShardStatus] = useState('idle')
   const [sortBy, setSortBy] = usePersistedState('/officer/loot-bid-forecast:sortBy', 'interest')
 
   useEffect(() => {
@@ -159,24 +161,6 @@ export default function OfficerLootBidForecast({ isOfficer }) {
       })
       .catch(() => {
         if (!cancelled) setDkpPrices(null)
-      })
-    fetch('/bid_forecast_by_item.json')
-      .then((r) => {
-        if (r.status === 404) return null
-        if (!r.ok) throw new Error(String(r.status))
-        return r.json()
-      })
-      .then((j) => {
-        if (!cancelled) setPrecomputedByItem(j && typeof j === 'object' ? j : null)
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setPrecomputedByItem(null)
-          setPrecomputedLoadNote('No bid_forecast_by_item.json (CI precompute not deployed yet).')
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setPrecomputeReady(true)
       })
     fetch('/bid_forecast_meta.json')
       .then((r) => {
@@ -221,13 +205,55 @@ export default function OfficerLootBidForecast({ isOfficer }) {
   }, [itemInput, nameToId])
 
   useEffect(() => {
-    if (
-      !precomputeReady ||
-      !forecastPayload ||
-      !resolvedItemId ||
-      !itemStats ||
-      rankingsData != null
-    ) {
+    let cancelled = false
+    const ac = new AbortController()
+
+    if (!resolvedItemId) {
+      setPrecomputedByItem(null)
+      setPrecomputeShardStatus('idle')
+      setPrecomputedLoadNote('')
+      return () => ac.abort()
+    }
+
+    setPrecomputeShardStatus('loading')
+    setPrecomputedLoadNote('')
+    setPrecomputedByItem(null)
+
+    fetchBidForecastPrecomputeShard(resolvedItemId, { signal: ac.signal })
+      .then((result) => {
+        if (cancelled) return
+        if (result.ok) {
+          setPrecomputedByItem(result.payload)
+          setPrecomputeShardStatus('ready')
+        } else if (result.absent) {
+          setPrecomputedByItem(null)
+          setPrecomputeShardStatus('absent')
+          setPrecomputedLoadNote(
+            'No CI shard for this item (bid_forecast_items/{id}.json). Live Magelo JSON will be used when needed.',
+          )
+        } else {
+          setPrecomputedByItem(null)
+          setPrecomputeShardStatus('error')
+          setPrecomputedLoadNote(
+            'Could not load bid forecast shard for this item. Check network or run CI precompute job.',
+          )
+        }
+      })
+      .catch((e) => {
+        if (cancelled || e?.name === 'AbortError') return
+        setPrecomputedByItem(null)
+        setPrecomputeShardStatus('error')
+        setPrecomputedLoadNote('Could not load bid forecast shard for this item.')
+      })
+
+    return () => {
+      cancelled = true
+      ac.abort()
+    }
+  }, [resolvedItemId])
+
+  useEffect(() => {
+    if (!forecastPayload || !resolvedItemId || !itemStats || rankingsData != null) {
       return
     }
     const people = normalizedForecastPeople(forecastPayload)
@@ -245,7 +271,6 @@ export default function OfficerLootBidForecast({ isOfficer }) {
     if (!needsMagelo) return
     loadRankings()
   }, [
-    precomputeReady,
     forecastPayload,
     resolvedItemId,
     itemStats,
@@ -612,6 +637,11 @@ export default function OfficerLootBidForecast({ isOfficer }) {
         </label>
       </div>
 
+      {precomputeShardStatus === 'loading' && (
+        <p style={{ color: '#a1a1aa', marginBottom: '0.5rem', fontSize: '0.9rem' }}>
+          Loading CI upgrade index for this item…
+        </p>
+      )}
       {precomputedLoadNote && (
         <p style={{ color: '#fbbf24', marginBottom: '0.5rem', fontSize: '0.9rem' }}>{precomputedLoadNote}</p>
       )}

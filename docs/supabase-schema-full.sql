@@ -2284,24 +2284,8 @@ BEGIN
           pl.loot_character_name,
           CASE
             WHEN pl.cost_num > 0 THEN gpr.ref_price_at_sale
-            ELSE (
-              SELECT avg(sub.cost_num)
-              FROM (
-                SELECT gl.cost_num
-                FROM guild_loot_base gl
-                WHERE gl.norm_name = pl.norm_name
-                  AND gl.cost_num > 0
-                  AND (
-                    gl.raid_date < pl.raid_date
-                    OR (
-                      gl.raid_date IS NOT DISTINCT FROM pl.raid_date
-                      AND gl.loot_id < pl.loot_id
-                    )
-                  )
-                ORDER BY gl.raid_date DESC NULLS LAST, gl.loot_id DESC
-                LIMIT 3
-              ) sub
-            )
+            -- Zero-cost rows: skip per-purchase scans over guild_loot_base (was timing out at scale).
+            ELSE NULL::numeric
           END AS ref_price_at_sale
         FROM purchases_limited pl
         LEFT JOIN guild_positive_ref gpr ON pl.cost_num > 0
@@ -2408,7 +2392,7 @@ END;
 $$;
 
 COMMENT ON FUNCTION public.officer_global_bid_forecast(integer) IS
-  'Officers only: active accounts (recent activity or pinned) with roster characters + spend profiles including per_toon_earned (raid_attendance_dkp), per_toon_spent, ref_price_at_sale per purchase.';
+  'Officers only: active accounts (recent activity or pinned) with roster characters + spend profiles including per_toon_earned (raid_attendance_dkp), per_toon_spent, ref_price_at_sale per purchase (paid rows only; zero-cost purchases omit ref to avoid full-table subqueries).';
 
 REVOKE ALL ON FUNCTION public.normalize_item_name_for_lookup(text) FROM PUBLIC;
 

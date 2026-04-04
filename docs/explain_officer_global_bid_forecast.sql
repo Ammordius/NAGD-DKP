@@ -1,0 +1,18 @@
+-- =============================================================================
+-- officer_global_bid_forecast — deploy + smoke timing (staging/production)
+-- =============================================================================
+-- 1. Apply the latest definition from docs/supabase-schema-full.sql
+--    (function public.officer_global_bid_forecast(integer)).
+--
+-- 2. Call as an officer (PostgREST with officer JWT), or from SQL editor using
+--    a role that satisfies is_officer() if you test that way.
+--
+--    select public.officer_global_bid_forecast(120);
+--
+-- 3. For deep planner analysis, copy the WITH body from the function into a
+--    one-off EXPLAIN (ANALYZE, BUFFERS) statement on a staging snapshot — avoid
+--    on production during peak load.
+--
+-- Note: zero-cost purchase rows intentionally omit ref_price_at_sale (NULL) to
+-- avoid per-row scans over guild loot; paid rows still join guild_positive_ref.
+-- =============================================================================

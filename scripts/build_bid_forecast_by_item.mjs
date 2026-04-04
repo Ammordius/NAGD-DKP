@@ -1,6 +1,9 @@
 /**
- * CI/local: build web/public/bid_forecast_by_item.json + bid_forecast_meta.json
- * from class_rankings.json (URL or file), guild roster JSON, and web/public/item_stats.json.
+ * CI/local: build per-item shards under web/public/bid_forecast_items/{itemId}.json
+ * plus bid_forecast_meta.json (from class_rankings, roster export, item_stats).
+ *
+ * Optional monolithic output (local/debug only): pass --legacy-monolith to also write
+ * web/public/bid_forecast_by_item.json (~large).
  *
  * Env:
  *   CLASS_RANKINGS_URL — required unless --rankings-file (same artifact as VITE_CLASS_RANKINGS_URL)
@@ -8,6 +11,7 @@
  * Usage (repo root):
  *   node scripts/build_bid_forecast_by_item.mjs
  *   node scripts/build_bid_forecast_by_item.mjs --rankings-file ./class_rankings.json
+ *   node scripts/build_bid_forecast_by_item.mjs --legacy-monolith
  */
 
 import crypto from 'crypto'
@@ -27,7 +31,8 @@ function normName(s) {
 function parseArgs(argv) {
   const out = {
     rosterFile: path.join(REPO_ROOT, 'data', 'bid_forecast_roster.json'),
-    outByItem: path.join(REPO_ROOT, 'web', 'public', 'bid_forecast_by_item.json'),
+    outByItem: null,
+    outShardsDir: path.join(REPO_ROOT, 'web', 'public', 'bid_forecast_items'),
     outMeta: path.join(REPO_ROOT, 'web', 'public', 'bid_forecast_meta.json'),
     rankingsFile: null,
     maxPerSlot: 8,
@@ -38,15 +43,26 @@ function parseArgs(argv) {
       out.rosterFile = path.resolve(REPO_ROOT, argv[++i])
     } else if (a === '--out-by-item' && argv[i + 1]) {
       out.outByItem = path.resolve(REPO_ROOT, argv[++i])
+    } else if (a === '--out-shards-dir' && argv[i + 1]) {
+      out.outShardsDir = path.resolve(REPO_ROOT, argv[++i])
     } else if (a === '--out-meta' && argv[i + 1]) {
       out.outMeta = path.resolve(REPO_ROOT, argv[++i])
     } else if (a === '--rankings-file' && argv[i + 1]) {
       out.rankingsFile = path.resolve(REPO_ROOT, argv[++i])
     } else if (a === '--max-per-slot' && argv[i + 1]) {
       out.maxPerSlot = Math.max(1, Math.min(20, parseInt(argv[++i], 10) || 8))
+    } else if (a === '--legacy-monolith') {
+      out.outByItem = path.join(REPO_ROOT, 'web', 'public', 'bid_forecast_by_item.json')
     }
   }
   return out
+}
+
+function clearJsonShardsInDir(dir) {
+  if (!fs.existsSync(dir)) return
+  for (const f of fs.readdirSync(dir)) {
+    if (f.endsWith('.json')) fs.unlinkSync(path.join(dir, f))
+  }
 }
 
 function shortHash(buf) {
@@ -222,13 +238,30 @@ async function main() {
     byItem,
   }
 
-  fs.mkdirSync(path.dirname(args.outByItem), { recursive: true })
-  fs.writeFileSync(args.outByItem, JSON.stringify(byItemPayload), 'utf8')
+  clearJsonShardsInDir(args.outShardsDir)
+  fs.mkdirSync(args.outShardsDir, { recursive: true })
+  for (const id of Object.keys(byItem)) {
+    const shard = {
+      version: 1,
+      itemId: id,
+      generated_at: generatedAt,
+      activity_days: activityDays,
+      entries: byItem[id],
+    }
+    fs.writeFileSync(path.join(args.outShardsDir, `${id}.json`), JSON.stringify(shard), 'utf8')
+  }
+
+  if (args.outByItem) {
+    fs.mkdirSync(path.dirname(args.outByItem), { recursive: true })
+    fs.writeFileSync(args.outByItem, JSON.stringify(byItemPayload), 'utf8')
+  }
 
   const meta = {
     version: 1,
     generated_at: generatedAt,
     activity_days: activityDays,
+    sharded: true,
+    shards_dir: 'bid_forecast_items',
     rankings_hash: shortHash(rankingsRaw),
     item_stats_hash: shortHash(itemStatsRaw),
     magelo_characters_total: rankingsChars.length,
@@ -243,7 +276,8 @@ async function main() {
   console.log(
     JSON.stringify(
       {
-        wrote_by_item: args.outByItem,
+        wrote_shards_dir: args.outShardsDir,
+        wrote_monolith: args.outByItem || null,
         wrote_meta: args.outMeta,
         ...meta,
       },

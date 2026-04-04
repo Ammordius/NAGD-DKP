@@ -205,7 +205,7 @@ jobs:
         working-directory: web
         run: npm ci
 
-      - name: Build bid_forecast_by_item.json
+      - name: Build bid_forecast item shards + meta
         if: steps.bf_secrets.outputs.ok == 'true'
         run: node scripts/build_bid_forecast_by_item.mjs
 
@@ -214,10 +214,11 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add web/public/bid_forecast_by_item.json web/public/bid_forecast_meta.json
+          git add web/public/bid_forecast_meta.json web/public/bid_forecast_items/
+          git add -u -- web/public/bid_forecast_by_item.json
           if git diff --staged --quiet; then
             echo "No bid forecast JSON changes"
           else
-            git commit -m "chore: refresh bid_forecast_by_item.json (CI guild upgrade index)"
+            git commit -m "chore: refresh bid_forecast item shards (CI guild upgrade index)"
             git push
           fi
