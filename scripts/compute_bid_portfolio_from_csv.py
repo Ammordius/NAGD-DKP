@@ -3,6 +3,8 @@
 Compute bid_portfolio_auction_fact rows (+ optional officer_bid_portfolio_for_loot payload)
 from a Supabase CSV backup folder (parity with docs/supabase-schema-full.sql).
 
+Runner-up here is the max-pool heuristic only (same family as SQL bid_portfolio_runner_up_guess), not the Python second-bidder model; see docs/HANDOFF_SECOND_BIDDER_MVP.md.
+
 JSONL format (one object per line):
   With --include-payload: {"fact": {...}, "payload": {...}}
   Otherwise: {"fact": {...}}  (fact row has no "payload" key; upload as SQL NULL)

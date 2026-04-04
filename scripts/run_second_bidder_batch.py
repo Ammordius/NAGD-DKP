@@ -159,6 +159,14 @@ def main() -> int:
         default=None,
         help="Optional raid_item_sources.json (default: <repo>/raid_item_sources.json if present)",
     )
+    ap.add_argument(
+        "--permissive-missing-char-class-level",
+        action="store_true",
+        help=(
+            "If item_stats gate is on: treat missing CSV class_name mapping or missing level as "
+            "eligible (legacy backups). Default is fail-closed when item has class/level rules."
+        ),
+    )
     args = ap.parse_args()
 
     ck_path = args.checkpoint or Path(str(args.out) + ".second_bidder_checkpoint.pkl")
@@ -213,6 +221,7 @@ def main() -> int:
             item_stats_path=args.item_stats.resolve() if args.item_stats else None,
             mob_loot_path=args.mob_loot_json.resolve() if args.mob_loot_json else None,
             raid_sources_path=args.raid_sources_json.resolve() if args.raid_sources_json else None,
+            permissive_missing_char_class_level=args.permissive_missing_char_class_level,
         )
         if item_bundle is None:
             print(

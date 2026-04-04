@@ -34,6 +34,7 @@ from second_bidder_model.item_stats_eligibility import (
     char_meets_item_stats,
     merge_eligible_char_pairs,
 )
+from second_bidder_model.lane_pick import top_eligible_attending_char_id
 from second_bidder_model.state import KnowledgeState, empty_state, update_knowledge_state
 from second_bidder_model.types import LootSaleEvent
 
@@ -625,6 +626,56 @@ class TestItemStatsEligibility(unittest.TestCase):
         snap.character_level["nec1"] = 70
         stats = {"classes": "WAR PAL RNG", "requiredLevel": 1}
         self.assertFalse(char_meets_item_stats(snap, "nec1", stats))
+
+    def test_unmapped_class_strict_fails_when_item_has_class_list(self):
+        snap = BackupSnapshot(Path("."))
+        snap.character_class_name["x"] = "UnknownClass"
+        snap.character_level["x"] = 70
+        stats = {"classes": "WAR PAL", "requiredLevel": 1}
+        self.assertFalse(char_meets_item_stats(snap, "x", stats))
+        self.assertTrue(
+            char_meets_item_stats(snap, "x", stats, permissive_missing_char_class_level=True)
+        )
+
+    def test_missing_level_strict_fails_when_required_level_set(self):
+        snap = BackupSnapshot(Path("."))
+        snap.character_class_name["x"] = "Warrior"
+        stats = {"classes": "WAR PAL", "requiredLevel": 65}
+        self.assertFalse(char_meets_item_stats(snap, "x", stats))
+        self.assertTrue(
+            char_meets_item_stats(snap, "x", stats, permissive_missing_char_class_level=True)
+        )
+
+    def test_all_classes_item_still_requires_level_when_strict(self):
+        snap = BackupSnapshot(Path("."))
+        snap.character_class_name["x"] = "Warrior"
+        stats = {"classes": "ALL", "requiredLevel": 65}
+        self.assertFalse(char_meets_item_stats(snap, "x", stats))
+
+
+class TestLanePick(unittest.TestCase):
+    def test_top_eligible_attending_char_id(self):
+        rows = [
+            {
+                "char_id": "a",
+                "eligible_for_item": True,
+                "seen_on_attendance": True,
+                "character_bid_plausibility": 0.5,
+            },
+            {
+                "char_id": "b",
+                "eligible_for_item": True,
+                "seen_on_attendance": True,
+                "character_bid_plausibility": 0.9,
+            },
+            {
+                "char_id": "c",
+                "eligible_for_item": False,
+                "seen_on_attendance": True,
+                "character_bid_plausibility": 1.0,
+            },
+        ]
+        self.assertEqual(top_eligible_attending_char_id(rows), "b")
 
 
 class TestPoolExclusionEligiblePairs(unittest.TestCase):

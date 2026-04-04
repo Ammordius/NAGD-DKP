@@ -58,6 +58,15 @@ def item_usable_by_class(item_classes: Optional[str], class_abbrev: str) -> bool
     return ca in c.split()
 
 
+def item_stats_has_class_restrictions(stats: Dict[str, Any]) -> bool:
+    """True when item stats specify a non-universal class list."""
+    ic = stats.get("classes")
+    if not ic or not isinstance(ic, str):
+        return False
+    c = ic.strip().upper()
+    return bool(c) and c != "ALL"
+
+
 def class_name_to_abbrev(raw: str) -> Optional[str]:
     """Map characters.class_name (full name or abbrev) to TAKP 3-letter code."""
     if not raw or not str(raw).strip():
@@ -74,15 +83,24 @@ def char_meets_item_stats(
     snap: BackupSnapshot,
     char_id: str,
     stats: Optional[Dict[str, Any]],
+    *,
+    permissive_missing_char_class_level: bool = False,
 ) -> bool:
-    """True if we cannot prove the character cannot use the item (permissive on missing data)."""
+    """Whether this character may use the item per CSV class/level + item_stats.
+
+    When ``permissive_missing_char_class_level`` is False (default), unknown class
+    (unmapped ``class_name``) or missing ``level`` fails the check if the item has
+    class or level requirements — fail-closed when rules are known.
+    """
     if not stats:
         return True
     cls_raw = snap.character_class_name.get(char_id, "")
     abbrev = class_name_to_abbrev(cls_raw)
-    if abbrev:
-        ic = stats.get("classes")
-        if ic and isinstance(ic, str) and not item_usable_by_class(ic, abbrev):
+    if item_stats_has_class_restrictions(stats):
+        if not abbrev:
+            if not permissive_missing_char_class_level:
+                return False
+        elif not item_usable_by_class(stats.get("classes"), abbrev):
             return False
     req = stats.get("requiredLevel")
     if req is not None:
@@ -92,7 +110,10 @@ def char_meets_item_stats(
             req_i = None
         if req_i is not None:
             lvl = snap.character_level.get(char_id)
-            if lvl is not None and lvl < req_i:
+            if lvl is None:
+                if not permissive_missing_char_class_level:
+                    return False
+            elif lvl < req_i:
                 return False
     return True
 
@@ -167,6 +188,7 @@ class ItemStatsEligibilityBundle:
 
     item_stats_by_id: Dict[str, Dict[str, Any]]
     normalized_name_to_item_id: Dict[str, int]
+    permissive_missing_char_class_level: bool = False
 
     def stats_for_item_name(self, item_name: str) -> Optional[Dict[str, Any]]:
         key = normalize_item_name_for_lookup(item_name)
@@ -196,10 +218,15 @@ def load_item_stats_eligibility_bundle(
     item_stats_path: Path,
     mob_loot_path: Path,
     raid_sources_path: Optional[Path] = None,
+    permissive_missing_char_class_level: bool = False,
 ) -> ItemStatsEligibilityBundle:
     stats = load_item_stats_by_id(item_stats_path)
     name_map = build_normalized_name_to_item_id(mob_loot_path, raid_sources_path)
-    return ItemStatsEligibilityBundle(item_stats_by_id=stats, normalized_name_to_item_id=name_map)
+    return ItemStatsEligibilityBundle(
+        item_stats_by_id=stats,
+        normalized_name_to_item_id=name_map,
+        permissive_missing_char_class_level=permissive_missing_char_class_level,
+    )
 
 
 def eligible_char_pairs_for_item_name(
@@ -213,7 +240,12 @@ def eligible_char_pairs_for_item_name(
         return None
     pairs: Set[Tuple[str, str]] = set()
     for char_id, account_ids in snap.char_to_accounts.items():
-        if not char_id or not char_meets_item_stats(snap, char_id, stats):
+        if not char_id or not char_meets_item_stats(
+            snap,
+            char_id,
+            stats,
+            permissive_missing_char_class_level=bundle.permissive_missing_char_class_level,
+        ):
             continue
         for aid in account_ids:
             a = (aid or "").strip()
@@ -250,6 +282,7 @@ def try_load_item_eligibility_bundle(
     item_stats_path: Optional[Path] = None,
     mob_loot_path: Optional[Path] = None,
     raid_sources_path: Optional[Path] = None,
+    permissive_missing_char_class_level: bool = False,
 ) -> Optional[ItemStatsEligibilityBundle]:
     """Load bundle if ``item_stats.json`` exists; otherwise return None (permissive mode)."""
     dflt_stats, dflt_mob, dflt_rs = default_repo_paths(repo_root)
@@ -265,4 +298,5 @@ def try_load_item_eligibility_bundle(
         item_stats_path=stats_p,
         mob_loot_path=mob_p,
         raid_sources_path=rs,
+        permissive_missing_char_class_level=permissive_missing_char_class_level,
     )

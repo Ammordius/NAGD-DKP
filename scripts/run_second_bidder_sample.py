@@ -38,6 +38,11 @@ def main() -> None:
         action="store_true",
         help="Do not load repo data/item_stats.json for class/level eligibility",
     )
+    p.add_argument(
+        "--permissive-missing-char-class-level",
+        action="store_true",
+        help="Missing CSV class/level counts as eligible when item has rules (legacy backups)",
+    )
     args = p.parse_args()
 
     cfg = SecondBidderConfig()
@@ -54,7 +59,10 @@ def main() -> None:
     if not args.no_item_stats:
         from second_bidder_model.item_stats_eligibility import try_load_item_eligibility_bundle
 
-        item_bundle = try_load_item_eligibility_bundle(REPO_ROOT)
+        item_bundle = try_load_item_eligibility_bundle(
+            REPO_ROOT,
+            permissive_missing_char_class_level=args.permissive_missing_char_class_level,
+        )
     preds = run_from_backup(
         str(args.backup_dir.resolve()),
         cfg,

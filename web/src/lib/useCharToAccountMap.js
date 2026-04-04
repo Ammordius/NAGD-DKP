@@ -72,14 +72,15 @@ async function fetchCharToAccountMap() {
   ;(accRows || []).forEach((a) => {
     if (a?.account_id) accountIdToDisplayName[a.account_id] = (a.display_name || '').trim() || a.account_id
   })
-  return { charToAccount: map, accountIdToDisplayName, accountIdToSampleCharName }
+  return { charToAccount: map, accountIdToDisplayName, accountIdToSampleCharName, charIdToName }
 }
 
 /**
  * Fetches character_account, characters, and accounts to build char_id/name -> account_id and account display name.
  * Uses SWR so multiple components share one request (dedupingInterval 60s).
  * Returns getAccountId(charIdOrName), getAccountDisplayName(charIdOrName),
- * getDisplayNameForAccountId(accountId), getRepresentativeCharNameForAccount(accountId), and loading flag.
+ * getDisplayNameForAccountId(accountId), getRepresentativeCharNameForAccount(accountId),
+ * getCharacterNameForCharId(charId), and loading flag.
  */
 export function useCharToAccountMap() {
   const { data, isLoading } = useSWR(CHAR_TO_ACCOUNT_KEY, fetchCharToAccountMap, {
@@ -90,6 +91,7 @@ export function useCharToAccountMap() {
   const charToAccount = data?.charToAccount ?? {}
   const accountIdToDisplayName = data?.accountIdToDisplayName ?? {}
   const accountIdToSampleCharName = data?.accountIdToSampleCharName ?? {}
+  const charIdToName = data?.charIdToName ?? {}
 
   const getAccountId = useMemo(() => {
     return (charIdOrName) => {
@@ -138,11 +140,20 @@ export function useCharToAccountMap() {
     }
   }, [accountIdToSampleCharName])
 
+  const getCharacterNameForCharId = useMemo(() => {
+    return (charId) => {
+      if (charId == null || charId === '') return null
+      const k = String(charId).trim()
+      return charIdToName[k] ?? null
+    }
+  }, [charIdToName])
+
   return {
     getAccountId,
     getAccountDisplayName,
     getDisplayNameForAccountId,
     getRepresentativeCharNameForAccount,
+    getCharacterNameForCharId,
     loading: isLoading,
   }
 }

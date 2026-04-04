@@ -92,9 +92,11 @@ python scripts/run_second_bidder_batch.py "C:\TAKP\dkp\backup-2026-04-02\backup"
 
 Add `--include-character-debug` to JSONL lines if you want `character_debug` / `player_debug` on each ranked candidate (larger files).
 
-By default the batch runner loads repo `data/item_stats.json` + `data/dkp_mob_loot.json` for class/level eligibility (stderr note if missing). Use `--no-item-stats` to skip, or `--item-stats` / `--mob-loot-json` / `--raid-sources-json` to override paths.
+By default the batch runner loads repo `data/item_stats.json` + `data/dkp_mob_loot.json` for class/level eligibility (stderr note if missing). Use `--no-item-stats` to skip, or `--item-stats` / `--mob-loot-json` / `--raid-sources-json` to override paths. When item rules are known, missing CSV `class_name` mapping or missing `level` makes a lane **ineligible** unless you pass **`--permissive-missing-char-class-level`** (legacy backups).
 
 Optional `--eligibility-json path.json` loads `eligible_by_loot_id` / `eligible_chars_by_loot_id` (see [`docs/HANDOFF_SECOND_BIDDER_MVP.md`](../../docs/HANDOFF_SECOND_BIDDER_MVP.md)); character pairs are **intersected** with derived stats-based pairs when both apply.
+
+Batch JSONL candidates include **`top_eligible_char_id`** (best item-eligible attending lane per ranked account); [`scripts/upload_second_bidder_runner_up.py`](../../scripts/upload_second_bidder_runner_up.py) writes it to **`bid_portfolio_auction_fact.runner_up_char_guess`**.
 
 Resume (append to the same `--out`, reuse checkpoint next to the file unless you passed `--checkpoint`):
 

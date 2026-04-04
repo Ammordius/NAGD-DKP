@@ -45,6 +45,8 @@ class ScoredCandidate:
     character_score: float = 0.0
     character_debug: List[Dict[str, Any]] = field(default_factory=list)
     player_debug: Dict[str, Any] = field(default_factory=dict)
+    # Best-scoring item-eligible character that was on raid attendance (for officer UI)
+    top_eligible_char_id: Optional[str] = None
 
 @dataclass
 class PredictionResult:

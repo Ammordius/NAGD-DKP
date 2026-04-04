@@ -228,6 +228,7 @@ def fact_row(
         "ref_price_at_sale": gle.ref_price_at_sale,
         "paid_to_ref_ratio": gle.paid_to_ref_ratio,
         "runner_up_account_guess": runner,
+        "runner_up_char_guess": None,
         "next_guild_sale_loot_id": gle.next_guild_sale_loot_id,
         "next_guild_sale_buyer_account_id": gle.next_guild_sale_buyer_account_id,
         "computed_at": computed_at,

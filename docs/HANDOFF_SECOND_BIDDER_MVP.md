@@ -10,7 +10,7 @@ It is **not** claiming ground-truth second bids. Outputs are best used for diagn
 
 **Related systems**
 
-- **Officer UI** reads cached `bid_portfolio_auction_fact.runner_up_account_guess` when present; see [`docs/HANDOFF_OFFICER_LOOT_BID_FORECAST.md`](HANDOFF_OFFICER_LOOT_BID_FORECAST.md) and [`web/src/pages/ItemPage.jsx`](../web/src/pages/ItemPage.jsx). You can **replace** that column with the Python model’s top pick via [`scripts/upload_second_bidder_runner_up.py`](../scripts/upload_second_bidder_runner_up.py) (see **Upload runner-up to Supabase** below)—it is **not** the same heuristic as SQL `bid_portfolio_runner_up_guess`.
+- **Officer UI** reads cached `bid_portfolio_auction_fact.runner_up_account_guess` and optional `runner_up_char_guess` when present; see [`docs/HANDOFF_OFFICER_LOOT_BID_FORECAST.md`](HANDOFF_OFFICER_LOOT_BID_FORECAST.md) and [`web/src/pages/ItemPage.jsx`](../web/src/pages/ItemPage.jsx). You can **replace** those fields with the Python model via [`scripts/upload_second_bidder_runner_up.py`](../scripts/upload_second_bidder_runner_up.py) (see **Upload runner-up to Supabase** below)—it is **not** the same heuristic as SQL `bid_portfolio_runner_up_guess`.
 - **Reconstructed balances and attendance** intentionally reuse [`scripts/bid_portfolio_local/`](../scripts/bid_portfolio_local/) so pool and attendee sets stay aligned with [`docs/HANDOFF_BID_PORTFOLIO_CSV_LOCAL.md`](HANDOFF_BID_PORTFOLIO_CSV_LOCAL.md) semantics.
 
 ## Code map
@@ -21,7 +21,7 @@ It is **not** claiming ground-truth second bids. Outputs are best used for diagn
 | Package README (commands, modules) | [`scripts/second_bidder_model/README.md`](../scripts/second_bidder_model/README.md) |
 | One-event human report | [`scripts/run_second_bidder_sample.py`](../scripts/run_second_bidder_sample.py) |
 | Full history → JSONL + resume | [`scripts/run_second_bidder_batch.py`](../scripts/run_second_bidder_batch.py) |
-| Upload JSONL → `bid_portfolio_auction_fact.runner_up_account_guess` | [`scripts/upload_second_bidder_runner_up.py`](../scripts/upload_second_bidder_runner_up.py) |
+| Upload JSONL → `bid_portfolio_auction_fact.runner_up_account_guess` + `runner_up_char_guess` | [`scripts/upload_second_bidder_runner_up.py`](../scripts/upload_second_bidder_runner_up.py) |
 | Unit tests | [`scripts/second_bidder_model/tests/`](../scripts/second_bidder_model/tests/) |
 
 ## Required CSVs (`--backup-dir`)
@@ -69,14 +69,20 @@ Default checkpoint path: `<out>.second_bidder_checkpoint.pkl` (override with `--
 Each line is one object (from [`serialize.prediction_result_to_json_dict`](../scripts/second_bidder_model/serialize.py)):
 
 - **`event`**: `loot_id`, `raid_id`, `event_id`, `raid_date`, `norm_name`, `item_name`, `winning_price`, `buyer_account_id`, `buyer_char_id`, `attendee_count`, `eligible_filter_on`, `event_index`, …
-- **`candidates`**: up to `--top-candidates` rows with `account_id`, `probability`, `raw_score`, `pool_before`, group scores; optional `--include-feature-vectors` adds normalized per-feature dicts (much larger).
+- **`candidates`**: up to `--top-candidates` rows with `account_id`, `probability`, `raw_score`, `pool_before`, `top_eligible_char_id` (modeled item-eligible attending lane), group scores; optional `--include-feature-vectors` adds normalized per-feature dicts (much larger).
 - **`candidate_count`**, **`exclusion_count`**
 
 `account_id` is whatever appears in `character_account` / resolution (may be numeric or a guild-specific string).
 
+## `compute_bid_portfolio_from_csv.py` vs second-bidder model
+
+[`scripts/compute_bid_portfolio_from_csv.py`](../scripts/compute_bid_portfolio_from_csv.py) builds `bid_portfolio_auction_fact` rows using **`runner_up_account_guess` = max reconstructed account pool** among non-buyer attendees who clear the price (same idea as SQL `bid_portfolio_runner_up_guess`). It **does not** run the Python second-bidder model and leaves **`runner_up_char_guess` null**.
+
+For **class/level-aware** account guesses and a **modeled attending character lane** in the officer UI, run **`run_second_bidder_batch.py`** then **`upload_second_bidder_runner_up.py`** (JSONL patches both `runner_up_account_guess` and `runner_up_char_guess`).
+
 ## Upload runner-up to Supabase
 
-Patch **`bid_portfolio_auction_fact.runner_up_account_guess`** (and **`computed_at`**) from batch JSONL. The value written is **`candidates[0].account_id`** (buyer is already excluded from the pool in the model). SQL’s `bid_portfolio_runner_up_guess` instead picks the non-buyer attendee with the **largest reconstructed pool** that still clears price—so numbers may differ by design.
+Patch **`bid_portfolio_auction_fact.runner_up_account_guess`**, **`runner_up_char_guess`**, and **`computed_at`** from batch JSONL. Account id is **`candidates[0].account_id`**; character id is **`candidates[0].top_eligible_char_id`** when present (buyer is already excluded from the pool in the model). SQL’s `bid_portfolio_runner_up_guess` instead picks the non-buyer attendee with the **largest reconstructed pool** that still clears price—so numbers may differ by design.
 
 Uses **`pip install supabase`** and the same env as BPF upload: `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` in `web/.env` (or `VITE_*`). By default, **`loot_id`s not present in remote `raid_loot` are skipped** (FK). Use **`--dry-run`** to parse and print counts plus a few sample rows without calling the API.
 
@@ -88,7 +94,7 @@ python scripts/upload_second_bidder_runner_up.py --in data/second_bidder.jsonl -
 python scripts/upload_second_bidder_runner_up.py --in data/second_bidder.jsonl --empty-candidates null
 ```
 
-Prefer a **full** `bid_portfolio_auction_fact` row from [`scripts/compute_bid_portfolio_from_csv.py`](../scripts/compute_bid_portfolio_from_csv.py) + [`scripts/upload_bid_portfolio_fact.py`](../scripts/upload_bid_portfolio_fact.py) when you want SQL-parity columns (`ref_price_at_sale`, `next_guild_sale_*`, `payload`, …). Use this uploader when you intentionally want the **Python second-bidder model** as the officer UI runner-up string.
+Prefer a **full** `bid_portfolio_auction_fact` row from [`scripts/compute_bid_portfolio_from_csv.py`](../scripts/compute_bid_portfolio_from_csv.py) + [`scripts/upload_bid_portfolio_fact.py`](../scripts/upload_bid_portfolio_fact.py) when you want SQL-parity columns (`ref_price_at_sale`, `next_guild_sale_*`, `payload`, …). That path still uses the **max-pool** runner-up only. Use **`upload_second_bidder_runner_up.py`** afterward if you want the **Python second-bidder model** (and modeled character lane) in the officer UI.
 
 **After the first real upsert**, spot-check one `loot_id` that already had a full BPF row: columns such as `buyer_account_id` or `payload` should still match the pre-upload row if your PostgREST version only updates fields present in the upsert body. If anything else is nulled, switch to a DB-only `UPDATE` workflow or ask for a follow-up fix.
 
@@ -98,7 +104,9 @@ By default, batch and sample CLIs load **[`data/item_stats.json`](../data/item_s
 
 - **Disable:** `--no-item-stats` on [`run_second_bidder_batch.py`](../scripts/run_second_bidder_batch.py) or [`run_second_bidder_sample.py`](../scripts/run_second_bidder_sample.py).
 - **Overrides:** `--item-stats`, `--mob-loot-json`, `--raid-sources-json` on the batch script.
+- **Legacy CSV gaps:** By default, if an item has class or level rules from `item_stats.json` but `characters.csv` is missing a mappable `class_name` or `level` for a character, that lane is **ineligible** (fail-closed). Pass **`--permissive-missing-char-class-level`** on batch or sample to restore the old permissive behavior for incomplete backups.
 - **Merge with Magelo:** If you also pass `--eligibility-json`, **character** eligibility sets are **intersected** (tightest wins).
+- **Database:** add `runner_up_char_guess` if your Supabase schema predates it: `ALTER TABLE public.bid_portfolio_auction_fact ADD COLUMN IF NOT EXISTS runner_up_char_guess text;` (see [`docs/supabase-schema-full.sql`](../docs/supabase-schema-full.sql)).
 
 Implementation: [`scripts/second_bidder_model/item_stats_eligibility.py`](../scripts/second_bidder_model/item_stats_eligibility.py), `prepare_second_bidder_events(..., item_eligibility_bundle=...)`.
 

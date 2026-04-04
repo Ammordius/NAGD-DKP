@@ -9,6 +9,7 @@ from .candidates import build_candidate_pool
 from .config import SecondBidderConfig
 from .features import build_feature_bundles
 from .item_stats_eligibility import ItemStatsEligibilityBundle
+from .lane_pick import top_eligible_attending_char_id
 from .prepare import prepare_second_bidder_events
 from .scoring import normalize_candidate_scores, score_candidate
 from .state import KnowledgeState, empty_state, update_knowledge_state
@@ -54,6 +55,7 @@ def predict_second_bidder_for_event(
             "final_player_score": raw,
             "exclusion_notes": notes,
         }
+        lane_id = top_eligible_attending_char_id(list(rows))
         scored.append(
             ScoredCandidate(
                 account_id=b.account_id,
@@ -67,6 +69,7 @@ def predict_second_bidder_for_event(
                 character_score=char,
                 character_debug=list(rows),
                 player_debug=player_debug,
+                top_eligible_char_id=lane_id,
             )
         )
     probs = normalize_candidate_scores(raw_by_aid, config.score_floor)

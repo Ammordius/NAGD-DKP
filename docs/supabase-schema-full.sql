@@ -3368,6 +3368,7 @@ CREATE TABLE IF NOT EXISTS public.bid_portfolio_auction_fact (
   ref_price_at_sale numeric,
   paid_to_ref_ratio numeric,
   runner_up_account_guess text,
+  runner_up_char_guess text,
   next_guild_sale_loot_id bigint,
   next_guild_sale_buyer_account_id text,
   payload jsonb,
@@ -3385,7 +3386,9 @@ CREATE INDEX IF NOT EXISTS idx_bid_portfolio_auction_fact_norm
   ON public.bid_portfolio_auction_fact (norm_name);
 
 COMMENT ON TABLE public.bid_portfolio_auction_fact IS
-  'Optional denormalized row per raid_loot for bidding heuristics (runner-up guess, next guild sale of same item). Backfill with officer_backfill_bid_portfolio_batch in small id ranges.';
+  'Optional denormalized row per raid_loot for bidding heuristics (runner-up guess, next guild sale of same item). Backfill with officer_backfill_bid_portfolio_batch in small id ranges. runner_up_char_guess is set by second-bidder JSONL upload (model lane); SQL backfill leaves it unchanged when NULL.';
+
+-- Existing databases before this column: ALTER TABLE public.bid_portfolio_auction_fact ADD COLUMN IF NOT EXISTS runner_up_char_guess text;
 
 ALTER TABLE public.bid_portfolio_auction_fact ENABLE ROW LEVEL SECURITY;
 
@@ -3475,6 +3478,7 @@ BEGIN
         ref_price_at_sale,
         paid_to_ref_ratio,
         runner_up_account_guess,
+        runner_up_char_guess,
         next_guild_sale_loot_id,
         next_guild_sale_buyer_account_id,
         payload,
@@ -3492,6 +3496,7 @@ BEGIN
         v_gle.ref_price_at_sale,
         v_gle.paid_to_ref_ratio,
         public.bid_portfolio_runner_up_guess(v_gle.loot_id),
+        NULL,
         v_gle.next_guild_sale_loot_id,
         v_gle.next_guild_sale_buyer_account_id,
         v_payload,
@@ -3508,6 +3513,7 @@ BEGIN
         ref_price_at_sale = EXCLUDED.ref_price_at_sale,
         paid_to_ref_ratio = EXCLUDED.paid_to_ref_ratio,
         runner_up_account_guess = EXCLUDED.runner_up_account_guess,
+        runner_up_char_guess = COALESCE(EXCLUDED.runner_up_char_guess, bid_portfolio_auction_fact.runner_up_char_guess),
         next_guild_sale_loot_id = EXCLUDED.next_guild_sale_loot_id,
         next_guild_sale_buyer_account_id = EXCLUDED.next_guild_sale_buyer_account_id,
         payload = CASE WHEN v_inc THEN EXCLUDED.payload ELSE bid_portfolio_auction_fact.payload END,

@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
-Patch bid_portfolio_auction_fact.runner_up_account_guess from second_bidder JSONL
-(produced by run_second_bidder_batch.py / serialize.prediction_result_to_json_dict).
+Patch bid_portfolio_auction_fact.runner_up_account_guess and runner_up_char_guess from
+second_bidder JSONL (produced by run_second_bidder_batch.py / serialize.prediction_result_to_json_dict).
 
-Uses the **model's** top non-buyer candidate (candidates[0].account_id). That is **not**
-the same algorithm as SQL public.bid_portfolio_runner_up_guess (max pool among attendees
-who could clear price). Uploading overwrites the stored string for each loot_id you send.
+Uses the **model's** top non-buyer candidate (candidates[0].account_id) and optional
+top_eligible_char_id (item-eligible attending lane). That is **not** the same algorithm
+as SQL public.bid_portfolio_runner_up_guess (max pool among attendees who could clear price).
 
 Uses SUPABASE_SERVICE_ROLE_KEY (or VITE_SUPABASE_SERVICE_ROLE_KEY) and SUPABASE_URL /
 VITE_SUPABASE_URL from web/.env (same pattern as scripts/upload_bid_portfolio_fact.py).
@@ -103,6 +103,7 @@ def _row_from_record(
         return {
             "loot_id": lid,
             "runner_up_account_guess": None,
+            "runner_up_char_guess": None,
             "computed_at": computed_at,
         }
 
@@ -111,10 +112,13 @@ def _row_from_record(
         return None
     aid = first.get("account_id")
     runner = None if aid is None else str(aid)
+    char_guess = first.get("top_eligible_char_id")
+    runner_char = None if char_guess is None else str(char_guess).strip() or None
 
     return {
         "loot_id": lid,
         "runner_up_account_guess": runner,
+        "runner_up_char_guess": runner_char,
         "computed_at": computed_at,
     }
 
@@ -137,7 +141,7 @@ def _flush_batch(
 
 def main() -> int:
     ap = argparse.ArgumentParser(
-        description="Upsert runner_up_account_guess on bid_portfolio_auction_fact from second_bidder JSONL."
+        description="Upsert runner_up_account_guess / runner_up_char_guess on bid_portfolio_auction_fact from second_bidder JSONL."
     )
     ap.add_argument("--in", dest="in_path", type=Path, required=True, help="Input JSONL")
     ap.add_argument("--batch-size", type=int, default=150)

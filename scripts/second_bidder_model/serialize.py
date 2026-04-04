@@ -39,6 +39,7 @@ def _scored_json(
         "propensity_score": c.propensity_score,
         "competitiveness_score": c.competitiveness_score,
         "character_score": c.character_score,
+        "top_eligible_char_id": c.top_eligible_char_id,
     }
     if include_features:
         fb = c.features

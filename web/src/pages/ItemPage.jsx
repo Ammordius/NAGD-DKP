@@ -165,7 +165,7 @@ export default function ItemPage({ isOfficer = false }) {
   const [searchParams] = useSearchParams()
   const location = useLocation()
   const secondPlaceSectionRef = useRef(null)
-  const { getAccountId, getAccountDisplayName, getDisplayNameForAccountId, getRepresentativeCharNameForAccount } = useCharToAccountMap()
+  const { getAccountId, getAccountDisplayName, getDisplayNameForAccountId, getRepresentativeCharNameForAccount, getCharacterNameForCharId } = useCharToAccountMap()
   const itemName = useMemo(() => (itemNameEncoded ? decodeURIComponent(itemNameEncoded) : ''), [itemNameEncoded])
   const [lootRows, setLootRows] = useState([])
   const [raids, setRaids] = useState({})
@@ -220,7 +220,7 @@ export default function ItemPage({ isOfficer = false }) {
           const chunk = lootIdsForFact.slice(i, i + FACT_IN_CHUNK)
           const { data, error: qErr } = await supabase
             .from('bid_portfolio_auction_fact')
-            .select('loot_id, runner_up_account_guess')
+            .select('loot_id, runner_up_account_guess, runner_up_char_guess')
             .in('loot_id', chunk)
           if (cancelled) return
           if (qErr) {
@@ -228,7 +228,10 @@ export default function ItemPage({ isOfficer = false }) {
             return
           }
           ;(data || []).forEach((row) => {
-            merged[Number(row.loot_id)] = row.runner_up_account_guess ?? null
+            merged[Number(row.loot_id)] = {
+              runner_up_account_guess: row.runner_up_account_guess ?? null,
+              runner_up_char_guess: row.runner_up_char_guess ?? null,
+            }
           })
         }
         if (!cancelled) setFactByLootId(merged)
@@ -472,7 +475,11 @@ export default function ItemPage({ isOfficer = false }) {
             </button>
           </div>
           <p style={{ color: '#a1a1aa', fontSize: '0.875rem', marginTop: 0 }}>
-            Heuristic only: no auction bid log. “Second place” is the richest non-buyer attendee whose reconstructed pool was at least the clearing price (see guild SQL docs).
+            No auction bid log: this is a guess. Cached rows may come from the second-bidder model (class/level-aware when you upload JSONL) or from the older SQL/CSV heuristic (richest non-buyer attendee by{' '}
+            <strong>account</strong>
+            {' '}DKP pool before the sale, among those who could clear the price).{' '}
+            <strong>pool_before</strong>
+            {' '}is always account-level, not the named character’s balance. When present, the character shown after the model upload is the model’s item-eligible attending lane; otherwise the name is only a representative toon for that account.
           </p>
           {factError && <p className="error" style={{ marginBottom: '0.5rem' }}>{factError}</p>}
           {factLoading && <p style={{ color: '#a1a1aa', marginBottom: '0.5rem' }}>Loading cached inference…</p>}
@@ -492,13 +499,17 @@ export default function ItemPage({ isOfficer = false }) {
                   const n = Number(row.id)
                   const hasFact = Number.isFinite(n) && Object.prototype.hasOwnProperty.call(factByLootId, n)
                   const hasRpc = Number.isFinite(n) && Object.prototype.hasOwnProperty.call(rpcRunnerUpByLootId, n)
-                  let inferred = null
+                  let inferredAccount = null
+                  let inferredCharId = null
                   let inferredReady = false
                   if (hasFact) {
-                    inferred = factByLootId[n]
+                    const f = factByLootId[n]
+                    inferredAccount = f?.runner_up_account_guess ?? null
+                    inferredCharId = f?.runner_up_char_guess ?? null
                     inferredReady = true
                   } else if (hasRpc) {
-                    inferred = rpcRunnerUpByLootId[n]
+                    inferredAccount = rpcRunnerUpByLootId[n]
+                    inferredCharId = null
                     inferredReady = true
                   }
                   const charName = row.character_name || row.char_id || '—'
@@ -519,11 +530,13 @@ export default function ItemPage({ isOfficer = false }) {
                       <td>
                         {!inferredReady && factLoading ? (
                           <span style={{ color: '#71717a' }}>…</span>
-                        ) : inferred ? (
-                          <Link to={`/accounts/${encodeURIComponent(String(inferred))}`}>
+                        ) : inferredAccount ? (
+                          <Link to={`/accounts/${encodeURIComponent(String(inferredAccount))}`}>
                             {formatAccountCharacter(
-                              getDisplayNameForAccountId(inferred),
-                              getRepresentativeCharNameForAccount?.(inferred) ?? '',
+                              getDisplayNameForAccountId(inferredAccount),
+                              inferredCharId
+                                ? (getCharacterNameForCharId(inferredCharId) || String(inferredCharId))
+                                : (getRepresentativeCharNameForAccount?.(inferredAccount) ?? ''),
                             )}
                           </Link>
                         ) : (
@@ -537,7 +550,7 @@ export default function ItemPage({ isOfficer = false }) {
             </table>
           </div>
           <p style={{ color: '#71717a', fontSize: '0.85rem', marginTop: '0.75rem', marginBottom: '0.5rem' }}>
-            Values come from <code>bid_portfolio_auction_fact</code> when backfilled. If rows are empty, run the portfolio backfill (see repo docs) or load live inference for recent drops (slow).
+            Values come from <code>bid_portfolio_auction_fact</code> (upload second-bidder JSONL for model guesses + <code>runner_up_char_guess</code>). SQL/CSV backfill fills account guesses only. If rows are empty, run the portfolio backfill (see repo docs) or load live inference for recent drops (slow; uses max-pool heuristic).
           </p>
           <button type="button" className="btn btn-ghost" disabled={factLoading || rpcLoading} onClick={() => loadRpcFallback()}>
             {rpcLoading ? 'Loading…' : `Load live inference (up to ${RPC_FALLBACK_MAX} recent drops missing cache)`}
