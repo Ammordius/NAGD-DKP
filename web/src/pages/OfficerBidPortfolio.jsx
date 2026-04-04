@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, Navigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 
 function defaultDateRange() {
@@ -25,7 +25,6 @@ function rpcErrorMessage(err) {
 }
 
 export default function OfficerBidPortfolio({ isOfficer }) {
-  const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const lootParam = (searchParams.get('loot') || '').trim()
   const raidParam = (searchParams.get('raid') || '').trim()
@@ -46,10 +45,6 @@ export default function OfficerBidPortfolio({ isOfficer }) {
 
   const [showRawLoot, setShowRawLoot] = useState(false)
   const [showRawAccount, setShowRawAccount] = useState(false)
-
-  useEffect(() => {
-    if (!isOfficer) navigate('/')
-  }, [isOfficer, navigate])
 
   useEffect(() => {
     setLootInput(lootParam)
@@ -152,7 +147,7 @@ export default function OfficerBidPortfolio({ isOfficer }) {
     setAccountPayload(data && typeof data === 'object' ? data : null)
   }
 
-  if (!isOfficer) return null
+  if (!isOfficer) return <Navigate to="/" replace />
 
   const sale = lootPayload?.sale || {}
 
