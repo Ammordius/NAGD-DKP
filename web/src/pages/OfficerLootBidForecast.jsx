@@ -712,8 +712,10 @@ export default function OfficerLootBidForecast({ isOfficer }) {
         per-toon concentration, balance) and Magelo-style upgrade scoring (precomputed CI index when
         available, else live class_rankings). Leave raid id blank to use the{' '}
         <strong style={{ color: '#e4e4e7' }}>active guild roster</strong> (same idea as Global bid). With a
-        raid and optional <strong style={{ color: '#e4e4e7' }}>loot row</strong>, the table adds an account
-        pool at that auction and a rough bid guess from upgrade rank vs clearing price — not a bid log.
+        raid and optional <strong style={{ color: '#e4e4e7' }}>loot row</strong>, the table can show pool at
+        that auction and a rough bid guess: those columns are computed <strong style={{ color: '#e4e4e7' }}>in
+        your browser</strong> from timeline/rollup JSON the API returned (not a bid log). Spend profiles use
+        roughly the last two years of guild sales for speed.
         <Link to="/officer" style={{ marginLeft: '0.5rem' }}>← Officer</Link>
         {' · '}
         <Link to="/officer/global-loot-bid-forecast">Global bid</Link>
@@ -841,8 +843,8 @@ export default function OfficerLootBidForecast({ isOfficer }) {
 
       {reconMeta && (
         <p style={{ color: '#a1a1aa', fontSize: '0.9rem', marginBottom: '0.75rem', maxWidth: '52rem' }}>
-          <strong style={{ color: '#e4e4e7' }}>Bid reconstruction (heuristic):</strong> clearing price{' '}
-          {reconMeta.clearingPrice} DKP on “{reconMeta.itemName}”. Simulation mode:{' '}
+          <strong style={{ color: '#e4e4e7' }}>Bid reconstruction (client-side heuristic):</strong> clearing
+          price {reconMeta.clearingPrice} DKP on “{reconMeta.itemName}”. Simulation mode:{' '}
           <code style={{ color: '#d4d4d8' }}>{reconMeta.simMode}</code>
           {reconMeta.winner ? (
             <>

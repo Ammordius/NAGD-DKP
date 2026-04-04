@@ -1732,6 +1732,8 @@ GRANT EXECUTE ON FUNCTION public.insert_raid_event_attendance_for_upload(text, j
 -- normalize_item_name_for_lookup: keep aligned with web/src/lib/itemNameNormalize.js.
 -- Ref-price (global): avg of up to 3 prior guild sales (cost > 0) per normalized name; zero-cost uses guarded subquery.
 -- Loot to account matches refresh_account_dkp_summary_internal (loot_assignment + char or name resolve).
+-- Purchase-history CTEs use a 730-day raid-date cutoff (matches max p_activity_days on global) to avoid full guild scans.
+-- statement_timeout 120s fail-fast on pooled connections; client runs bid reconstruction from returned JSON.
 -- =============================================================================
 CREATE OR REPLACE FUNCTION public.officer_loot_bid_forecast(p_raid_id text)
 RETURNS jsonb
@@ -1742,6 +1744,7 @@ AS $$
 DECLARE
   v_raid text := trim(p_raid_id);
   v_use_per_event boolean;
+  v_hist_cutoff date := (CURRENT_DATE - INTERVAL '730 days')::date;
 BEGIN
   IF NOT public.is_officer() THEN
     RAISE EXCEPTION 'officer only';
@@ -1752,6 +1755,8 @@ BEGIN
   END IF;
 
   SELECT EXISTS (SELECT 1 FROM raid_event_attendance WHERE raid_id = v_raid LIMIT 1) INTO v_use_per_event;
+
+  SET LOCAL statement_timeout = '120s';
 
   RETURN (
     WITH attendees_raw AS (
@@ -1842,6 +1847,7 @@ BEGIN
       )
       LEFT JOIN characters ch ON ch.char_id = ca.char_id
       WHERE ca.account_id IN (SELECT account_id FROM account_ids)
+        AND public.raid_date_parsed(r.date_iso) >= v_hist_cutoff
       ORDER BY rl.id, ca.account_id
     ),
     loot_numeric AS (
@@ -2010,7 +2016,7 @@ END;
 $$;
 
 COMMENT ON FUNCTION public.officer_loot_bid_forecast(text) IS
-  'Officers only: distinct raid attendees with class/account + spend profiles (per_toon_earned from raid_attendance_dkp, per_toon_spent, last purchase, sample purchases) for bid-interest UI.';
+  'Officers only: distinct raid attendees with class/account + spend profiles (per_toon_earned from raid_attendance_dkp, per_toon_spent, last purchase, sample purchases) for bid-interest UI. Purchase history CTEs use last 730d of raid dates; SET LOCAL statement_timeout = 120s.';
 
 REVOKE ALL ON FUNCTION public.officer_loot_bid_forecast(text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.officer_loot_bid_forecast(text) TO authenticated;
@@ -2029,6 +2035,7 @@ DECLARE
   v_raid text := trim(p_raid_id);
   v_use_per_event boolean;
   v_scope_event_id text := NULL;
+  v_hist_cutoff date := (CURRENT_DATE - INTERVAL '730 days')::date;
 BEGIN
   IF NOT public.is_officer() THEN
     RAISE EXCEPTION 'officer only';
@@ -2049,6 +2056,8 @@ BEGIN
   END IF;
 
   SELECT EXISTS (SELECT 1 FROM raid_event_attendance WHERE raid_id = v_raid LIMIT 1) INTO v_use_per_event;
+
+  SET LOCAL statement_timeout = '120s';
 
   RETURN (
     WITH
@@ -2117,6 +2126,7 @@ BEGIN
       )
       LEFT JOIN characters ch ON ch.char_id = ca.char_id
       WHERE ca.account_id IN (SELECT account_id FROM account_ids)
+        AND public.raid_date_parsed(r.date_iso) >= v_hist_cutoff
       ORDER BY rl.id, ca.account_id
     ),
     loot_numeric AS (
@@ -2462,7 +2472,7 @@ END;
 $$;
 
 COMMENT ON FUNCTION public.officer_loot_bid_forecast_v2(text, bigint) IS
-  'Officers only: v1-style attendees/profiles plus raid loot timeline, per-event DKP credits, account raid rollup, optional loot_context for bid reconstruction. per_toon_earned_this_raid is scoped to this raid.';
+  'Officers only: v1-style attendees/profiles plus raid loot timeline, per-event DKP credits, account raid rollup, optional loot_context for client-side bid reconstruction. per_toon_earned_this_raid is scoped to this raid. Profile purchase history uses last 730d of raid dates; SET LOCAL statement_timeout = 120s.';
 
 REVOKE ALL ON FUNCTION public.officer_loot_bid_forecast_v2(text, bigint) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.officer_loot_bid_forecast_v2(text, bigint) TO authenticated;
@@ -3623,6 +3633,7 @@ SET search_path = public
 AS $$
 DECLARE
   v_days int := COALESCE(p_activity_days, 120);
+  v_hist_cutoff date := (CURRENT_DATE - INTERVAL '730 days')::date;
 BEGIN
   IF NOT public.is_officer() THEN
     RAISE EXCEPTION 'officer only';
@@ -3632,8 +3643,7 @@ BEGIN
     RAISE EXCEPTION 'p_activity_days must be between 1 and 730';
   END IF;
 
-  -- Pooled connections often use a short statement_timeout; this RPC scans guild loot and attendance.
-  SET LOCAL statement_timeout = '20min';
+  SET LOCAL statement_timeout = '120s';
 
   RETURN (
     WITH active_by_date AS (
@@ -3670,6 +3680,7 @@ BEGIN
       FROM raid_loot rl
       JOIN raids r ON r.raid_id = rl.raid_id
       WHERE rl.item_name IS NOT NULL AND trim(rl.item_name) <> ''
+        AND public.raid_date_parsed(r.date_iso) >= v_hist_cutoff
     ),
     roster_by_account AS (
       SELECT
@@ -3740,6 +3751,7 @@ BEGIN
       )
       LEFT JOIN characters ch ON ch.char_id = ca.char_id
       WHERE ca.account_id IN (SELECT account_id FROM active_account_ids)
+        AND public.raid_date_parsed(r.date_iso) >= v_hist_cutoff
       ORDER BY rl.id, ca.account_id
     ),
     loot_numeric AS (
@@ -3963,7 +3975,7 @@ END;
 $$;
 
 COMMENT ON FUNCTION public.officer_global_bid_forecast(integer) IS
-  'Officers only: active accounts (recent activity or pinned) with roster characters + spend profiles including per_toon_earned (raid_attendance_dkp), per_toon_spent, ref_price_at_sale per purchase (paid rows only; zero-cost purchases omit ref to avoid full-table subqueries). Uses SET LOCAL statement_timeout = 20min for the call.';
+  'Officers only: active accounts (recent activity or pinned) with roster characters + spend profiles including per_toon_earned (raid_attendance_dkp), per_toon_spent, ref_price_at_sale per purchase (paid rows only; zero-cost purchases omit ref). guild_loot_base and per-account purchase joins use last 730d of raid dates; SET LOCAL statement_timeout = 120s.';
 
 REVOKE ALL ON FUNCTION public.normalize_item_name_for_lookup(text) FROM PUBLIC;
 
