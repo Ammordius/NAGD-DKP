@@ -10,7 +10,7 @@ It is **not** claiming ground-truth second bids. Outputs are best used for diagn
 
 **Related systems**
 
-- **Officer UI** today uses SQL/RPC + cache for a different “runner-up style” signal; see [`docs/HANDOFF_OFFICER_LOOT_BID_FORECAST.md`](HANDOFF_OFFICER_LOOT_BID_FORECAST.md) and [`web/src/pages/ItemPage.jsx`](../web/src/pages/ItemPage.jsx). This Python path is **separate** until someone explicitly wires it to the DB or web.
+- **Officer UI** reads cached `bid_portfolio_auction_fact.runner_up_account_guess` when present; see [`docs/HANDOFF_OFFICER_LOOT_BID_FORECAST.md`](HANDOFF_OFFICER_LOOT_BID_FORECAST.md) and [`web/src/pages/ItemPage.jsx`](../web/src/pages/ItemPage.jsx). You can **replace** that column with the Python model’s top pick via [`scripts/upload_second_bidder_runner_up.py`](../scripts/upload_second_bidder_runner_up.py) (see **Upload runner-up to Supabase** below)—it is **not** the same heuristic as SQL `bid_portfolio_runner_up_guess`.
 - **Reconstructed balances and attendance** intentionally reuse [`scripts/bid_portfolio_local/`](../scripts/bid_portfolio_local/) so pool and attendee sets stay aligned with [`docs/HANDOFF_BID_PORTFOLIO_CSV_LOCAL.md`](HANDOFF_BID_PORTFOLIO_CSV_LOCAL.md) semantics.
 
 ## Code map
@@ -21,6 +21,7 @@ It is **not** claiming ground-truth second bids. Outputs are best used for diagn
 | Package README (commands, modules) | [`scripts/second_bidder_model/README.md`](../scripts/second_bidder_model/README.md) |
 | One-event human report | [`scripts/run_second_bidder_sample.py`](../scripts/run_second_bidder_sample.py) |
 | Full history → JSONL + resume | [`scripts/run_second_bidder_batch.py`](../scripts/run_second_bidder_batch.py) |
+| Upload JSONL → `bid_portfolio_auction_fact.runner_up_account_guess` | [`scripts/upload_second_bidder_runner_up.py`](../scripts/upload_second_bidder_runner_up.py) |
 | Unit tests | [`scripts/second_bidder_model/tests/`](../scripts/second_bidder_model/tests/) |
 
 ## Required CSVs (`--backup-dir`)
@@ -73,6 +74,24 @@ Each line is one object (from [`serialize.prediction_result_to_json_dict`](../sc
 
 `account_id` is whatever appears in `character_account` / resolution (may be numeric or a guild-specific string).
 
+## Upload runner-up to Supabase
+
+Patch **`bid_portfolio_auction_fact.runner_up_account_guess`** (and **`computed_at`**) from batch JSONL. The value written is **`candidates[0].account_id`** (buyer is already excluded from the pool in the model). SQL’s `bid_portfolio_runner_up_guess` instead picks the non-buyer attendee with the **largest reconstructed pool** that still clears price—so numbers may differ by design.
+
+Uses **`pip install supabase`** and the same env as BPF upload: `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` in `web/.env` (or `VITE_*`). By default, **`loot_id`s not present in remote `raid_loot` are skipped** (FK). Use **`--dry-run`** to parse and print counts plus a few sample rows without calling the API.
+
+```powershell
+python scripts/upload_second_bidder_runner_up.py --in data/second_bidder.jsonl
+python scripts/upload_second_bidder_runner_up.py --in data/second_bidder.jsonl --batch-size 200
+python scripts/upload_second_bidder_runner_up.py --in data/second_bidder.jsonl --dry-run
+# When the model produced no candidates: skip the line (default) or clear runner-up in DB
+python scripts/upload_second_bidder_runner_up.py --in data/second_bidder.jsonl --empty-candidates null
+```
+
+Prefer a **full** `bid_portfolio_auction_fact` row from [`scripts/compute_bid_portfolio_from_csv.py`](../scripts/compute_bid_portfolio_from_csv.py) + [`scripts/upload_bid_portfolio_fact.py`](../scripts/upload_bid_portfolio_fact.py) when you want SQL-parity columns (`ref_price_at_sale`, `next_guild_sale_*`, `payload`, …). Use this uploader when you intentionally want the **Python second-bidder model** as the officer UI runner-up string.
+
+**After the first real upsert**, spot-check one `loot_id` that already had a full BPF row: columns such as `buyer_account_id` or `payload` should still match the pre-upload row if your PostgREST version only updates fields present in the upsert body. If anything else is nulled, switch to a DB-only `UPDATE` workflow or ask for a follow-up fix.
+
 ## Eligibility map (`eligible_by_loot_id`)
 
 Optional filter for “could use this item” from **external** data (Magelo, `bid_forecast_items`, etc.). Passed through `prepare_second_bidder_events` / `run_from_backup`.
@@ -92,7 +111,7 @@ When you have a map `loot_id → true_second_bidder_account_id`, use `evaluate_s
 
 ## Follow-ups (optional)
 
-- Pipe JSONL into Supabase (new table) or join to `raid_loot` in analytics.
+- Store full per-event JSON in a dedicated table or `payload` merge (not implemented; today only `runner_up_account_guess` + `computed_at` via [`upload_second_bidder_runner_up.py`](../scripts/upload_second_bidder_runner_up.py)).
 - Feed `eligible_by_loot_id` from the Magelo / bid-forecast JSON pipeline.
 - Tune `SecondBidderConfig` weights from labeled samples (rare).
 - Compare side-by-side with officer UI / `runner_up_account_guess` for the same `loot_id` when validating UX.

@@ -13,6 +13,7 @@ Canonical behavior reference: [`docs/supabase-schema-full.sql`](supabase-schema-
 | Core library | [`scripts/bid_portfolio_local/`](../scripts/bid_portfolio_local/) (`normalize`, `load_csv`, `guild_loot_enriched`, `attendees`, `balance_before_loot`, `portfolio`, `resolve`) |
 | Compute JSONL | [`scripts/compute_bid_portfolio_from_csv.py`](../scripts/compute_bid_portfolio_from_csv.py) |
 | Upload | [`scripts/upload_bid_portfolio_fact.py`](../scripts/upload_bid_portfolio_fact.py) |
+| Runner-up only (Python second-bidder JSONL → `runner_up_account_guess`) | [`scripts/upload_second_bidder_runner_up.py`](../scripts/upload_second_bidder_runner_up.py); see [`HANDOFF_SECOND_BIDDER_MVP.md`](HANDOFF_SECOND_BIDDER_MVP.md) |
 
 ## Required CSVs (in `--backup-dir`)
 
