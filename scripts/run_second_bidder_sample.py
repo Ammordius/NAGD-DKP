@@ -26,13 +26,29 @@ def main() -> None:
         action="store_true",
         help="Omit per-character lines in the text report",
     )
+    p.add_argument(
+        "--eligibility-json",
+        type=Path,
+        default=None,
+        help="Optional JSON for eligible_by_loot_id / eligible_chars_by_loot_id (see HANDOFF_SECOND_BIDDER_MVP)",
+    )
     args = p.parse_args()
 
     cfg = SecondBidderConfig()
+    prep_kw = {}
+    if args.eligibility_json is not None:
+        from second_bidder_model.eligibility_io import load_eligibility_json
+
+        ea, ec = load_eligibility_json(args.eligibility_json.resolve())
+        if ea is not None:
+            prep_kw["eligible_by_loot_id"] = ea
+        if ec is not None:
+            prep_kw["eligible_chars_by_loot_id"] = ec
     preds = run_from_backup(
         str(args.backup_dir.resolve()),
         cfg,
         debug_first_n=1 if args.debug else 0,
+        **prep_kw,
     )
     if not preds:
         print("No positive-price sales with buyer resolved.", file=sys.stderr)

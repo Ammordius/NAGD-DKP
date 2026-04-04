@@ -96,7 +96,29 @@ Prefer a **full** `bid_portfolio_auction_fact` row from [`scripts/compute_bid_po
 
 Optional filter for “could use this item” from **external** data (Magelo, `bid_forecast_items`, etc.). Passed through `prepare_second_bidder_events` / `run_from_backup`.
 
+**Batch CLI:** pass `--eligibility-json path.json` to [`scripts/run_second_bidder_batch.py`](../scripts/run_second_bidder_batch.py) (or `--eligibility-json` on [`scripts/run_second_bidder_sample.py`](../scripts/run_second_bidder_sample.py)). The file is parsed by [`scripts/second_bidder_model/eligibility_io.py`](../scripts/second_bidder_model/eligibility_io.py).
+
+**JSON shape** (one object; each top-level key is optional):
+
+```json
+{
+  "eligible_by_loot_id": {
+    "12345": ["account-uuid-a", "account-uuid-b"]
+  },
+  "eligible_chars_by_loot_id": {
+    "12345": [
+      ["account-uuid-a", "char-uuid-1"],
+      {"account_id": "account-uuid-b", "char_id": "char-uuid-2"}
+    ]
+  }
+}
+```
+
+Loot ids are numeric strings or integers; values must match `raid_loot.id` in your backup.
+
 **Important:** If you pass a dict but a given `loot_id` is **missing** from the dict, that sale has **no** eligibility filter (same as omitting the map). Only keys **present** in the dict apply a strict subset filter. An **empty set** for a key means nobody is eligible for that loot row.
+
+**Checkpoints:** batch checkpoints use version `2` (includes rolling `account_loot_events_attended`). Older pickles (`v=1`) still resume after a one-time in-memory migration of missing fields.
 
 ## Labeled evaluation
 

@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import json
+import os
 import sys
+import tempfile
 import unittest
 from datetime import date
 from pathlib import Path
@@ -16,6 +19,7 @@ from bid_portfolio_local.load_csv import BackupSnapshot
 from second_bidder_model.candidates import build_candidate_pool
 from second_bidder_model.character_plausibility import aggregate_character_scores_to_player
 from second_bidder_model.config import SecondBidderConfig
+from second_bidder_model.eligibility_io import load_eligibility_json
 from second_bidder_model.features import compute_propensity_raw
 from second_bidder_model.evaluate import evaluate_second_bidder_predictions
 from second_bidder_model.pipeline import (
@@ -344,6 +348,41 @@ class TestPrepareCharEligibility(unittest.TestCase):
         self.assertEqual(events[0].eligible_char_pairs, pairs)
 
 
+class TestEligibilityJsonLoader(unittest.TestCase):
+    def test_loads_account_and_char_maps(self):
+        fd, path = tempfile.mkstemp(suffix=".json", text=True)
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump(
+                    {
+                        "eligible_by_loot_id": {"10": ["a", "b"]},
+                        "eligible_chars_by_loot_id": {
+                            "20": [["a", "c1"], {"account_id": "b", "char_id": "c2"}]
+                        },
+                    },
+                    f,
+                )
+            acc, chars = load_eligibility_json(Path(path))
+            self.assertIsNotNone(acc)
+            self.assertIsNotNone(chars)
+            assert acc is not None and chars is not None
+            self.assertEqual(acc[10], {"a", "b"})
+            self.assertEqual(chars[20], {("a", "c1"), ("b", "c2")})
+        finally:
+            os.unlink(path)
+
+    def test_optional_sections(self):
+        fd, path = tempfile.mkstemp(suffix=".json", text=True)
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump({"eligible_by_loot_id": {"5": ["x"]}}, f)
+            acc, chars = load_eligibility_json(Path(path))
+            self.assertIsNotNone(acc)
+            self.assertIsNone(chars)
+        finally:
+            os.unlink(path)
+
+
 class TestCharacterAwareScoring(unittest.TestCase):
     def _ev(
         self,
@@ -455,6 +494,33 @@ class TestCharacterAwareScoring(unittest.TestCase):
         st.char_win_history[("A", "c1")] = [(10, "helm", "Helm", 5.0)]
         v = st.recency_weighted_norm_wins_for_char("A", "c1", "helm", current_event_index=5, decay=0.1)
         self.assertAlmostEqual(v, 0.0, places=6)
+
+    def test_default_config_prefers_active_burner_without_char_eligibility_gate(self):
+        """Production-shaped: no eligible_char_pairs; similar pools; B wins on utilization + win-rate."""
+        st = KnowledgeState()
+        st.account_total_spent["H"] = 4000.0
+        st.account_char_spent[("H", "h1")] = 4000.0
+        st.account_win_count["H"] = 25
+        st.account_loot_events_attended["H"] = 500
+        st.account_total_spent["B"] = 8000.0
+        st.account_char_spent[("B", "b1")] = 8000.0
+        st.account_win_count["B"] = 90
+        st.account_loot_events_attended["B"] = 160
+
+        ev = self._ev(
+            attendees={"H", "B", "winner"},
+            acc_to_chars={"H": {"h1"}, "B": {"b1"}},
+            ei=100,
+            eligible_char_pairs=None,
+        )
+        pools = {
+            (ev.loot_id, "H"): 4500.0,
+            (ev.loot_id, "B"): 4500.0,
+            (ev.loot_id, "winner"): 100.0,
+        }
+        pred = predict_second_bidder_for_event(ev, st, MockBC(pools), SecondBidderConfig())
+        p = {c.account_id: c.probability for c in pred.candidates}
+        self.assertGreater(p["B"], p["H"])
 
     def test_multi_toon_inacht_pattern_not_top_from_dkp_alone(self):
         """Concentrated spend on mains; only drudge attends — must not dominate vs real bidder."""

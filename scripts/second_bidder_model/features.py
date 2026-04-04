@@ -49,20 +49,32 @@ def _norm_rows(raw_rows: List[Dict[str, float]]) -> List[Dict[str, float]]:
 def compute_capability_raw(
     account_id: str,
     event: LootSaleEvent,
+    state: KnowledgeState,
     bc: BalanceCalculator,
+    config: SecondBidderConfig,
 ) -> Dict[str, float]:
     pool = float(bc.balance_before(event.loot_id, account_id) or 0.0)
     p = max(float(event.winning_price), 1.0)
+    tot = float(state.account_total_spent.get(account_id, 0.0))
     elig = (
         1.0
         if event.eligible_account_ids is None or account_id in event.eligible_account_ids
         else 0.0
     )
+    pool_cap = float(config.capability_pool_cap or 0.0)
+    pool_for_log = min(pool, pool_cap) if pool_cap > 0 else pool
+    ratio = pool / p
+    ratio_cap = float(config.capability_dkp_ratio_cap or 0.0)
+    if ratio_cap > 0:
+        ratio = min(ratio, ratio_cap)
+    denom = tot + pool + 1e-9
+    wealth_util = tot / denom
     return {
-        "dkp_ratio": pool / p,
-        "dkp_log": math.log1p(max(pool, 0.0)),
+        "dkp_ratio": ratio,
+        "dkp_log": math.log1p(max(pool_for_log, 0.0)),
         "eligible": elig,
         "recent_attendance": 1.0,
+        "wealth_utilization": wealth_util,
     }
 
 
@@ -77,10 +89,14 @@ def compute_propensity_raw(
     same = state.recency_weighted_norm_wins(account_id, event.norm_name, idx, d)
     anyw = state.recency_weighted_any_wins(account_id, idx, d)
     spend = _revealed_char_spend_sum(account_id, state)
+    wins = int(state.account_win_count.get(account_id, 0))
+    attended = int(state.account_loot_events_attended.get(account_id, 0))
+    win_rate = float(wins) / float(max(1, attended))
     return {
         "same_norm_recency": same,
         "any_recency": anyw,
         "attending_toon_spend": spend,
+        "win_rate_over_attended_loot_sales": win_rate,
     }
 
 
@@ -98,11 +114,13 @@ def compute_competitiveness_raw(
     s = float(state.account_paid_to_ref_sum.get(account_id, 0.0))
     mean_ptr = (s / n) if n else 0.0
     char_lane_spend = _max_revealed_char_spend(account_id, state)
-    hoard = pool / (1.0 + char_lane_spend)
+    hoard_lane = pool / (1.0 + char_lane_spend)
+    hoard_account = pool / (1.0 + tot)
     return {
         "mean_win_cost": mean_cost,
         "paid_to_ref": mean_ptr,
-        "hoarding_char_lane": hoard,
+        "hoarding_char_lane": hoard_lane,
+        "hoarding_account_total": hoard_account,
         "win_count": float(wins),
     }
 
@@ -127,7 +145,7 @@ def build_feature_bundles(
             }
         )
 
-    caps = [compute_capability_raw(a, event, bc) for a in account_ids]
+    caps = [compute_capability_raw(a, event, state, bc, config) for a in account_ids]
     props = [compute_propensity_raw(a, event, state, config) for a in account_ids]
     comps = [compute_competitiveness_raw(a, event, state, bc) for a in account_ids]
     caps_n = _norm_rows(caps)

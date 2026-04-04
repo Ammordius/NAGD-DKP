@@ -19,6 +19,11 @@ Resume after Ctrl+C (same backup path and --out):
 Start over (delete checkpoint, overwrite JSONL):
 
   python scripts/run_second_bidder_batch.py ... --out data/second_bidder.jsonl --fresh
+
+Optional Magelo-style eligibility (see docs/HANDOFF_SECOND_BIDDER_MVP.md):
+
+  python scripts/run_second_bidder_batch.py ... --out data/second_bidder.jsonl `
+    --eligibility-json data/second_bidder_eligibility.json
 """
 from __future__ import annotations
 
@@ -38,12 +43,21 @@ sys.path.insert(0, str(SCRIPT_DIR))
 from bid_portfolio_local.load_csv import load_backup
 
 from second_bidder_model import SecondBidderConfig
+from second_bidder_model.eligibility_io import load_eligibility_json
 from second_bidder_model.pipeline import iter_sequential_predictions
 from second_bidder_model.prepare import prepare_second_bidder_events
 from second_bidder_model.serialize import prediction_result_to_json_dict
 from second_bidder_model.state import KnowledgeState, empty_state
 
-_CHECKPOINT_VERSION = 1
+_CHECKPOINT_VERSION = 2
+
+
+def _migrate_knowledge_state(st: KnowledgeState) -> None:
+    """Best-effort upgrade for pickles from older model versions."""
+    if not hasattr(st, "char_win_history") or st.char_win_history is None:
+        st.char_win_history = {}
+    if not hasattr(st, "account_loot_events_attended") or st.account_loot_events_attended is None:
+        st.account_loot_events_attended = {}
 
 
 def _atomic_pickle_dump(path: Path, obj: Any) -> None:
@@ -111,6 +125,15 @@ def main() -> int:
         action="store_true",
         help="Include per-candidate character breakdown and player_debug (larger JSONL)",
     )
+    ap.add_argument(
+        "--eligibility-json",
+        type=Path,
+        default=None,
+        help=(
+            "Optional JSON with eligible_by_loot_id and/or eligible_chars_by_loot_id "
+            "(see docs/HANDOFF_SECOND_BIDDER_MVP.md)"
+        ),
+    )
     args = ap.parse_args()
 
     ck_path = args.checkpoint or Path(str(args.out) + ".second_bidder_checkpoint.pkl")
@@ -124,7 +147,8 @@ def main() -> int:
         initial_state: Optional[KnowledgeState] = None
     elif args.resume and ck_path.is_file():
         blob = _load_checkpoint(ck_path)
-        if not blob or blob.get("v") != _CHECKPOINT_VERSION:
+        cv = blob.get("v") if blob else None
+        if not blob or cv not in (1, _CHECKPOINT_VERSION):
             print("Checkpoint missing or version mismatch; starting from 0.", file=sys.stderr)
             out_mode = "w"
             start_index = 0
@@ -132,8 +156,6 @@ def main() -> int:
         else:
             start_index = int(blob["next_index"])
             initial_state = blob["state"]
-            if not hasattr(initial_state, "char_win_history"):
-                initial_state.char_win_history = {}
             out_mode = "a"
             print(
                 f"Resuming at event_index={start_index} (checkpoint {ck_path})",
@@ -152,7 +174,18 @@ def main() -> int:
     cfg = SecondBidderConfig()
     t0 = time.perf_counter()
     snap = load_backup(backup)
-    events = prepare_second_bidder_events(snap)
+    elig_acc = elig_chars = None
+    if args.eligibility_json is not None:
+        p = args.eligibility_json.resolve()
+        if not p.is_file():
+            print(f"Eligibility file not found: {p}", file=sys.stderr)
+            return 1
+        elig_acc, elig_chars = load_eligibility_json(p)
+    events = prepare_second_bidder_events(
+        snap,
+        eligible_by_loot_id=elig_acc,
+        eligible_chars_by_loot_id=elig_chars,
+    )
     total = len(events)
     if total == 0:
         print("No positive-price sales with buyer resolved.", file=sys.stderr)
@@ -162,6 +195,7 @@ def main() -> int:
         return 0
 
     state_arg = empty_state() if initial_state is None else initial_state
+    _migrate_knowledge_state(state_arg)
     ctx: Dict[str, Any] = {
         "next_index": start_index,
         "state": state_arg,

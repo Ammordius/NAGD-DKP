@@ -21,6 +21,8 @@ class KnowledgeState:
     char_win_history: Dict[Tuple[str, str], List[Tuple[int, str, str, float]]] = field(
         default_factory=dict
     )
+    # Prior loot-sale rows (same chronology as inference) where the account was an attendee
+    account_loot_events_attended: Dict[str, int] = field(default_factory=dict)
 
     def recency_weighted_norm_wins(
         self, account_id: str, norm_name: str, current_event_index: int, decay: float
@@ -88,10 +90,19 @@ def empty_state() -> KnowledgeState:
     return KnowledgeState()
 
 
+def _bump_loot_sale_attendance(state: KnowledgeState, event: LootSaleEvent) -> None:
+    for aid in event.attendee_account_ids:
+        a = (aid or "").strip()
+        if not a:
+            continue
+        state.account_loot_events_attended[a] = state.account_loot_events_attended.get(a, 0) + 1
+
+
 def update_knowledge_state(state: KnowledgeState, event: LootSaleEvent) -> None:
     buyer = (event.buyer_account_id or "").strip()
     price = float(event.winning_price or 0)
     if not buyer or price <= 0:
+        _bump_loot_sale_attendance(state, event)
         state.events_committed += 1
         return
     state.account_total_spent[buyer] = state.account_total_spent.get(buyer, 0.0) + price
@@ -114,4 +125,5 @@ def update_knowledge_state(state: KnowledgeState, event: LootSaleEvent) -> None:
     state.account_win_history.setdefault(buyer, []).append(
         (event.event_index, event.norm_name, price)
     )
+    _bump_loot_sale_attendance(state, event)
     state.events_committed += 1

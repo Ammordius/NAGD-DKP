@@ -13,38 +13,45 @@ class SecondBidderConfig:
     min_pool_absolute: float = 0.0
     require_pool_ge_clearing: bool = True
     clearing_epsilon: float = 0.0
-    w_capability: float = 0.7
+    w_capability: float = 0.55
     w_propensity: float = 1.0
-    w_competitiveness: float = 0.5
+    w_competitiveness: float = 0.6
     w_character: float = 1.0
     w_affordability: float = 1.0
     capability_weights: dict = field(
         default_factory=lambda: {
-            "dkp_ratio": 0.45,
-            "dkp_log": 0.35,
-            "eligible": 0.2,
+            "dkp_ratio": 0.28,
+            "dkp_log": 0.22,
+            "eligible": 0.12,
             "recent_attendance": 0.0,
+            "wealth_utilization": 0.38,
         }
     )
     propensity_weights: dict = field(
         default_factory=lambda: {
-            "same_norm_recency": 0.5,
-            "any_recency": 0.25,
-            "attending_toon_spend": 0.25,
+            "same_norm_recency": 0.4,
+            "any_recency": 0.2,
+            "attending_toon_spend": 0.2,
+            "win_rate_over_attended_loot_sales": 0.2,
         }
     )
     competitiveness_weights: dict = field(
         default_factory=lambda: {
-            "mean_win_cost": 0.25,
-            "paid_to_ref": 0.25,
-            "hoarding_char_lane": 0.25,
-            "win_count": 0.25,
+            "mean_win_cost": 0.18,
+            "paid_to_ref": 0.18,
+            "hoarding_char_lane": 0.12,
+            "hoarding_account_total": 0.34,
+            "win_count": 0.18,
         }
     )
     character_weights: dict = field(default_factory=lambda: {"char_agg": 1.0})
     score_floor: float = 1e-6
     recency_decay_per_event: float = 0.03
     recency_decay_char: float | None = None
+
+    # Soften extreme wallets before per-event min–max (0 disables)
+    capability_pool_cap: float = 500.0
+    capability_dkp_ratio_cap: float = 3.5
 
     # Character-aware heuristics
     min_active_char_lifetime_spend: float = 25.0

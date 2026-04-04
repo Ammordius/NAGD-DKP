@@ -19,7 +19,7 @@ $env:PYTHONPATH = "scripts"
 python -m unittest discover -s scripts/second_bidder_model/tests -p "test*.py" -v
 ```
 
-Capability features include `recent_attendance` (placeholder `1.0` per spec); default weight is `0.0` so it does not change scores until you tune it.
+Capability includes `wealth_utilization`, soft pool/ratio caps (`capability_pool_cap`, `capability_dkp_ratio_cap`), and `recent_attendance` (placeholder `1.0`; default weight `0.0`). Propensity includes `win_rate_over_attended_loot_sales` from rolling `KnowledgeState.account_loot_events_attended`.
 
 ## Use from a CSV backup
 
@@ -88,6 +88,8 @@ python scripts/run_second_bidder_batch.py "C:\TAKP\dkp\backup-2026-04-02\backup"
 ```
 
 Add `--include-character-debug` to JSONL lines if you want `character_debug` / `player_debug` on each ranked candidate (larger files).
+
+Optional `--eligibility-json path.json` loads `eligible_by_loot_id` / `eligible_chars_by_loot_id` (see [`docs/HANDOFF_SECOND_BIDDER_MVP.md`](../../docs/HANDOFF_SECOND_BIDDER_MVP.md) and `eligibility_io.py`).
 
 Resume (append to the same `--out`, reuse checkpoint next to the file unless you passed `--checkpoint`):
 

@@ -44,8 +44,9 @@ All features use **only information available strictly before** the current sale
 |---------|-------------|
 | `attended` | 1.0 for pool members |
 | `eligible_for_item` | 1.0 if eligibility set missing or account in set; else excluded from pool |
-| `dkp_available` | `pool_before` |
-| `dkp_ratio_to_winning_bid` | `pool_before / max(winning_price, 1)` |
+| `dkp_available` | `pool_before` (optionally capped before `log1p` for normalization) |
+| `dkp_ratio_to_winning_bid` | `pool_before / max(winning_price, 1)` (optionally capped) |
+| `wealth_utilization` | `prior_total_spent / (prior_total_spent + pool_before)` — higher when the wallet has actually circulated DKP |
 | `recent_attendance_proxy` | **MVP:** placeholder 1.0 (optional extension: pre-count raids attended before date from attendance tables) |
 
 ### 2) Propensity / desire (revealed preference, prior only)
@@ -57,6 +58,7 @@ All features use **only information available strictly before** the current sale
 | `prior_wins_same_norm_weighted` | Recency-weighted count of prior wins on same `norm_name` (decay by event index) |
 | `prior_wins_any_weighted` | Same, any item (activity / spend appetite) |
 | `prior_spend_on_attending_toons` | Sum of prior DKP spent on **toons that attended this auction** for this account (from `KnowledgeState`) |
+| `win_rate_over_attended_loot_sales` | `prior_win_count / max(1, prior_loot_sales_attended)` — rolling count of guild sales (same chronology) where the account was an attendee |
 
 ### 3) Competitiveness (prior bidding posture)
 
@@ -65,7 +67,8 @@ All features use **only information available strictly before** the current sale
 | `prior_win_count` | Number of prior paid wins |
 | `prior_mean_win_cost` | Mean cost of prior wins (0 if none) |
 | `prior_mean_paid_to_ref` | Mean of `paid_to_ref_ratio` on prior wins when present |
-| `hoarding_proxy` | `pool_before / (1 + prior_total_spent)` — high = more dry powder vs history |
+| `hoarding_account_total` | `pool_before / (1 + prior_total_spent)` — dry powder vs **account** burn history |
+| `hoarding_char_lane` | `pool_before / (1 + max prior per-character spend)` — lane-level dry powder (character-aware) |
 
 ---
 

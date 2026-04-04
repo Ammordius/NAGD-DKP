@@ -65,6 +65,13 @@ Configurable via `character_aggregation`, `aggregation_top_k`, `logsumexp_temper
 
 If the union is **empty** (no attendance `char_id`s and no prior per-character purchases recorded in state for that account), we apply `empty_attendee_chars_multiplier` to the aggregated character score (soft penalty). Hard exclusion is optional via `exclude_accounts_with_no_attendee_chars` (default false), which still keys off attendance-only char resolution for pool quality checks.
 
+## Competitiveness (player-level)
+
+Besides mean win cost, paid-to-ref, and win count, the scorer uses two **hoarding / dry-powder** proxies after per-candidate normalization:
+
+- **`hoarding_char_lane`:** `pool / (1 + max prior per-character spend)` — sensitive to multi-toon “main” lanes.
+- **`hoarding_account_total`:** `pool / (1 + prior account total spent)` — matches the original MVP spec and downweights lifetime whales with huge banks relative to their burn history.
+
 ## Config summary
 
 See `SecondBidderConfig` in `scripts/second_bidder_model/config.py` for defaults and tuning:
@@ -72,6 +79,7 @@ See `SecondBidderConfig` in `scripts/second_bidder_model/config.py` for defaults
 - Lane thresholds: `min_active_char_lifetime_spend`, `min_char_share_of_account_spend`
 - `dormant_char_multiplier`, `inactive_player_char_floor`, `empty_attendee_chars_multiplier`
 - Aggregation: `character_aggregation`, `aggregation_top_k`, `logsumexp_temperature`
+- Capability caps: `capability_pool_cap`, `capability_dkp_ratio_cap` (soften extreme wallets before min–max)
 - Weights: `w_character`, `w_affordability` (with legacy `w_capability`, `w_propensity`, `w_competitiveness` for backward compatibility)
 
 ## Debug output
