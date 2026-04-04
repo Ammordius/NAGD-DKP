@@ -139,7 +139,6 @@ export default function OfficerLootBidForecast({ isOfficer }) {
   const [itemStats, setItemStats] = useState(null)
   const [dkpPrices, setDkpPrices] = useState(null)
   const [rankingsData, setRankingsData] = useState(null)
-  const [rankingsError, setRankingsError] = useState('')
   const [precomputedByItem, setPrecomputedByItem] = useState(null)
   const [precomputedMeta, setPrecomputedMeta] = useState(null)
   const [precomputedLoadNote, setPrecomputedLoadNote] = useState('')
@@ -191,7 +190,6 @@ export default function OfficerLootBidForecast({ isOfficer }) {
   }, [])
 
   const loadRankings = useCallback(() => {
-    setRankingsError('')
     fetch(CLASS_RANKINGS_URL)
       .then((r) => {
         if (!r.ok) throw new Error(`${r.status}`)
@@ -200,9 +198,6 @@ export default function OfficerLootBidForecast({ isOfficer }) {
       .then((j) => setRankingsData(j))
       .catch(() => {
         setRankingsData(null)
-        setRankingsError(
-          `Could not load class rankings from ${CLASS_RANKINGS_URL}. Set VITE_CLASS_RANKINGS_URL or add class_rankings.json to web/public for live upgrade scoring (fallback when precompute misses).`,
-        )
       })
   }, [])
 
@@ -679,9 +674,6 @@ export default function OfficerLootBidForecast({ isOfficer }) {
             ? ` (${Math.floor(stalePrecomputeDays)}d ago — consider refreshing CI)`
             : ''}
         </p>
-      )}
-      {rankingsError && (
-        <p style={{ color: '#fbbf24', marginBottom: '0.75rem' }}>{rankingsError}</p>
       )}
       {error && <p style={{ color: '#f87171', marginBottom: '0.75rem' }}>{error}</p>}
 

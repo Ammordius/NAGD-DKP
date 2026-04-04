@@ -137,7 +137,6 @@ export default function OfficerGlobalLootBidForecast({ isOfficer }) {
   const [itemStats, setItemStats] = useState(null)
   const [dkpPrices, setDkpPrices] = useState(null)
   const [rankingsData, setRankingsData] = useState(null)
-  const [rankingsError, setRankingsError] = useState('')
   const [precomputedByItem, setPrecomputedByItem] = useState(null)
   const [precomputedMeta, setPrecomputedMeta] = useState(null)
   const [precomputedLoadNote, setPrecomputedLoadNote] = useState('')
@@ -186,7 +185,6 @@ export default function OfficerGlobalLootBidForecast({ isOfficer }) {
   }, [])
 
   const fetchRankingsJson = useCallback(async () => {
-    setRankingsError('')
     const r = await fetch(CLASS_RANKINGS_URL)
     if (!r.ok) throw new Error(String(r.status))
     const j = await r.json()
@@ -197,9 +195,6 @@ export default function OfficerGlobalLootBidForecast({ isOfficer }) {
   const loadRankings = useCallback(() => {
     fetchRankingsJson().catch(() => {
       setRankingsData(null)
-      setRankingsError(
-        `Could not load class rankings from ${CLASS_RANKINGS_URL}. Set VITE_CLASS_RANKINGS_URL or add class_rankings.json to web/public for live upgrade fallback or slot lists.`,
-      )
     })
   }, [fetchRankingsJson])
 
@@ -391,9 +386,7 @@ export default function OfficerGlobalLootBidForecast({ isOfficer }) {
             )
           }
         } else if (!pc && !mageloChar) {
-          toonBullets.push(
-            'No CI upgrade row and no matching Magelo export for this toon — use Reload Magelo JSON or set VITE_CLASS_RANKINGS_URL for live scoring.',
-          )
+          toonBullets.push('No CI upgrade row and no matching Magelo export for this toon.')
         } else if (upgrade && !upgrade.eligible) {
           toonBullets.push(`Not a candidate for this item: ${upgrade.reason || 'unknown'}.`)
         }
@@ -558,10 +551,7 @@ export default function OfficerGlobalLootBidForecast({ isOfficer }) {
         } catch {
           setUpgradeCache((prev) => ({
             ...prev,
-            [key]: {
-              error:
-                'Could not load class rankings. Set VITE_CLASS_RANKINGS_URL or add class_rankings.json to web/public.',
-            },
+            [key]: { error: 'Could not load class rankings.' },
           }))
           return
         }
@@ -817,9 +807,6 @@ export default function OfficerGlobalLootBidForecast({ isOfficer }) {
       )}
       {precomputedLoadNote && (
         <p style={{ color: '#fbbf24', marginBottom: '0.5rem', fontSize: '0.9rem' }}>{precomputedLoadNote}</p>
-      )}
-      {rankingsError && (
-        <p style={{ color: '#fbbf24', marginBottom: '0.75rem' }}>{rankingsError}</p>
       )}
       {error && <p style={{ color: '#f87171', marginBottom: '0.75rem' }}>{error}</p>}
 
