@@ -20,10 +20,16 @@ def _event_json(e: LootSaleEvent) -> Dict[str, Any]:
         "buyer_char_id": e.buyer_char_id,
         "attendee_count": len(e.attendee_account_ids),
         "eligible_filter_on": e.eligible_account_ids is not None,
+        "eligible_char_pairs_on": e.eligible_char_pairs is not None,
     }
 
 
-def _scored_json(c: ScoredCandidate, *, include_features: bool) -> Dict[str, Any]:
+def _scored_json(
+    c: ScoredCandidate,
+    *,
+    include_features: bool,
+    include_character_debug: bool,
+) -> Dict[str, Any]:
     row: Dict[str, Any] = {
         "account_id": c.account_id,
         "probability": c.probability,
@@ -32,6 +38,7 @@ def _scored_json(c: ScoredCandidate, *, include_features: bool) -> Dict[str, Any
         "capability_score": c.capability_score,
         "propensity_score": c.propensity_score,
         "competitiveness_score": c.competitiveness_score,
+        "character_score": c.character_score,
     }
     if include_features:
         fb = c.features
@@ -39,7 +46,11 @@ def _scored_json(c: ScoredCandidate, *, include_features: bool) -> Dict[str, Any
             "capability": dict(fb.capability),
             "propensity": dict(fb.propensity),
             "competitiveness": dict(fb.competitiveness),
+            "character": dict(fb.character),
         }
+    if include_character_debug:
+        row["character_debug"] = list(c.character_debug)
+        row["player_debug"] = dict(c.player_debug)
     return row
 
 
@@ -48,12 +59,20 @@ def prediction_result_to_json_dict(
     *,
     top_candidates: int = 25,
     include_feature_vectors: bool = False,
+    include_character_debug: bool = False,
 ) -> Dict[str, Any]:
     cap = max(0, top_candidates)
     cands: List[ScoredCandidate] = p.candidates[:cap] if cap else []
     return {
         "event": _event_json(p.event),
-        "candidates": [_scored_json(c, include_features=include_feature_vectors) for c in cands],
+        "candidates": [
+            _scored_json(
+                c,
+                include_features=include_feature_vectors,
+                include_character_debug=include_character_debug,
+            )
+            for c in cands
+        ],
         "candidate_count": len(p.candidates),
         "exclusion_count": len(p.exclusion_notes),
     }

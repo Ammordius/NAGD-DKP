@@ -2,7 +2,7 @@
 from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import date
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 @dataclass
 class LootSaleEvent:
@@ -19,6 +19,8 @@ class LootSaleEvent:
     attendee_account_ids: Set[str]
     attendee_account_to_chars: Dict[str, Set[str]] = field(default_factory=dict)
     eligible_account_ids: Optional[Set[str]] = None
+    # Optional (account_id, char_id) pairs that may bid on this item; if set, used per character
+    eligible_char_pairs: Optional[Set[Tuple[str, str]]] = None
     ref_price_at_sale: Optional[float] = None
     paid_to_ref_ratio: Optional[float] = None
 
@@ -28,6 +30,7 @@ class FeatureBundle:
     capability: Dict[str, float]
     propensity: Dict[str, float]
     competitiveness: Dict[str, float]
+    character: Dict[str, float] = field(default_factory=dict)
 
 @dataclass
 class ScoredCandidate:
@@ -39,6 +42,9 @@ class ScoredCandidate:
     propensity_score: float
     competitiveness_score: float
     features: FeatureBundle
+    character_score: float = 0.0
+    character_debug: List[Dict[str, Any]] = field(default_factory=list)
+    player_debug: Dict[str, Any] = field(default_factory=dict)
 
 @dataclass
 class PredictionResult:

@@ -17,6 +17,7 @@
 | Package | [`scripts/second_bidder_model/`](../scripts/second_bidder_model/) |
 | Package README | [`scripts/second_bidder_model/README.md`](../scripts/second_bidder_model/README.md) |
 | Spec | [`SECOND_BIDDER_MVP_SPEC.md`](SECOND_BIDDER_MVP_SPEC.md) |
+| Handoff (commands, JSONL, resume) | [`HANDOFF_SECOND_BIDDER_MVP.md`](HANDOFF_SECOND_BIDDER_MVP.md) |
 | Sample CLI | [`scripts/run_second_bidder_sample.py`](../scripts/run_second_bidder_sample.py) |
 | Batch JSONL + resume | [`scripts/run_second_bidder_batch.py`](../scripts/run_second_bidder_batch.py) |
 
@@ -49,3 +50,15 @@ PYTHONPATH=scripts python -m unittest discover -s scripts/second_bidder_model/te
 5. `format_event_report(pred)` for inspection.
 
 For **all** sales to disk with progress and **checkpointed resume**, run `run_second_bidder_batch.py` (see package README).
+
+## Character-aware revision (gap + direction)
+
+**Problem:** The original MVP scored **accounts** with strong **player-level** signals (`dkp_ratio`, `account_total_spent`, `hoarding = pool/(1+account_tot)`). High wallet + high lifetime spend on *any* alt could rank an account highly even when no **item-eligible character lane** was a plausible **active gearing** target (e.g. spend concentrated on mains while only a negligible alt could use the drop).
+
+**Current scoring path (pre-revision):** `build_candidate_pool` → `build_feature_bundles` (`compute_capability_raw`, `compute_propensity_raw`, `compute_competitiveness_raw`) → per-event min–max normalization across candidates → `score_candidate` (weighted dot products) → `normalize_candidate_scores`.
+
+**Character lanes (who to score):** Union of raid attendance `char_id`s (when present) and every character with **prior** revealed spend / win history on that account in `KnowledgeState` (known purchases before the event—no future leakage). **Item eligibility** still gates which of those lanes count for the item (`eligible_char_pairs` when provided).
+
+**Implemented direction:** See [`SECOND_BIDDER_CHARACTER_AWARE_SPEC.md`](SECOND_BIDDER_CHARACTER_AWARE_SPEC.md). Code: `character_plausibility.py`, extended `KnowledgeState.char_win_history`, `SecondBidderConfig` knobs, `FeatureBundle.character`, `ScoredCandidate.character_debug` / `player_debug`, optional `eligible_chars_by_loot_id` in `prepare_second_bidder_events`.
+
+**Affected files:** `scripts/second_bidder_model/state.py`, `features.py`, `scoring.py`, `pipeline.py`, `config.py`, `types.py`, `character_plausibility.py` (new), `prepare.py`, `serialize.py`, `debug.py`, `run_second_bidder_batch.py`, tests, spec + this note.

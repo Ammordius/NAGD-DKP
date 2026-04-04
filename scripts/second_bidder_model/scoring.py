@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Dict, List
+from typing import Dict, Tuple
 
 from .config import SecondBidderConfig
 from .types import FeatureBundle
@@ -13,16 +13,23 @@ def _dot(weights: Dict[str, float], values: Dict[str, float]) -> float:
     return s
 
 
-def score_candidate(bundle: FeatureBundle, config: SecondBidderConfig) -> tuple:
+def score_candidate(bundle: FeatureBundle, config: SecondBidderConfig) -> Tuple[float, float, float, float, float]:
     cap = _dot(config.capability_weights, bundle.capability)
     prop = _dot(config.propensity_weights, bundle.propensity)
-    comp = _dot(config.competitiveness_weights, bundle.competitiveness)
+    comp_vals = dict(bundle.competitiveness)
+    hcl = comp_vals.get("hoarding_char_lane")
+    if hcl is not None and "hoarding" not in comp_vals:
+        comp_vals["hoarding"] = float(hcl)
+    comp = _dot(config.competitiveness_weights, comp_vals)
+    char = _dot(config.character_weights, bundle.character)
+    cap_scaled = float(config.w_affordability) * float(config.w_capability) * cap
     raw = (
-        config.w_capability * cap
+        cap_scaled
         + config.w_propensity * prop
         + config.w_competitiveness * comp
+        + config.w_character * char
     )
-    return raw, cap, prop, comp
+    return raw, cap_scaled, prop, comp, char
 
 
 def normalize_candidate_scores(raw_scores: Dict[str, float], floor: float) -> Dict[str, float]:

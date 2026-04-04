@@ -14,10 +14,15 @@ from bid_portfolio_local.guild_loot_enriched import EnrichedLoot
 from bid_portfolio_local.load_csv import BackupSnapshot
 
 from second_bidder_model.candidates import build_candidate_pool
+from second_bidder_model.character_plausibility import aggregate_character_scores_to_player
 from second_bidder_model.config import SecondBidderConfig
 from second_bidder_model.features import compute_propensity_raw
 from second_bidder_model.evaluate import evaluate_second_bidder_predictions
-from second_bidder_model.pipeline import iter_sequential_predictions, run_sequential_predictions
+from second_bidder_model.pipeline import (
+    iter_sequential_predictions,
+    predict_second_bidder_for_event,
+    run_sequential_predictions,
+)
 from second_bidder_model.prepare import prepare_second_bidder_events
 from second_bidder_model.types import FeatureBundle, PredictionResult, ScoredCandidate
 from second_bidder_model.scoring import normalize_candidate_scores
@@ -274,6 +279,7 @@ class TestEvaluateMetrics(unittest.TestCase):
                 propensity_score=0.0,
                 competitiveness_score=0.0,
                 features=fb,
+                character_score=0.0,
             )
             for aid in order
         ]
@@ -299,6 +305,202 @@ class TestDeterministicToy(unittest.TestCase):
         p2 = normalize_candidate_scores(raw, cfg.score_floor)
         self.assertEqual(p1, p2)
         self.assertAlmostEqual(p1["x"], 0.5, places=6)
+
+
+class TestPrepareCharEligibility(unittest.TestCase):
+    def _sample_enriched(self, loot_id: int = 42) -> EnrichedLoot:
+        return EnrichedLoot(
+            loot_id=loot_id,
+            raid_id="r1",
+            event_id=None,
+            item_name="Sword",
+            norm_name="sword",
+            raid_date=None,
+            cost_num=10.0,
+            cost_text="10",
+            buyer_account_id="buyer",
+            ref_price_at_sale=None,
+            paid_to_ref_ratio=None,
+            next_guild_sale_loot_id=None,
+            next_guild_sale_buyer_account_id=None,
+        )
+
+    def test_eligible_chars_attached(self):
+        el = self._sample_enriched(42)
+        snap = BackupSnapshot(Path("."))
+        snap.raid_loot = [{"id": "42", "char_id": "", "raid_id": "r1"}]
+        pairs = {("acc1", "c1")}
+        with patch(
+            "second_bidder_model.prepare.build_guild_loot_sale_enriched",
+            return_value=([el], {42: el}),
+        ):
+            with patch(
+                "second_bidder_model.prepare.attendee_account_char_map_for_loot",
+                return_value=({"buyer"}, {}),
+            ):
+                events = prepare_second_bidder_events(
+                    snap, eligible_chars_by_loot_id={42: pairs}
+                )
+        self.assertEqual(events[0].eligible_char_pairs, pairs)
+
+
+class TestCharacterAwareScoring(unittest.TestCase):
+    def _ev(
+        self,
+        *,
+        attendees: set,
+        acc_to_chars: dict,
+        norm: str = "ancient_symbol",
+        price: float = 500.0,
+        loot_id: int = 99,
+        ei: int = 5,
+        eligible_char_pairs=None,
+    ) -> LootSaleEvent:
+        return LootSaleEvent(
+            event_index=ei,
+            loot_id=loot_id,
+            raid_id="r",
+            event_id=None,
+            raid_date=None,
+            norm_name=norm,
+            item_name="Symbol of Ancient Summoning",
+            winning_price=price,
+            buyer_account_id="winner",
+            buyer_char_id="wc",
+            attendee_account_ids=attendees,
+            attendee_account_to_chars=acc_to_chars,
+            eligible_account_ids=None,
+            eligible_char_pairs=eligible_char_pairs,
+        )
+
+    def test_high_dkp_dormant_attendee_ranks_below_active_lane(self):
+        """Same pool; only item-eligible lane for A is a negligible-spend toon; B has a real lane.
+
+        Character universe includes all prior-revealed spenders; char-level eligibility
+        restricts who could use this item (e.g. Magelo).
+        """
+        st = KnowledgeState()
+        st.account_total_spent["A"] = 1314.0 + 1095.0 + 728.0 + 7.0
+        st.account_char_spent[("A", "inacht")] = 1314.0
+        st.account_char_spent[("A", "perch")] = 1095.0
+        st.account_char_spent[("A", "larch")] = 728.0
+        st.account_char_spent[("A", "drudge")] = 7.0
+        st.account_total_spent["B"] = 800.0
+        st.account_char_spent[("B", "main")] = 800.0
+
+        ev = self._ev(
+            attendees={"A", "B", "winner"},
+            acc_to_chars={"A": {"drudge"}, "B": {"main"}},
+            eligible_char_pairs={("A", "drudge"), ("B", "main")},
+        )
+        pools = {(ev.loot_id, "A"): 2000.0, (ev.loot_id, "B"): 2000.0, (ev.loot_id, "winner"): 100.0}
+        cfg = SecondBidderConfig(
+            w_character=2.0,
+            w_capability=0.3,
+            w_propensity=0.2,
+            w_competitiveness=0.2,
+        )
+        pred = predict_second_bidder_for_event(ev, st, MockBC(pools), cfg)
+        by_aid = {c.account_id: c.probability for c in pred.candidates}
+        self.assertGreater(by_aid["B"], by_aid["A"])
+
+    def test_negligible_sibling_max_aggregation_uses_strong_lane_when_both_attend(self):
+        """When two toons attend, max aggregation should reflect the stronger lane."""
+        st = KnowledgeState()
+        st.account_total_spent["A"] = 1300.0 + 7.0
+        st.account_char_spent[("A", "big")] = 1300.0
+        st.account_char_spent[("A", "tiny")] = 7.0
+        ev = self._ev(
+            attendees={"A", "winner"},
+            acc_to_chars={"A": {"big", "tiny"}},
+            ei=2,
+        )
+        pools = {(ev.loot_id, "A"): 1500.0, (ev.loot_id, "winner"): 10.0}
+        cfg = SecondBidderConfig(character_aggregation="max")
+        pred = predict_second_bidder_for_event(ev, st, MockBC(pools), cfg)
+        sc = pred.candidates[0]
+        rows = {r["char_id"]: r for r in sc.character_debug}
+        self.assertGreater(rows["big"]["character_bid_plausibility"], rows["tiny"]["character_bid_plausibility"])
+        self.assertGreater(sc.player_debug["raw_character_agg"], rows["tiny"]["character_bid_plausibility"])
+
+    def test_active_player_beats_dormant_only_peer(self):
+        st = KnowledgeState()
+        st.account_total_spent["dormant_only"] = 5000.0
+        st.account_char_spent[("dormant_only", "mule")] = 50.0
+        st.account_total_spent["active"] = 600.0
+        st.account_char_spent[("active", "main")] = 600.0
+        ev = self._ev(
+            attendees={"dormant_only", "active", "winner"},
+            acc_to_chars={"dormant_only": {"mule"}, "active": {"main"}},
+            ei=3,
+        )
+        pools = {
+            (ev.loot_id, "dormant_only"): 3000.0,
+            (ev.loot_id, "active"): 3000.0,
+            (ev.loot_id, "winner"): 1.0,
+        }
+        cfg = SecondBidderConfig(w_character=2.5, w_capability=0.2)
+        pred = predict_second_bidder_for_event(ev, st, MockBC(pools), cfg)
+        p = {c.account_id: c.probability for c in pred.candidates}
+        self.assertGreater(p["active"], p["dormant_only"])
+
+    def test_aggregation_top_k_sum_exceeds_max(self):
+        cfg = SecondBidderConfig(character_aggregation="max", aggregation_top_k=2)
+        self.assertEqual(aggregate_character_scores_to_player([10.0, 5.0], cfg), 10.0)
+        cfg2 = SecondBidderConfig(character_aggregation="top_k_sum", aggregation_top_k=2)
+        self.assertEqual(aggregate_character_scores_to_player([10.0, 5.0], cfg2), 15.0)
+
+    def test_char_history_future_index_ignored(self):
+        st = KnowledgeState()
+        st.char_win_history[("A", "c1")] = [(10, "helm", "Helm", 5.0)]
+        v = st.recency_weighted_norm_wins_for_char("A", "c1", "helm", current_event_index=5, decay=0.1)
+        self.assertAlmostEqual(v, 0.0, places=6)
+
+    def test_multi_toon_inacht_pattern_not_top_from_dkp_alone(self):
+        """Concentrated spend on mains; only drudge attends — must not dominate vs real bidder."""
+        st = KnowledgeState()
+        for aid, mp in [
+            ("inacht_acct", {"inacht": 1314.0, "perch": 1095.0, "larch": 728.0, "drudge": 7.0}),
+        ]:
+            tot = sum(mp.values())
+            st.account_total_spent[aid] = tot
+            for c, s in mp.items():
+                st.account_char_spent[(aid, c)] = s
+        st.account_total_spent["other"] = 900.0
+        st.account_char_spent[("other", "ot")] = 900.0
+
+        ev = self._ev(
+            attendees={"inacht_acct", "other", "winner"},
+            acc_to_chars={"inacht_acct": {"drudge"}, "other": {"ot"}},
+            ei=10,
+            eligible_char_pairs={("inacht_acct", "drudge"), ("other", "ot")},
+        )
+        pools = {
+            (ev.loot_id, "inacht_acct"): 5000.0,
+            (ev.loot_id, "other"): 5000.0,
+            (ev.loot_id, "winner"): 100.0,
+        }
+        cfg = SecondBidderConfig(w_character=3.0, w_capability=0.15, w_propensity=0.15, w_competitiveness=0.15)
+        pred = predict_second_bidder_for_event(ev, st, MockBC(pools), cfg)
+        p = {c.account_id: c.probability for c in pred.candidates}
+        self.assertGreater(p["other"], p["inacht_acct"])
+
+    def test_prior_revealed_chars_used_when_attendance_has_no_char_ids(self):
+        """Portfolio lanes from known purchases still score even if attendance lacks char_id."""
+        st = KnowledgeState()
+        st.account_total_spent["solo"] = 400.0
+        st.account_char_spent[("solo", "main")] = 400.0
+        ev = self._ev(
+            attendees={"solo", "winner"},
+            acc_to_chars={"solo": set()},
+            ei=4,
+        )
+        pools = {(ev.loot_id, "solo"): 800.0, (ev.loot_id, "winner"): 1.0}
+        pred = predict_second_bidder_for_event(ev, st, MockBC(pools), SecondBidderConfig())
+        sc = pred.candidates[0]
+        ids = {r["char_id"] for r in sc.character_debug}
+        self.assertIn("main", ids)
+        self.assertGreater(sc.player_debug["raw_character_agg"], 0.0)
 
 
 if __name__ == "__main__":

@@ -28,6 +28,10 @@ def build_candidate_pool(
         if event.eligible_account_ids is not None and aid not in event.eligible_account_ids:
             exclusions[aid] = "not_eligible_for_item_external"
             continue
+        if config.exclude_accounts_with_no_attendee_chars:
+            if not event.attendee_account_to_chars.get(aid, set()):
+                exclusions[aid] = "no_attendee_char_ids"
+                continue
         pool = bc.balance_before(event.loot_id, aid)
         if pool is None:
             exclusions[aid] = "no_reconstructed_pool"

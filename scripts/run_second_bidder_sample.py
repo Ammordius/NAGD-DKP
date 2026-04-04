@@ -21,6 +21,11 @@ def main() -> None:
     p.add_argument("backup_dir", type=Path, help="Folder with raids.csv, raid_loot.csv, …")
     p.add_argument("--index", type=int, default=-1, help="Event index in chronological list (default: last)")
     p.add_argument("--debug", action="store_true", help="Include pool-threshold debug on first event only")
+    p.add_argument(
+        "--no-character-detail",
+        action="store_true",
+        help="Omit per-character lines in the text report",
+    )
     args = p.parse_args()
 
     cfg = SecondBidderConfig()
@@ -34,7 +39,7 @@ def main() -> None:
         sys.exit(1)
     i = args.index if args.index >= 0 else len(preds) + args.index
     i = max(0, min(i, len(preds) - 1))
-    print(format_event_report(preds[i]))
+    print(format_event_report(preds[i], verbose_characters=not args.no_character_detail))
 
 
 if __name__ == "__main__":

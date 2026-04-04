@@ -17,12 +17,18 @@ class KnowledgeState:
     account_paid_to_ref_sum: Dict[str, float] = field(default_factory=dict)
     account_paid_to_ref_n: Dict[str, int] = field(default_factory=dict)
     account_win_history: Dict[str, List[Tuple[int, str, float]]] = field(default_factory=dict)
+    # (account_id, char_id) -> prior wins for character-aware item fit (no leakage if updated after score)
+    char_win_history: Dict[Tuple[str, str], List[Tuple[int, str, str, float]]] = field(
+        default_factory=dict
+    )
 
     def recency_weighted_norm_wins(
         self, account_id: str, norm_name: str, current_event_index: int, decay: float
     ) -> float:
         total = 0.0
         for idx, n, _cost in self.account_win_history.get(account_id, []):
+            if idx >= current_event_index:
+                continue
             if n != norm_name:
                 continue
             gap = max(0, current_event_index - idx)
@@ -34,9 +40,48 @@ class KnowledgeState:
     ) -> float:
         total = 0.0
         for idx, _n, _cost in self.account_win_history.get(account_id, []):
+            if idx >= current_event_index:
+                continue
             gap = max(0, current_event_index - idx)
             total += math.exp(-decay * gap)
         return total
+
+    def recency_weighted_norm_wins_for_char(
+        self,
+        account_id: str,
+        char_id: str,
+        norm_name: str,
+        current_event_index: int,
+        decay: float,
+    ) -> float:
+        key = (account_id, char_id)
+        total = 0.0
+        for idx, n, _item, _cost in self.char_win_history.get(key, []):
+            if idx >= current_event_index:
+                continue
+            if n != norm_name:
+                continue
+            gap = max(0, current_event_index - idx)
+            total += math.exp(-decay * gap)
+        return total
+
+    def recency_weighted_any_wins_for_char(
+        self, account_id: str, char_id: str, current_event_index: int, decay: float
+    ) -> float:
+        key = (account_id, char_id)
+        total = 0.0
+        for idx, _n, _item, _cost in self.char_win_history.get(key, []):
+            if idx >= current_event_index:
+                continue
+            gap = max(0, current_event_index - idx)
+            total += math.exp(-decay * gap)
+        return total
+
+    def char_win_count(self, account_id: str, char_id: str, before_event_index: int | None = None) -> int:
+        hist = self.char_win_history.get((account_id, char_id), [])
+        if before_event_index is None:
+            return len(hist)
+        return sum(1 for idx, *_rest in hist if idx < before_event_index)
 
 
 def empty_state() -> KnowledgeState:
@@ -54,9 +99,13 @@ def update_knowledge_state(state: KnowledgeState, event: LootSaleEvent) -> None:
     key = (buyer, event.norm_name)
     state.account_norm_win_count[key] = state.account_norm_win_count.get(key, 0) + 1
     cid = (event.buyer_char_id or "").strip()
+    item_name = (event.item_name or "").strip()
     if cid:
         ck = (buyer, cid)
         state.account_char_spent[ck] = state.account_char_spent.get(ck, 0.0) + price
+        state.char_win_history.setdefault(ck, []).append(
+            (event.event_index, event.norm_name, item_name, price)
+        )
     if event.paid_to_ref_ratio is not None:
         state.account_paid_to_ref_sum[buyer] = state.account_paid_to_ref_sum.get(buyer, 0.0) + float(
             event.paid_to_ref_ratio

@@ -1,13 +1,30 @@
 from __future__ import annotations
 
 import math
-from typing import Dict, List
+from typing import Dict, List, Tuple
 
 from bid_portfolio_local.balance_before_loot import BalanceCalculator
 
+from .character_plausibility import compute_account_character_plausibility
 from .config import SecondBidderConfig
 from .state import KnowledgeState
 from .types import FeatureBundle, LootSaleEvent
+
+
+def _revealed_char_spend_sum(account_id: str, state: KnowledgeState) -> float:
+    """Sum of prior DKP attributed to any character on this account (from known purchases)."""
+    return sum(
+        float(v) for (a, _cid), v in state.account_char_spent.items() if a == account_id
+    )
+
+
+def _max_revealed_char_spend(account_id: str, state: KnowledgeState) -> float:
+    """Largest prior per-character spend on this account (revealed investment lane ceiling)."""
+    m = 0.0
+    for (a, _cid), v in state.account_char_spent.items():
+        if a == account_id:
+            m = max(m, float(v))
+    return m
 
 
 def _norm_rows(raw_rows: List[Dict[str, float]]) -> List[Dict[str, float]]:
@@ -59,10 +76,7 @@ def compute_propensity_raw(
     idx = event.event_index
     same = state.recency_weighted_norm_wins(account_id, event.norm_name, idx, d)
     anyw = state.recency_weighted_any_wins(account_id, idx, d)
-    chars = event.attendee_account_to_chars.get(account_id, set())
-    spend = 0.0
-    for c in chars:
-        spend += state.account_char_spent.get((account_id, c), 0.0)
+    spend = _revealed_char_spend_sum(account_id, state)
     return {
         "same_norm_recency": same,
         "any_recency": anyw,
@@ -83,11 +97,12 @@ def compute_competitiveness_raw(
     n = int(state.account_paid_to_ref_n.get(account_id, 0))
     s = float(state.account_paid_to_ref_sum.get(account_id, 0.0))
     mean_ptr = (s / n) if n else 0.0
-    hoard = pool / (1.0 + tot)
+    char_lane_spend = _max_revealed_char_spend(account_id, state)
+    hoard = pool / (1.0 + char_lane_spend)
     return {
         "mean_win_cost": mean_cost,
         "paid_to_ref": mean_ptr,
-        "hoarding": hoard,
+        "hoarding_char_lane": hoard,
         "win_count": float(wins),
     }
 
@@ -98,13 +113,27 @@ def build_feature_bundles(
     state: KnowledgeState,
     bc: BalanceCalculator,
     config: SecondBidderConfig,
-) -> List[FeatureBundle]:
+) -> Tuple[List[FeatureBundle], List[Dict[str, object]]]:
+    char_raw: List[Dict[str, float]] = []
+    side: List[Dict[str, object]] = []
+    for a in account_ids:
+        raw_agg, rows, notes = compute_account_character_plausibility(a, event, state, config)
+        char_raw.append({"char_agg": raw_agg})
+        side.append(
+            {
+                "raw_character_agg": raw_agg,
+                "character_rows": rows,
+                "exclusion_notes": notes,
+            }
+        )
+
     caps = [compute_capability_raw(a, event, bc) for a in account_ids]
     props = [compute_propensity_raw(a, event, state, config) for a in account_ids]
     comps = [compute_competitiveness_raw(a, event, state, bc) for a in account_ids]
     caps_n = _norm_rows(caps)
     props_n = _norm_rows(props)
     comps_n = _norm_rows(comps)
+    chars_n = _norm_rows(char_raw)
     bundles: List[FeatureBundle] = []
     for i, a in enumerate(account_ids):
         bundles.append(
@@ -113,6 +142,7 @@ def build_feature_bundles(
                 capability=caps_n[i],
                 propensity=props_n[i],
                 competitiveness=comps_n[i],
+                character=chars_n[i],
             )
         )
-    return bundles
+    return bundles, side

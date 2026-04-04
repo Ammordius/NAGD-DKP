@@ -32,23 +32,40 @@ def predict_second_bidder_for_event(
             debug=dbg if debug else {},
         )
 
-    bundles = build_feature_bundles(candidates, event, state, bc, config)
+    bundles, char_side = build_feature_bundles(candidates, event, state, bc, config)
     raw_by_aid: Dict[str, float] = {}
     scored: List[ScoredCandidate] = []
-    for b in bundles:
-        raw, cap, prop, comp = score_candidate(b, config)
+    for b, side in zip(bundles, char_side):
+        raw, cap_scaled, prop, comp, char = score_candidate(b, config)
         raw_by_aid[b.account_id] = raw
         pool = float(bc.balance_before(event.loot_id, b.account_id) or 0.0)
+        notes = list(side.get("exclusion_notes") or [])
+        rows = side.get("character_rows") or []
+        raw_char = float(side.get("raw_character_agg") or 0.0)
+        player_debug: Dict[str, Any] = {
+            "total_player_dkp": pool,
+            "raw_character_agg": raw_char,
+            "aggregated_character_score_normalized": float(b.character.get("char_agg", 0.0)),
+            "player_affordability_contribution": cap_scaled,
+            "propensity_contribution": config.w_propensity * prop,
+            "competitiveness_contribution": config.w_competitiveness * comp,
+            "character_contribution": config.w_character * char,
+            "final_player_score": raw,
+            "exclusion_notes": notes,
+        }
         scored.append(
             ScoredCandidate(
                 account_id=b.account_id,
                 pool_before=pool,
                 raw_score=raw,
                 probability=0.0,
-                capability_score=cap,
+                capability_score=cap_scaled,
                 propensity_score=prop,
                 competitiveness_score=comp,
                 features=b,
+                character_score=char,
+                character_debug=list(rows),
+                player_debug=player_debug,
             )
         )
     probs = normalize_candidate_scores(raw_by_aid, config.score_floor)

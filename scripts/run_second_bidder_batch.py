@@ -106,6 +106,11 @@ def main() -> int:
         action="store_true",
         help="Include per-candidate normalized feature dicts (much larger files)",
     )
+    ap.add_argument(
+        "--include-character-debug",
+        action="store_true",
+        help="Include per-candidate character breakdown and player_debug (larger JSONL)",
+    )
     args = ap.parse_args()
 
     ck_path = args.checkpoint or Path(str(args.out) + ".second_bidder_checkpoint.pkl")
@@ -127,6 +132,8 @@ def main() -> int:
         else:
             start_index = int(blob["next_index"])
             initial_state = blob["state"]
+            if not hasattr(initial_state, "char_win_history"):
+                initial_state.char_win_history = {}
             out_mode = "a"
             print(
                 f"Resuming at event_index={start_index} (checkpoint {ck_path})",
@@ -191,6 +198,7 @@ def main() -> int:
                 pred,
                 top_candidates=args.top_candidates,
                 include_feature_vectors=args.include_feature_vectors,
+                include_character_debug=args.include_character_debug,
             )
             fout.write(json.dumps(row, ensure_ascii=False) + "\n")
             fout.flush()
