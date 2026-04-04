@@ -10,9 +10,9 @@ Officers get **heuristic** bid-interest views for a chosen item: **by raid** (wh
 
 ## Deploy checklist
 
-1. **Apply SQL in Supabase** (once per project):
-   - [`docs/supabase-officer-loot-bid-forecast.sql`](supabase-officer-loot-bid-forecast.sql) — `public.officer_loot_bid_forecast(p_raid_id text)` (`SECURITY DEFINER`, `is_officer()`).
-   - [`docs/supabase-officer-global-bid-forecast.sql`](supabase-officer-global-bid-forecast.sql) — `public.normalize_item_name_for_lookup(text)` (internal, `IMMUTABLE`) and `public.officer_global_bid_forecast(p_activity_days int DEFAULT 120)` (`SECURITY DEFINER`, `is_officer()`). `GRANT EXECUTE` on the RPC only (`authenticated`); the normalizer has no execute grant for clients.
+1. **Apply SQL in Supabase** (once per project): run the canonical [`docs/supabase-schema-full.sql`](supabase-schema-full.sql). Near the end it defines the bid-forecast objects:
+   - `public.officer_loot_bid_forecast(p_raid_id text)` (`SECURITY DEFINER`, `is_officer()`).
+   - `public.normalize_item_name_for_lookup(text)` (internal, `IMMUTABLE`) and `public.officer_global_bid_forecast(p_activity_days int DEFAULT 120)` (`SECURITY DEFINER`, `is_officer()`). `GRANT EXECUTE` on the RPCs only (`authenticated`); the normalizer has no execute grant for clients.
 
 2. **Static JSON**
    - `web/public/item_stats.json` — already part of the app.
@@ -38,9 +38,9 @@ Officers get **heuristic** bid-interest views for a chosen item: **by raid** (wh
 | Magelo scoring port | [`web/src/lib/mageloUpgradeEngine.js`](../web/src/lib/mageloUpgradeEngine.js) (`evaluateItemUpgradeForCharacter`, `computeUpgradesForCharacter`, etc.) |
 | Heuristics / tags / bid band | [`web/src/lib/bidForecastModel.js`](../web/src/lib/bidForecastModel.js) (`bidVsMarketFromPurchasesTimeAware`, …), [`web/src/lib/itemNameNormalize.js`](../web/src/lib/itemNameNormalize.js) |
 | Active window constant | [`web/src/lib/dkpLeaderboard.js`](../web/src/lib/dkpLeaderboard.js) (`ACTIVE_DAYS`, same idea as global default) |
-| RPC definitions | [`docs/supabase-officer-loot-bid-forecast.sql`](supabase-officer-loot-bid-forecast.sql), [`docs/supabase-officer-global-bid-forecast.sql`](supabase-officer-global-bid-forecast.sql) |
+| RPC definitions | [`docs/supabase-schema-full.sql`](supabase-schema-full.sql) (Officer bid forecast RPCs section) |
 | CI: roster export + Node index | [`scripts/export_bid_forecast_roster.py`](../scripts/export_bid_forecast_roster.py), [`scripts/build_bid_forecast_by_item.mjs`](../scripts/build_bid_forecast_by_item.mjs) |
-| Schema pointer | Comment at end of [`docs/supabase-schema-full.sql`](supabase-schema-full.sql) |
+| Canonical schema | [`docs/supabase-schema-full.sql`](supabase-schema-full.sql) |
 
 ## Data model notes (RPC)
 
@@ -77,4 +77,4 @@ Officers get **heuristic** bid-interest views for a chosen item: **by raid** (wh
 3. Clear **Raid id**, set **Activity days** if needed, **Run** again — should match **Global bid** roster behavior for the same item.
 4. After CI has populated precompute JSON, confirm upgrade summaries show **(Precomputed CI index)** in expanded detail where applicable.
 
-5. **Global** page: apply [`docs/supabase-officer-global-bid-forecast.sql`](supabase-officer-global-bid-forecast.sql), open **Global bid**, set activity days (default 120 matches leaderboard), enter an item, **Run**; expand **Show top upgrades by slot** on a row that qualifies (concentrated spend on that toon or recent spend on that toon).
+5. **Global** page: with schema applied (step 1), open **Global bid**, set activity days (default 120 matches leaderboard), enter an item, **Run**; expand **Show top upgrades by slot** on a row that qualifies (concentrated spend on that toon or recent spend on that toon).

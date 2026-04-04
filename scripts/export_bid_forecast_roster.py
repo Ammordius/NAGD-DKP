@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Export active-roster character keys for bid_forecast precompute (guild scope).
-Mirrors active_account_ids + roster join in docs/supabase-officer-global-bid-forecast.sql.
+Mirrors active_account_ids + roster join in docs/supabase-schema-full.sql (officer_global_bid_forecast).
 Uses SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY (same as loot-to-character CI).
 
 Does NOT call officer_global_bid_forecast (RPC requires is_officer(); service role is not an officer).

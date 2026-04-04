@@ -43,7 +43,7 @@ Intermediate `data/bid_forecast_roster.json` is **gitignored**.
 
 ## Behavior without browser `class_rankings.json`
 
-- **RPC + spend + bid bands:** always work for signed-in officers (SQL applied).  
+- **RPC + spend + bid bands:** always work for signed-in officers when canonical [`docs/supabase-schema-full.sql`](supabase-schema-full.sql) is applied.  
 - **Rich upgrade lines:** come from **`bid_forecast_by_item.json`** once CI has populated it — **no** `VITE_CLASS_RANKINGS_URL` required in the browser for those rows.  
 - **Live fallback** (toons/items missing from precompute): still needs **`class_rankings.json`** in the bundle or via `VITE_CLASS_RANKINGS_URL`; otherwise you see the yellow warning and weaker “why” text.
 

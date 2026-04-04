@@ -85,7 +85,7 @@ Align this with GitHub secret **`CLASS_RANKINGS_URL`** when you want CI precompu
 
 ## Deploy and operations checklist (global-specific)
 
-1. **SQL**: Run [`docs/supabase-officer-global-bid-forecast.sql`](supabase-officer-global-bid-forecast.sql) on the **same** Supabase project the app uses (including production).
+1. **SQL**: Apply [`docs/supabase-schema-full.sql`](supabase-schema-full.sql) on the **same** Supabase project the app uses (including production). It includes `normalize_item_name_for_lookup` and `officer_global_bid_forecast` in the **Officer bid forecast RPCs** section near the end.
 
 2. **Static assets**
    - `web/public/item_stats.json` — required to resolve item **names** to ids and for scoring.
@@ -100,7 +100,7 @@ Align this with GitHub secret **`CLASS_RANKINGS_URL`** when you want CI precompu
 | Concern | File |
 |--------|------|
 | Global UI | [`web/src/pages/OfficerGlobalLootBidForecast.jsx`](../web/src/pages/OfficerGlobalLootBidForecast.jsx) |
-| RPC + normalizer | [`docs/supabase-officer-global-bid-forecast.sql`](supabase-officer-global-bid-forecast.sql) |
+| RPC + normalizer | [`docs/supabase-schema-full.sql`](supabase-schema-full.sql) |
 | Magelo parity scoring | [`web/src/lib/mageloUpgradeEngine.js`](../web/src/lib/mageloUpgradeEngine.js) |
 | Bid ratios / bands | [`web/src/lib/bidForecastModel.js`](../web/src/lib/bidForecastModel.js) |
 | Active days default | [`web/src/lib/dkpLeaderboard.js`](../web/src/lib/dkpLeaderboard.js) (`ACTIVE_DAYS`) |
@@ -114,7 +114,7 @@ Align this with GitHub secret **`CLASS_RANKINGS_URL`** when you want CI precompu
 | “Could not resolve item id” | Item missing from `item_stats.json` or name mismatch vs Allaclone naming. |
 | All `paid_to_ref_ratio` null | First guild sales for those item names, or zero prior sales in `raid_loot`. |
 | Stale gear vs reality | Regenerate / redeploy **`class_rankings.json`** from Magelo. |
-| Slow “Run” on large DB | Historically: per-purchase ref-price subqueries; current SQL uses a window over positive-cost guild sales (re-apply [`supabase-officer-global-bid-forecast.sql`](supabase-officer-global-bid-forecast.sql)). If still slow, add indexes / denormalized sale date per main handoff. |
+| Slow “Run” on large DB | Historically: per-purchase ref-price subqueries; current SQL uses a window over positive-cost guild sales (re-apply the bid-forecast section from [`supabase-schema-full.sql`](supabase-schema-full.sql)). If still slow, add indexes / denormalized sale date per main handoff. |
 
 ## Follow-ups (ideas)
 
