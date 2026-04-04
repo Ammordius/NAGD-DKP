@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Iterator, List, Optional, Tuple
 
 from bid_portfolio_local.balance_before_loot import BalanceCalculator
 from bid_portfolio_local.load_csv import BackupSnapshot
@@ -71,22 +71,61 @@ def predict_second_bidder_for_event(
     )
 
 
+def iter_sequential_predictions(
+    events: List[LootSaleEvent],
+    snap: BackupSnapshot,
+    config: SecondBidderConfig,
+    *,
+    debug_first_n: int = 0,
+    start_index: int = 0,
+    initial_state: Optional[KnowledgeState] = None,
+) -> Iterator[Tuple[int, PredictionResult, KnowledgeState]]:
+    """Yield ``(event_index, prediction, knowledge_state)`` after each event.
+
+    ``knowledge_state`` is the rolling state **after** applying that sale (safe to
+    pickle for resume with ``next_index = event_index + 1``).
+    """
+    if start_index < 0:
+        raise ValueError("start_index must be >= 0")
+    if start_index > 0 and initial_state is None:
+        raise ValueError("initial_state is required when start_index > 0")
+    if start_index > len(events):
+        raise ValueError("start_index out of range")
+    bc = BalanceCalculator(snap)
+    state = empty_state() if initial_state is None else initial_state
+    for i, ev in enumerate(events):
+        if i < start_index:
+            continue
+        use_dbg = debug_first_n > 0 and i < debug_first_n
+        pred = predict_second_bidder_for_event(ev, state, bc, config, debug=use_dbg)
+        update_knowledge_state(state, ev)
+        yield i, pred, state
+
+
 def run_sequential_predictions(
     events: List[LootSaleEvent],
     snap: BackupSnapshot,
     config: SecondBidderConfig,
     *,
     debug_first_n: int = 0,
+    start_index: int = 0,
+    initial_state: Optional[KnowledgeState] = None,
 ) -> List[PredictionResult]:
-    bc = BalanceCalculator(snap)
-    state = empty_state()
-    out: List[PredictionResult] = []
-    for i, ev in enumerate(events):
-        use_dbg = debug_first_n > 0 and i < debug_first_n
-        pred = predict_second_bidder_for_event(ev, state, bc, config, debug=use_dbg)
-        out.append(pred)
-        update_knowledge_state(state, ev)
-    return out
+    """For ``start_index > 0``, pass ``initial_state`` from a checkpoint (post-event state)."""
+    if start_index > 0 and initial_state is None:
+        raise ValueError("initial_state is required when start_index > 0")
+    st = empty_state() if initial_state is None else initial_state
+    return [
+        pred
+        for _, pred, _ in iter_sequential_predictions(
+            events,
+            snap,
+            config,
+            debug_first_n=debug_first_n,
+            start_index=start_index,
+            initial_state=st,
+        )
+    ]
 
 
 def run_from_backup(
@@ -103,4 +142,11 @@ def run_from_backup(
     snap = load_backup(Path(backup_dir))
     cfg = config or SecondBidderConfig()
     events = prepare_second_bidder_events(snap, **prepare_kwargs)
-    return run_sequential_predictions(events, snap, cfg, debug_first_n=debug_first_n)
+    return run_sequential_predictions(
+        events,
+        snap,
+        cfg,
+        debug_first_n=debug_first_n,
+        start_index=0,
+        initial_state=None,
+    )

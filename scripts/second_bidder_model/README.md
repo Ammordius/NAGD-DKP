@@ -50,6 +50,7 @@ Optional: pass `eligible_by_loot_id={loot_id: {"acc1", "acc2"}}` into `run_from_
 | `pipeline.py` | Sequential prediction loop |
 | `debug.py` | Human-readable report |
 | `evaluate.py` | Optional rank metrics when labels exist |
+| `serialize.py` | JSON-safe rows for batch export |
 
 ## Sample CLI
 
@@ -65,5 +66,28 @@ python scripts/run_second_bidder_sample.py "C:\TAKP\dkp\supabase-backup-2026-04-
 ```
 
 Use the folder that contains `raids.csv` (sometimes `...\supabase-backup-YYYY-MM-DD\backup` after extract).
+
+## Batch export (all sales, JSONL + resume)
+
+Every positive-price sale with a resolved buyer becomes one JSON line (top candidates + counts). Progress prints to stderr; checkpoints let you restart after Ctrl+C or a crash.
+
+```powershell
+$env:PYTHONPATH = "scripts"
+python scripts/run_second_bidder_batch.py "C:\TAKP\dkp\backup-2026-04-02\backup" `
+  --out data/second_bidder.jsonl --progress-every 500 --checkpoint-every 200
+```
+
+Resume (append to the same `--out`, reuse checkpoint next to the file unless you passed `--checkpoint`):
+
+```powershell
+python scripts/run_second_bidder_batch.py "C:\TAKP\dkp\backup-2026-04-02\backup" `
+  --out data/second_bidder.jsonl --resume
+```
+
+Full re-run from scratch: add `--fresh` (deletes the default `*.second_bidder_checkpoint.pkl` and overwrites the JSONL).
+
+**Why resume needs a pickle:** The model’s “prior wins” state depends on **all** earlier sales in order. The checkpoint stores that rolling state plus the next `event_index`, so you do not have to re-score from row one unless you use `--fresh`.
+
+For programmatic use, `iter_sequential_predictions(...)` yields `(event_index, prediction, knowledge_state)` after each event.
 
 See `docs/SECOND_BIDDER_MVP_SPEC.md` for the full spec.

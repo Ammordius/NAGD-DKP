@@ -4,6 +4,7 @@ from .config import SecondBidderConfig
 from .debug import format_event_report
 from .evaluate import evaluate_second_bidder_predictions
 from .pipeline import (
+    iter_sequential_predictions,
     predict_second_bidder_for_event,
     run_from_backup,
     run_sequential_predictions,
@@ -23,6 +24,7 @@ __all__ = [
     "prepare_second_bidder_events",
     "predict_second_bidder_for_event",
     "run_sequential_predictions",
+    "iter_sequential_predictions",
     "run_from_backup",
     "format_event_report",
     "evaluate_second_bidder_predictions",

@@ -17,6 +17,7 @@ from second_bidder_model.candidates import build_candidate_pool
 from second_bidder_model.config import SecondBidderConfig
 from second_bidder_model.features import compute_propensity_raw
 from second_bidder_model.evaluate import evaluate_second_bidder_predictions
+from second_bidder_model.pipeline import iter_sequential_predictions, run_sequential_predictions
 from second_bidder_model.prepare import prepare_second_bidder_events
 from second_bidder_model.types import FeatureBundle, PredictionResult, ScoredCandidate
 from second_bidder_model.scoring import normalize_candidate_scores
@@ -30,6 +31,42 @@ class MockBC:
 
     def balance_before(self, loot_id: int, account_id: str):
         return self.pools.get((loot_id, account_id))
+
+
+class TestSequentialResume(unittest.TestCase):
+    def test_resume_requires_initial_state(self):
+        ev = LootSaleEvent(
+            event_index=0,
+            loot_id=1,
+            raid_id="r",
+            event_id=None,
+            raid_date=None,
+            norm_name="n",
+            item_name="I",
+            winning_price=1.0,
+            buyer_account_id="a",
+            buyer_char_id=None,
+            attendee_account_ids={"a"},
+            attendee_account_to_chars={},
+        )
+        with self.assertRaises(ValueError):
+            list(
+                iter_sequential_predictions(
+                    [ev],
+                    snap=None,  # type: ignore[arg-type]
+                    config=SecondBidderConfig(),
+                    start_index=1,
+                    initial_state=None,
+                )
+            )
+        with self.assertRaises(ValueError):
+            run_sequential_predictions(
+                [ev],
+                snap=None,  # type: ignore[arg-type]
+                config=SecondBidderConfig(),
+                start_index=1,
+                initial_state=None,
+            )
 
 
 class TestNormalize(unittest.TestCase):

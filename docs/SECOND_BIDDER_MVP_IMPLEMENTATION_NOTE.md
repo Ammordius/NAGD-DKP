@@ -18,6 +18,7 @@
 | Package README | [`scripts/second_bidder_model/README.md`](../scripts/second_bidder_model/README.md) |
 | Spec | [`SECOND_BIDDER_MVP_SPEC.md`](SECOND_BIDDER_MVP_SPEC.md) |
 | Sample CLI | [`scripts/run_second_bidder_sample.py`](../scripts/run_second_bidder_sample.py) |
+| Batch JSONL + resume | [`scripts/run_second_bidder_batch.py`](../scripts/run_second_bidder_batch.py) |
 
 ## Dependencies
 
@@ -46,3 +47,5 @@ PYTHONPATH=scripts python -m unittest discover -s scripts/second_bidder_model/te
 3. Optionally attach `eligible_by_loot_id` from your JSON pipeline.
 4. `run_sequential_predictions(...)` or `run_from_backup(...)`.
 5. `format_event_report(pred)` for inspection.
+
+For **all** sales to disk with progress and **checkpointed resume**, run `run_second_bidder_batch.py` (see package README).
