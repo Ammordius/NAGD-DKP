@@ -1923,19 +1923,22 @@ BEGIN
     ),
     purchases_json AS (
       SELECT
-        account_id,
+        pl.account_id,
         jsonb_agg(
           jsonb_build_object(
-            'raid_date', raid_date,
-            'item_name', item_name,
-            'cost', cost_num,
-            'char_id', loot_char_id,
-            'character_name', loot_character_name
+            'loot_id', pl.loot_id,
+            'raid_date', pl.raid_date,
+            'item_name', pl.item_name,
+            'cost', pl.cost_num,
+            'char_id', pl.loot_char_id,
+            'character_name', pl.loot_character_name,
+            'paid_to_ref_ratio', gle.paid_to_ref_ratio
           )
-          ORDER BY raid_date ASC NULLS FIRST, loot_id ASC
+          ORDER BY pl.raid_date ASC NULLS FIRST, pl.loot_id ASC
         ) AS purchases
-      FROM purchases_limited
-      GROUP BY account_id
+      FROM purchases_limited pl
+      LEFT JOIN public.guild_loot_sale_enriched gle ON gle.loot_id = pl.loot_id
+      GROUP BY pl.account_id
     ),
     per_toon_json AS (
       SELECT
@@ -2202,19 +2205,22 @@ BEGIN
     ),
     purchases_json AS (
       SELECT
-        account_id,
+        pl.account_id,
         jsonb_agg(
           jsonb_build_object(
-            'raid_date', raid_date,
-            'item_name', item_name,
-            'cost', cost_num,
-            'char_id', loot_char_id,
-            'character_name', loot_character_name
+            'loot_id', pl.loot_id,
+            'raid_date', pl.raid_date,
+            'item_name', pl.item_name,
+            'cost', pl.cost_num,
+            'char_id', pl.loot_char_id,
+            'character_name', pl.loot_character_name,
+            'paid_to_ref_ratio', gle.paid_to_ref_ratio
           )
-          ORDER BY raid_date ASC NULLS FIRST, loot_id ASC
+          ORDER BY pl.raid_date ASC NULLS FIRST, pl.loot_id ASC
         ) AS purchases
-      FROM purchases_limited
-      GROUP BY account_id
+      FROM purchases_limited pl
+      LEFT JOIN public.guild_loot_sale_enriched gle ON gle.loot_id = pl.loot_id
+      GROUP BY pl.account_id
     ),
     per_toon_json AS (
       SELECT
@@ -3882,6 +3888,7 @@ BEGIN
         account_id,
         jsonb_agg(
           jsonb_build_object(
+            'loot_id', loot_id,
             'raid_date', raid_date,
             'item_name', item_name,
             'cost', cost_num,

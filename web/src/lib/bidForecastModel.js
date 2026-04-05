@@ -219,6 +219,100 @@ export function lastPurchaseOnCharacter(purchasesChronological, charId, charName
 /** Optional interest-score penalty when this toon is cold vs active spending elsewhere */
 export const DORMANT_TOON_THRESHOLD_DAYS = 90
 
+/** Recent loot spend on this toon boosts bid-interest (aligns with Python attending recency). */
+export const RECENT_TOON_SPEND_BONUS_DAYS = 21
+export const RECENT_TOON_SPEND_MAX_BONUS = 10
+
+/** Same-slot purchase on this toon recently reduces interest (slot cooldown). */
+export const SAME_SLOT_COOLDOWN_LOOKBACK_DAYS = 120
+export const SAME_SLOT_COOLDOWN_MAX_PENALTY = 18
+
+/**
+ * Canonical slot key: sorted upper tokens joined by '|' (matches Python second_bidder_model.equip_slot).
+ * @param {string | null | undefined} raw
+ * @returns {string | null}
+ */
+export function normalizeEquipSlotKey(raw) {
+  if (!raw || typeof raw !== 'string') return null
+  const parts = raw
+    .trim()
+    .toUpperCase()
+    .split(/\s+/)
+    .filter(Boolean)
+  if (!parts.length) return null
+  return [...parts].sort().join('|')
+}
+
+/**
+ * @param {string | null | undefined} keyA
+ * @param {string | null | undefined} keyB
+ */
+export function slotKeysOverlap(keyA, keyB) {
+  if (!keyA || !keyB) return false
+  const sa = new Set(String(keyA).split('|').filter(Boolean))
+  const sb = new Set(String(keyB).split('|').filter(Boolean))
+  for (const x of sa) {
+    if (sb.has(x)) return true
+  }
+  return false
+}
+
+/** @param {object | null | undefined} itemStatsRow — row from item_stats */
+export function equipSlotKeyFromItemStats(itemStatsRow) {
+  if (!itemStatsRow?.slot || typeof itemStatsRow.slot !== 'string') return null
+  return normalizeEquipSlotKey(itemStatsRow.slot)
+}
+
+export function interestScoreRecentToonSpendBonus(profile, charId, charName, opts = {}) {
+  const windowDays = opts.windowDays ?? RECENT_TOON_SPEND_BONUS_DAYS
+  const maxBonus = opts.maxBonus ?? RECENT_TOON_SPEND_MAX_BONUS
+  if (!profile) return 0
+  const purchases = Array.isArray(profile.recent_purchases_desc) ? profile.recent_purchases_desc : []
+  const lastOnToon = lastPurchaseOnCharacter(purchases, charId, charName)
+  if (lastOnToon == null) return 0
+  const days = daysSinceRaidDate(lastOnToon.raid_date)
+  if (days == null || days > windowDays) return 0
+  return Math.round((maxBonus * (windowDays - days)) / windowDays)
+}
+
+/**
+ * Penalty when this toon bought an item in the same equip slot recently.
+ * @param {Array<{ item_name?: string, raid_date?: string, char_id?: string, character_name?: string }>} purchasesChronological
+ * @param {Map<string,string>|Record<string,string>} nameToId
+ * @param {Record<string, object>} itemStats
+ */
+export function interestScoreSameSlotCooldownPenalty(
+  purchasesChronological,
+  nameToId,
+  itemStats,
+  charId,
+  charName,
+  currentSlotKey,
+  opts = {},
+) {
+  const lookback = opts.lookbackDays ?? SAME_SLOT_COOLDOWN_LOOKBACK_DAYS
+  const maxPen = opts.maxPenalty ?? SAME_SLOT_COOLDOWN_MAX_PENALTY
+  if (!currentSlotKey || !Array.isArray(purchasesChronological) || purchasesChronological.length === 0) {
+    return 0
+  }
+  let bestPen = 0
+  for (let i = purchasesChronological.length - 1; i >= 0; i--) {
+    const p = purchasesChronological[i]
+    if (!purchaseMatchesToon(p, charId, charName)) continue
+    const days = daysSinceRaidDate(p.raid_date)
+    if (days == null || days > lookback) continue
+    const id = resolveItemIdFromName(p.item_name, nameToId)
+    if (!id) continue
+    const row = itemStats[String(id)] || itemStats[Number(id)]
+    const pk = equipSlotKeyFromItemStats(row)
+    if (!pk || !slotKeysOverlap(currentSlotKey, pk)) continue
+    const freshness = Math.max(0, (lookback - days) / lookback)
+    const pen = Math.round(maxPen * freshness)
+    if (pen > bestPen) bestPen = pen
+  }
+  return bestPen
+}
+
 export function interestScoreDormantPenalty(profile, charId, charName) {
   if (!profile) return 0
   const purchases = Array.isArray(profile.recent_purchases_desc) ? profile.recent_purchases_desc : []
@@ -334,7 +428,9 @@ export function estimateBidBand(balance, anchorPrice, medianBidRatio, scoreDelta
   if (medianBidRatio != null && !Number.isNaN(medianBidRatio)) {
     mult = Math.min(1.35, Math.max(0.75, medianBidRatio))
   }
-  if (scoreDelta != null && scoreDelta > 0.02) mult = Math.min(1.25, mult * 1.08)
+  const sd = scoreDelta != null && !Number.isNaN(Number(scoreDelta)) ? Number(scoreDelta) : null
+  if (sd != null && sd > 0.02) mult = Math.min(1.25, mult * 1.08)
+  if (sd != null && sd > 0 && sd <= 0.012) mult = Math.max(0.82, mult * 0.92)
   if (a == null || a <= 0) {
     const mid = Math.round(b * 0.45)
     return {

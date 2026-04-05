@@ -21,6 +21,7 @@ def _event_json(e: LootSaleEvent) -> Dict[str, Any]:
         "attendee_count": len(e.attendee_account_ids),
         "eligible_filter_on": e.eligible_account_ids is not None,
         "eligible_char_pairs_on": e.eligible_char_pairs is not None,
+        "equip_slot": e.equip_slot,
     }
 
 

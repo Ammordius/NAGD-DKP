@@ -2,6 +2,8 @@ import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import {
   estimateBidReconstructionHeuristic,
+  normalizeEquipSlotKey,
+  slotKeysOverlap,
   simulateBalancesBeforeLootRow,
 } from './bidForecastModel.js'
 
@@ -55,6 +57,17 @@ describe('simulateBalancesBeforeLootRow', () => {
     })
     // B0 = 200 + 10 - 50 = 160; e1: +40, -5 => 195; e2: +10 before its loot => 205; stop before loot 20
     assert.equal(balances.A, 205)
+  })
+})
+
+describe('normalizeEquipSlotKey / slotKeysOverlap', () => {
+  it('sorts multi-slot keys for stable matching', () => {
+    assert.equal(normalizeEquipSlotKey('PRIMARY SECONDARY'), 'PRIMARY|SECONDARY')
+    assert.equal(normalizeEquipSlotKey('SECONDARY PRIMARY'), 'PRIMARY|SECONDARY')
+  })
+  it('detects token overlap', () => {
+    assert.equal(slotKeysOverlap('EAR', 'EAR'), true)
+    assert.equal(slotKeysOverlap('EAR', 'NECK'), false)
   })
 })
 

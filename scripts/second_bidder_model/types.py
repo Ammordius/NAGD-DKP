@@ -23,6 +23,8 @@ class LootSaleEvent:
     eligible_char_pairs: Optional[Set[Tuple[str, str]]] = None
     ref_price_at_sale: Optional[float] = None
     paid_to_ref_ratio: Optional[float] = None
+    # Normalized from item_stats.slot (see equip_slot.normalize_equip_slot_key); None if unknown
+    equip_slot: Optional[str] = None
 
 @dataclass
 class FeatureBundle:

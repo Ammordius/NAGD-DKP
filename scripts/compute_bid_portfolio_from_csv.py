@@ -173,7 +173,9 @@ def main() -> int:
         for ev in events_full:
             gle = enriched_by_id.get(ev.loot_id)
             if gle is None:
-                update_knowledge_state(state, ev)
+                update_knowledge_state(
+                    state, ev, paid_to_ref_ewma_alpha=sb_cfg.paid_to_ref_ewma_alpha
+                )
                 continue
 
             emit = want is None or ev.loot_id in want
@@ -213,7 +215,9 @@ def main() -> int:
                 if args.progress_every > 0 and n % args.progress_every == 0:
                     print(f"... wrote {n} row(s), last loot_id={ev.loot_id}", file=sys.stderr)
 
-            update_knowledge_state(state, ev)
+            update_knowledge_state(
+                state, ev, paid_to_ref_ewma_alpha=sb_cfg.paid_to_ref_ewma_alpha
+            )
 
     print(f"Wrote {n} JSONL record(s) to {args.out}", file=sys.stderr)
     return 0

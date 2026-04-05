@@ -14,8 +14,11 @@ import {
   buildNameToItemId,
   buildSharedAccountSpendBullets,
   dormantToonVersusAccountNarrative,
+  equipSlotKeyFromItemStats,
   estimateBidBand,
   interestScoreDormantPenalty,
+  interestScoreRecentToonSpendBonus,
+  interestScoreSameSlotCooldownPenalty,
   lastSpendNarrative,
   mergeBidBandsForAccountRow,
   perToonShareNarrative,
@@ -358,6 +361,7 @@ export default function OfficerGlobalLootBidForecast({ isOfficer }) {
 
         const purchases = Array.isArray(prof?.recent_purchases_desc) ? prof.recent_purchases_desc : []
         const bidInfo = bidVsMarketFromPurchasesTimeAware(purchases, nameToId, dkpPrices || {})
+        const currentSlotKey = equipSlotKeyFromItemStats(itemStats[String(resolvedItemId)])
         const accountBalance = prof?.balance != null ? Number(prof.balance) : 0
         const toonBalance = prof ? toonBalanceFromProfile(prof, charId) : 0
         const bidBalance = prof ? accountBalance : 0
@@ -404,6 +408,15 @@ export default function OfficerGlobalLootBidForecast({ isOfficer }) {
           (upgrade?.isUpgrade ? 50 + Math.min(40, (upgrade.scoreDelta || 0) * 200) : 0)
           + (prof && bidBalance > 0 ? Math.min(25, bidBalance / 8) : 0)
           + (bidInfo.medianRatio != null && bidInfo.medianRatio >= 1.1 ? 8 : 0)
+        interestScore += interestScoreRecentToonSpendBonus(prof, charId, charName)
+        interestScore -= interestScoreSameSlotCooldownPenalty(
+          purchases,
+          nameToId,
+          itemStats,
+          charId,
+          charName,
+          currentSlotKey,
+        )
         interestScore -= interestScoreDormantPenalty(prof, charId, charName)
 
         const upgradeShort = pc

@@ -18,6 +18,53 @@ def _revealed_char_spend_sum(account_id: str, state: KnowledgeState) -> float:
     )
 
 
+def _attending_chars_revealed_spend(account_id: str, event: LootSaleEvent, state: KnowledgeState) -> float:
+    """Prior spend only on characters linked to this raid's attendance for this account."""
+    chars = event.attendee_account_to_chars.get(account_id, set()) or set()
+    s = 0.0
+    for cid in chars:
+        c = (cid or "").strip()
+        if not c:
+            continue
+        s += float(state.account_char_spent.get((account_id, c), 0.0))
+    return s
+
+
+def _max_attending_char_any_recency(
+    account_id: str, event: LootSaleEvent, state: KnowledgeState, decay: float
+) -> float:
+    """Max decay-weighted 'any item' win recency among raid-attending characters."""
+    chars = event.attendee_account_to_chars.get(account_id, set()) or set()
+    best = 0.0
+    idx = event.event_index
+    for cid in chars:
+        c = (cid or "").strip()
+        if not c:
+            continue
+        v = state.recency_weighted_any_wins_for_char(account_id, c, idx, decay)
+        best = max(best, v)
+    return best
+
+
+def _attendee_char_id_list(account_id: str, event: LootSaleEvent) -> List[str]:
+    chars = event.attendee_account_to_chars.get(account_id, set()) or set()
+    out = [(c or "").strip() for c in chars]
+    return [c for c in out if c]
+
+
+def _same_slot_recency_attending(
+    account_id: str, event: LootSaleEvent, state: KnowledgeState, decay: float
+) -> float:
+    """Decay-weighted prior wins in the same equip slot on any attending character (cooldown signal)."""
+    return state.recency_weighted_same_slot_wins_for_attending_chars(
+        account_id,
+        _attendee_char_id_list(account_id, event),
+        event.equip_slot,
+        event.event_index,
+        decay,
+    )
+
+
 def _prior_same_item_win_count(
     account_id: str,
     item_name: str,
@@ -32,7 +79,8 @@ def _prior_same_item_win_count(
     for (a, _cid), hist in state.char_win_history.items():
         if a != account_id:
             continue
-        for idx, _norm, iname, _p in hist:
+        for row in hist:
+            idx, iname = row[0], row[2]
             if idx >= before_event_index:
                 continue
             if (iname or "").strip() == it:
@@ -110,7 +158,14 @@ def compute_propensity_raw(
     idx = event.event_index
     same = state.recency_weighted_norm_wins(account_id, event.norm_name, idx, d)
     anyw = state.recency_weighted_any_wins(account_id, idx, d)
-    spend = _revealed_char_spend_sum(account_id, state)
+    decay_c = (
+        config.recency_decay_char
+        if config.recency_decay_char is not None
+        else config.recency_decay_per_event
+    )
+    spend = _attending_chars_revealed_spend(account_id, event, state)
+    max_att_rec = _max_attending_char_any_recency(account_id, event, state, decay_c)
+    slot_rec = _same_slot_recency_attending(account_id, event, state, decay_c)
     wins = int(state.account_win_count.get(account_id, 0))
     attended = int(state.account_loot_events_attended.get(account_id, 0))
     win_rate = float(wins) / float(max(1, attended))
@@ -121,6 +176,8 @@ def compute_propensity_raw(
         "same_norm_recency": same,
         "any_recency": anyw,
         "attending_toon_spend": spend,
+        "max_attending_char_any_recency": max_att_rec,
+        "same_slot_recency_attending": slot_rec,
         "win_rate_over_attended_loot_sales": win_rate,
         "prior_same_item_wins": prior_same,
     }
@@ -139,12 +196,17 @@ def compute_competitiveness_raw(
     n = int(state.account_paid_to_ref_n.get(account_id, 0))
     s = float(state.account_paid_to_ref_sum.get(account_id, 0.0))
     mean_ptr = (s / n) if n else 0.0
+    ew = state.account_paid_to_ref_ewma.get(account_id)
+    ewma_ptr = float(ew) if ew is not None else mean_ptr
+    if ewma_ptr <= 0.0:
+        ewma_ptr = mean_ptr if mean_ptr > 0.0 else 1.0
     char_lane_spend = _max_revealed_char_spend(account_id, state)
     hoard_lane = pool / (1.0 + char_lane_spend)
     hoard_account = pool / (1.0 + tot)
     return {
         "mean_win_cost": mean_cost,
         "paid_to_ref": mean_ptr,
+        "paid_to_ref_ewma": ewma_ptr,
         "hoarding_char_lane": hoard_lane,
         "hoarding_account_total": hoard_account,
         "win_count": float(wins),

@@ -51,7 +51,7 @@ from second_bidder_model.prepare import prepare_second_bidder_events
 from second_bidder_model.serialize import prediction_result_to_json_dict
 from second_bidder_model.state import KnowledgeState, empty_state
 
-_CHECKPOINT_VERSION = 2
+_CHECKPOINT_VERSION = 3
 
 
 def _migrate_knowledge_state(st: KnowledgeState) -> None:
@@ -60,6 +60,8 @@ def _migrate_knowledge_state(st: KnowledgeState) -> None:
         st.char_win_history = {}
     if not hasattr(st, "account_loot_events_attended") or st.account_loot_events_attended is None:
         st.account_loot_events_attended = {}
+    if not hasattr(st, "account_paid_to_ref_ewma") or st.account_paid_to_ref_ewma is None:
+        st.account_paid_to_ref_ewma = {}
 
 
 def _atomic_pickle_dump(path: Path, obj: Any) -> None:

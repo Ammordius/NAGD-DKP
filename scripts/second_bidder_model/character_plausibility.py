@@ -90,7 +90,8 @@ def compute_item_character_fit_features(
     same_item_hits = 0.0
     item_name = (event.item_name or "").strip()
     if item_name:
-        for _idx, _n, it, _p in state.char_win_history.get(key, []):
+        for row in state.char_win_history.get(key, []):
+            it = row[2]
             if it == item_name:
                 same_item_hits += 1.0
     return {

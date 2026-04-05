@@ -20,7 +20,8 @@ from second_bidder_model.candidates import build_candidate_pool
 from second_bidder_model.character_plausibility import aggregate_character_scores_to_player
 from second_bidder_model.config import SecondBidderConfig
 from second_bidder_model.eligibility_io import load_eligibility_json
-from second_bidder_model.features import compute_propensity_raw
+from second_bidder_model.equip_slot import normalize_equip_slot_key, slot_keys_overlap
+from second_bidder_model.features import compute_competitiveness_raw, compute_propensity_raw
 from second_bidder_model.evaluate import evaluate_second_bidder_predictions
 from second_bidder_model.pipeline import (
     iter_sequential_predictions,
@@ -525,7 +526,7 @@ class TestCharacterAwareScoring(unittest.TestCase):
 
     def test_char_history_future_index_ignored(self):
         st = KnowledgeState()
-        st.char_win_history[("A", "c1")] = [(10, "helm", "Helm", 5.0)]
+        st.char_win_history[("A", "c1")] = [(10, "helm", "Helm", 5.0, None)]
         v = st.recency_weighted_norm_wins_for_char("A", "c1", "helm", current_event_index=5, decay=0.1)
         self.assertAlmostEqual(v, 0.0, places=6)
 
@@ -601,6 +602,90 @@ class TestCharacterAwareScoring(unittest.TestCase):
         ids = {r["char_id"] for r in sc.character_debug}
         self.assertIn("main", ids)
         self.assertGreater(sc.player_debug["raw_character_agg"], 0.0)
+
+
+class TestSpendAndSlotFeatures(unittest.TestCase):
+    def test_attending_spend_only_counts_attending_chars(self):
+        st = KnowledgeState()
+        st.account_char_spent[("A", "main")] = 500.0
+        st.account_char_spent[("A", "alt")] = 200.0
+        cfg = SecondBidderConfig()
+        raw = compute_propensity_raw(
+            "A",
+            LootSaleEvent(
+                event_index=2,
+                loot_id=1,
+                raid_id="r",
+                event_id=None,
+                raid_date=None,
+                norm_name="x",
+                item_name="X",
+                winning_price=1.0,
+                buyer_account_id="B",
+                buyer_char_id="b",
+                attendee_account_ids={"A"},
+                attendee_account_to_chars={"A": {"main"}},
+            ),
+            st,
+            cfg,
+        )
+        self.assertEqual(raw["attending_toon_spend"], 500.0)
+
+    def test_same_slot_recency_when_prior_same_slot_on_attending_toon(self):
+        st = KnowledgeState()
+        st.char_win_history[("A", "c1")] = [(0, "n1", "Item", 10.0, "EAR")]
+        cfg = SecondBidderConfig(recency_decay_per_event=0.0, recency_decay_char=0.0)
+        raw = compute_propensity_raw(
+            "A",
+            LootSaleEvent(
+                event_index=1,
+                loot_id=2,
+                raid_id="r",
+                event_id=None,
+                raid_date=None,
+                norm_name="x",
+                item_name="Other",
+                winning_price=20.0,
+                buyer_account_id="B",
+                buyer_char_id="b",
+                attendee_account_ids={"A"},
+                attendee_account_to_chars={"A": {"c1"}},
+                equip_slot="EAR",
+            ),
+            st,
+            cfg,
+        )
+        self.assertGreater(raw["same_slot_recency_attending"], 0.0)
+
+    def test_paid_to_ref_ewma_in_competitiveness(self):
+        st = KnowledgeState()
+        st.account_paid_to_ref_ewma["Z"] = 1.25
+        ev = LootSaleEvent(
+            event_index=0,
+            loot_id=1,
+            raid_id="r",
+            event_id=None,
+            raid_date=None,
+            norm_name="n",
+            item_name="I",
+            winning_price=1.0,
+            buyer_account_id="b",
+            buyer_char_id=None,
+            attendee_account_ids={"Z"},
+            attendee_account_to_chars={},
+        )
+        raw = compute_competitiveness_raw("Z", ev, st, MockBC({(1, "Z"): 100.0}))
+        self.assertAlmostEqual(raw["paid_to_ref_ewma"], 1.25, places=6)
+
+
+class TestEquipSlotHelpers(unittest.TestCase):
+    def test_normalize_slot_order_invariant(self):
+        self.assertEqual(normalize_equip_slot_key("PRIMARY SECONDARY"), "PRIMARY|SECONDARY")
+        self.assertEqual(normalize_equip_slot_key("SECONDARY PRIMARY"), "PRIMARY|SECONDARY")
+
+    def test_slot_overlap(self):
+        self.assertTrue(slot_keys_overlap("EAR", "EAR"))
+        self.assertFalse(slot_keys_overlap("EAR", "NECK"))
 
 
 class TestItemStatsEligibility(unittest.TestCase):

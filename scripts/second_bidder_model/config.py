@@ -29,26 +29,33 @@ class SecondBidderConfig:
     )
     propensity_weights: dict = field(
         default_factory=lambda: {
-            "same_norm_recency": 0.35,
-            "any_recency": 0.18,
-            "attending_toon_spend": 0.18,
-            "win_rate_over_attended_loot_sales": 0.18,
-            "prior_same_item_wins": 0.11,
+            "same_norm_recency": 0.30,
+            "any_recency": 0.14,
+            # Prior spend on raid-attending characters only (not whole account)
+            "attending_toon_spend": 0.14,
+            "max_attending_char_any_recency": 0.12,
+            # Higher = recent same-slot win on an attending toon → down-weight (negative coeff)
+            "same_slot_recency_attending": -0.10,
+            "win_rate_over_attended_loot_sales": 0.14,
+            "prior_same_item_wins": 0.10,
         }
     )
     competitiveness_weights: dict = field(
         default_factory=lambda: {
-            "mean_win_cost": 0.18,
-            "paid_to_ref": 0.18,
+            "mean_win_cost": 0.16,
+            "paid_to_ref": 0.14,
+            "paid_to_ref_ewma": 0.12,
             "hoarding_char_lane": 0.12,
-            "hoarding_account_total": 0.34,
-            "win_count": 0.18,
+            "hoarding_account_total": 0.30,
+            "win_count": 0.16,
         }
     )
     character_weights: dict = field(default_factory=lambda: {"char_agg": 1.0})
     score_floor: float = 1e-6
     recency_decay_per_event: float = 0.03
     recency_decay_char: float | None = None
+    # Update on each win when paid_to_ref_ratio is present
+    paid_to_ref_ewma_alpha: float = 0.12
 
     # Soften extreme wallets before per-event min–max (0 disables)
     capability_pool_cap: float = 500.0

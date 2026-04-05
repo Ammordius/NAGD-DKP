@@ -119,7 +119,7 @@ def iter_sequential_predictions(
             continue
         use_dbg = debug_first_n > 0 and i < debug_first_n
         pred = predict_second_bidder_for_event(ev, state, bc, config, debug=use_dbg)
-        update_knowledge_state(state, ev)
+        update_knowledge_state(state, ev, paid_to_ref_ewma_alpha=config.paid_to_ref_ewma_alpha)
         yield i, pred, state
 
 
