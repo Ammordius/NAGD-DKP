@@ -1,0 +1,15 @@
+---
+description: DKP web app — Vite/React stack, routing, Supabase, and UI state persistence
+globs: web/**/*.{js,jsx}
+alwaysApply: false
+---
+
+# DKP `web/` application
+
+- The site is a **Vite + React + react-router-dom v6 SPA** deployed from the **`web/`** directory on Vercel. It is **not** Next.js.
+- **Canonical reference:** [docs/WEBSITE_STACK_AND_STATE.md](docs/WEBSITE_STACK_AND_STATE.md) — routes, env vars, data sources (`supabase` vs static JSON), `sessionStorage` keys, and debugging.
+- **Auth:** `web/src/App.jsx` — `RequireAuth`, session, `profiles.role`, officer nav.
+- **Persistence:** Do not rely on `useState` alone for anything the user expects to keep after navigating away. Use **URL** (`useSearchParams` / path) for primary/shareable context; use **`usePersistedState`** (`web/src/lib/usePersistedState.js`, keys like `'/path:field'`) for filters and convenience. Ephemeral UI stays in `useState`.
+- **Last route:** `App.jsx` persists `sessionStorage['dkp-last-path']` and may restore once when opening `/` after login — see the doc.
+
+When changing routes or state behavior, update `docs/WEBSITE_STACK_AND_STATE.md` if conventions or query params change.

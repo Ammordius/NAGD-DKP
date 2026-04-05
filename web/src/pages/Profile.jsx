@@ -1,17 +1,39 @@
-import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useEffect, useState, useCallback } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { loadAccountActivity } from '../lib/accountData'
 
 const MAGELO_BASE = 'https://www.takproject.net/magelo/character.php?char='
 const MIDDLE_DOT = '\u00B7'
 
+const PROFILE_TABS = ['activity', 'characters']
+
+function normalizeProfileTab(raw) {
+  const t = (raw || '').trim().toLowerCase()
+  return PROFILE_TABS.includes(t) ? t : 'activity'
+}
+
 export default function Profile({ profile, onProfileUpdate }) {
+  const [searchParams, setSearchParams] = useSearchParams()
+  const tab = normalizeProfileTab(searchParams.get('tab'))
+  const setTab = useCallback(
+    (next) => {
+      setSearchParams(
+        (prev) => {
+          const n = new URLSearchParams(prev)
+          if (next === 'activity') n.delete('tab')
+          else n.set('tab', next)
+          return n
+        },
+        { replace: true }
+      )
+    },
+    [setSearchParams]
+  )
   const [claimedAccount, setClaimedAccount] = useState(null)
   const [characters, setCharacters] = useState([])
   const [activityByRaid, setActivityByRaid] = useState([])
   const [accountLoading, setAccountLoading] = useState(false)
-  const [tab, setTab] = useState('activity')
   const [unclaimLoading, setUnclaimLoading] = useState(false)
   const [error, setError] = useState('')
   const [refreshKey, setRefreshKey] = useState(0)

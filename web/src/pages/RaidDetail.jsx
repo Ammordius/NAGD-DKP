@@ -10,6 +10,7 @@ import { getDkpMobLoot, getRaidItemSources } from '../lib/staticData'
 import { formatAccountCharacter, formatAccountCharacters } from '../lib/formatAccountCharacter'
 import { groupRaidLootByEvent } from '../lib/groupRaidLootByEvent'
 import { buildItemNameToIdMap, buildLootMobLookups, subgroupLootRowsByMob } from '../lib/lootMobSubgroups'
+import { usePersistedState } from '../lib/usePersistedState'
 
 /** SWR deduplication: 60s so revisiting the same raid or multiple components don't each hit the DB. */
 const RAID_DEDUPING_INTERVAL_MS = 60_000
@@ -56,7 +57,10 @@ export default function RaidDetail({ isOfficer }) {
   const loading = isLoading
   const [mutationError, setMutationError] = useState('')
   const error = swrError?.message ?? mutationError
-  const [expandedEvents, setExpandedEvents] = useState({})
+  const [expandedEvents, setExpandedEvents] = usePersistedState(
+    raidId ? `/raids/detail:${raidId}:expandedEvents` : '/raids/detail:none:expandedEvents',
+    {}
+  )
   const [editingEventId, setEditingEventId] = useState(null)
   const [editingEventDkp, setEditingEventDkp] = useState('')
   const [editingEventTimeId, setEditingEventTimeId] = useState(null)

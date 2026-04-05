@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom'
 const OFFICER_ADD_RAID_HASH = '#add-raid'
 import { supabase } from '../lib/supabase'
 import { createCache } from '../lib/cache'
+import { usePersistedState } from '../lib/usePersistedState'
 
 const CACHE_KEY_PREFIX = 'raids_month_'
 const CACHE_TTL = 15 * 60 * 1000 // 15 min per month
@@ -152,10 +153,10 @@ function isInWindow(windowMonths, year, month) {
 
 export default function Raids({ isOfficer }) {
   const now = useMemo(() => new Date(), [])
-  const [windowEndYear, setWindowEndYear] = useState(now.getFullYear())
-  const [windowEndMonth, setWindowEndMonth] = useState(now.getMonth() + 1)
-  const [viewYear, setViewYear] = useState(now.getFullYear())
-  const [viewMonth, setViewMonth] = useState(now.getMonth() + 1)
+  const [windowEndYear, setWindowEndYear] = usePersistedState('/raids:windowEndYear', now.getFullYear())
+  const [windowEndMonth, setWindowEndMonth] = usePersistedState('/raids:windowEndMonth', now.getMonth() + 1)
+  const [viewYear, setViewYear] = usePersistedState('/raids:viewYear', now.getFullYear())
+  const [viewMonth, setViewMonth] = usePersistedState('/raids:viewMonth', now.getMonth() + 1)
   const [raids, setRaids] = useState([])
   const [eventsByRaid, setEventsByRaid] = useState({})
   const [classificationsByRaid, setClassificationsByRaid] = useState({})

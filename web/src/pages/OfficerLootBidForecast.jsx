@@ -142,9 +142,12 @@ export default function OfficerLootBidForecast({ isOfficer }) {
   const [raidInput, setRaidInput] = useState(raidIdParam)
   const [raidsForSelect, setRaidsForSelect] = useState([])
   const [lootOptions, setLootOptions] = useState([])
-  const [lootSelectValue, setLootSelectValue] = useState('')
-  const [activityDays, setActivityDays] = useState(String(ACTIVE_DAYS))
-  const [itemInput, setItemInput] = useState('')
+  const [lootSelectValue, setLootSelectValue] = usePersistedState('/officer/loot-bid-forecast:lootSelectValue', '')
+  const [activityDays, setActivityDays] = usePersistedState(
+    '/officer/loot-bid-forecast:activityDays',
+    String(ACTIVE_DAYS)
+  )
+  const [itemInput, setItemInput] = usePersistedState('/officer/loot-bid-forecast:itemInput', '')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [forecastPayload, setForecastPayload] = useState(null)
@@ -203,6 +206,12 @@ export default function OfficerLootBidForecast({ isOfficer }) {
       cancelled = true
     }
   }, [raidInput, isOfficer])
+
+  useEffect(() => {
+    if (!lootSelectValue) return
+    const ok = lootOptions.some((x) => String(x.id) === String(lootSelectValue))
+    if (!ok) setLootSelectValue('')
+  }, [lootOptions, lootSelectValue, setLootSelectValue])
 
   useEffect(() => {
     let cancelled = false

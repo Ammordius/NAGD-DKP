@@ -1,5 +1,5 @@
-import { useEffect, useState, useMemo } from 'react'
-import { useParams, Link, useNavigate } from 'react-router-dom'
+import { useEffect, useState, useMemo, useCallback } from 'react'
+import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom'
 import useSWR from 'swr'
 import { supabase } from '../lib/supabase'
 import { useCharToAccountMap } from '../lib/useCharToAccountMap'
@@ -10,8 +10,16 @@ import ItemLink from '../components/ItemLink'
 import { getDkpMobLoot } from '../lib/staticData'
 import { useDkpData } from '../lib/dkpLeaderboard'
 import { formatAccountCharacter, formatCharacterClassSpentLine } from '../lib/formatAccountCharacter'
+import { usePersistedState } from '../lib/usePersistedState'
 
 const MAGELO_BASE = 'https://www.takproject.net/magelo/character.php?char='
+
+const ACCOUNT_TABS = ['activity', 'characters', 'loot']
+
+function normalizeAccountTab(raw) {
+  const t = (raw || '').trim().toLowerCase()
+  return ACCOUNT_TABS.includes(t) ? t : 'activity'
+}
 
 function buildItemIdMap(mobLoot) {
   const map = {}
@@ -164,6 +172,22 @@ async function fetchAccountDetail(accountId) {
 export default function AccountDetail({ isOfficer, profile, session }) {
   const { accountId } = useParams()
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const tab = normalizeAccountTab(searchParams.get('tab'))
+  const setTab = useCallback(
+    (next) => {
+      setSearchParams(
+        (prev) => {
+          const n = new URLSearchParams(prev)
+          if (next === 'activity') n.delete('tab')
+          else n.set('tab', next)
+          return n
+        },
+        { replace: true }
+      )
+    },
+    [setSearchParams]
+  )
   const { getAccountId, getAccountDisplayName } = useCharToAccountMap()
   const cacheKey = accountId ? `account-detail-${accountId}` : null
   const fallbackData = cacheKey ? getAccountDetailFromSession(accountId) : undefined
@@ -184,8 +208,10 @@ export default function AccountDetail({ isOfficer, profile, session }) {
   const dkpByCharacterKey = swrData?.dkpByCharacterKey ?? { earned: {}, spent: {} }
   const loading = isLoading && !swrData
   const error = swrError?.message ?? ''
-  const [tab, setTab] = useState('activity')
-  const [activityPage, setActivityPage] = useState(1)
+  const [activityPage, setActivityPage] = usePersistedState(
+    accountId ? `/accounts/detail:${accountId}:activityPage` : '/accounts/detail:none:activityPage',
+    1
+  )
   const [addCharOpen, setAddCharOpen] = useState(false)
   const [addCharInput, setAddCharInput] = useState('')
   const [addCharIdInput, setAddCharIdInput] = useState('')

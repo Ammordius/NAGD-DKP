@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useMemo, useRef, Fragment } from 'react'
-import { Link, useNavigate, useLocation } from 'react-router-dom'
+import { Link, useNavigate, useLocation, useSearchParams } from 'react-router-dom'
 import useSWRConfig from 'swr'
 import { supabase } from '../lib/supabase'
 import { getDkpMobLoot, getRaidItemSources } from '../lib/staticData'
@@ -113,9 +113,22 @@ function generateEventId(eventTimeStr) {
 export default function Officer({ isOfficer }) {
   const navigate = useNavigate()
   const location = useLocation()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const selectedRaidId = (searchParams.get('raid') || '').trim()
+  const setSelectedRaidId = useCallback((raidId) => {
+    const v = typeof raidId === 'string' ? raidId.trim() : ''
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev)
+        if (v) next.set('raid', v)
+        else next.delete('raid')
+        return next
+      },
+      { replace: true }
+    )
+  }, [setSearchParams])
   const { mutate: globalMutate } = useSWRConfig()
   const [raids, setRaids] = useState([])
-  const [selectedRaidId, setSelectedRaidId] = useState('')
   const [raid, setRaid] = useState(null)
   const [events, setEvents] = useState([])
   const [loot, setLoot] = useState([])

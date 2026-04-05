@@ -2,6 +2,8 @@
 
 Minimal React app with Supabase auth and two roles: **officer** and **player**.
 
+**Architecture, routes, data sources, and UI state persistence:** see **[`../docs/WEBSITE_STACK_AND_STATE.md`](../docs/WEBSITE_STACK_AND_STATE.md)** (canonical reference for this SPA).
+
 ## Setup
 
 1. **Supabase**  

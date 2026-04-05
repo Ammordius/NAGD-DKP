@@ -134,8 +134,11 @@ function characterQualifiesForUpgradeStrip(profile, charId) {
 
 export default function OfficerGlobalLootBidForecast({ isOfficer }) {
   const navigate = useNavigate()
-  const [activityDays, setActivityDays] = useState(String(ACTIVE_DAYS))
-  const [itemInput, setItemInput] = useState('')
+  const [activityDays, setActivityDays] = usePersistedState(
+    '/officer/global-loot-bid-forecast:activityDays',
+    String(ACTIVE_DAYS)
+  )
+  const [itemInput, setItemInput] = usePersistedState('/officer/global-loot-bid-forecast:itemInput', '')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [forecastPayload, setForecastPayload] = useState(null)
