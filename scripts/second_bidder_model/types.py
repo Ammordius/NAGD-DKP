@@ -25,6 +25,8 @@ class LootSaleEvent:
     paid_to_ref_ratio: Optional[float] = None
     # Normalized from item_stats.slot (see equip_slot.normalize_equip_slot_key); None if unknown
     equip_slot: Optional[str] = None
+    # two_hand | mh_one_hand | oh_weapon | shield — from item_stats (weapon_lane.classify_weapon_lane_from_stats)
+    weapon_lane: Optional[str] = None
 
 @dataclass
 class FeatureBundle:

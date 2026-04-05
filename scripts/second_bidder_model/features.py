@@ -53,7 +53,11 @@ def _attendee_char_id_list(account_id: str, event: LootSaleEvent) -> List[str]:
 
 
 def _same_slot_recency_attending(
-    account_id: str, event: LootSaleEvent, state: KnowledgeState, decay: float
+    account_id: str,
+    event: LootSaleEvent,
+    state: KnowledgeState,
+    decay: float,
+    config: SecondBidderConfig,
 ) -> float:
     """Decay-weighted prior wins in the same equip slot on any attending character (cooldown signal)."""
     return state.recency_weighted_same_slot_wins_for_attending_chars(
@@ -62,6 +66,8 @@ def _same_slot_recency_attending(
         event.equip_slot,
         event.event_index,
         decay,
+        target_weapon_lane=event.weapon_lane,
+        filler_max_dkp=float(config.slot_cooldown_filler_dkp_max),
     )
 
 
@@ -165,7 +171,7 @@ def compute_propensity_raw(
     )
     spend = _attending_chars_revealed_spend(account_id, event, state)
     max_att_rec = _max_attending_char_any_recency(account_id, event, state, decay_c)
-    slot_rec = _same_slot_recency_attending(account_id, event, state, decay_c)
+    slot_rec = _same_slot_recency_attending(account_id, event, state, decay_c, config)
     wins = int(state.account_win_count.get(account_id, 0))
     attended = int(state.account_loot_events_attended.get(account_id, 0))
     win_rate = float(wins) / float(max(1, attended))

@@ -20,6 +20,8 @@ import {
   interestScoreDormantPenalty,
   interestScoreRecentToonSpendBonus,
   interestScoreSameSlotCooldownPenalty,
+  interestScoreUpgradeComponent,
+  lastOnToonSpendQualityNarrative,
   lastSpendNarrative,
   mergeBidBandsForAccountRow,
   perToonShareNarrative,
@@ -484,10 +486,15 @@ export default function OfficerLootBidForecast({ isOfficer }) {
         const pts = perToonShareNarrative(prof, charId)
         if (pts) toonDetailBullets.push(pts)
         toonDetailBullets.push(lastSpendNarrative(prof, charId))
+        const spendQ = lastOnToonSpendQualityNarrative(purchases, charId, charName)
+        if (spendQ) toonDetailBullets.push(spendQ)
       }
 
+      const classAbbrevLoot = className ? CLASS_TO_ABBREV[className] : null
+      const currentItemRowLoot = itemStats[String(resolvedItemId)] || itemStats[Number(resolvedItemId)]
+
       let interestScore =
-        (upgrade?.isUpgrade ? 50 + Math.min(40, (upgrade.scoreDelta || 0) * 200) : 0)
+        interestScoreUpgradeComponent(!!upgrade?.isUpgrade, upgrade?.scoreDelta)
         + (prof && bidBalance > 0 ? Math.min(25, bidBalance / 8) : 0)
         + (bidInfo.medianRatio != null && bidInfo.medianRatio >= 1.1 ? 8 : 0)
       interestScore += interestScoreRecentToonSpendBonus(prof, charId, charName)
@@ -498,6 +505,7 @@ export default function OfficerLootBidForecast({ isOfficer }) {
         charId,
         charName,
         currentSlotKey,
+        { classAbbrev: classAbbrevLoot || null, currentItemStatsRow: currentItemRowLoot },
       )
       interestScore -= interestScoreDormantPenalty(prof, charId, charName)
 

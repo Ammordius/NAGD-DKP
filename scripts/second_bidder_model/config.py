@@ -56,6 +56,8 @@ class SecondBidderConfig:
     recency_decay_char: float | None = None
     # Update on each win when paid_to_ref_ratio is present
     paid_to_ref_ewma_alpha: float = 0.12
+    # Same-slot recency: wins at or below this DKP are ignored (slot fillers; parity with web bid forecast)
+    slot_cooldown_filler_dkp_max: float = 3.0
 
     # Soften extreme wallets before per-event min–max (0 disables)
     capability_pool_cap: float = 500.0

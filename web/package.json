@@ -8,7 +8,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "preprocess:mob-loot": "cd .. && python scripts/takp_jsons/preprocess_mob_loot_for_display.py",
-    "test": "node --test src/lib/bidForecastRaidSim.test.js"
+    "test": "node --test src/lib/bidForecastRaidSim.test.js src/lib/bidForecastModel.test.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",

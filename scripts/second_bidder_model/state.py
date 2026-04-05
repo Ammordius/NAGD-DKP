@@ -6,9 +6,10 @@ from typing import Dict, List, Optional, Tuple
 
 from .equip_slot import slot_keys_overlap
 from .types import LootSaleEvent
+from .weapon_lane import melee_weapon_lane_skips_same_slot_penalty
 
-# (event_index, norm_name, item_name, price, equip_slot_key_or_none)
-CharWinRow = Tuple[int, str, str, float, Optional[str]]
+# (event_index, norm_name, item_name, price, equip_slot_key_or_none, weapon_lane_or_none)
+CharWinRow = Tuple[int, str, str, float, Optional[str], Optional[str]]
 
 
 @dataclass
@@ -27,6 +28,8 @@ class KnowledgeState:
     account_paid_to_ref_ewma: Dict[str, float] = field(default_factory=dict)
     # Prior loot-sale rows (same chronology as inference) where the account was an attendee
     account_loot_events_attended: Dict[str, int] = field(default_factory=dict)
+    # char_id -> class abbrev (WAR, MNK, …) from backup characters.csv for weapon-lane same-slot rules
+    char_class_abbrev: Dict[str, str] = field(default_factory=dict)
 
     def recency_weighted_norm_wins(
         self, account_id: str, norm_name: str, current_event_index: int, decay: float
@@ -93,17 +96,29 @@ class KnowledgeState:
         target_slot_key: Optional[str],
         current_event_index: int,
         decay: float,
+        *,
+        target_weapon_lane: Optional[str] = None,
+        filler_max_dkp: float = 3.0,
     ) -> float:
         if not target_slot_key:
             return 0.0
         key = (account_id, char_id)
         total = 0.0
+        char_abbrev = self.char_class_abbrev.get(char_id)
         for row in self.char_win_history.get(key, []):
             idx = row[0]
             if idx >= current_event_index:
                 continue
+            price = float(row[3]) if len(row) >= 4 else 0.0
+            if price <= float(filler_max_dkp):
+                continue
             win_slot = row[4] if len(row) >= 5 else None
+            win_lane = row[5] if len(row) >= 6 else None
             if not slot_keys_overlap(target_slot_key, win_slot):
+                continue
+            if melee_weapon_lane_skips_same_slot_penalty(
+                char_abbrev, target_weapon_lane, win_lane
+            ):
                 continue
             gap = max(0, current_event_index - idx)
             total += math.exp(-decay * gap)
@@ -116,6 +131,9 @@ class KnowledgeState:
         target_slot_key: Optional[str],
         current_event_index: int,
         decay: float,
+        *,
+        target_weapon_lane: Optional[str] = None,
+        filler_max_dkp: float = 3.0,
     ) -> float:
         """Sum of decay-weighted prior same-slot wins on any listed character (e.g. raid attendance)."""
         if not target_slot_key or not attendee_char_ids:
@@ -126,7 +144,13 @@ class KnowledgeState:
             if not c:
                 continue
             s += self.recency_weighted_same_slot_wins_for_char(
-                account_id, c, target_slot_key, current_event_index, decay
+                account_id,
+                c,
+                target_slot_key,
+                current_event_index,
+                decay,
+                target_weapon_lane=target_weapon_lane,
+                filler_max_dkp=filler_max_dkp,
             )
         return s
 
@@ -168,11 +192,12 @@ def update_knowledge_state(
     cid = (event.buyer_char_id or "").strip()
     item_name = (event.item_name or "").strip()
     slot_key = (event.equip_slot or "").strip() or None
+    lane_key = (event.weapon_lane or "").strip() or None
     if cid:
         ck = (buyer, cid)
         state.account_char_spent[ck] = state.account_char_spent.get(ck, 0.0) + price
         state.char_win_history.setdefault(ck, []).append(
-            (event.event_index, event.norm_name, item_name, price, slot_key)
+            (event.event_index, event.norm_name, item_name, price, slot_key, lane_key)
         )
     if event.paid_to_ref_ratio is not None:
         r = float(event.paid_to_ref_ratio)

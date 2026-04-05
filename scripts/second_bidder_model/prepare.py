@@ -10,6 +10,7 @@ from bid_portfolio_local.load_csv import BackupSnapshot
 
 from .attendance_map import attendee_account_char_map_for_loot
 from .equip_slot import normalize_equip_slot_key
+from .weapon_lane import classify_weapon_lane_from_stats
 from .item_stats_eligibility import (
     ItemStatsEligibilityBundle,
     eligible_char_pairs_for_item_name,
@@ -70,12 +71,14 @@ def prepare_second_bidder_events(
             derived = None
         elig_chars = merge_eligible_char_pairs(derived, json_chars)
         equip_slot_key = None
+        weapon_lane = None
         if item_eligibility_bundle is not None:
             st = item_eligibility_bundle.stats_for_item_name(e.item_name)
             if st:
                 raw_slot = st.get("slot")
                 if isinstance(raw_slot, str):
                     equip_slot_key = normalize_equip_slot_key(raw_slot)
+                weapon_lane = classify_weapon_lane_from_stats(st)
         events.append(
             LootSaleEvent(
                 event_index=i,
@@ -95,6 +98,7 @@ def prepare_second_bidder_events(
                 ref_price_at_sale=e.ref_price_at_sale,
                 paid_to_ref_ratio=e.paid_to_ref_ratio,
                 equip_slot=equip_slot_key,
+                weapon_lane=weapon_lane,
             )
         )
     return events

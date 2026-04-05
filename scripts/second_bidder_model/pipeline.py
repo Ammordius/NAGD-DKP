@@ -5,6 +5,8 @@ from typing import Any, Dict, Iterator, List, Optional, Tuple
 from bid_portfolio_local.balance_before_loot import BalanceCalculator
 from bid_portfolio_local.load_csv import BackupSnapshot
 
+from .weapon_lane import abbrev_for_class_name
+
 from .candidates import build_candidate_pool
 from .config import SecondBidderConfig
 from .features import build_feature_bundles
@@ -92,6 +94,15 @@ def predict_second_bidder_for_event(
     )
 
 
+def _merge_char_class_abbrev(state: KnowledgeState, snap: BackupSnapshot) -> None:
+    for cid, cname in snap.character_class_name.items():
+        if cid in state.char_class_abbrev:
+            continue
+        ab = abbrev_for_class_name(cname)
+        if ab:
+            state.char_class_abbrev[cid] = ab
+
+
 def iter_sequential_predictions(
     events: List[LootSaleEvent],
     snap: BackupSnapshot,
@@ -114,6 +125,7 @@ def iter_sequential_predictions(
         raise ValueError("start_index out of range")
     bc = BalanceCalculator(snap)
     state = empty_state() if initial_state is None else initial_state
+    _merge_char_class_abbrev(state, snap)
     for i, ev in enumerate(events):
         if i < start_index:
             continue

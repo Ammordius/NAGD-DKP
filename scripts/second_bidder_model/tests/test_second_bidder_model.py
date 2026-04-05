@@ -21,6 +21,7 @@ from second_bidder_model.character_plausibility import aggregate_character_score
 from second_bidder_model.config import SecondBidderConfig
 from second_bidder_model.eligibility_io import load_eligibility_json
 from second_bidder_model.equip_slot import normalize_equip_slot_key, slot_keys_overlap
+from second_bidder_model.weapon_lane import classify_weapon_lane_from_stats
 from second_bidder_model.features import compute_competitiveness_raw, compute_propensity_raw
 from second_bidder_model.evaluate import evaluate_second_bidder_predictions
 from second_bidder_model.pipeline import (
@@ -633,7 +634,7 @@ class TestSpendAndSlotFeatures(unittest.TestCase):
 
     def test_same_slot_recency_when_prior_same_slot_on_attending_toon(self):
         st = KnowledgeState()
-        st.char_win_history[("A", "c1")] = [(0, "n1", "Item", 10.0, "EAR")]
+        st.char_win_history[("A", "c1")] = [(0, "n1", "Item", 10.0, "EAR", None)]
         cfg = SecondBidderConfig(recency_decay_per_event=0.0, recency_decay_char=0.0)
         raw = compute_propensity_raw(
             "A",
@@ -651,6 +652,92 @@ class TestSpendAndSlotFeatures(unittest.TestCase):
                 attendee_account_ids={"A"},
                 attendee_account_to_chars={"A": {"c1"}},
                 equip_slot="EAR",
+            ),
+            st,
+            cfg,
+        )
+        self.assertGreater(raw["same_slot_recency_attending"], 0.0)
+
+    def test_same_slot_recency_ignores_cheap_filler_wins(self):
+        st = KnowledgeState()
+        st.char_win_history[("A", "c1")] = [(0, "n1", "Cheap", 2.0, "EAR", None)]
+        cfg = SecondBidderConfig(recency_decay_per_event=0.0, recency_decay_char=0.0)
+        raw = compute_propensity_raw(
+            "A",
+            LootSaleEvent(
+                event_index=1,
+                loot_id=2,
+                raid_id="r",
+                event_id=None,
+                raid_date=None,
+                norm_name="x",
+                item_name="Other",
+                winning_price=20.0,
+                buyer_account_id="B",
+                buyer_char_id="b",
+                attendee_account_ids={"A"},
+                attendee_account_to_chars={"A": {"c1"}},
+                equip_slot="EAR",
+            ),
+            st,
+            cfg,
+        )
+        self.assertEqual(raw["same_slot_recency_attending"], 0.0)
+
+    def test_melee_different_weapon_lane_skips_same_slot_penalty(self):
+        st = KnowledgeState()
+        st.char_class_abbrev["c1"] = "WAR"
+        st.char_win_history[("A", "c1")] = [
+            (0, "n1", "Sword", 100.0, "PRIMARY|SECONDARY", "mh_one_hand"),
+        ]
+        cfg = SecondBidderConfig(recency_decay_per_event=0.0, recency_decay_char=0.0)
+        raw = compute_propensity_raw(
+            "A",
+            LootSaleEvent(
+                event_index=1,
+                loot_id=2,
+                raid_id="r",
+                event_id=None,
+                raid_date=None,
+                norm_name="x",
+                item_name="Lance",
+                winning_price=20.0,
+                buyer_account_id="B",
+                buyer_char_id="b",
+                attendee_account_ids={"A"},
+                attendee_account_to_chars={"A": {"c1"}},
+                equip_slot="PRIMARY",
+                weapon_lane="two_hand",
+            ),
+            st,
+            cfg,
+        )
+        self.assertEqual(raw["same_slot_recency_attending"], 0.0)
+
+    def test_melee_same_weapon_lane_still_counts_for_recency(self):
+        st = KnowledgeState()
+        st.char_class_abbrev["c1"] = "WAR"
+        st.char_win_history[("A", "c1")] = [
+            (0, "n1", "LanceA", 100.0, "PRIMARY", "two_hand"),
+        ]
+        cfg = SecondBidderConfig(recency_decay_per_event=0.0, recency_decay_char=0.0)
+        raw = compute_propensity_raw(
+            "A",
+            LootSaleEvent(
+                event_index=1,
+                loot_id=2,
+                raid_id="r",
+                event_id=None,
+                raid_date=None,
+                norm_name="x",
+                item_name="LanceB",
+                winning_price=20.0,
+                buyer_account_id="B",
+                buyer_char_id="b",
+                attendee_account_ids={"A"},
+                attendee_account_to_chars={"A": {"c1"}},
+                equip_slot="PRIMARY",
+                weapon_lane="two_hand",
             ),
             st,
             cfg,
@@ -686,6 +773,31 @@ class TestEquipSlotHelpers(unittest.TestCase):
     def test_slot_overlap(self):
         self.assertTrue(slot_keys_overlap("EAR", "EAR"))
         self.assertFalse(slot_keys_overlap("EAR", "NECK"))
+
+    def test_classify_weapon_lane_from_stats(self):
+        self.assertEqual(
+            classify_weapon_lane_from_stats(
+                {"name": "Lance", "slot": "PRIMARY", "skill": "2H Piercing", "dmg": 40}
+            ),
+            "two_hand",
+        )
+        self.assertEqual(
+            classify_weapon_lane_from_stats(
+                {"name": "Fearsome Shield", "slot": "SECONDARY", "ac": 40},
+            ),
+            "shield",
+        )
+        self.assertEqual(
+            classify_weapon_lane_from_stats(
+                {
+                    "name": "Short Sword",
+                    "slot": "PRIMARY SECONDARY",
+                    "skill": "1H Slashing",
+                    "dmg": 12,
+                }
+            ),
+            "mh_one_hand",
+        )
 
 
 class TestItemStatsEligibility(unittest.TestCase):

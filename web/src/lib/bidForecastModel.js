@@ -227,6 +227,19 @@ export const RECENT_TOON_SPEND_MAX_BONUS = 10
 export const SAME_SLOT_COOLDOWN_LOOKBACK_DAYS = 120
 export const SAME_SLOT_COOLDOWN_MAX_PENALTY = 18
 
+/** Purchases at or below this DKP do not count toward same-slot cooldown (slot fillers). */
+export const SLOT_COOLDOWN_FILLER_DKP_MAX = 3
+
+/** WAR / ROG / MNK: separate weapon lanes (2H vs MH vs OH vs shield) relax same-slot overlap. */
+export const MELEE_WEAPON_LANE_CLASS_ABBREVS = new Set(['WAR', 'ROG', 'MNK'])
+
+/** Recent-spend bonus: scale down when last on-toon purchase was very cheap vs reference. */
+export const RECENT_SPEND_LOW_REF_RATIO = 0.55
+export const RECENT_SPEND_HIGH_REF_RATIO = 1.2
+export const RECENT_SPEND_REF_LOW_MULT = 0.72
+export const RECENT_SPEND_REF_HIGH_MULT = 1.12
+export const RECENT_SPEND_FILLER_MULT = 0.38
+
 /**
  * Canonical slot key: sorted upper tokens joined by '|' (matches Python second_bidder_model.equip_slot).
  * @param {string | null | undefined} raw
@@ -263,23 +276,115 @@ export function equipSlotKeyFromItemStats(itemStatsRow) {
   return normalizeEquipSlotKey(itemStatsRow.slot)
 }
 
+/**
+ * Weapon sub-lane for PRIMARY/SECONDARY items (item_stats row). Null when not classified as a weapon lane.
+ * @returns {'two_hand' | 'mh_one_hand' | 'oh_weapon' | 'shield' | null}
+ */
+export function classifyWeaponLane(itemStatsRow) {
+  if (!itemStatsRow || typeof itemStatsRow !== 'object') return null
+  const slotKey = equipSlotKeyFromItemStats(itemStatsRow)
+  if (!slotKey) return null
+  const tokens = new Set(String(slotKey).split('|').filter(Boolean))
+  const hasPrimary = tokens.has('PRIMARY')
+  const hasSecondary = tokens.has('SECONDARY')
+  const skill = typeof itemStatsRow.skill === 'string' ? itemStatsRow.skill : ''
+  const name = typeof itemStatsRow.name === 'string' ? itemStatsRow.name : ''
+  const is2H = /^\s*2H\b/i.test(skill) || /\b2H\s+/i.test(skill)
+  const ac = Number(itemStatsRow.ac)
+  const hasDmg = itemStatsRow.dmg != null && itemStatsRow.dmg !== ''
+
+  if (hasSecondary && !hasPrimary) {
+    if (/shield/i.test(name) || /shield/i.test(skill)) return 'shield'
+    if (!Number.isNaN(ac) && ac >= 18 && !hasDmg) return 'shield'
+    if (skill && /\b(1H|One Hand|Hand to Hand)\b/i.test(skill)) return 'oh_weapon'
+    if (hasDmg || itemStatsRow.atkDelay != null) return 'oh_weapon'
+    return null
+  }
+
+  if (hasPrimary && !hasSecondary) {
+    if (is2H) return 'two_hand'
+    if (skill && /\b1H\b/i.test(skill)) return 'mh_one_hand'
+    if (hasDmg || itemStatsRow.atkDelay != null) return 'mh_one_hand'
+    return null
+  }
+
+  if (hasPrimary && hasSecondary) {
+    if (is2H) return 'two_hand'
+    return 'mh_one_hand'
+  }
+
+  return null
+}
+
+/**
+ * Heuristic interest from Magelo upgrade strength: separates chunky BIS moves from tiny sidegrades.
+ * @param {boolean} isUpgrade
+ * @param {number | null | undefined} scoreDelta
+ */
+export function interestScoreUpgradeComponent(isUpgrade, scoreDelta) {
+  if (!isUpgrade) return 0
+  const sd = Math.max(0, Number(scoreDelta) || 0)
+  let part = 50 + Math.min(40, sd * 200)
+  if (sd > 0.02) part = Math.min(98, part + 6)
+  else if (sd > 0 && sd <= 0.012) part = Math.max(36, part - 5)
+  return part
+}
+
+/**
+ * Optional officer bullet: last on-toon purchase looks like filler vs strong vs reference.
+ * @param {Array<{ cost?: number, paid_to_ref_ratio?: number|null, ref_price_at_sale?: number|null }>} purchasesChronological
+ */
+export function lastOnToonSpendQualityNarrative(purchasesChronological, charId, charName) {
+  const last = lastPurchaseOnCharacter(purchasesChronological, charId, charName)
+  if (!last) return ''
+  const cost = Number(last.cost) || 0
+  if (cost > 0 && cost <= SLOT_COOLDOWN_FILLER_DKP_MAX) {
+    return 'Last on-toon spend was a very low-DKP pickup — treated as a slot filler for interest scoring.'
+  }
+  const ptr = last.paid_to_ref_ratio
+  if (ptr != null && !Number.isNaN(Number(ptr)) && Number(ptr) > 0) {
+    const p = Number(ptr)
+    if (p >= RECENT_SPEND_HIGH_REF_RATIO) {
+      return 'Last on-toon spend was high vs guild reference at that sale — suggests willingness to pay up on that character.'
+    }
+    if (p < RECENT_SPEND_LOW_REF_RATIO) {
+      return 'Last on-toon spend was low vs guild reference at that sale — a patient / discount pickup on that character.'
+    }
+  }
+  return ''
+}
+
 export function interestScoreRecentToonSpendBonus(profile, charId, charName, opts = {}) {
   const windowDays = opts.windowDays ?? RECENT_TOON_SPEND_BONUS_DAYS
   const maxBonus = opts.maxBonus ?? RECENT_TOON_SPEND_MAX_BONUS
+  const fillerMax = opts.fillerDkpMax ?? SLOT_COOLDOWN_FILLER_DKP_MAX
   if (!profile) return 0
   const purchases = Array.isArray(profile.recent_purchases_desc) ? profile.recent_purchases_desc : []
   const lastOnToon = lastPurchaseOnCharacter(purchases, charId, charName)
   if (lastOnToon == null) return 0
   const days = daysSinceRaidDate(lastOnToon.raid_date)
   if (days == null || days > windowDays) return 0
-  return Math.round((maxBonus * (windowDays - days)) / windowDays)
+  let mult = 1
+  const cost = Number(lastOnToon.cost) || 0
+  if (cost > 0 && cost <= fillerMax) mult *= RECENT_SPEND_FILLER_MULT
+  const ptr = lastOnToon.paid_to_ref_ratio
+  if (ptr != null && !Number.isNaN(Number(ptr)) && Number(ptr) > 0) {
+    const p = Number(ptr)
+    if (p < RECENT_SPEND_LOW_REF_RATIO) mult *= RECENT_SPEND_REF_LOW_MULT
+    if (p >= RECENT_SPEND_HIGH_REF_RATIO) mult *= RECENT_SPEND_REF_HIGH_MULT
+  }
+  const raw = (maxBonus * (windowDays - days)) / windowDays
+  return Math.round(Math.min(maxBonus * 1.15, Math.max(0, raw * mult)))
 }
 
 /**
  * Penalty when this toon bought an item in the same equip slot recently.
- * @param {Array<{ item_name?: string, raid_date?: string, char_id?: string, character_name?: string }>} purchasesChronological
+ * @param {Array<{ item_name?: string, raid_date?: string, char_id?: string, character_name?: string, cost?: number }>} purchasesChronological
  * @param {Map<string,string>|Record<string,string>} nameToId
  * @param {Record<string, object>} itemStats
+ * @param {object} [opts]
+ * @param {string | null} [opts.classAbbrev] — e.g. WAR; enables melee weapon-lane exception
+ * @param {object | null} [opts.currentItemStatsRow] — item_stats row for the forecasted item
  */
 export function interestScoreSameSlotCooldownPenalty(
   purchasesChronological,
@@ -292,6 +397,14 @@ export function interestScoreSameSlotCooldownPenalty(
 ) {
   const lookback = opts.lookbackDays ?? SAME_SLOT_COOLDOWN_LOOKBACK_DAYS
   const maxPen = opts.maxPenalty ?? SAME_SLOT_COOLDOWN_MAX_PENALTY
+  const fillerMax = opts.fillerDkpMax ?? SLOT_COOLDOWN_FILLER_DKP_MAX
+  const classAbbrev = opts.classAbbrev != null ? String(opts.classAbbrev).toUpperCase() : null
+  const currentRow = opts.currentItemStatsRow ?? null
+  const meleeLanes =
+    classAbbrev && MELEE_WEAPON_LANE_CLASS_ABBREVS.has(classAbbrev)
+      ? { current: classifyWeaponLane(currentRow), enabled: true }
+      : { current: null, enabled: false }
+
   if (!currentSlotKey || !Array.isArray(purchasesChronological) || purchasesChronological.length === 0) {
     return 0
   }
@@ -301,11 +414,17 @@ export function interestScoreSameSlotCooldownPenalty(
     if (!purchaseMatchesToon(p, charId, charName)) continue
     const days = daysSinceRaidDate(p.raid_date)
     if (days == null || days > lookback) continue
+    const cost = Number(p.cost) || 0
+    if (cost <= fillerMax) continue
     const id = resolveItemIdFromName(p.item_name, nameToId)
     if (!id) continue
     const row = itemStats[String(id)] || itemStats[Number(id)]
     const pk = equipSlotKeyFromItemStats(row)
     if (!pk || !slotKeysOverlap(currentSlotKey, pk)) continue
+    if (meleeLanes.enabled && meleeLanes.current) {
+      const priorLane = classifyWeaponLane(row)
+      if (priorLane && priorLane !== meleeLanes.current) continue
+    }
     const freshness = Math.max(0, (lookback - days) / lookback)
     const pen = Math.round(maxPen * freshness)
     if (pen > bestPen) bestPen = pen
