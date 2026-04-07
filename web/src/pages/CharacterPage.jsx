@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { fetchAllByRange } from '../lib/fetchAllByRange'
 import AssignedLootDisclaimer from '../components/AssignedLootDisclaimer'
 import ItemLink from '../components/ItemLink'
 import { getDkpMobLoot } from '../lib/staticData'
@@ -44,41 +45,43 @@ export default function CharacterPage() {
     }
     setLoading(true)
     setError('')
-    // Resolve charKey (name or char_id) to account_id via character_account + characters
-    Promise.all([
-      supabase.from('character_account').select('char_id, account_id').limit(20000),
-      supabase.from('characters').select('char_id, name').limit(20000),
-    ]).then(([caRes, chRes]) => {
-      const charToAcc = {}
-      ;(caRes.data || []).forEach((r) => {
-        if (r.char_id != null && r.account_id != null) {
-          charToAcc[String(r.char_id).trim()] = r.account_id
+    ;(async () => {
+      try {
+        const [caRows, chRows] = await Promise.all([
+          fetchAllByRange('character_account', 'char_id, account_id'),
+          fetchAllByRange('characters', 'char_id, name'),
+        ])
+        const charToAcc = {}
+        ;(caRows || []).forEach((r) => {
+          if (r.char_id != null && r.account_id != null) {
+            charToAcc[String(r.char_id).trim()] = r.account_id
+          }
+        })
+        const key = String(charIdOrName).trim()
+        let accId = charToAcc[key] ?? null
+        let name = key
+        let resolvedCharId = null
+        if (!accId) {
+          const byName = (chRows || []).find((c) => (c.name || '').trim().toLowerCase() === key.toLowerCase())
+          if (byName) {
+            accId = charToAcc[String(byName.char_id).trim()] ?? null
+            name = (byName.name || '').trim() || name
+            resolvedCharId = String(byName.char_id).trim()
+          }
+        } else {
+          const ch = (chRows || []).find((c) => String(c.char_id).trim() === key)
+          if (ch?.name) name = (ch.name || '').trim()
+          resolvedCharId = key
         }
-      })
-      const key = String(charIdOrName).trim()
-      let accId = charToAcc[key] ?? null
-      let name = key
-      let resolvedCharId = null
-      if (!accId) {
-        const byName = (chRes.data || []).find((c) => (c.name || '').trim().toLowerCase() === key.toLowerCase())
-        if (byName) {
-          accId = charToAcc[String(byName.char_id).trim()] ?? null
-          name = (byName.name || '').trim() || name
-          resolvedCharId = String(byName.char_id).trim()
-        }
-      } else {
-        const ch = (chRes.data || []).find((c) => String(c.char_id).trim() === key)
-        if (ch?.name) name = (ch.name || '').trim()
-        resolvedCharId = key
+        setAccountId(accId)
+        setCharId(resolvedCharId)
+        setDisplayName(name || charIdOrName)
+      } catch (err) {
+        setError(err?.message || 'Failed to load')
+      } finally {
+        setLoading(false)
       }
-      setAccountId(accId)
-      setCharId(resolvedCharId)
-      setDisplayName(name || charIdOrName)
-      setLoading(false)
-    }).catch((err) => {
-      setError(err?.message || 'Failed to load')
-      setLoading(false)
-    })
+    })()
   }, [charIdOrName])
 
   // Loot assigned to this character (from Magelo assignment)

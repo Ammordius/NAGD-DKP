@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo, useCallback, Fragment } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import useSWR from 'swr'
 import { supabase } from '../lib/supabase'
+import { fetchAllByRange } from '../lib/fetchAllByRange'
 import { useCharToAccountMap } from '../lib/useCharToAccountMap'
 import { logOfficerAudit } from '../lib/officerAudit'
 import AssignedLootDisclaimer from '../components/AssignedLootDisclaimer'
@@ -82,9 +83,18 @@ export default function RaidDetail({ isOfficer }) {
   }, [])
 
   useEffect(() => {
-    if (isOfficer && raidId) {
-      supabase.from('characters').select('char_id, name').limit(5000).then(({ data }) => setCharacters(data || []))
-    }
+    if (!isOfficer || !raidId) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const rows = await fetchAllByRange('characters', 'char_id, name')
+        if (!cancelled) setCharacters(rows || [])
+      } catch (e) {
+        console.error('RaidDetail: failed to load characters list', e)
+        if (!cancelled) setCharacters([])
+      }
+    })()
+    return () => { cancelled = true }
   }, [isOfficer, raidId])
 
   useEffect(() => {

@@ -1,6 +1,7 @@
 import useSWR from 'swr'
 import { useMemo } from 'react'
 import { supabase } from './supabase'
+import { fetchAllByRange } from './fetchAllByRange'
 
 /** SWR deduplication: 60s so multiple components don't trigger the same fetch (e.g. RaidDetail + AccountDetail). */
 const DEDUPING_INTERVAL_MS = 60_000
@@ -29,20 +30,20 @@ async function fetchAllAccounts() {
 }
 
 async function fetchCharToAccountMap() {
-  const [caRes, chRes, accRows] = await Promise.all([
-    supabase.from('character_account').select('char_id, account_id').limit(20000),
-    supabase.from('characters').select('char_id, name').limit(20000),
+  const [caRows, chRows, accRows] = await Promise.all([
+    fetchAllByRange('character_account', 'char_id, account_id'),
+    fetchAllByRange('characters', 'char_id, name'),
     fetchAllAccounts(),
   ])
   const map = {}
-  ;(caRes.data || []).forEach((r) => {
+  ;(caRows || []).forEach((r) => {
     if (r.char_id != null && r.char_id !== '' && r.account_id != null) {
       const k = String(r.char_id).trim()
       if (map[k] == null) map[k] = r.account_id
     }
   })
   const charIds = new Set(Object.keys(map))
-  ;(chRes.data || []).forEach((c) => {
+  ;(chRows || []).forEach((c) => {
     if (!c?.char_id || !charIds.has(String(c.char_id).trim())) return
     const name = (c.name || '').trim()
     const accId = map[String(c.char_id).trim()]
@@ -53,7 +54,7 @@ async function fetchCharToAccountMap() {
     }
   })
   const charIdToName = {}
-  ;(chRes.data || []).forEach((c) => {
+  ;(chRows || []).forEach((c) => {
     if (!c?.char_id) return
     const id = String(c.char_id).trim()
     const name = (c.name || '').trim()
@@ -61,7 +62,7 @@ async function fetchCharToAccountMap() {
   })
   /** First linked character name per account (for labels when only account_id is known). */
   const accountIdToSampleCharName = {}
-  ;(caRes.data || []).forEach((r) => {
+  ;(caRows || []).forEach((r) => {
     if (r.char_id == null || r.char_id === '' || r.account_id == null) return
     const aid = String(r.account_id).trim()
     if (!aid || Object.prototype.hasOwnProperty.call(accountIdToSampleCharName, aid)) return
