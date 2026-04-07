@@ -7,7 +7,7 @@ import { fetchAll } from '../lib/accountData'
 import { createCache } from '../lib/cache'
 import { usePersistedState } from '../lib/usePersistedState'
 
-const CACHE_KEY_PREFIX = 'raids_month_v3_'
+const CACHE_KEY_PREFIX = 'raids_month_v4_'
 const CACHE_TTL = 15 * 60 * 1000 // 15 min per month
 
 const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
@@ -68,6 +68,8 @@ function getMonthRange(year, month) {
 
 const CHUNK = 80
 
+const ORDER_BY_ID = { order: { column: 'id', ascending: true } }
+
 async function fetchOneMonth(year, month) {
   const cacheKey = `${CACHE_KEY_PREFIX}${year}_${month}`
   const cache = createCache(cacheKey, CACHE_TTL)
@@ -88,26 +90,42 @@ async function fetchOneMonth(year, month) {
   if (error) throw new Error(error.message)
   const raids = raidList || []
 
-  const earnedByRaid = {}
+  const paidOutByRaid = {}
+  const ticsByRaid = {}
   const spentByRaid = {}
 
   if (raids.length > 0) {
     const raidIds = raids.map((r) => String(r.raid_id).trim()).filter(Boolean)
-    // Sum of each tic's dkp_value (guild definition). Use raid_events, not raid_dkp_totals — cache can drift.
+    // Total DKP credited to characters for the raid (ledger-aligned).
     for (let i = 0; i < raidIds.length; i += CHUNK) {
       const chunk = raidIds.slice(i, i + CHUNK)
-      const { data: eventRows, error: evErr } = await fetchAll('raid_events', 'raid_id, dkp_value', (q) => q.in('raid_id', chunk))
-      if (evErr) throw new Error(evErr.message || 'Failed to load raid events')
-      ;(eventRows || []).forEach((row) => {
+      const { data: attRows, error: attErr } = await fetchAll(
+        'raid_attendance_dkp',
+        'raid_id, dkp_earned',
+        (q) => q.in('raid_id', chunk),
+        ORDER_BY_ID
+      )
+      if (attErr) throw new Error(attErr.message || 'Failed to load raid attendance DKP')
+      ;(attRows || []).forEach((row) => {
         const rid = String(row.raid_id ?? '').trim()
         if (!rid) return
-        const v = parseFloat(row.dkp_value || 0) || 0
-        earnedByRaid[rid] = (earnedByRaid[rid] || 0) + v
+        const v = parseFloat(row.dkp_earned || 0) || 0
+        paidOutByRaid[rid] = (paidOutByRaid[rid] || 0) + v
       })
     }
     for (let i = 0; i < raidIds.length; i += CHUNK) {
       const chunk = raidIds.slice(i, i + CHUNK)
-      const { data: lootRows, error: lootErr } = await fetchAll('raid_loot', 'raid_id, cost', (q) => q.in('raid_id', chunk))
+      const { data: eventRows, error: evErr } = await fetchAll('raid_events', 'raid_id', (q) => q.in('raid_id', chunk), ORDER_BY_ID)
+      if (evErr) throw new Error(evErr.message || 'Failed to load raid events')
+      ;(eventRows || []).forEach((row) => {
+        const rid = String(row.raid_id ?? '').trim()
+        if (!rid) return
+        ticsByRaid[rid] = (ticsByRaid[rid] || 0) + 1
+      })
+    }
+    for (let i = 0; i < raidIds.length; i += CHUNK) {
+      const chunk = raidIds.slice(i, i + CHUNK)
+      const { data: lootRows, error: lootErr } = await fetchAll('raid_loot', 'raid_id, cost', (q) => q.in('raid_id', chunk), ORDER_BY_ID)
       if (lootErr) throw new Error(lootErr.message || 'Failed to load raid loot')
       ;(lootRows || []).forEach((row) => {
         const rid = String(row.raid_id ?? '').trim()
@@ -118,18 +136,20 @@ async function fetchOneMonth(year, month) {
     }
   }
 
-  const result = { raids, earnedByRaid, spentByRaid }
+  const result = { raids, paidOutByRaid, ticsByRaid, spentByRaid }
   cache.set(result)
   return result
 }
 
 function mergeMonthData(arrays) {
   const raids = []
-  const earnedByRaid = {}
+  const paidOutByRaid = {}
+  const ticsByRaid = {}
   const spentByRaid = {}
-  arrays.forEach(({ raids: r, earnedByRaid: e, spentByRaid: s }) => {
+  arrays.forEach(({ raids: r, paidOutByRaid: p, ticsByRaid: t, spentByRaid: s }) => {
     raids.push(...r)
-    Object.assign(earnedByRaid, e)
+    Object.assign(paidOutByRaid, p)
+    Object.assign(ticsByRaid, t)
     Object.assign(spentByRaid, s)
   })
   raids.sort((a, b) => {
@@ -138,7 +158,7 @@ function mergeMonthData(arrays) {
     if (bi !== ai) return bi.localeCompare(ai)
     return String(b.raid_id).localeCompare(String(a.raid_id))
   })
-  return { raids, earnedByRaid, spentByRaid }
+  return { raids, paidOutByRaid, ticsByRaid, spentByRaid }
 }
 
 /** Check if (y, m) is in the window months list. */
@@ -153,7 +173,8 @@ export default function Raids({ isOfficer }) {
   const [viewYear, setViewYear] = usePersistedState('/raids:viewYear', now.getFullYear())
   const [viewMonth, setViewMonth] = usePersistedState('/raids:viewMonth', now.getMonth() + 1)
   const [raids, setRaids] = useState([])
-  const [earnedByRaid, setEarnedByRaid] = useState({})
+  const [paidOutByRaid, setPaidOutByRaid] = useState({})
+  const [ticsByRaid, setTicsByRaid] = useState({})
   const [spentByRaid, setSpentByRaid] = useState({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -182,7 +203,8 @@ export default function Raids({ isOfficer }) {
         const results = await Promise.all(months.map(({ year, month }) => fetchOneMonth(year, month)))
         const merged = mergeMonthData(results)
         setRaids(merged.raids)
-        setEarnedByRaid(merged.earnedByRaid)
+        setPaidOutByRaid(merged.paidOutByRaid)
+        setTicsByRaid(merged.ticsByRaid)
         setSpentByRaid(merged.spentByRaid)
       } catch (err) {
         setError(err?.message || 'Failed to load raids')
@@ -467,7 +489,8 @@ export default function Raids({ isOfficer }) {
                 <tr>
                   <th>Date</th>
                   <th>Raid</th>
-                  <th>DKP earned</th>
+                  <th>DKP paid out</th>
+                  <th>Tics</th>
                   <th>DKP spent</th>
                   <th>Attendees</th>
                 </tr>
@@ -475,13 +498,15 @@ export default function Raids({ isOfficer }) {
               <tbody>
                 {monthRaids.map((r) => {
                   const rid = String(r.raid_id ?? '').trim()
-                  const earned = Object.prototype.hasOwnProperty.call(earnedByRaid, rid) ? earnedByRaid[rid] : null
+                  const paidOut = paidOutByRaid[rid] ?? 0
+                  const tics = ticsByRaid[rid] ?? 0
                   const spent = spentByRaid[rid] ?? 0
                   return (
                     <tr key={r.raid_id}>
                       <td>{r.date_iso || r.date || '—'}</td>
                       <td><Link to={`/raids/${r.raid_id}`}>{r.raid_name || r.raid_id}</Link></td>
-                      <td>{earned != null ? Math.round(Number(earned)) : '—'}</td>
+                      <td>{Math.round(Number(paidOut))}</td>
+                      <td>{tics}</td>
                       <td>{Math.round(Number(spent))}</td>
                       <td>{r.attendees != null && r.attendees !== '' ? Math.round(Number(r.attendees)) : '—'}</td>
                     </tr>
