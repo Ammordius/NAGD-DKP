@@ -3,10 +3,11 @@ import { Link } from 'react-router-dom'
 
 const OFFICER_ADD_RAID_HASH = '#add-raid'
 import { supabase } from '../lib/supabase'
+import { fetchAll } from '../lib/accountData'
 import { createCache } from '../lib/cache'
 import { usePersistedState } from '../lib/usePersistedState'
 
-const CACHE_KEY_PREFIX = 'raids_month_'
+const CACHE_KEY_PREFIX = 'raids_month_v2_'
 const CACHE_TTL = 15 * 60 * 1000 // 15 min per month
 
 const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
@@ -87,55 +88,46 @@ async function fetchOneMonth(year, month) {
   if (error) throw new Error(error.message)
   const raids = raidList || []
 
-  let eventsByRaid = {}
-  let classificationsByRaid = {}
+  const earnedByRaid = {}
+  const spentByRaid = {}
 
   if (raids.length > 0) {
     const raidIds = raids.map((r) => String(r.raid_id).trim()).filter(Boolean)
-    const allEvents = []
     for (let i = 0; i < raidIds.length; i += CHUNK) {
       const chunk = raidIds.slice(i, i + CHUNK)
-      const { data } = await supabase.from('raid_events').select('raid_id, dkp_value, event_order').in('raid_id', chunk)
-      if (data?.length) allEvents.push(...data)
-    }
-    allEvents.forEach((ev) => {
-      const rid = String(ev.raid_id ?? '').trim()
-      if (!rid) return
-      if (!eventsByRaid[rid]) eventsByRaid[rid] = { totalDkp: 0, events: [] }
-      const v = parseFloat(ev.dkp_value || 0)
-      eventsByRaid[rid].totalDkp += v
-      eventsByRaid[rid].events.push({ ...ev, dkp_value: v })
-    })
-
-    const classPromises = []
-    for (let i = 0; i < raidIds.length; i += CHUNK) {
-      classPromises.push(
-        supabase.from('raid_classifications').select('raid_id, mob, zone').in('raid_id', raidIds.slice(i, i + CHUNK))
-      )
-    }
-    const classResponses = await Promise.all(classPromises)
-    classResponses.forEach(({ data }) => {
-      ;(data || []).forEach((row) => {
+      const { data: totalRows } = await supabase.from('raid_dkp_totals').select('raid_id, total_dkp').in('raid_id', chunk)
+      ;(totalRows || []).forEach((row) => {
         const rid = String(row.raid_id ?? '').trim()
-        if (!classificationsByRaid[rid]) classificationsByRaid[rid] = []
-        classificationsByRaid[rid].push({ mob: row.mob, zone: row.zone })
+        if (!rid) return
+        earnedByRaid[rid] = parseFloat(row.total_dkp ?? 0) || 0
       })
-    })
+    }
+    for (let i = 0; i < raidIds.length; i += CHUNK) {
+      const chunk = raidIds.slice(i, i + CHUNK)
+      const { data: lootRows, error: lootErr } = await fetchAll('raid_loot', 'raid_id, cost', (q) => q.in('raid_id', chunk))
+      if (lootErr) throw new Error(lootErr.message || 'Failed to load raid loot')
+      ;(lootRows || []).forEach((row) => {
+        const rid = String(row.raid_id ?? '').trim()
+        if (!rid) return
+        const c = parseFloat(row.cost || 0) || 0
+        spentByRaid[rid] = (spentByRaid[rid] || 0) + c
+      })
+    }
   }
 
-  const result = { raids, eventsByRaid, classificationsByRaid }
+  const result = { raids, earnedByRaid, spentByRaid }
   cache.set(result)
   return result
 }
 
 function mergeMonthData(arrays) {
   const raids = []
-  const eventsByRaid = {}
-  const classificationsByRaid = {}
-  arrays.forEach(({ raids: r, eventsByRaid: e, classificationsByRaid: c }) => {
+  const earnedByRaid = {}
+  const spentByRaid = {}
+  arrays.forEach(({ raids: r, earnedByRaid: e, spentByRaid: s }) => {
     raids.push(...r)
-    Object.assign(eventsByRaid, e)
-    Object.assign(classificationsByRaid, c)
+    Object.assign(earnedByRaid, e)
+    Object.assign(spentByRaid, s)
   })
   raids.sort((a, b) => {
     const ai = (a.date_iso || a.date || '').toString().trim()
@@ -143,7 +135,7 @@ function mergeMonthData(arrays) {
     if (bi !== ai) return bi.localeCompare(ai)
     return String(b.raid_id).localeCompare(String(a.raid_id))
   })
-  return { raids, eventsByRaid, classificationsByRaid }
+  return { raids, earnedByRaid, spentByRaid }
 }
 
 /** Check if (y, m) is in the window months list. */
@@ -158,8 +150,8 @@ export default function Raids({ isOfficer }) {
   const [viewYear, setViewYear] = usePersistedState('/raids:viewYear', now.getFullYear())
   const [viewMonth, setViewMonth] = usePersistedState('/raids:viewMonth', now.getMonth() + 1)
   const [raids, setRaids] = useState([])
-  const [eventsByRaid, setEventsByRaid] = useState({})
-  const [classificationsByRaid, setClassificationsByRaid] = useState({})
+  const [earnedByRaid, setEarnedByRaid] = useState({})
+  const [spentByRaid, setSpentByRaid] = useState({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -187,8 +179,8 @@ export default function Raids({ isOfficer }) {
         const results = await Promise.all(months.map(({ year, month }) => fetchOneMonth(year, month)))
         const merged = mergeMonthData(results)
         setRaids(merged.raids)
-        setEventsByRaid(merged.eventsByRaid)
-        setClassificationsByRaid(merged.classificationsByRaid)
+        setEarnedByRaid(merged.earnedByRaid)
+        setSpentByRaid(merged.spentByRaid)
       } catch (err) {
         setError(err?.message || 'Failed to load raids')
       } finally {
@@ -472,19 +464,22 @@ export default function Raids({ isOfficer }) {
                 <tr>
                   <th>Date</th>
                   <th>Raid</th>
-                  <th>Total DKP</th>
+                  <th>DKP earned</th>
+                  <th>DKP spent</th>
                   <th>Attendees</th>
                 </tr>
               </thead>
               <tbody>
                 {monthRaids.map((r) => {
-                  const ev = eventsByRaid[String(r.raid_id ?? '').trim()]
-                  const totalDkp = ev ? ev.totalDkp : null
+                  const rid = String(r.raid_id ?? '').trim()
+                  const earned = Object.prototype.hasOwnProperty.call(earnedByRaid, rid) ? earnedByRaid[rid] : null
+                  const spent = spentByRaid[rid] ?? 0
                   return (
                     <tr key={r.raid_id}>
                       <td>{r.date_iso || r.date || '—'}</td>
                       <td><Link to={`/raids/${r.raid_id}`}>{r.raid_name || r.raid_id}</Link></td>
-                      <td>{totalDkp != null ? Math.round(Number(totalDkp)) : '—'}</td>
+                      <td>{earned != null ? Math.round(Number(earned)) : '—'}</td>
+                      <td>{Math.round(Number(spent))}</td>
                       <td>{r.attendees != null && r.attendees !== '' ? Math.round(Number(r.attendees)) : '—'}</td>
                     </tr>
                   )
