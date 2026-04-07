@@ -69,6 +69,11 @@ function getMonthRange(year, month) {
 const CHUNK = 80
 
 const ORDER_BY_ID = { order: { column: 'id', ascending: true } }
+/** raid_attendance_dkp has no id column (PK is raid_id + character_key). */
+const ORDER_BY_RAD_DKP = {
+  order: { column: 'raid_id', ascending: true },
+  order2: { column: 'character_key', ascending: true },
+}
 
 async function fetchOneMonth(year, month) {
   const cacheKey = `${CACHE_KEY_PREFIX}${year}_${month}`
@@ -103,7 +108,7 @@ async function fetchOneMonth(year, month) {
         'raid_attendance_dkp',
         'raid_id, dkp_earned',
         (q) => q.in('raid_id', chunk),
-        ORDER_BY_ID
+        ORDER_BY_RAD_DKP
       )
       if (attErr) throw new Error(attErr.message || 'Failed to load raid attendance DKP')
       ;(attRows || []).forEach((row) => {

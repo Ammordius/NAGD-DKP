@@ -1,7 +1,7 @@
 import { supabase } from './supabase'
 
 const PAGE = 1000
-/** @param {object} [opts] - optional: { order: { column: string, ascending: boolean } } for reverse chronological etc. */
+/** @param {object} [opts] - optional: { order, order2 } each { column: string, ascending: boolean } */
 export async function fetchAll(table, select = '*', filter, opts) {
   const all = []
   let from = 0
@@ -10,6 +10,7 @@ export async function fetchAll(table, select = '*', filter, opts) {
     let q = supabase.from(table).select(select).range(from, to)
     if (filter) q = filter(q)
     if (opts?.order) q = q.order(opts.order.column, { ascending: opts.order.ascending })
+    if (opts?.order2) q = q.order(opts.order2.column, { ascending: opts.order2.ascending })
     const { data, error } = await q
     if (error) return { data: null, error }
     all.push(...(data || []))
