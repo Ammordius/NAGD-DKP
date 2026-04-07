@@ -7,7 +7,7 @@ import { fetchAll } from '../lib/accountData'
 import { createCache } from '../lib/cache'
 import { usePersistedState } from '../lib/usePersistedState'
 
-const CACHE_KEY_PREFIX = 'raids_month_v2_'
+const CACHE_KEY_PREFIX = 'raids_month_v3_'
 const CACHE_TTL = 15 * 60 * 1000 // 15 min per month
 
 const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
@@ -93,13 +93,16 @@ async function fetchOneMonth(year, month) {
 
   if (raids.length > 0) {
     const raidIds = raids.map((r) => String(r.raid_id).trim()).filter(Boolean)
+    // Sum of each tic's dkp_value (guild definition). Use raid_events, not raid_dkp_totals — cache can drift.
     for (let i = 0; i < raidIds.length; i += CHUNK) {
       const chunk = raidIds.slice(i, i + CHUNK)
-      const { data: totalRows } = await supabase.from('raid_dkp_totals').select('raid_id, total_dkp').in('raid_id', chunk)
-      ;(totalRows || []).forEach((row) => {
+      const { data: eventRows, error: evErr } = await fetchAll('raid_events', 'raid_id, dkp_value', (q) => q.in('raid_id', chunk))
+      if (evErr) throw new Error(evErr.message || 'Failed to load raid events')
+      ;(eventRows || []).forEach((row) => {
         const rid = String(row.raid_id ?? '').trim()
         if (!rid) return
-        earnedByRaid[rid] = parseFloat(row.total_dkp ?? 0) || 0
+        const v = parseFloat(row.dkp_value || 0) || 0
+        earnedByRaid[rid] = (earnedByRaid[rid] || 0) + v
       })
     }
     for (let i = 0; i < raidIds.length; i += CHUNK) {
