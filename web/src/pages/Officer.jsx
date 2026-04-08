@@ -751,7 +751,18 @@ export default function Officer({ isOfficer }) {
       target_id: null,
       delta: { r: selectedRaidId, i: itemName, c: char.name, cost: String(isNaN(cost) ? 0 : cost) },
     })
-    setLootResult({ itemName, characterName: char.name, cost: isNaN(cost) ? 0 : cost })
+    const recipientAccountId = (() => {
+      const a = charIdToAccountId[String(char.char_id)] ?? charIdToAccountId[char.char_id]
+      return a ? String(a) : null
+    })()
+    setLootResult({
+      itemName,
+      characterName: char.name,
+      cost: isNaN(cost) ? 0 : cost,
+      unlinkedAccountWarning: !recipientAccountId
+        ? `${char.name} is not linked to any DKP account. This loot will not count toward account totals until you link this character on that account’s page (Characters tab).`
+        : undefined,
+    })
     setLootItemQuery('')
     setLootCharName('')
     setLootCost('0')
@@ -762,7 +773,6 @@ export default function Officer({ isOfficer }) {
       if (prev.some((n) => (n || '').trim().toLowerCase() === key)) return prev
       return [...prev, itemName].sort((a, b) => a.localeCompare(b))
     })
-    const recipientAccountId = (() => { const a = charIdToAccountId[String(char.char_id)] ?? charIdToAccountId[char.char_id]; return a ? String(a) : null })()
     await supabase.rpc('refresh_dkp_summary')
     if (recipientAccountId) {
       await supabase.rpc('refresh_account_dkp_summary_for_raid', {
@@ -840,6 +850,16 @@ export default function Officer({ isOfficer }) {
       parts.push(`No DKP amount in line (used 0) (${missingDkpAmount.length}): ${missingDkpAmount.map((r) => `"${r.itemName}" → ${r.characterName}`).join('; ')}.`)
     }
     if (parts.length > 0) setError(parts.join(' '))
+    const unlinkedNamesFromLog = [...new Set(
+      insertedItems
+        .map((item) => {
+          const ch = nameToChar[(item.c || '').toLowerCase()]
+          if (!ch) return null
+          const aid = charIdToAccountId[String(ch.char_id)] ?? charIdToAccountId[ch.char_id]
+          return aid ? null : ch.name
+        })
+        .filter(Boolean)
+    )]
     if (inserted > 0) {
       await logOfficerAudit(supabase, {
         action: 'add_loot_from_log',
@@ -850,19 +870,33 @@ export default function Officer({ isOfficer }) {
       const recipientAccountIds = [...new Set(
         insertedItems
           .map((item) => {
-            const char = nameToChar[(item.c || '').toLowerCase()]
-            return char && charIdToAccountId[char.char_id] ? String(charIdToAccountId[char.char_id]) : null
+            const ch = nameToChar[(item.c || '').toLowerCase()]
+            return ch && charIdToAccountId[ch.char_id] ? String(charIdToAccountId[ch.char_id]) : null
           })
           .filter(Boolean)
       )]
+      const needsFullAccountRefresh = unlinkedNamesFromLog.length > 0 || recipientAccountIds.length === 0
       await supabase.rpc('refresh_dkp_summary')
-      await supabase.rpc('refresh_account_dkp_summary_for_raid', {
-        p_raid_id: selectedRaidId,
-        p_extra_account_ids: recipientAccountIds,
-      })
+      if (needsFullAccountRefresh) {
+        await supabase.rpc('refresh_account_dkp_summary')
+      } else {
+        await supabase.rpc('refresh_account_dkp_summary_for_raid', {
+          p_raid_id: selectedRaidId,
+          p_extra_account_ids: recipientAccountIds,
+        })
+      }
       try { sessionStorage.removeItem('dkp_leaderboard_v2') } catch (_) {}
     }
-    setLootResult({ fromLog: true, inserted, total: totalRows, insertedItems })
+    setLootResult({
+      fromLog: true,
+      inserted,
+      total: totalRows,
+      insertedItems,
+      unlinkedAccountWarning:
+        unlinkedNamesFromLog.length > 0
+          ? `These characters are not linked to any DKP account — loot will not count toward account totals until linked on the account page: ${unlinkedNamesFromLog.join(', ')}.`
+          : undefined,
+    })
     if (playerNotFound.length === 0 && itemNotFound.length === 0) setLootLogPaste('')
     loadSelectedRaid()
     globalMutate(DKP_DATA_KEY)
@@ -1211,6 +1245,8 @@ export default function Officer({ isOfficer }) {
         <h2 style={{ marginTop: 0 }}>Create new DKP account</h2>
         <p style={{ color: '#71717a', fontSize: '0.9rem', marginBottom: '0.75rem' }}>
           Create an account that a player can then claim on the account page. Share the account link with them.
+          {' '}
+          <strong>Link every character</strong> that may appear on tics or receive loot (open the account → Characters → add); otherwise tics or loot may not count toward that account’s totals.
         </p>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
           <input
@@ -1525,6 +1561,11 @@ export default function Officer({ isOfficer }) {
                 {lootResult.insertedItems?.length > 0 && (
                   <p style={{ color: '#22c55e', fontSize: '0.9rem', marginTop: 0 }}>
                     {lootResult.insertedItems.map((entry, i) => `${entry.i} → ${entry.c} (${entry.cost} DKP)`).join('; ')}
+                  </p>
+                )}
+                {lootResult.unlinkedAccountWarning && (
+                  <p style={{ color: '#fbbf24', fontSize: '0.9rem', marginTop: '0.35rem', marginBottom: 0 }} role="status">
+                    {lootResult.unlinkedAccountWarning}
                   </p>
                 )}
               </div>
