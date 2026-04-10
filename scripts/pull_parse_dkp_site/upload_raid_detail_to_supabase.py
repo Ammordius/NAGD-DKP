@@ -12,6 +12,9 @@ Then run:
 
 Without --apply, prints what would be uploaded (dry run).
 Uses .env / web/.env for SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.
+
+With --apply, buyer char_id values from the HTML (Magelo numeric char=) are resolved to
+public.characters.char_id using character_name so inserts match FKs when char_id is a name key.
 """
 
 from __future__ import annotations
@@ -36,6 +39,115 @@ RPC_RETRIES = 3
 RPC_RETRY_DELAY_SEC = 5
 # Per-raid account summary only (no full-table fallback; see _refresh_account_summary_strict).
 ACCOUNT_REFRESH_RPC_RETRIES = 5
+
+CHARACTERS_PAGE_SIZE = 1000
+
+
+def _fetch_characters_maps(client) -> tuple[set[str], dict[str, str]]:
+    """Load all characters: known char_id set and lower(name)->char_id (first row wins on duplicate names)."""
+    known_char_ids: set[str] = set()
+    lower_name_to_char_id: dict[str, str] = {}
+    duplicate_name_keys: set[str] = set()
+    offset = 0
+    while True:
+        r = (
+            client.table("characters")
+            .select("char_id, name")
+            .range(offset, offset + CHARACTERS_PAGE_SIZE - 1)
+            .execute()
+        )
+        rows = (r.data or []) if hasattr(r, "data") else []
+        for row in rows:
+            cid = (row.get("char_id") or "").strip()
+            name_raw = (row.get("name") or "").strip()
+            if cid:
+                known_char_ids.add(cid)
+            if not name_raw:
+                continue
+            nk = name_raw.lower()
+            if nk in lower_name_to_char_id and lower_name_to_char_id[nk] != cid:
+                duplicate_name_keys.add(nk)
+            elif nk not in lower_name_to_char_id and cid:
+                lower_name_to_char_id[nk] = cid
+        if len(rows) < CHARACTERS_PAGE_SIZE:
+            break
+        offset += CHARACTERS_PAGE_SIZE
+    if duplicate_name_keys:
+        sample = ", ".join(sorted(duplicate_name_keys)[:5])
+        print(
+            f"Warning: duplicate character names (different char_id) in DB; "
+            f"using first char_id per lower(name). Sample keys: {sample}",
+            file=sys.stderr,
+        )
+    return known_char_ids, lower_name_to_char_id
+
+
+def _resolve_upload_char_id(
+    raw_char_id: str | None,
+    character_name: str | None,
+    *,
+    known_char_ids: set[str],
+    name_to_char_id: dict[str, str],
+) -> tuple[str | None, str | None]:
+    """Map DKP-site Magelo numeric char= or unknown keys to public.characters.char_id.
+
+    Returns (char_id_for_insert, log_line_or_none). If no match, char_id is cleared
+    and character_name is left as-is so refresh_dkp_summary can key by name.
+    """
+    cid = (raw_char_id or "").strip()
+    cname = (character_name or "").strip()
+    name_key = cname.lower()
+
+    if not cid:
+        if name_key:
+            filled = name_to_char_id.get(name_key)
+            if filled:
+                return (
+                    filled,
+                    f"char_id filled from name {cname!r} -> {filled!r}",
+                )
+        return (None, None)
+
+    if cid in known_char_ids:
+        return (cid, None)
+
+    resolved = name_to_char_id.get(name_key) if name_key else None
+    if resolved:
+        if resolved != cid:
+            return (
+                resolved,
+                f"char_id {cid!r} -> {resolved!r} (matched character name {cname!r})",
+            )
+        return (cid, None)
+
+    if cname:
+        return (
+            None,
+            f"char_id {cid!r} cleared (not in characters; no name match for {cname!r})",
+        )
+    return (None, f"char_id {cid!r} cleared (not in characters; empty character_name)")
+
+
+def _apply_char_id_resolution(
+    rows: list[dict],
+    *,
+    known_char_ids: set[str],
+    name_to_char_id: dict[str, str],
+    label: str,
+) -> None:
+    """Mutate each dict's char_id in place; print one line per change."""
+    for r in rows:
+        raw = r.get("char_id")
+        cname = r.get("character_name")
+        new_id, note = _resolve_upload_char_id(
+            raw,
+            cname,
+            known_char_ids=known_char_ids,
+            name_to_char_id=name_to_char_id,
+        )
+        r["char_id"] = new_id or ""
+        if note:
+            print(f"  [{label}] {note}")
 
 
 def _is_transient_refresh_error(exc: Exception) -> bool:
@@ -302,6 +414,27 @@ def main() -> int:
         options=SyncClientOptions(postgrest_client_timeout=args.postgrest_timeout),
     )
 
+    try:
+        known_char_ids, name_to_char_id = _fetch_characters_maps(client)
+    except Exception as e:
+        print(f"ERROR: could not load characters for char_id resolution: {e}", file=sys.stderr)
+        return 1
+
+    if loot:
+        _apply_char_id_resolution(
+            loot,
+            known_char_ids=known_char_ids,
+            name_to_char_id=name_to_char_id,
+            label="loot",
+        )
+    if attendees:
+        _apply_char_id_resolution(
+            attendees,
+            known_char_ids=known_char_ids,
+            name_to_char_id=name_to_char_id,
+            label="raid_attendance",
+        )
+
     # Delete existing data for this raid via direct, batched table deletes.
     # Avoid the delete_raid_for_reupload RPC here: it runs full refreshes that are
     # appropriate for bulk restore, but overkill (and slow) for a single-raid upload.
@@ -398,6 +531,15 @@ def main() -> int:
             for cid, cname in att_list:
                 cid = (cid or "").strip()
                 cname = (cname or "").strip() or None
+                resolved_cid, rea_note = _resolve_upload_char_id(
+                    cid or None,
+                    cname,
+                    known_char_ids=known_char_ids,
+                    name_to_char_id=name_to_char_id,
+                )
+                if rea_note:
+                    print(f"  [raid_event_attendance] {rea_note}")
+                cid = (resolved_cid or "").strip()
                 account_id = char_to_account.get(cid) if cid else None
                 # Dedupe priority: account_id (when known) > char_id > character_name.
                 if account_id:
