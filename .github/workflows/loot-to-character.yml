@@ -151,7 +151,22 @@ jobs:
             echo "No count file change"
           else
             git commit -m "chore: update last_raid_loot_count for loot-to-character skip check"
-            git push
+            BRANCH="${{ github.ref_name }}"
+            ok=0
+            for i in 1 2 3; do
+              if git pull --rebase origin "$BRANCH" && git push; then
+                ok=1
+                break
+              fi
+              echo "git pull --rebase / push attempt $i failed, retrying..."
+              if [ "$i" -lt 3 ]; then
+                sleep $((i * 5))
+              fi
+            done
+            if [ "$ok" -ne 1 ]; then
+              echo "::error::git pull --rebase + push failed after 3 attempts"
+              exit 1
+            fi
           fi
 
   # Guild-scoped upgrade index for officer bid hints (runs even when raid_loot count unchanged — gear updates without new loot).
@@ -219,5 +234,20 @@ jobs:
             echo "No bid forecast JSON changes"
           else
             git commit -m "chore: refresh bid_forecast item shards (CI guild upgrade index)"
-            git push
+            BRANCH="${{ github.ref_name }}"
+            ok=0
+            for i in 1 2 3; do
+              if git pull --rebase origin "$BRANCH" && git push; then
+                ok=1
+                break
+              fi
+              echo "git pull --rebase / push attempt $i failed, retrying..."
+              if [ "$i" -lt 3 ]; then
+                sleep $((i * 5))
+              fi
+            done
+            if [ "$ok" -ne 1 ]; then
+              echo "::error::git pull --rebase + push failed after 3 attempts"
+              exit 1
+            fi
           fi
