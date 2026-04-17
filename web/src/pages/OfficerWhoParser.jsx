@@ -1,6 +1,24 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { usePersistedState } from '../lib/usePersistedState'
+
+const PAGE_SIZE = 1000
+
+async function fetchAllRows(table, select) {
+  const all = []
+  let from = 0
+  while (true) {
+    const to = from + PAGE_SIZE - 1
+    const { data, error } = await supabase.from(table).select(select).range(from, to)
+    if (error) throw error
+    const rows = data || []
+    all.push(...rows)
+    if (rows.length < PAGE_SIZE) break
+    from += PAGE_SIZE
+  }
+  return all
+}
 
 function parseWhoNames(paste) {
   const names = []
@@ -34,7 +52,7 @@ function parseWhoNames(paste) {
 
 export default function OfficerWhoParser({ isOfficer }) {
   const navigate = useNavigate()
-  const [paste, setPaste] = useState('')
+  const [paste, setPaste] = usePersistedState('/officer/who-parser:paste', '')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [characters, setCharacters] = useState([])
@@ -52,25 +70,22 @@ export default function OfficerWhoParser({ isOfficer }) {
       setLoading(true)
       setError('')
       try {
-        const [charsRes, caRes, accountsRes] = await Promise.all([
-          supabase.from('characters').select('char_id, name').limit(5000),
-          supabase.from('character_account').select('char_id, account_id').limit(10000),
-          supabase.from('accounts').select('account_id, display_name').limit(5000),
+        const [charsData, caData, accountsData] = await Promise.all([
+          fetchAllRows('characters', 'char_id, name'),
+          fetchAllRows('character_account', 'char_id, account_id'),
+          fetchAllRows('accounts', 'account_id, display_name'),
         ])
         if (cancelled) return
-        if (charsRes.error) throw charsRes.error
-        if (caRes.error) throw caRes.error
-        if (accountsRes.error) throw accountsRes.error
-        setCharacters(charsRes.data || [])
+        setCharacters(charsData || [])
         const caMap = {}
-        ;(caRes.data || []).forEach((row) => {
+        ;(caData || []).forEach((row) => {
           if (row?.char_id && row?.account_id && caMap[String(row.char_id)] == null) {
             caMap[String(row.char_id)] = String(row.account_id)
           }
         })
         setCharToAccount(caMap)
         const nameMap = {}
-        ;(accountsRes.data || []).forEach((row) => {
+        ;(accountsData || []).forEach((row) => {
           if (row?.account_id) {
             nameMap[String(row.account_id)] = (row.display_name || '').trim() || String(row.account_id)
           }

@@ -162,7 +162,7 @@ export default function Accounts() {
                     </Link>
                     <span style={{ marginLeft: '0.5rem', color: '#71717a', fontSize: '0.875rem' }}>
                       <code>{acc.account_id}</code>
-                      {acc.toon_count != null && ` · ${acc.toon_count} toons`}
+                      {` · ${chars.length} toons`}
                     </span>
                   </td>
                   <td style={{ verticalAlign: 'top', minWidth: 0 }}>

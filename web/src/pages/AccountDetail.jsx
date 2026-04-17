@@ -242,6 +242,7 @@ export default function AccountDetail({ isOfficer, profile, session }) {
   }, [accountId, profile])
 
   const displayName = account?.display_name?.trim() || account?.toon_names?.split(',')[0]?.trim() || accountId
+  const linkedToonCount = characters.length
 
   const dkpTotal = accountId != null ? (accountBalanceByAccountId[accountId] ?? 0) : 0
 
@@ -311,7 +312,7 @@ export default function AccountDetail({ isOfficer, profile, session }) {
       <DkpSiteDisclaimer />
       <p style={{ color: '#a1a1aa', marginBottom: '1rem' }}>
         Account <code>{accountId}</code>
-        {account.toon_count != null && <span style={{ marginLeft: '0.5rem' }}>({account.toon_count} toons)</span>}
+        <span style={{ marginLeft: '0.5rem' }}>({linkedToonCount} toons)</span>
         {activityByRaid.length > 0 && (
           <span style={{ marginLeft: '0.5rem' }}>
             {MIDDLE_DOT} <strong>DKP total: {Number(dkpTotal).toFixed(0)}</strong>
