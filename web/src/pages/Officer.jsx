@@ -1185,6 +1185,18 @@ export default function Officer({ isOfficer }) {
           + New raid
         </button>
       </div>
+      <section className="card" style={{ marginBottom: '1rem' }}>
+        <h2 style={{ marginTop: 0 }}>Officer tools</h2>
+        <p style={{ marginBottom: 0 }}>
+          <Link to="/officer/dkp-changelog">DKP changelog</Link>
+          {' · '}
+          <Link to="/officer/loot-bid-forecast">Bid hints</Link>
+          {' · '}
+          <Link to="/officer/global-loot-bid-forecast">Global bid</Link>
+          {' · '}
+          <Link to="/officer/who-parser">Who parser</Link>
+        </p>
+      </section>
       {error && <p className="error" style={{ marginBottom: '1rem' }}>{error}</p>}
 
       {/* Add raid */}
@@ -1235,10 +1247,6 @@ export default function Officer({ isOfficer }) {
           </span>
         )}
       </section>
-
-      <p style={{ marginBottom: '1.5rem' }}>
-        <Link to="/officer/dkp-changelog">DKP changelog</Link> — who added raids or edited DKP (officer audit log).
-      </p>
 
       {/* Create new DKP account (officer-only); player claims it on the account page */}
       <section className="card" style={{ marginBottom: '1.5rem' }}>
