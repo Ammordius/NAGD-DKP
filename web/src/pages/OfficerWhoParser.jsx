@@ -53,6 +53,7 @@ function parseWhoNames(paste) {
 export default function OfficerWhoParser({ isOfficer }) {
   const navigate = useNavigate()
   const [paste, setPaste] = usePersistedState('/officer/who-parser:paste', '')
+  const [activeTab, setActiveTab] = usePersistedState('/officer/who-parser:tab', 'grouped')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [characters, setCharacters] = useState([])
@@ -71,7 +72,7 @@ export default function OfficerWhoParser({ isOfficer }) {
       setError('')
       try {
         const [charsData, caData, accountsData] = await Promise.all([
-          fetchAllRows('characters', 'char_id, name'),
+          fetchAllRows('characters', 'char_id, name, class_name'),
           fetchAllRows('character_account', 'char_id, account_id'),
           fetchAllRows('accounts', 'account_id, display_name'),
         ])
@@ -108,7 +109,11 @@ export default function OfficerWhoParser({ isOfficer }) {
     for (const c of characters) {
       const n = String(c?.name || '').trim()
       if (!n) continue
-      out[n.toLowerCase()] = { char_id: String(c.char_id), name: n }
+      out[n.toLowerCase()] = {
+        char_id: String(c.char_id),
+        name: n,
+        className: String(c?.class_name || '').trim() || 'Unknown',
+      }
     }
     return out
   }, [characters])
@@ -132,17 +137,53 @@ export default function OfficerWhoParser({ isOfficer }) {
           accountId,
           displayName: display,
           characters: [],
+          characterDetails: [],
           unlinked: !accountId,
         })
       }
       const entry = groupedMap.get(key)
       if (!entry.characters.includes(matched.name)) entry.characters.push(matched.name)
+      if (!entry.characterDetails.some((c) => c.name === matched.name)) {
+        entry.characterDetails.push({
+          name: matched.name,
+          className: matched.className || 'Unknown',
+        })
+      }
     }
     const grouped = [...groupedMap.values()].sort((a, b) => {
       return String(a.displayName || '').localeCompare(String(b.displayName || ''))
     })
-    const flatUnique = grouped.map((g) => ({ accountId: g.accountId, displayName: g.displayName }))
-    return { grouped, flatUnique, unmatched }
+    const flatUnique = grouped.map((g) => ({
+      accountId: g.accountId,
+      displayName: g.displayName,
+      toonCount: g.characters.length,
+    }))
+    const matchedCharacters = grouped
+      .flatMap((g) =>
+        g.characterDetails.map((c) => ({
+          ...c,
+          accountId: g.accountId,
+          humanDisplayName: g.displayName,
+        }))
+      )
+      .sort((a, b) => {
+        const classCmp = String(a.className).localeCompare(String(b.className))
+        if (classCmp !== 0) return classCmp
+        return String(a.name).localeCompare(String(b.name))
+      })
+    const classMap = new Map()
+    for (const c of matchedCharacters) {
+      const className = String(c.className || '').trim() || 'Unknown'
+      if (!classMap.has(className)) classMap.set(className, { className, count: 0, characters: [] })
+      const row = classMap.get(className)
+      row.count += 1
+      row.characters.push(c.name)
+    }
+    const classSummary = [...classMap.values()].sort((a, b) => {
+      if (b.count !== a.count) return b.count - a.count
+      return String(a.className).localeCompare(String(b.className))
+    })
+    return { grouped, flatUnique, unmatched, matchedCharacters, classSummary }
   }, [parsedNames, nameToChar, charToAccount, accountNames])
 
   async function handleCopyHumans() {
@@ -154,6 +195,20 @@ export default function OfficerWhoParser({ isOfficer }) {
     try {
       await navigator.clipboard.writeText(text)
       setCopyStatus(`Copied ${result.flatUnique.length} humans.`)
+    } catch (_) {
+      setCopyStatus('Clipboard write failed in this browser.')
+    }
+  }
+
+  async function handleCopyHumansWithCounts() {
+    const text = result.flatUnique.map((h) => `${h.displayName} (${h.toonCount})`).join('\n')
+    if (!text) {
+      setCopyStatus('Nothing to copy.')
+      return
+    }
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopyStatus(`Copied ${result.flatUnique.length} humans with toon counts.`)
     } catch (_) {
       setCopyStatus('Clipboard write failed in this browser.')
     }
@@ -190,38 +245,122 @@ export default function OfficerWhoParser({ isOfficer }) {
       </section>
 
       <section className="card" style={{ marginBottom: '1rem' }}>
-        <h2 style={{ marginTop: 0 }}>Grouped humans</h2>
-        {result.grouped.length === 0 ? (
-          <p style={{ color: '#71717a', marginBottom: 0 }}>No grouped results yet.</p>
-        ) : (
-          <div style={{ overflowX: 'auto' }}>
-            <table>
-              <thead>
-                <tr>
-                  <th>Human</th>
-                  <th>Characters</th>
-                  <th>Count</th>
-                </tr>
-              </thead>
-              <tbody>
-                {result.grouped.map((group) => (
-                  <tr key={`${group.accountId || group.displayName}`}>
-                    <td>
-                      {group.accountId ? (
-                        <Link to={`/accounts/${encodeURIComponent(group.accountId)}`}>{group.displayName}</Link>
-                      ) : (
-                        group.displayName
-                      )}
-                    </td>
-                    <td>{group.characters.join(', ')}</td>
-                    <td>{group.characters.length}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+        <h2 style={{ marginTop: 0 }}>View</h2>
+        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            className={`btn ${activeTab === 'grouped' ? '' : 'btn-ghost'}`}
+            onClick={() => setActiveTab('grouped')}
+          >
+            Grouped humans
+          </button>
+          <button
+            type="button"
+            className={`btn ${activeTab === 'characters' ? '' : 'btn-ghost'}`}
+            onClick={() => setActiveTab('characters')}
+          >
+            Characters
+          </button>
+        </div>
       </section>
+
+      {activeTab === 'grouped' && (
+        <section className="card" style={{ marginBottom: '1rem' }}>
+          <h2 style={{ marginTop: 0 }}>Grouped humans</h2>
+          {result.grouped.length === 0 ? (
+            <p style={{ color: '#71717a', marginBottom: 0 }}>No grouped results yet.</p>
+          ) : (
+            <div style={{ overflowX: 'auto' }}>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Human</th>
+                    <th>Characters</th>
+                    <th>Count</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {result.grouped.map((group) => (
+                    <tr key={`${group.accountId || group.displayName}`}>
+                      <td>
+                        {group.accountId ? (
+                          <Link to={`/accounts/${encodeURIComponent(group.accountId)}`}>{group.displayName}</Link>
+                        ) : (
+                          group.displayName
+                        )}
+                      </td>
+                      <td>{group.characters.join(', ')}</td>
+                      <td>{group.characters.length}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      )}
+
+      {activeTab === 'characters' && (
+        <section className="card" style={{ marginBottom: '1rem' }}>
+          <h2 style={{ marginTop: 0 }}>Character details</h2>
+          {result.matchedCharacters.length === 0 ? (
+            <p style={{ color: '#71717a', marginBottom: 0 }}>No matched characters yet.</p>
+          ) : (
+            <div style={{ overflowX: 'auto', marginBottom: '1rem' }}>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Character</th>
+                    <th>Class</th>
+                    <th>Human</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {result.matchedCharacters.map((char) => (
+                    <tr key={`${char.name}:${char.accountId || char.humanDisplayName}`}>
+                      <td>{char.name}</td>
+                      <td>{char.className || 'Unknown'}</td>
+                      <td>
+                        {char.accountId ? (
+                          <Link to={`/accounts/${encodeURIComponent(char.accountId)}`}>{char.humanDisplayName}</Link>
+                        ) : (
+                          char.humanDisplayName
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          <h3 style={{ marginTop: 0 }}>Class summary</h3>
+          {result.classSummary.length === 0 ? (
+            <p style={{ color: '#71717a', marginBottom: 0 }}>No class summary yet.</p>
+          ) : (
+            <div style={{ overflowX: 'auto' }}>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Class</th>
+                    <th>Count</th>
+                    <th>Characters</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {result.classSummary.map((row) => (
+                    <tr key={row.className}>
+                      <td>{row.className}</td>
+                      <td>{row.count}</td>
+                      <td>{row.characters.join(', ')}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      )}
 
       <section className="card" style={{ marginBottom: '1rem' }}>
         <h2 style={{ marginTop: 0 }}>Flat unique humans</h2>
@@ -235,6 +374,9 @@ export default function OfficerWhoParser({ isOfficer }) {
             <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '0.5rem' }}>
               <button type="button" className="btn btn-ghost" onClick={handleCopyHumans}>
                 Copy humans to clipboard
+              </button>
+              <button type="button" className="btn btn-ghost" onClick={handleCopyHumansWithCounts}>
+                Copy humans + toon counts
               </button>
               {copyStatus && <span style={{ color: '#a1a1aa', fontSize: '0.9rem' }}>{copyStatus}</span>}
             </div>
