@@ -199,7 +199,6 @@ export default function OfficerWhoParser({ isOfficer }) {
               <thead>
                 <tr>
                   <th>Human</th>
-                  <th>Account</th>
                   <th>Characters</th>
                   <th>Count</th>
                 </tr>
@@ -212,13 +211,6 @@ export default function OfficerWhoParser({ isOfficer }) {
                         <Link to={`/accounts/${encodeURIComponent(group.accountId)}`}>{group.displayName}</Link>
                       ) : (
                         group.displayName
-                      )}
-                    </td>
-                    <td>
-                      {group.accountId ? (
-                        <Link to={`/accounts/${encodeURIComponent(group.accountId)}`}>{group.accountId}</Link>
-                      ) : (
-                        'Unlinked'
                       )}
                     </td>
                     <td>{group.characters.join(', ')}</td>
