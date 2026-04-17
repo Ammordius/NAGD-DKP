@@ -187,7 +187,7 @@ export default function OfficerWhoParser({ isOfficer }) {
   }, [parsedNames, nameToChar, charToAccount, accountNames])
 
   async function handleCopyHumans() {
-    const text = result.flatUnique.map((h) => h.displayName).join('\n')
+    const text = result.flatUnique.map((h) => h.displayName).join(', ')
     if (!text) {
       setCopyStatus('Nothing to copy.')
       return
@@ -201,7 +201,7 @@ export default function OfficerWhoParser({ isOfficer }) {
   }
 
   async function handleCopyHumansWithCounts() {
-    const text = result.flatUnique.map((h) => `${h.displayName} (${h.toonCount})`).join('\n')
+    const text = result.flatUnique.map((h) => `${h.displayName} (${h.toonCount})`).join(', ')
     if (!text) {
       setCopyStatus('Nothing to copy.')
       return
