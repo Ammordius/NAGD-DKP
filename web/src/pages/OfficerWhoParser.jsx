@@ -40,6 +40,7 @@ export default function OfficerWhoParser({ isOfficer }) {
   const [characters, setCharacters] = useState([])
   const [charToAccount, setCharToAccount] = useState({})
   const [accountNames, setAccountNames] = useState({})
+  const [copyStatus, setCopyStatus] = useState('')
 
   useEffect(() => {
     if (!isOfficer) {
@@ -125,9 +126,23 @@ export default function OfficerWhoParser({ isOfficer }) {
     const grouped = [...groupedMap.values()].sort((a, b) => {
       return String(a.displayName || '').localeCompare(String(b.displayName || ''))
     })
-    const flatUnique = grouped.map((g) => g.displayName)
+    const flatUnique = grouped.map((g) => ({ accountId: g.accountId, displayName: g.displayName }))
     return { grouped, flatUnique, unmatched }
   }, [parsedNames, nameToChar, charToAccount, accountNames])
+
+  async function handleCopyHumans() {
+    const text = result.flatUnique.map((h) => h.displayName).join('\n')
+    if (!text) {
+      setCopyStatus('Nothing to copy.')
+      return
+    }
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopyStatus(`Copied ${result.flatUnique.length} humans.`)
+    } catch (_) {
+      setCopyStatus('Clipboard write failed in this browser.')
+    }
+  }
 
   if (!isOfficer) return null
 
@@ -177,8 +192,20 @@ export default function OfficerWhoParser({ isOfficer }) {
               <tbody>
                 {result.grouped.map((group) => (
                   <tr key={`${group.accountId || group.displayName}`}>
-                    <td>{group.displayName}</td>
-                    <td>{group.accountId || 'Unlinked'}</td>
+                    <td>
+                      {group.accountId ? (
+                        <Link to={`/accounts/${encodeURIComponent(group.accountId)}`}>{group.displayName}</Link>
+                      ) : (
+                        group.displayName
+                      )}
+                    </td>
+                    <td>
+                      {group.accountId ? (
+                        <Link to={`/accounts/${encodeURIComponent(group.accountId)}`}>{group.accountId}</Link>
+                      ) : (
+                        'Unlinked'
+                      )}
+                    </td>
                     <td>{group.characters.join(', ')}</td>
                     <td>{group.characters.length}</td>
                   </tr>
@@ -198,7 +225,24 @@ export default function OfficerWhoParser({ isOfficer }) {
             <p style={{ marginTop: 0, marginBottom: '0.5rem' }}>
               <strong>{result.flatUnique.length}</strong> unique humans:
             </p>
-            <p style={{ marginBottom: 0 }}>{result.flatUnique.join(', ')}</p>
+            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '0.5rem' }}>
+              <button type="button" className="btn btn-ghost" onClick={handleCopyHumans}>
+                Copy humans to clipboard
+              </button>
+              {copyStatus && <span style={{ color: '#a1a1aa', fontSize: '0.9rem' }}>{copyStatus}</span>}
+            </div>
+            <p style={{ marginBottom: 0 }}>
+              {result.flatUnique.map((h, idx) => (
+                <span key={`${h.accountId || h.displayName}-${idx}`}>
+                  {idx > 0 ? ', ' : ''}
+                  {h.accountId ? (
+                    <Link to={`/accounts/${encodeURIComponent(h.accountId)}`}>{h.displayName}</Link>
+                  ) : (
+                    h.displayName
+                  )}
+                </span>
+              ))}
+            </p>
           </>
         )}
       </section>
