@@ -394,9 +394,12 @@ export default function AccountDetail({ isOfficer, profile, session }) {
     activityWithMissing.filter((act) => act.hasTrackableAttendance)
   ), [activityWithMissing])
 
-  const visibleActivityRows = useMemo(() => (
-    onlyMissingRaids ? filteredActivityRows.filter((act) => act.isMissingTics) : filteredActivityRows
-  ), [filteredActivityRows, onlyMissingRaids])
+  const visibleActivityRows = useMemo(() => {
+    const detailScopedRows = showMissingDetails
+      ? filteredActivityRows
+      : filteredActivityRows.filter((act) => Number(act.dkpEarned ?? 0) > 0 || Number(act.ticEarned ?? 0) > 0)
+    return onlyMissingRaids ? detailScopedRows.filter((act) => act.isMissingTics) : detailScopedRows
+  }, [filteredActivityRows, onlyMissingRaids, showMissingDetails])
 
   if (loading) return <div className="container">Loading account...</div>
   if (error) return <div className="container"><span className="error">{error}</span> <Link to="/accounts">← Accounts</Link></div>
@@ -679,7 +682,9 @@ export default function AccountDetail({ isOfficer, profile, session }) {
                 type="checkbox"
                 checked={onlyMissingRaids}
                 onChange={(e) => {
-                  setOnlyMissingRaids(e.target.checked)
+                  const checked = e.target.checked
+                  setOnlyMissingRaids(checked)
+                  if (checked) setShowMissingDetails(true)
                   setActivityPage(1)
                 }}
               />
