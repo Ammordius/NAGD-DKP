@@ -138,16 +138,25 @@ async function fetchAccountDetail(accountId) {
     return { account: accRes.data, characters: chars, raids: {}, activityByRaid: [], dkpByCharacterKey }
   }
   const raidList = [...raidIds]
-  const [rRes, totalsRes] = await Promise.all([
+  const [rRes, totalsRes, eventsRes] = await Promise.all([
     fetchByChunkedIn('raids', 'raid_id, raid_name, date_iso', 'raid_id', raidList),
     fetchByChunkedIn('raid_dkp_totals', 'raid_id, total_dkp', 'raid_id', raidList),
+    fetchByChunkedIn('raid_events', 'raid_id, dkp_value', 'raid_id', raidList),
   ])
   if (rRes?.error) throw new Error(rRes.error?.message || 'Failed to load raids')
   if (totalsRes?.error) throw new Error(totalsRes.error?.message || 'Failed to load raid totals')
+  if (eventsRes?.error) throw new Error(eventsRes.error?.message || 'Failed to load raid events')
   const rMap = {}
   ;(rRes.data || []).forEach((row) => { rMap[row.raid_id] = row })
   const totalRaidDkp = {}
   ;(totalsRes.data || []).forEach((row) => { totalRaidDkp[row.raid_id] = parseFloat(row.total_dkp || 0) })
+  const ticTotalsByRaid = {}
+  ;(eventsRes.data || []).forEach((row) => {
+    const rid = row?.raid_id
+    if (!rid) return
+    const dkpValue = parseFloat(row?.dkp_value || 0)
+    if (dkpValue > 0) ticTotalsByRaid[rid] = (ticTotalsByRaid[rid] || 0) + 1
+  })
   const dkpByRaid = {}
   attDkp.forEach((row) => {
     if (!dkpByRaid[row.raid_id]) dkpByRaid[row.raid_id] = 0
@@ -164,6 +173,7 @@ async function fetchAccountDetail(accountId) {
     raid_name: rMap[raidId]?.raid_name || raidId,
     dkpEarned: dkpByRaid[raidId] ?? 0,
     dkpRaidTotal: totalRaidDkp[raidId] ?? 0,
+    ticTotal: ticTotalsByRaid[raidId] ?? 0,
     items: lootByRaid[raidId] || [],
   })).sort((a, b) => (b.date || '').localeCompare(a.date || ''))
   return { account: accRes.data, characters: chars, raids: rMap, activityByRaid, dkpByCharacterKey }
@@ -211,6 +221,14 @@ export default function AccountDetail({ isOfficer, profile, session }) {
   const [activityPage, setActivityPage] = usePersistedState(
     accountId ? `/accounts/detail:${accountId}:activityPage` : '/accounts/detail:none:activityPage',
     1
+  )
+  const [showMissingDetails, setShowMissingDetails] = usePersistedState(
+    accountId ? `/accounts/detail:${accountId}:showMissingDetails` : '/accounts/detail:none:showMissingDetails',
+    false
+  )
+  const [onlyMissingRaids, setOnlyMissingRaids] = usePersistedState(
+    accountId ? `/accounts/detail:${accountId}:onlyMissingRaids` : '/accounts/detail:none:onlyMissingRaids',
+    false
   )
   const [addCharOpen, setAddCharOpen] = useState(false)
   const [addCharInput, setAddCharInput] = useState('')
@@ -300,6 +318,26 @@ export default function AccountDetail({ isOfficer, profile, session }) {
       return String(a.name || a.char_id).localeCompare(String(b.name || b.char_id))
     })
   }, [characters, dkpByCharacterKey])
+
+  const activityWithMissing = useMemo(() => (
+    activityByRaid.map((act) => {
+      const ticEarned = Number(act.dkpEarned ?? 0)
+      const ticTotal = Number(act.ticTotal ?? 0)
+      const missingCount = Math.max(0, ticTotal - ticEarned)
+      const isMissingTics = ticTotal > 0 && ticEarned < ticTotal
+      return {
+        ...act,
+        ticEarned,
+        ticTotal,
+        missingCount,
+        isMissingTics,
+      }
+    })
+  ), [activityByRaid])
+
+  const visibleActivityRows = useMemo(() => (
+    onlyMissingRaids ? activityWithMissing.filter((act) => act.isMissingTics) : activityWithMissing
+  ), [activityWithMissing, onlyMissingRaids])
 
   if (loading) return <div className="container">Loading account...</div>
   if (error) return <div className="container"><span className="error">{error}</span> <Link to="/accounts">← Accounts</Link></div>
@@ -567,18 +605,39 @@ export default function AccountDetail({ isOfficer, profile, session }) {
       {tab === 'activity' && (
         <div className="card">
           <h2 style={{ marginTop: 0 }}>Activity (earned DKP and items by raid)</h2>
-          <p style={{ color: '#a1a1aa', fontSize: '0.875rem', marginBottom: '1rem' }}>Reverse chronological. Each raid shows DKP earned and items won by the characters on this account.</p>
-          {activityByRaid.length === 0 ? (
+          <p style={{ color: '#a1a1aa', fontSize: '0.875rem', marginBottom: '0.75rem' }}>Reverse chronological. Each raid shows DKP earned and items won by the characters on this account.</p>
+          <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
+            <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem', color: '#d4d4d8' }}>
+              <input
+                type="checkbox"
+                checked={showMissingDetails}
+                onChange={(e) => setShowMissingDetails(e.target.checked)}
+              />
+              Show missing tic details
+            </label>
+            <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem', color: '#d4d4d8' }}>
+              <input
+                type="checkbox"
+                checked={onlyMissingRaids}
+                onChange={(e) => {
+                  setOnlyMissingRaids(e.target.checked)
+                  setActivityPage(1)
+                }}
+              />
+              Only show raids with missing tics
+            </label>
+          </div>
+          {visibleActivityRows.length === 0 ? (
             <p style={{ color: '#71717a' }}>No raid activity recorded.</p>
           ) : (
             <>
               {(() => {
-                const total = activityByRaid.length
+                const total = visibleActivityRows.length
                 const usePagination = total > ACTIVITY_PAGINATION_THRESHOLD
                 const totalPages = usePagination ? Math.max(1, Math.ceil(total / ACTIVITY_PAGE_SIZE)) : 1
                 const page = Math.min(Math.max(1, activityPage), totalPages)
                 const start = usePagination ? (page - 1) * ACTIVITY_PAGE_SIZE : 0
-                const activityToShow = usePagination ? activityByRaid.slice(start, start + ACTIVITY_PAGE_SIZE) : activityByRaid
+                const activityToShow = usePagination ? visibleActivityRows.slice(start, start + ACTIVITY_PAGE_SIZE) : visibleActivityRows
                 return (
                   <>
                     {usePagination && (
@@ -646,11 +705,30 @@ export default function AccountDetail({ isOfficer, profile, session }) {
                     )}
                     <ul style={{ listStyle: 'none', paddingLeft: 0, margin: 0 }}>
                       {activityToShow.map((act) => (
-                        <li key={act.raid_id} style={{ marginBottom: '1.5rem', paddingBottom: '1rem', borderBottom: '1px solid #27272a' }}>
+                        <li
+                          key={act.raid_id}
+                          style={{
+                            marginBottom: '1.5rem',
+                            paddingBottom: '1rem',
+                            borderBottom: '1px solid #27272a',
+                            borderLeft: showMissingDetails && act.isMissingTics ? '3px solid #f97316' : '3px solid transparent',
+                            paddingLeft: showMissingDetails && act.isMissingTics ? '0.5rem' : 0,
+                          }}
+                        >
                           <p style={{ margin: '0 0 0.25rem 0' }}>
                             <Link to={`/raids/${act.raid_id}`}><strong>{act.raid_name}</strong></Link>
                             {act.date && <span style={{ color: '#71717a', marginLeft: '0.5rem' }}>{act.date}</span>}
                             <span style={{ marginLeft: '0.5rem' }}>{MIDDLE_DOT} <strong>Earned: {Number(act.dkpEarned ?? 0).toFixed(0)}{act.dkpRaidTotal != null && act.dkpRaidTotal > 0 ? ` / ${Number(act.dkpRaidTotal).toFixed(0)}` : ''}</strong> DKP</span>
+                            {act.ticTotal > 0 && (
+                              <span style={{ marginLeft: '0.5rem' }}>
+                                {MIDDLE_DOT} <strong>{act.ticEarned}/{act.ticTotal} tics</strong>
+                              </span>
+                            )}
+                            {showMissingDetails && act.isMissingTics && (
+                              <span style={{ marginLeft: '0.5rem', color: '#f97316' }}>
+                                {MIDDLE_DOT} Missing {act.missingCount} tic{act.missingCount === 1 ? '' : 's'}
+                              </span>
+                            )}
                           </p>
                           {act.items.length > 0 && (
                             <ul style={{ margin: '0.25rem 0 0 1.25rem', paddingLeft: 0, listStyle: 'none' }}>
