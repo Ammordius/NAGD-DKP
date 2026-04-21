@@ -101,10 +101,9 @@ async function fetchAccountDetail(accountId) {
   if (charIds.length === 0) {
     return { account: accRes.data, characters: [], raids: {}, activityByRaid: [], dkpByCharacterKey: { earned: {}, spent: {} } }
   }
-  const [chRes, attRes, eventAttRes, lootRes, attDkpByAccountRes, attDkpRes] = await Promise.all([
+  const [chRes, attRes, lootRes, attDkpByAccountRes, attDkpRes] = await Promise.all([
     supabase.from('characters').select('char_id, name, class_name, level').in('char_id', charIds),
     fetchAll('raid_attendance', 'raid_id, char_id, character_name', (q) => q.in('char_id', charIds)),
-    fetchAll('raid_event_attendance', 'raid_id, event_id, char_id', (q) => q.in('char_id', charIds)),
     fetchAll('raid_loot_with_assignment', 'id, raid_id, char_id, character_name, item_name, cost, assigned_char_id, assigned_character_name', (q) => q.in('char_id', charIds), { order: { column: 'id', ascending: true } }),
     fetchAll('raid_attendance_dkp_by_account', 'raid_id, account_id, dkp_earned', (q) => q.eq('account_id', accountId), { order: { column: 'raid_id', ascending: true } }),
     (async () => {
@@ -116,6 +115,19 @@ async function fetchAccountDetail(accountId) {
     })(),
   ])
   const chars = (chRes.data || []).map((c) => ({ ...c, displayName: c.name || c.char_id }))
+  const charNames = [...new Set(chars.map((c) => (c.name || '').trim()).filter(Boolean))]
+  const [eventAttByIdRes, eventAttByNameRes] = await Promise.all([
+    fetchByChunkedIn('raid_event_attendance', 'raid_id, event_id, char_id, character_name', 'char_id', charIds),
+    fetchByChunkedIn('raid_event_attendance', 'raid_id, event_id, char_id, character_name', 'character_name', charNames),
+  ])
+  if (eventAttByIdRes?.error) throw new Error(eventAttByIdRes.error?.message || 'Failed to load event attendance')
+  if (eventAttByNameRes?.error) throw new Error(eventAttByNameRes.error?.message || 'Failed to load event attendance')
+  const eventAttByKey = {}
+  ;[...(eventAttByIdRes.data || []), ...(eventAttByNameRes.data || [])].forEach((row) => {
+    const key = `${row?.raid_id || ''}|${row?.event_id || ''}|${row?.char_id || ''}|${row?.character_name || ''}`
+    if (!eventAttByKey[key]) eventAttByKey[key] = row
+  })
+  const eventAttResData = Object.values(eventAttByKey)
   const attDkp = !attDkpByAccountRes.error && attDkpByAccountRes.data?.length > 0
     ? attDkpByAccountRes.data.map((r) => ({ raid_id: r.raid_id, character_key: r.account_id, dkp_earned: r.dkp_earned }))
     : (attDkpRes?.error ? [] : (attDkpRes?.data || []))
@@ -131,7 +143,7 @@ async function fetchAccountDetail(accountId) {
   })
   const dkpByCharacterKey = { earned: earnedByKey, spent: spentByKey }
   const ticEarnedByRaidEventSet = {}
-  ;(eventAttRes.data || []).forEach((row) => {
+  ;(eventAttResData || []).forEach((row) => {
     const rid = row?.raid_id
     const eid = row?.event_id
     if (!rid || !eid) return
@@ -145,7 +157,7 @@ async function fetchAccountDetail(accountId) {
 
   const raidIds = new Set([
     ...(attRes.data || []).map((r) => r.raid_id),
-    ...(eventAttRes.data || []).map((r) => r.raid_id),
+    ...(eventAttResData || []).map((r) => r.raid_id),
     ...(lootRes.data || []).map((r) => r.raid_id),
     ...attDkp.map((r) => r.raid_id),
   ])
@@ -153,14 +165,16 @@ async function fetchAccountDetail(accountId) {
     return { account: accRes.data, characters: chars, raids: {}, activityByRaid: [], dkpByCharacterKey }
   }
   const raidList = [...raidIds]
-  const [rRes, totalsRes, eventsRes] = await Promise.all([
+  const [rRes, totalsRes, eventsRes, allPositiveEventsRes] = await Promise.all([
     fetchByChunkedIn('raids', 'raid_id, raid_name, date_iso', 'raid_id', raidList),
     fetchByChunkedIn('raid_dkp_totals', 'raid_id, total_dkp', 'raid_id', raidList),
     fetchByChunkedIn('raid_events', 'raid_id, dkp_value', 'raid_id', raidList),
+    fetchAll('raid_events', 'raid_id, dkp_value', (q) => q.gt('dkp_value', 0)),
   ])
   if (rRes?.error) throw new Error(rRes.error?.message || 'Failed to load raids')
   if (totalsRes?.error) throw new Error(totalsRes.error?.message || 'Failed to load raid totals')
   if (eventsRes?.error) throw new Error(eventsRes.error?.message || 'Failed to load raid events')
+  if (allPositiveEventsRes?.error) throw new Error(allPositiveEventsRes.error?.message || 'Failed to load raid events')
   const rMap = {}
   ;(rRes.data || []).forEach((row) => { rMap[row.raid_id] = row })
   const totalRaidDkp = {}
@@ -173,7 +187,7 @@ async function fetchAccountDetail(accountId) {
     if (dkpValue > 0) ticTotalsByRaid[rid] = (ticTotalsByRaid[rid] || 0) + 1
   })
   // Include raids where this account had no activity so "only missing" can show full absences.
-  const allPositiveTicRaidIds = new Set(Object.keys(ticTotalsByRaid))
+  const allPositiveTicRaidIds = new Set((allPositiveEventsRes.data || []).map((row) => row.raid_id).filter(Boolean))
   const missingRaidIdsFromUniverse = [...allPositiveTicRaidIds].filter((rid) => !raidIds.has(rid))
   let universeRaidMap = {}
   let universeRaidTotalsMap = {}
@@ -752,7 +766,7 @@ export default function AccountDetail({ isOfficer, profile, session }) {
                             <Link to={`/raids/${act.raid_id}`}><strong>{act.raid_name}</strong></Link>
                             {act.date && <span style={{ color: '#71717a', marginLeft: '0.5rem' }}>{act.date}</span>}
                             <span style={{ marginLeft: '0.5rem' }}>{MIDDLE_DOT} <strong>Earned: {Number(act.dkpEarned ?? 0).toFixed(0)}{act.dkpRaidTotal != null && act.dkpRaidTotal > 0 ? ` / ${Number(act.dkpRaidTotal).toFixed(0)}` : ''}</strong> DKP</span>
-                            {act.ticTotal > 0 && (
+                            {showMissingDetails && act.ticTotal > 0 && (
                               <span style={{ marginLeft: '0.5rem' }}>
                                 {MIDDLE_DOT} <strong>{act.ticEarned}/{act.ticTotal} tics</strong>
                               </span>
