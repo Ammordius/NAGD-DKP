@@ -101,9 +101,10 @@ async function fetchAccountDetail(accountId) {
   if (charIds.length === 0) {
     return { account: accRes.data, characters: [], raids: {}, activityByRaid: [], dkpByCharacterKey: { earned: {}, spent: {} } }
   }
-  const [chRes, attRes, lootRes, attDkpByAccountRes, attDkpRes] = await Promise.all([
+  const [chRes, attRes, eventAttRes, lootRes, attDkpByAccountRes, attDkpRes] = await Promise.all([
     supabase.from('characters').select('char_id, name, class_name, level').in('char_id', charIds),
     fetchAll('raid_attendance', 'raid_id, char_id, character_name', (q) => q.in('char_id', charIds)),
+    fetchAll('raid_event_attendance', 'raid_id, event_id, char_id', (q) => q.in('char_id', charIds)),
     fetchAll('raid_loot_with_assignment', 'id, raid_id, char_id, character_name, item_name, cost, assigned_char_id, assigned_character_name', (q) => q.in('char_id', charIds), { order: { column: 'id', ascending: true } }),
     fetchAll('raid_attendance_dkp_by_account', 'raid_id, account_id, dkp_earned', (q) => q.eq('account_id', accountId), { order: { column: 'raid_id', ascending: true } }),
     (async () => {
@@ -129,8 +130,22 @@ async function fetchAccountDetail(accountId) {
     if (k) spentByKey[k] = (spentByKey[k] || 0) + parseFloat(row.cost || 0)
   })
   const dkpByCharacterKey = { earned: earnedByKey, spent: spentByKey }
+  const ticEarnedByRaidEventSet = {}
+  ;(eventAttRes.data || []).forEach((row) => {
+    const rid = row?.raid_id
+    const eid = row?.event_id
+    if (!rid || !eid) return
+    if (!ticEarnedByRaidEventSet[rid]) ticEarnedByRaidEventSet[rid] = new Set()
+    ticEarnedByRaidEventSet[rid].add(String(eid))
+  })
+  const ticEarnedByRaid = {}
+  Object.entries(ticEarnedByRaidEventSet).forEach(([rid, eventSet]) => {
+    ticEarnedByRaid[rid] = eventSet.size
+  })
+
   const raidIds = new Set([
     ...(attRes.data || []).map((r) => r.raid_id),
+    ...(eventAttRes.data || []).map((r) => r.raid_id),
     ...(lootRes.data || []).map((r) => r.raid_id),
     ...attDkp.map((r) => r.raid_id),
   ])
@@ -157,6 +172,21 @@ async function fetchAccountDetail(accountId) {
     const dkpValue = parseFloat(row?.dkp_value || 0)
     if (dkpValue > 0) ticTotalsByRaid[rid] = (ticTotalsByRaid[rid] || 0) + 1
   })
+  // Include raids where this account had no activity so "only missing" can show full absences.
+  const allPositiveTicRaidIds = new Set(Object.keys(ticTotalsByRaid))
+  const missingRaidIdsFromUniverse = [...allPositiveTicRaidIds].filter((rid) => !raidIds.has(rid))
+  let universeRaidMap = {}
+  let universeRaidTotalsMap = {}
+  if (missingRaidIdsFromUniverse.length > 0) {
+    const [universeRaidsRes, universeTotalsRes] = await Promise.all([
+      fetchByChunkedIn('raids', 'raid_id, raid_name, date_iso', 'raid_id', missingRaidIdsFromUniverse),
+      fetchByChunkedIn('raid_dkp_totals', 'raid_id, total_dkp', 'raid_id', missingRaidIdsFromUniverse),
+    ])
+    if (universeRaidsRes?.error) throw new Error(universeRaidsRes.error?.message || 'Failed to load raid universe')
+    if (universeTotalsRes?.error) throw new Error(universeTotalsRes.error?.message || 'Failed to load raid totals universe')
+    ;(universeRaidsRes.data || []).forEach((row) => { universeRaidMap[row.raid_id] = row })
+    ;(universeTotalsRes.data || []).forEach((row) => { universeRaidTotalsMap[row.raid_id] = parseFloat(row.total_dkp || 0) })
+  }
   const dkpByRaid = {}
   attDkp.forEach((row) => {
     if (!dkpByRaid[row.raid_id]) dkpByRaid[row.raid_id] = 0
@@ -167,12 +197,14 @@ async function fetchAccountDetail(accountId) {
     if (!lootByRaid[row.raid_id]) lootByRaid[row.raid_id] = []
     lootByRaid[row.raid_id].push(row)
   })
-  const activityByRaid = raidList.map((raidId) => ({
+  const allRaidIdsForActivity = [...new Set([...raidList, ...missingRaidIdsFromUniverse])]
+  const activityByRaid = allRaidIdsForActivity.map((raidId) => ({
     raid_id: raidId,
-    date: (rMap[raidId]?.date_iso || '').slice(0, 10),
-    raid_name: rMap[raidId]?.raid_name || raidId,
+    date: ((rMap[raidId]?.date_iso || universeRaidMap[raidId]?.date_iso) || '').slice(0, 10),
+    raid_name: rMap[raidId]?.raid_name || universeRaidMap[raidId]?.raid_name || raidId,
     dkpEarned: dkpByRaid[raidId] ?? 0,
-    dkpRaidTotal: totalRaidDkp[raidId] ?? 0,
+    dkpRaidTotal: totalRaidDkp[raidId] ?? universeRaidTotalsMap[raidId] ?? 0,
+    ticEarned: ticEarnedByRaid[raidId] ?? 0,
     ticTotal: ticTotalsByRaid[raidId] ?? 0,
     items: lootByRaid[raidId] || [],
   })).sort((a, b) => (b.date || '').localeCompare(a.date || ''))
@@ -321,8 +353,9 @@ export default function AccountDetail({ isOfficer, profile, session }) {
 
   const activityWithMissing = useMemo(() => (
     activityByRaid.map((act) => {
-      const ticEarned = Number(act.dkpEarned ?? 0)
+      const ticEarnedRaw = Number(act.ticEarned ?? 0)
       const ticTotal = Number(act.ticTotal ?? 0)
+      const ticEarned = ticTotal > 0 ? Math.min(ticEarnedRaw, ticTotal) : ticEarnedRaw
       const missingCount = Math.max(0, ticTotal - ticEarned)
       const isMissingTics = ticTotal > 0 && ticEarned < ticTotal
       return {
