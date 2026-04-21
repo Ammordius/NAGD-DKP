@@ -370,21 +370,33 @@ export default function AccountDetail({ isOfficer, profile, session }) {
       const ticEarnedRaw = Number(act.ticEarned ?? 0)
       const ticTotal = Number(act.ticTotal ?? 0)
       const ticEarned = ticTotal > 0 ? Math.min(ticEarnedRaw, ticTotal) : ticEarnedRaw
-      const missingCount = Math.max(0, ticTotal - ticEarned)
-      const isMissingTics = ticTotal > 0 && ticEarned < ticTotal
+      const dkpEarned = Number(act.dkpEarned ?? 0)
+      const dkpRaidTotal = Number(act.dkpRaidTotal ?? 0)
+      const hasTrackableAttendance = ticTotal > 0 || dkpRaidTotal > 0
+      const missingCount = ticTotal > 0
+        ? Math.max(0, ticTotal - ticEarned)
+        : (dkpRaidTotal > 0 ? Math.max(0, dkpRaidTotal - dkpEarned) : 0)
+      const isMissingTics = hasTrackableAttendance && missingCount > 0
       return {
         ...act,
+        dkpEarned,
+        dkpRaidTotal,
         ticEarned,
         ticTotal,
+        hasTrackableAttendance,
         missingCount,
         isMissingTics,
       }
     })
   ), [activityByRaid])
 
+  const filteredActivityRows = useMemo(() => (
+    activityWithMissing.filter((act) => act.hasTrackableAttendance)
+  ), [activityWithMissing])
+
   const visibleActivityRows = useMemo(() => (
-    onlyMissingRaids ? activityWithMissing.filter((act) => act.isMissingTics) : activityWithMissing
-  ), [activityWithMissing, onlyMissingRaids])
+    onlyMissingRaids ? filteredActivityRows.filter((act) => act.isMissingTics) : filteredActivityRows
+  ), [filteredActivityRows, onlyMissingRaids])
 
   if (loading) return <div className="container">Loading account...</div>
   if (error) return <div className="container"><span className="error">{error}</span> <Link to="/accounts">← Accounts</Link></div>
