@@ -302,7 +302,7 @@ export default function AccountDetail({ isOfficer, profile, session }) {
   const [savingLootId, setSavingLootId] = useState(null)
   const [lootAssignError, setLootAssignError] = useState('')
   const [mobLoot, setMobLoot] = useState(null)
-  const { accountBalanceByAccountId } = useDkpData()
+  const { accountTotalsByAccountId } = useDkpData()
 
   useEffect(() => {
     getDkpMobLoot().then(setMobLoot)
@@ -321,7 +321,33 @@ export default function AccountDetail({ isOfficer, profile, session }) {
   const displayName = account?.display_name?.trim() || account?.toon_names?.split(',')[0]?.trim() || accountId
   const linkedToonCount = characters.length
 
-  const dkpTotal = accountId != null ? (accountBalanceByAccountId[accountId] ?? 0) : 0
+  /** Align header with Loot/Activity tabs; account_dkp_summary can lag after backfill or miss legacy buyer char_id rows. */
+  const accountDkp = useMemo(() => {
+    const summary = accountTotalsByAccountId[accountId] || {}
+    let pageSpent = 0
+    for (const act of activityByRaid) {
+      for (const it of act.items || []) {
+        const c = parseFloat(it.cost)
+        if (Number.isFinite(c)) pageSpent += c
+      }
+    }
+    pageSpent = Math.round(pageSpent)
+    const pageEarned = Math.round(
+      activityByRaid.reduce((s, a) => s + (Number(a.dkpEarned) || 0), 0),
+    )
+    const summaryEarned = Math.round(Number(summary.earned) || 0)
+    const summarySpent = Math.round(Number(summary.spent) || 0)
+    const earned = Math.max(summaryEarned, pageEarned)
+    const spent = pageSpent > 0 ? Math.max(pageSpent, summarySpent) : summarySpent
+    const balance = earned - spent
+    const summaryBalance = summaryEarned - summarySpent
+    const staleSummary =
+      (summaryEarned > 0 || summarySpent > 0) &&
+      (Math.abs(spent - summarySpent) > 1 ||
+        Math.abs(earned - summaryEarned) > 1 ||
+        Math.abs(balance - summaryBalance) > 1)
+    return { earned, spent, balance, staleSummary }
+  }, [accountId, accountTotalsByAccountId, activityByRaid])
 
   async function handleClaimAccount() {
     const { data: { user } } = await supabase.auth.getUser()
@@ -426,9 +452,18 @@ export default function AccountDetail({ isOfficer, profile, session }) {
       <p style={{ color: '#a1a1aa', marginBottom: '1rem' }}>
         Account <code>{accountId}</code>
         <span style={{ marginLeft: '0.5rem' }}>({linkedToonCount} toons)</span>
-        {activityByRaid.length > 0 && (
+        {(activityByRaid.length > 0 || accountDkp.earned > 0 || accountDkp.spent > 0) && (
           <span style={{ marginLeft: '0.5rem' }}>
-            {MIDDLE_DOT} <strong>DKP total: {Number(dkpTotal).toFixed(0)}</strong>
+            {MIDDLE_DOT}{' '}
+            <strong>DKP total: {Number(accountDkp.balance).toFixed(0)}</strong>
+            <span style={{ color: '#a1a1aa', fontWeight: 400 }}>
+              {' '}(earned {accountDkp.earned} · spent {accountDkp.spent})
+            </span>
+            {accountDkp.staleSummary && (
+              <span style={{ color: '#f59e0b', fontSize: '0.8rem' }}>
+                {' '}· leaderboard cache differs; totals here match this page
+              </span>
+            )}
           </span>
         )}
         {isMyAccount && <span style={{ marginLeft: '0.5rem', color: '#a78bfa' }}> {MIDDLE_DOT} This is your account</span>}
