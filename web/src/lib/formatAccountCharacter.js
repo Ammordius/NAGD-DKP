@@ -62,10 +62,10 @@ export function formatCharacterClassSpentLine(c, spent) {
 
 /**
  * Spent per assignee, scoped to loot rows whose buyer (raid_loot.char_id) belongs to that account.
- * Matches AccountDetail Characters tab: fetch uses .in('char_id', accountCharIds), then sum by assigned_*.
+ * Matches AccountDetail: buyer linked by character_account char_id and/or characters.name / character_name.
  *
- * @param {Array<{ char_id?: string, cost?: string | number, assigned_char_id?: string, assigned_character_name?: string }>} lootRows
- * @param {Record<string, string>} buyerCharIdToAccountId - char_id -> account_id from character_account
+ * @param {Array<{ char_id?: string, character_name?: string, cost?: string | number, assigned_char_id?: string, assigned_character_name?: string }>} lootRows
+ * @param {Record<string, string>} buyerCharIdToAccountId - char_id and display name -> account_id
  * @returns {Record<string, Record<string, number>>} account_id -> (assignee key -> spent)
  */
 export function buildSpentByAccountFromLoot(lootRows, buyerCharIdToAccountId) {
@@ -73,8 +73,11 @@ export function buildSpentByAccountFromLoot(lootRows, buyerCharIdToAccountId) {
   const byAccount = {}
   for (const row of lootRows || []) {
     const buyer = String(row.char_id ?? '').trim()
-    if (!buyer) continue
-    const accountId = buyerCharIdToAccountId[buyer]
+    const buyerName = String(row.character_name ?? '').trim()
+    const accountId =
+      (buyer && buyerCharIdToAccountId[buyer]) ||
+      (buyerName && buyerCharIdToAccountId[buyerName]) ||
+      null
     if (!accountId) continue
     const k = (row.assigned_character_name || row.assigned_char_id || '').trim()
     if (!k) continue

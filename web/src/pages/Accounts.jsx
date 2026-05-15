@@ -65,9 +65,11 @@ export default function Accounts() {
       ;(ca.data || []).forEach((row) => {
         if (!byAccount[row.account_id]) byAccount[row.account_id] = []
         byAccount[row.account_id].push(row.char_id)
-        if (row.char_id != null && String(row.char_id).trim() !== '') {
-          buyerCharIdToAccountId[String(row.char_id).trim()] = String(row.account_id)
-        }
+        const accountId = String(row.account_id)
+        const cid = row.char_id != null ? String(row.char_id).trim() : ''
+        if (cid) buyerCharIdToAccountId[cid] = accountId
+        const cname = (charMap[row.char_id]?.name || '').trim()
+        if (cname) buyerCharIdToAccountId[cname] = accountId
       })
       const spentByAccount = buildSpentByAccountFromLoot(lootRes.data || [], buyerCharIdToAccountId)
       const accList = (a.data || []).filter((acc) => !acc.inactive).map((acc) => {

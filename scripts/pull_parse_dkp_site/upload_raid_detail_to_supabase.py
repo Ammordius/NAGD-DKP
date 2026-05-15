@@ -322,6 +322,17 @@ def _insert_raid_event_attendance_rows(client, raid_id: str, rea_rows: list[dict
         raise last_err
 
 
+def _looks_like_login_page(html: str) -> bool:
+    """Best-effort check for unauthenticated GamerLaunch save pages."""
+    t = (html or "").lower()
+    return (
+        "the content you have tried to access is for members of the guild site only" in t
+        or "<h2>login</h2>" in t
+        or "name=\"loginpassword\"" in t
+        or "raid_details_attendees.php" in t and "destination" in t and "login" in t
+    )
+
+
 def main() -> int:
     import argparse
     ap = argparse.ArgumentParser(description="Upload one raid's events, loot, attendance to Supabase")
@@ -515,6 +526,17 @@ def main() -> int:
             ca_from += ca_page_size
         att_html = attendees_file.read_text(encoding="utf-8")
         sections = parse_attendees_html(att_html, raid_id)
+        if not sections:
+            login_hint = (
+                "The file appears to be a login/unauthorized page. " if _looks_like_login_page(att_html) else ""
+            )
+            print(
+                f"ERROR: could not parse per-event attendee sections from {attendees_file.name}. "
+                f"{login_hint}"
+                "Open the raid attendees page while logged in, Save As again, and re-run this upload.",
+                file=sys.stderr,
+            )
+            return 4
         event_ids = [e["event_id"] for e in events]
         print("Per-event attendees from HTML (raw, before dedupe):")
         for i, (event_name, att_list) in enumerate(sections):
@@ -568,12 +590,18 @@ def main() -> int:
                 rows = event_debug.get(eid, [])
                 names = [name for _, name in rows]
                 print(f"  event_id={eid}: {len(rows)} rows -> {names}")
-        if rea_rows:
-            _insert_raid_event_attendance_rows(client, raid_id, rea_rows)
+        if not rea_rows:
             print(
-                f"Inserted {len(rea_rows)} raid_event_attendance (one per account per tic) "
-                "via insert_raid_event_attendance_for_upload (restore_load + per-raid attendance totals)"
+                "ERROR: attendee sections were parsed but produced 0 raid_event_attendance rows. "
+                "Aborting to avoid a partial upload with missing earned attendance credit.",
+                file=sys.stderr,
             )
+            return 4
+        _insert_raid_event_attendance_rows(client, raid_id, rea_rows)
+        print(
+            f"Inserted {len(rea_rows)} raid_event_attendance (one per account per tic) "
+            "via insert_raid_event_attendance_for_upload (restore_load + per-raid attendance totals)"
+        )
 
     # Strict: this upload is considered successful only if account summary refresh succeeds.
     account_refresh_ok, account_refresh_mode_or_error = _refresh_account_summary_strict(client, raid_id)

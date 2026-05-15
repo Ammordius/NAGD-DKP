@@ -1,6 +1,57 @@
 import { supabase } from './supabase'
 
 const PAGE = 1000
+const IN_CHUNK = 150
+
+/** Fetch rows where column is in values, in chunks (PostgREST URL limits). */
+export async function fetchByChunkedIn(table, select, column, values) {
+  if (!values.length) return { data: [], error: null }
+  const all = []
+  for (let i = 0; i < values.length; i += IN_CHUNK) {
+    const chunk = values.slice(i, i + IN_CHUNK)
+    const { data, error } = await supabase.from(table).select(select).in(column, chunk)
+    if (error) return { data: null, error }
+    all.push(...(data || []))
+  }
+  return { data: all, error: null }
+}
+
+/** Dedupe raid_loot_with_assignment rows (char_id + character_name queries overlap). */
+export function mergeLootRowsById(rows) {
+  const map = new Map()
+  for (const row of rows || []) {
+    const id = row?.id
+    const key =
+      id != null && id !== ''
+        ? String(id)
+        : `${row?.raid_id}|${row?.char_id}|${row?.character_name}|${row?.item_name}|${row?.cost}`
+    if (!map.has(key)) map.set(key, row)
+  }
+  return [...map.values()]
+}
+
+/**
+ * Load loot for an account's characters. Matches account_dkp_summary: buyer char_id OR character_name
+ * (legacy rows often use display name as char_id, e.g. Karis vs unlinked_Karis).
+ */
+export async function fetchLootForAccountChars(charIds, charNames, select, opts) {
+  const parts = []
+  if (charIds.length) {
+    const r = await fetchAll('raid_loot_with_assignment', select, (q) => q.in('char_id', charIds), opts)
+    if (r.error) return r
+    parts.push(...(r.data || []))
+  }
+  if (charNames.length) {
+    const r = await fetchByChunkedIn('raid_loot_with_assignment', select, 'character_name', charNames)
+    if (r.error) return { data: null, error: r.error }
+    parts.push(...(r.data || []))
+  }
+  const merged = mergeLootRowsById(parts)
+  if (opts?.order?.column === 'id') {
+    merged.sort((a, b) => Number(a.id || 0) - Number(b.id || 0))
+  }
+  return { data: merged, error: null }
+}
 /** @param {object} [opts] - optional: { order, order2 } each { column: string, ascending: boolean } */
 export async function fetchAll(table, select = '*', filter, opts) {
   const all = []
@@ -29,10 +80,9 @@ export async function loadAccountActivity(accountId) {
   const charIds = (caRes.data || []).map((r) => r.char_id).filter(Boolean)
   if (charIds.length === 0) return { account: accRes.data, characters: [], activityByRaid: [] }
 
-  const [chRes, attRes, lootRes, attDkpByAccountRes, attDkpRes] = await Promise.all([
+  const [chRes, attRes, attDkpByAccountRes, attDkpRes] = await Promise.all([
     supabase.from('characters').select('char_id, name, class_name, level').in('char_id', charIds),
     fetchAll('raid_attendance', 'raid_id, char_id, character_name', (q) => q.in('char_id', charIds)),
-    fetchAll('raid_loot_with_assignment', 'raid_id, char_id, character_name, item_name, cost', (q) => q.in('char_id', charIds)),
     fetchAll('raid_attendance_dkp_by_account', 'raid_id, account_id, dkp_earned', (q) => q.eq('account_id', accountId), { order: { column: 'raid_id', ascending: true } }),
     (async () => {
       const chars = (await supabase.from('characters').select('char_id, name').in('char_id', charIds)).data || []
@@ -42,6 +92,13 @@ export async function loadAccountActivity(accountId) {
     })(),
   ])
   const chars = (chRes.data || []).map((c) => ({ ...c, displayName: c.name || c.char_id }))
+  const charNames = [...new Set(chars.map((c) => (c.name || '').trim()).filter(Boolean))]
+  const lootRes = await fetchLootForAccountChars(
+    charIds,
+    charNames,
+    'raid_id, char_id, character_name, item_name, cost',
+  )
+  if (lootRes.error) return { error: lootRes.error.message || 'Failed to load loot', characters: [], activityByRaid: [] }
   const attDkp = !attDkpByAccountRes.error && attDkpByAccountRes.data?.length > 0
     ? attDkpByAccountRes.data.map((r) => ({ raid_id: r.raid_id, character_key: r.account_id, dkp_earned: r.dkp_earned }))
     : (attDkpRes.error ? [] : (attDkpRes.data || []))

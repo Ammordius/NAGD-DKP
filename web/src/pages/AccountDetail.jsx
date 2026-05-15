@@ -11,6 +11,7 @@ import { getDkpMobLoot } from '../lib/staticData'
 import { useDkpData } from '../lib/dkpLeaderboard'
 import { formatAccountCharacter, formatCharacterClassSpentLine } from '../lib/formatAccountCharacter'
 import { usePersistedState } from '../lib/usePersistedState'
+import { fetchLootForAccountChars } from '../lib/accountData'
 
 const MAGELO_BASE = 'https://www.takproject.net/magelo/character.php?char='
 
@@ -101,10 +102,9 @@ async function fetchAccountDetail(accountId) {
   if (charIds.length === 0) {
     return { account: accRes.data, characters: [], raids: {}, activityByRaid: [], dkpByCharacterKey: { earned: {}, spent: {} } }
   }
-  const [chRes, attRes, lootRes, attDkpByAccountRes, attDkpRes] = await Promise.all([
+  const [chRes, attRes, attDkpByAccountRes, attDkpRes] = await Promise.all([
     supabase.from('characters').select('char_id, name, class_name, level').in('char_id', charIds),
     fetchAll('raid_attendance', 'raid_id, char_id, character_name', (q) => q.in('char_id', charIds)),
-    fetchAll('raid_loot_with_assignment', 'id, raid_id, char_id, character_name, item_name, cost, assigned_char_id, assigned_character_name', (q) => q.in('char_id', charIds), { order: { column: 'id', ascending: true } }),
     fetchAll('raid_attendance_dkp_by_account', 'raid_id, account_id, dkp_earned', (q) => q.eq('account_id', accountId), { order: { column: 'raid_id', ascending: true } }),
     (async () => {
       const cr = await supabase.from('characters').select('char_id, name').in('char_id', charIds)
@@ -116,6 +116,13 @@ async function fetchAccountDetail(accountId) {
   ])
   const chars = (chRes.data || []).map((c) => ({ ...c, displayName: c.name || c.char_id }))
   const charNames = [...new Set(chars.map((c) => (c.name || '').trim()).filter(Boolean))]
+  const lootRes = await fetchLootForAccountChars(
+    charIds,
+    charNames,
+    'id, raid_id, char_id, character_name, item_name, cost, assigned_char_id, assigned_character_name',
+    { order: { column: 'id', ascending: true } },
+  )
+  if (lootRes.error) throw new Error(lootRes.error?.message || 'Failed to load loot')
   const [eventAttByIdRes, eventAttByNameRes] = await Promise.all([
     fetchByChunkedIn('raid_event_attendance', 'raid_id, event_id, char_id, character_name', 'char_id', charIds),
     fetchByChunkedIn('raid_event_attendance', 'raid_id, event_id, char_id, character_name', 'character_name', charNames),
@@ -138,7 +145,13 @@ async function fetchAccountDetail(accountId) {
   })
   const spentByKey = {}
   ;(lootRes.data || []).forEach((row) => {
-    const k = (row.assigned_character_name || row.assigned_char_id || '').trim()
+    const k = (
+      row.assigned_character_name ||
+      row.assigned_char_id ||
+      row.character_name ||
+      row.char_id ||
+      ''
+    ).trim()
     if (k) spentByKey[k] = (spentByKey[k] || 0) + parseFloat(row.cost || 0)
   })
   const dkpByCharacterKey = { earned: earnedByKey, spent: spentByKey }
