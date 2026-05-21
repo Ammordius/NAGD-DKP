@@ -220,13 +220,14 @@ jobs:
         working-directory: web
         run: npm ci
 
-      - name: Build bid_forecast item shards + meta
-        if: steps.bf_secrets.outputs.ok == 'true'
-        run: node scripts/build_bid_forecast_by_item.mjs
-
+      # Push class coverage before bid_forecast shards (heavy; failures there used to skip coverage).
       - name: Build and push account class coverage
         if: steps.bf_secrets.outputs.ok == 'true'
         run: node scripts/build_account_class_coverage.mjs
+
+      - name: Build bid_forecast item shards + meta
+        if: steps.bf_secrets.outputs.ok == 'true'
+        run: node scripts/build_bid_forecast_by_item.mjs
 
       - name: Commit bid forecast JSON artifacts
         if: steps.bf_secrets.outputs.ok == 'true'
