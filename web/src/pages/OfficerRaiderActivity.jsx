@@ -319,7 +319,7 @@ export default function OfficerRaiderActivity({ isOfficer }) {
             ? 'loading…'
             : 'not loaded yet — run CI or Reload coverage'}
         . Percent = Magelo class-normalized gear (vs best in class in rankings export), not raw overall_score.
-        Green = &gt;85%; muted = viable below that. Viability: &gt;75% normalized (&gt;85% PAL/WAR/SHD).
+        Green = &gt;85% (&gt;92% PAL/WAR/SHD); muted = viable below that. Viability: &gt;75% normalized (&gt;85% tanks).
       </p>
 
       {computed && (

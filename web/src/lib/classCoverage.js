@@ -28,12 +28,20 @@ export const CLASS_ORDER = [
 const GENERAL_VIABILITY_PCT = 75
 const TANK_VIABILITY_PCT = 85
 
-/** UI highlight threshold for class pills (strictly above). */
+/** UI green-pill threshold for non-tanks (strictly above). */
 export const HIGHLIGHT_GEAR_PCT = 85
 
-export function isHighlightedGearPct(pct) {
+/** UI green-pill threshold for PAL/WAR/SHD (strictly above viability minimum). */
+export const TANK_HIGHLIGHT_GEAR_PCT = 92
+
+export function highlightThresholdForClass(abbrev) {
+  const a = (abbrev || '').trim().toUpperCase()
+  return TANK_CLASS_ABBREVS.has(a) ? TANK_HIGHLIGHT_GEAR_PCT : HIGHLIGHT_GEAR_PCT
+}
+
+export function isHighlightedGearPct(pct, classAbbrev) {
   if (pct == null || !Number.isFinite(Number(pct))) return false
-  return Number(pct) > HIGHLIGHT_GEAR_PCT
+  return Number(pct) > highlightThresholdForClass(classAbbrev)
 }
 
 export function normName(s) {

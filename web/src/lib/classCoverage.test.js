@@ -8,7 +8,9 @@ import {
   extractGearPct,
   isViableGearPct,
   isHighlightedGearPct,
+  highlightThresholdForClass,
   HIGHLIGHT_GEAR_PCT,
+  TANK_HIGHLIGHT_GEAR_PCT,
   classesMatchForRanking,
   findRankingChar,
   buildAccountCoverage,
@@ -82,12 +84,20 @@ describe('isViableGearPct', () => {
   })
 })
 
-describe('isHighlightedGearPct', () => {
-  it('requires strictly above 85', () => {
-    assert.equal(HIGHLIGHT_GEAR_PCT, 85)
-    assert.equal(isHighlightedGearPct(85), false)
-    assert.equal(isHighlightedGearPct(85.1), true)
-    assert.equal(isHighlightedGearPct(88), true)
+describe('highlightThresholdForClass / isHighlightedGearPct', () => {
+  it('uses 85 highlight for non-tanks', () => {
+    assert.equal(highlightThresholdForClass('WIZ'), HIGHLIGHT_GEAR_PCT)
+    assert.equal(isHighlightedGearPct(85, 'WIZ'), false)
+    assert.equal(isHighlightedGearPct(85.1, 'WIZ'), true)
+  })
+
+  it('uses 92 highlight for tanks (above 85 viability)', () => {
+    assert.equal(TANK_HIGHLIGHT_GEAR_PCT, 92)
+    assert.equal(highlightThresholdForClass('WAR'), 92)
+    assert.equal(isHighlightedGearPct(88, 'WAR'), false)
+    assert.equal(isHighlightedGearPct(92, 'WAR'), false)
+    assert.equal(isHighlightedGearPct(92.1, 'WAR'), true)
+    assert.equal(isHighlightedGearPct(85.1, 'WAR'), false)
   })
 })
 

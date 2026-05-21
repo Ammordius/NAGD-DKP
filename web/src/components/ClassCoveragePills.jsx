@@ -1,4 +1,4 @@
-import { CLASS_ORDER, isHighlightedGearPct } from '../lib/classCoverage'
+import { CLASS_ORDER, highlightThresholdForClass, isHighlightedGearPct } from '../lib/classCoverage'
 
 /**
  * Compact class abbrev pills for raider roster flexibility.
@@ -18,13 +18,14 @@ export default function ClassCoveragePills({ classes = [] }) {
   return (
     <span style={{ display: 'inline-flex', flexWrap: 'wrap', gap: '0.25rem', alignItems: 'center' }}>
       {sorted.map((c) => {
-        const highlighted = isHighlightedGearPct(c.gear_pct)
+        const highlighted = isHighlightedGearPct(c.gear_pct, c.abbrev)
         const label = (c.abbrev || '').trim() || '—'
+        const highlightMin = highlightThresholdForClass(c.abbrev)
         const tip = [
           c.class_name || label,
           c.gear_pct != null ? `${c.gear_pct}%` : null,
           c.char_name ? `(${c.char_name})` : null,
-          highlighted ? '>85% gear' : null,
+          highlighted ? `>${highlightMin}% gear` : null,
         ]
           .filter(Boolean)
           .join(' ')
