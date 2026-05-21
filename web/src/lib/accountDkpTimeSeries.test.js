@@ -10,6 +10,8 @@ import {
   resolveChartDateBounds,
   sliceSeriesToDateWindow,
   sparseCharacterSeries,
+  countActivityInChartWindow,
+  formatInvestedChartFooter,
 } from './accountDkpTimeSeries.js'
 
 describe('lootCharacterKey', () => {
@@ -178,5 +180,93 @@ describe('selectTopCharactersForCharts', () => {
     const top = selectTopCharactersForCharts(list, dkpByCharacterKey)
     assert.equal(top.length, 1)
     assert.equal(top[0].displayName, 'High')
+  })
+})
+
+describe('countActivityInChartWindow', () => {
+  it('counts raids and paid loot rows in bounds', () => {
+    const sorted = [
+      { date: '2024-01-01', items: [{ cost: 5 }, { cost: 0 }] },
+      { date: '2024-02-01', items: [] },
+      { date: '2024-06-01', items: [{ cost: 10 }] },
+      { date: '2025-01-01', items: [{ cost: 1 }] },
+    ]
+    const stats = countActivityInChartWindow(sorted, {
+      start: '2024-01-01',
+      end: '2024-06-01',
+    })
+    assert.equal(stats.raids, 3)
+    assert.equal(stats.lootPurchases, 2)
+  })
+})
+
+describe('formatInvestedChartFooter', () => {
+  it('formats range raids and purchases', () => {
+    const line = formatInvestedChartFooter({
+      start: '2024-01-01',
+      end: '2025-05-01',
+      raids: 2,
+      lootPurchases: 3,
+    })
+    assert.match(line, /Jan 2024/)
+    assert.match(line, /May 2025/)
+    assert.match(line, /2 raids/)
+    assert.match(line, /3 loot purchases/)
+  })
+})
+
+describe('buildAccountDkpTimeSeries topCharCharts', () => {
+  const characters = [
+    { char_id: 'c1', name: 'One' },
+    { char_id: 'c2', name: 'Two' },
+    { char_id: 'c3', name: 'Three' },
+    { char_id: 'c4', name: 'Four' },
+    { char_id: 'c5', name: 'Five' },
+    { char_id: 'c6', name: 'Six' },
+  ]
+  const dkpByCharacterKey = {
+    spent: {
+      c1: 100, One: 100,
+      c2: 90, Two: 90,
+      c3: 80, Three: 80,
+      c4: 70, Four: 70,
+      c5: 60, Five: 60,
+      c6: 50, Six: 50,
+    },
+  }
+
+  it('returns at most 5 characters ordered by lifetime spend', () => {
+    const activityByRaid = [
+      {
+        raid_id: 'r1',
+        date: '2024-01-10',
+        dkpEarned: 0,
+        items: [
+          { cost: 10, assigned_char_id: 'c1' },
+          { cost: 5, assigned_char_id: 'c6' },
+        ],
+      },
+      {
+        raid_id: 'r2',
+        date: '2024-02-01',
+        dkpEarned: 0,
+        items: [{ cost: 20, assigned_char_id: 'c2' }],
+      },
+    ]
+    const { topCharCharts, investedWindowStats } = buildAccountDkpTimeSeries(
+      activityByRaid,
+      characters,
+      dkpByCharacterKey,
+      { months: 0 },
+    )
+    assert.equal(topCharCharts.length, 5)
+    assert.deepEqual(
+      topCharCharts.map((c) => c.displayName),
+      ['One', 'Two', 'Three', 'Four', 'Five'],
+    )
+    assert.equal(topCharCharts[0].series.at(-1)?.invested, 10)
+    assert.equal(topCharCharts[1].series.at(-1)?.invested, 20)
+    assert.equal(investedWindowStats.raids, 2)
+    assert.equal(investedWindowStats.lootPurchases, 3)
   })
 })

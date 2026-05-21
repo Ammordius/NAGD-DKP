@@ -3,6 +3,7 @@ import DkpLineChart from './DkpLineChart'
 import {
   buildAccountDkpTimeSeries,
   formatChartMonthYear,
+  formatInvestedChartFooter,
 } from '../lib/accountDkpTimeSeries'
 import { usePersistedState } from '../lib/usePersistedState'
 
@@ -12,6 +13,8 @@ const HISTORY_MONTH_OPTIONS = [
   { value: 36, label: 'Last 36 months' },
   { value: 0, label: 'All activity' },
 ]
+
+const INVESTED_CHART_COLORS = ['#34d399', '#60a5fa', '#f472b6', '#fbbf24', '#c084fc']
 
 function chartWindowSubtitle(chartBounds) {
   const { start, end, months } = chartBounds || {}
@@ -31,8 +34,19 @@ export default function AccountLootHistoryTab({ activityByRaid, dkpByCharacterKe
     [activityByRaid, characters, dkpByCharacterKey, months],
   )
 
-  const { hasDatedRaids, netSeries, investedSeries, topCharCharts, chartBounds } = charts
+  const { hasDatedRaids, netSeries, topCharCharts, investedWindowStats, chartBounds } = charts
   const windowSubtitle = chartWindowSubtitle(chartBounds)
+  const investedFooter = formatInvestedChartFooter(investedWindowStats)
+
+  const investedSeriesList = useMemo(
+    () => topCharCharts.map((ch, i) => ({
+      data: ch.series,
+      valueKey: 'invested',
+      label: ch.displayName,
+      color: INVESTED_CHART_COLORS[i % INVESTED_CHART_COLORS.length],
+    })),
+    [topCharCharts],
+  )
 
   if (!hasDatedRaids) {
     return (
@@ -78,51 +92,17 @@ export default function AccountLootHistoryTab({ activityByRaid, dkpByCharacterKe
         />
       )}
 
-      {investedSeries.length > 0 && (
-        <DkpLineChart
-          data={investedSeries}
-          valueKey="invested"
-          title="DKP invested (account)"
-          subtitle="Total DKP spent on loot for all characters on this account"
-          legendLabel="DKP spent (cumulative)"
-          strokeColor="#34d399"
-          yAxisLabel="DKP spent"
-        />
-      )}
-
       {topCharCharts.length > 0 ? (
-        <div>
-          <h2 style={{ marginTop: 0, marginBottom: '0.75rem', fontSize: '1.125rem' }}>DKP invested by character</h2>
-          <p style={{ color: '#a1a1aa', fontSize: '0.875rem', marginBottom: '1rem' }}>
-            Top characters with more than 10 lifetime DKP spent (up to 5).
-          </p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            {topCharCharts.map((ch) => (
-              ch.series.length > 0 ? (
-                <DkpLineChart
-                  key={ch.canonical}
-                  data={ch.series}
-                  valueKey="invested"
-                  title={ch.displayName}
-                  subtitle={`Lifetime spent: ${Math.round(ch.lifetimeSpent)} DKP`}
-                  legendLabel={`${ch.displayName} — DKP spent (cumulative)`}
-                  strokeColor="#60a5fa"
-                  yAxisLabel="DKP spent"
-                />
-              ) : (
-                <div key={ch.canonical} className="card">
-                  <h3 style={{ marginTop: 0 }}>{ch.displayName}</h3>
-                  <p style={{ color: '#71717a', fontSize: '0.875rem' }}>
-                    Lifetime spent {Math.round(ch.lifetimeSpent)} DKP — no dated loot events in this window.
-                  </p>
-                </div>
-              )
-            ))}
-          </div>
-        </div>
+        <DkpLineChart
+          series={investedSeriesList}
+          title="DKP invested (account)"
+          subtitle="Top characters by lifetime DKP spent on loot (up to 5)"
+          yAxisLabel="DKP spent"
+          rangeFooter={investedFooter}
+        />
       ) : (
         <div className="card">
-          <h3 style={{ marginTop: 0 }}>DKP invested by character</h3>
+          <h3 style={{ marginTop: 0 }}>DKP invested (account)</h3>
           <p style={{ color: '#71717a', fontSize: '0.875rem' }}>
             No characters on this account have more than 10 lifetime DKP spent.
           </p>

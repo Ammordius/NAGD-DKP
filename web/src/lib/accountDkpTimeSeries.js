@@ -187,6 +187,38 @@ export function formatChartMonthYear(dateIso) {
   return `${MONTH_NAMES[m - 1]} ${y}`
 }
 
+/** Activity raids and paid loot rows within chartBounds [start, end]. */
+export function countActivityInChartWindow(sortedActivityRaids, chartBounds) {
+  const { start, end } = chartBounds || {}
+  if (!start || !end) {
+    return { raids: 0, lootPurchases: 0, start: null, end: null }
+  }
+  let raids = 0
+  let lootPurchases = 0
+  for (const act of sortedActivityRaids || []) {
+    const d = parseDateIso(act.date)
+    if (!d || d < start || d > end) continue
+    raids += 1
+    for (const it of act.items || []) {
+      if (parseCost(it) > 0) lootPurchases += 1
+    }
+  }
+  return { raids, lootPurchases, start, end }
+}
+
+/** Footer line for invested chart: date range, raids, loot purchases. */
+export function formatInvestedChartFooter(stats) {
+  const { start, end, raids, lootPurchases } = stats || {}
+  if (!start || !end) return null
+  const range =
+    start === end
+      ? formatChartMonthYear(start)
+      : `${formatChartMonthYear(start)} – ${formatChartMonthYear(end)}`
+  const raidLabel = `${raids} raid${raids !== 1 ? 's' : ''}`
+  const purchaseLabel = `${lootPurchases} loot purchase${lootPurchases !== 1 ? 's' : ''}`
+  return `${range} · ${raidLabel} · ${purchaseLabel}`
+}
+
 /**
  * Walk activity raids chronologically; returns bounded chart series.
  * @param {object} [opts]
@@ -247,16 +279,28 @@ export function buildAccountDkpTimeSeries(activityByRaid, characters, dkpByChara
     'invested',
   )
 
+  const investedWindowStats = countActivityInChartWindow(sorted, chartBounds)
+
   const topCharacters = selectTopCharactersForCharts(list, dkpByCharacterKey)
   const topCharCharts = topCharacters.map((c) => {
     const raw = perCharSeries[c.canonical]?.series ?? []
     const sparse = sparseCharacterSeries(raw, 'invested')
-    const series = sliceSeriesToDateWindow(
+    let series = sliceSeriesToDateWindow(
       sparse,
       chartBounds.start,
       chartBounds.end,
       'invested',
     )
+    if (
+      series.length === 0 &&
+      chartBounds.start &&
+      chartBounds.end
+    ) {
+      series = [
+        { date: chartBounds.start, invested: 0 },
+        { date: chartBounds.end, invested: 0 },
+      ]
+    }
     return {
       canonical: c.canonical,
       displayName: c.displayName,
@@ -270,6 +314,7 @@ export function buildAccountDkpTimeSeries(activityByRaid, characters, dkpByChara
     chartBounds,
     netSeries,
     investedSeries,
+    investedWindowStats,
     topCharCharts,
   }
 }
