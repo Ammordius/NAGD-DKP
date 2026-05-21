@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated_at": "2026-05-21T14:40:27.586Z",
+  "generated_at": "2026-05-21T15:09:04.349Z",
   "activity_days": 120,
   "sharded": true,
   "shards_dir": "bid_forecast_items",
