@@ -24,7 +24,7 @@ Set in `.env.local` (local) and Vercel project settings (production):
 |----------|---------|
 | `VITE_SUPABASE_URL` | Supabase project URL |
 | `VITE_SUPABASE_ANON_KEY` | Supabase anon (public) key |
-| `VITE_CLASS_RANKINGS_URL` | Optional; bid forecast pages default to `/class_rankings.json` |
+| `VITE_CLASS_RANKINGS_URL` | Optional; bid forecast / class coverage default to `/class_rankings.json`. Guild export: `https://ammordius.github.io/NAGD-spell-inventory/class_rankings.json` (set GitHub secret `CLASS_RANKINGS_URL` to the same for CI). |
 
 Access in code: `import.meta.env.VITE_*` (Vite convention).
 
@@ -59,7 +59,7 @@ Defined in `web/src/App.jsx`.
 | `/officer/loot-bid-forecast` | `OfficerLootBidForecast` | Signed in (officer) |
 | `/officer/global-loot-bid-forecast` | `OfficerGlobalLootBidForecast` | Signed in (officer) |
 | `/officer/claim-cooldowns` | `OfficerClaimCooldowns` | Signed in (officer) |
-| `/officer/raider-activity` | `OfficerRaiderActivity` | Signed in (officer) |
+| `/officer/raider-activity` | `OfficerRaiderActivity` | Signed in (officer); class coverage from `account_class_coverage` (CI/Magelo) |
 | `/loot` | `LootSearch` | Signed in |
 | `/loot-recipients` | `LootRecipients` | Signed in |
 | `/mobs` | `MobLoot` | Signed in |
@@ -90,7 +90,8 @@ Fetched with `fetch('/…')` from `public/` or CDN:
 
 - Item stats, prices, mob loot, raid item sources: see `getDkpMobLoot`, `getRaidItemSources` in `web/src/lib/staticData.js` and usages in item/raid/officer flows.
 - Bid forecast precompute: `/bid_forecast_meta.json`, shards under `/bid_forecast_items/` (see `web/src/lib/bidForecastPrecomputeFetch.js`).
-- Optional `VITE_CLASS_RANKINGS_URL` or `/class_rankings.json` for bid forecast rankings.
+- Optional `VITE_CLASS_RANKINGS_URL` or `/class_rankings.json` for bid forecast rankings and officer **Reload coverage** on Raider Activity.
+- **Class coverage cache:** table `account_class_coverage` (deploy `docs/supabase-account-class-coverage.sql`). Refreshed by CI job `build_account_class_coverage.mjs` in `.github/workflows/loot-to-character.yml` (`bid_forecast_index`), not on each page load.
 
 `web/vercel.json` sets long cache headers for some JSON paths.
 

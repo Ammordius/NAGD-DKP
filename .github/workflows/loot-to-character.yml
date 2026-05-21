@@ -224,6 +224,10 @@ jobs:
         if: steps.bf_secrets.outputs.ok == 'true'
         run: node scripts/build_bid_forecast_by_item.mjs
 
+      - name: Build and push account class coverage
+        if: steps.bf_secrets.outputs.ok == 'true'
+        run: node scripts/build_account_class_coverage.mjs
+
       - name: Commit bid forecast JSON artifacts
         if: steps.bf_secrets.outputs.ok == 'true'
         run: |

@@ -2,6 +2,12 @@ import { useEffect, useState, useMemo, useCallback } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { usePersistedState } from '../lib/usePersistedState'
+import ClassCoveragePills from '../components/ClassCoveragePills'
+import {
+  buildAccountCoverage,
+  coverageRowsToMap,
+  coverageToUpsertRows,
+} from '../lib/classCoverage'
 import {
   buildRaiderActivityRows,
   buildActivitySummary,
@@ -13,6 +19,8 @@ import {
   STATUS_LABELS,
   STATUS_COLORS,
 } from '../lib/raiderActivity'
+
+const CLASS_RANKINGS_URL = import.meta.env.VITE_CLASS_RANKINGS_URL || '/class_rankings.json'
 
 const PERIOD_OPTIONS = [
   { value: 30, label: '30 days' },
@@ -107,7 +115,12 @@ function WatchlistBlock({ title, rows, emptyText }) {
 export default function OfficerRaiderActivity({ isOfficer }) {
   const navigate = useNavigate()
   const [snapshot, setSnapshot] = useState(null)
+  const [coverageMap, setCoverageMap] = useState(() => new Map())
+  const [coverageRefreshedAt, setCoverageRefreshedAt] = useState(null)
+  const [coverageError, setCoverageError] = useState('')
   const [loading, setLoading] = useState(true)
+  const [coverageLoading, setCoverageLoading] = useState(false)
+  const [coverageRebuildLoading, setCoverageRebuildLoading] = useState(false)
   const [error, setError] = useState('')
 
   const [periodDays, setPeriodDays] = usePersistedState('/officer/raider-activity:periodDays', 90)
@@ -116,14 +129,48 @@ export default function OfficerRaiderActivity({ isOfficer }) {
   const [sortBy, setSortBy] = usePersistedState('/officer/raider-activity:sortBy', 'ra30')
   const [absentRaids, setAbsentRaids] = usePersistedState('/officer/raider-activity:absentRaids', 5)
 
+  const loadCoverage = useCallback(async () => {
+    setCoverageLoading(true)
+    setCoverageError('')
+    const { data, error: covErr } = await supabase
+      .from('account_class_coverage')
+      .select('account_id, main_char_id, classes, refreshed_at')
+    setCoverageLoading(false)
+    if (covErr) {
+      const msg = covErr.message || 'Failed to load class coverage'
+      if (msg.includes('account_class_coverage') || msg.includes('schema cache')) {
+        setCoverageError(
+          `${msg} — Deploy docs/supabase-account-class-coverage.sql, run CI build_account_class_coverage, then retry.`,
+        )
+      } else {
+        setCoverageError(msg)
+      }
+      setCoverageMap(new Map())
+      setCoverageRefreshedAt(null)
+      return
+    }
+    const map = coverageRowsToMap(data || [])
+    setCoverageMap(map)
+    let latest = null
+    for (const row of data || []) {
+      const t = row.refreshed_at
+      if (t && (!latest || t > latest)) latest = t
+    }
+    setCoverageRefreshedAt(latest)
+  }, [])
+
   const loadData = useCallback(async () => {
     setLoading(true)
     setError('')
-    const { data, error: rpcErr } = await supabase.rpc('officer_raider_activity', {
-      p_lookback_days: 120,
-      p_absent_raid_count: Math.max(1, Number(absentRaids) || 5),
-    })
+    const [activityRes] = await Promise.all([
+      supabase.rpc('officer_raider_activity', {
+        p_lookback_days: 120,
+        p_absent_raid_count: Math.max(1, Number(absentRaids) || 5),
+      }),
+      loadCoverage(),
+    ])
     setLoading(false)
+    const { data, error: rpcErr } = activityRes
     if (rpcErr) {
       const msg = rpcErr.message || 'Failed to load raider activity'
       if (msg.includes('officer_raider_activity') || msg.includes('schema cache')) {
@@ -137,7 +184,64 @@ export default function OfficerRaiderActivity({ isOfficer }) {
       return
     }
     setSnapshot(data)
-  }, [absentRaids])
+  }, [absentRaids, loadCoverage])
+
+  const rebuildCoverageFromRankings = useCallback(async () => {
+    setCoverageRebuildLoading(true)
+    setCoverageError('')
+    try {
+      const rankingsRes = await fetch(CLASS_RANKINGS_URL)
+      if (!rankingsRes.ok) {
+        throw new Error(`Magelo rankings fetch failed: ${rankingsRes.status}`)
+      }
+      const rankingsData = await rankingsRes.json()
+      const rankingsChars = rankingsData.characters || []
+
+      const [{ data: links, error: linkErr }, { data: characters, error: charErr }] =
+        await Promise.all([
+          supabase.from('character_account').select('char_id, account_id'),
+          supabase.from('characters').select('char_id, name, class_name'),
+        ])
+      if (linkErr) throw new Error(linkErr.message)
+      if (charErr) throw new Error(charErr.message)
+
+      const built = buildAccountCoverage({
+        links: links || [],
+        characters: characters || [],
+        rankingsChars,
+        spendByCharId: {},
+      })
+      const rows = coverageToUpsertRows(built)
+      const rankingsHash = await crypto.subtle
+        .digest('SHA-256', new TextEncoder().encode(JSON.stringify(rankingsData)))
+        .then((buf) =>
+          Array.from(new Uint8Array(buf))
+            .map((b) => b.toString(16).padStart(2, '0'))
+            .join('')
+            .slice(0, 16),
+        )
+
+      const { error: upsertErr } = await supabase.rpc('officer_upsert_account_class_coverage', {
+        p_payload: { rankings_hash: rankingsHash, rows },
+      })
+      if (upsertErr) {
+        if (
+          upsertErr.message?.includes('officer_upsert_account_class_coverage') ||
+          upsertErr.message?.includes('schema cache')
+        ) {
+          throw new Error(
+            `${upsertErr.message} — Deploy docs/supabase-account-class-coverage.sql in Supabase SQL Editor.`,
+          )
+        }
+        throw new Error(upsertErr.message)
+      }
+      await loadCoverage()
+    } catch (e) {
+      setCoverageError(e.message || 'Failed to rebuild class coverage')
+    } finally {
+      setCoverageRebuildLoading(false)
+    }
+  }, [loadCoverage])
 
   useEffect(() => {
     if (!isOfficer) {
@@ -154,9 +258,15 @@ export default function OfficerRaiderActivity({ isOfficer }) {
     const rosterIds = new Set((snapshot.roster_account_ids || []).map(String))
     const summary = buildActivitySummary(rows, rosterIds, raidsSorted, periodDays, now)
     const watchlists = buildWatchlists(rows, { absentRaids: Number(absentRaids) || 5, now, raidsSorted })
-    const filtered = filterAndSortRows(rows, { search, statusFilter, sortBy })
+    const filtered = filterAndSortRows(rows, { search, statusFilter, sortBy }).map((r) => {
+      const cov = coverageMap.get(String(r.accountId))
+      return {
+        ...r,
+        classCoverage: cov?.classes || [],
+      }
+    })
     return { rows, raidsSorted, summary, watchlists, filtered, rosterIds }
-  }, [snapshot, periodDays, search, statusFilter, sortBy, absentRaids])
+  }, [snapshot, periodDays, search, statusFilter, sortBy, absentRaids, coverageMap])
 
   if (!isOfficer) return null
 
@@ -185,6 +295,26 @@ export default function OfficerRaiderActivity({ isOfficer }) {
           </button>
         </p>
       )}
+
+      {coverageError && (
+        <p className="error" style={{ marginBottom: '1rem' }}>
+          {coverageError}
+          {' '}
+          <button type="button" className="btn btn-ghost" onClick={loadCoverage} disabled={coverageLoading}>
+            Retry coverage
+          </button>
+        </p>
+      )}
+
+      <p style={{ color: '#71717a', fontSize: '0.8rem', marginBottom: '1rem' }}>
+        Class coverage (viable geared alts):{' '}
+        {coverageRefreshedAt
+          ? `updated ${new Date(coverageRefreshedAt).toLocaleString()}`
+          : coverageLoading
+            ? 'loading…'
+            : 'not loaded yet — run CI or Reload coverage'}
+        . Green = main toon; muted = alt. Thresholds: &gt;75% overall (&gt;85% PAL/WAR/SHD).
+      </p>
 
       {computed && (
         <>
@@ -287,6 +417,15 @@ export default function OfficerRaiderActivity({ isOfficer }) {
             <button type="button" className="btn btn-ghost" onClick={loadData} disabled={loading}>
               {loading ? 'Refreshing…' : 'Refresh'}
             </button>
+            <button
+              type="button"
+              className="btn btn-ghost"
+              onClick={rebuildCoverageFromRankings}
+              disabled={coverageRebuildLoading || coverageLoading}
+              title="Fetch Magelo rankings once and update cached coverage in the database"
+            >
+              {coverageRebuildLoading ? 'Rebuilding coverage…' : 'Reload coverage'}
+            </button>
           </div>
 
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', marginBottom: '1rem' }}>
@@ -312,6 +451,7 @@ export default function OfficerRaiderActivity({ isOfficer }) {
               <thead>
                 <tr>
                   <th>Raider</th>
+                  <th title="Viable raid-ready classes from Magelo gear rankings">Class coverage</th>
                   <th>RA 30d</th>
                   <th>RA 60d</th>
                   <th>RA 90d</th>
@@ -327,7 +467,7 @@ export default function OfficerRaiderActivity({ isOfficer }) {
               <tbody>
                 {computed.filtered.length === 0 && (
                   <tr>
-                    <td colSpan={9} style={{ color: '#71717a' }}>
+                    <td colSpan={10} style={{ color: '#71717a' }}>
                       No raiders match filters.
                     </td>
                   </tr>
@@ -343,6 +483,9 @@ export default function OfficerRaiderActivity({ isOfficer }) {
                           (off roster)
                         </span>
                       ) : null}
+                    </td>
+                    <td>
+                      <ClassCoveragePills classes={r.classCoverage} />
                     </td>
                     <td>{formatRaPercent(r.ra30)}</td>
                     <td>{formatRaPercent(r.ra60)}</td>

@@ -28,6 +28,8 @@ Single index of **all public RPCs/functions** and **one-off SQL** in this repo: 
 | **delete_raid** | supabase-officer-raids.sql | — | Officer.jsx (permanent delete raid + tics) |
 | **delete_tic** | supabase-officer-raids.sql | — | Officer.jsx (remove one tic + attendance; avoids timeout) |
 | **officer_raider_activity** | — | supabase-officer-raider-activity.sql | OfficerRaiderActivity.jsx |
+| **officer_upsert_account_class_coverage** | — | supabase-account-class-coverage.sql | OfficerRaiderActivity.jsx (manual Reload coverage) |
+| **account_class_coverage** (table) | — | supabase-account-class-coverage.sql | OfficerRaiderActivity.jsx; CI `scripts/build_account_class_coverage.mjs` |
 | **delete_raid_for_reupload** | upload_script_rpcs.sql | delete_raid_for_reupload_rpc.sql (superseded) | upload_raid_detail_to_supabase.py |
 | **insert_raid_event_attendance_for_upload** | upload_script_rpcs.sql | — | upload_raid_detail_to_supabase.py |
 | **refresh_dkp_summary** | supabase-schema.sql | — | Officer.jsx, RaidDetail.jsx, DKP.jsx, upload script, restore, dedupe, zerodkp |
