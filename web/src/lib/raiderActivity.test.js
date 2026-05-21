@@ -204,6 +204,32 @@ describe('filterAndSortRows', () => {
     const f = filterAndSortRows(rows, { sortBy: 'trendDelta' })
     assert.equal(f[0].accountId, 'z')
   })
+
+  it('filters by class coverage (any of selected)', () => {
+    const withCov = [
+      {
+        accountId: 'war',
+        displayName: 'WarriorMain',
+        toonNames: '',
+        status: 'Core',
+        ra30: 80,
+        classCoverage: [{ abbrev: 'WAR', gear_pct: 90 }],
+      },
+      {
+        accountId: 'clr',
+        displayName: 'ClericMain',
+        toonNames: '',
+        status: 'Core',
+        ra30: 80,
+        classCoverage: [{ abbrev: 'CLR', gear_pct: 80 }],
+      },
+    ]
+    const warOnly = filterAndSortRows(withCov, { classFilter: ['WAR'] })
+    assert.equal(warOnly.length, 1)
+    assert.equal(warOnly[0].accountId, 'war')
+    const either = filterAndSortRows(withCov, { classFilter: ['WAR', 'CLR'] })
+    assert.equal(either.length, 2)
+  })
 })
 
 describe('formatTrendDelta', () => {

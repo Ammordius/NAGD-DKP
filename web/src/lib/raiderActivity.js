@@ -325,12 +325,13 @@ export function buildWatchlists(rows, options = {}) {
 
 /**
  * @param {ReturnType<buildRaiderActivityRows>['rows']} rows
- * @param {{ search?: string, statusFilter?: string, sortBy?: string }} opts
+ * @param {{ search?: string, statusFilter?: string, sortBy?: string, classFilter?: string[] }} opts
  */
 export function filterAndSortRows(rows, opts = {}) {
   const search = (opts.search || '').trim().toLowerCase()
   const statusFilter = (opts.statusFilter || '').trim()
   const sortBy = opts.sortBy || 'displayName'
+  const classFilter = Array.isArray(opts.classFilter) ? opts.classFilter.filter(Boolean) : []
 
   let list = [...rows]
   if (search) {
@@ -343,6 +344,11 @@ export function filterAndSortRows(rows, opts = {}) {
   }
   if (statusFilter) {
     list = list.filter((r) => r.status === statusFilter)
+  }
+  if (classFilter.length) {
+    list = list.filter((r) =>
+      (r.classCoverage || []).some((c) => classFilter.includes(c.abbrev)),
+    )
   }
 
   const cmp = (a, b) => {

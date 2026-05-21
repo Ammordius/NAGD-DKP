@@ -28,6 +28,14 @@ export const CLASS_ORDER = [
 const GENERAL_VIABILITY_PCT = 75
 const TANK_VIABILITY_PCT = 85
 
+/** UI highlight threshold for class pills (strictly above). */
+export const HIGHLIGHT_GEAR_PCT = 85
+
+export function isHighlightedGearPct(pct) {
+  if (pct == null || !Number.isFinite(Number(pct))) return false
+  return Number(pct) > HIGHLIGHT_GEAR_PCT
+}
+
 export function normName(s) {
   return (s || '').trim().toLowerCase()
 }
@@ -75,6 +83,28 @@ export function isViableGearPct(pct, classAbbrev) {
 }
 
 /**
+ * @param {string} dbClass
+ * @param {string} mageloClass
+ */
+export function classesMatchForRanking(dbClass, mageloClass) {
+  if (!normName(dbClass)) return true
+  const aAbbrev = classNameToAbbrev(dbClass)
+  const mAbbrev = classNameToAbbrev(mageloClass)
+  if (aAbbrev && mAbbrev) return aAbbrev === mAbbrev
+  return normName(dbClass) === normName(mageloClass)
+}
+
+/**
+ * @param {object[]} rankingsChars
+ * @param {string} attendeeName
+ */
+export function findRankingCharsByName(rankingsChars, attendeeName) {
+  if (!rankingsChars || !attendeeName) return []
+  const n = normName(attendeeName)
+  return rankingsChars.filter((c) => normName(c.name) === n)
+}
+
+/**
  * @param {object[]} rankingsChars
  * @param {string} attendeeName
  * @param {string} attendeeClass
@@ -83,11 +113,24 @@ export function findRankingChar(rankingsChars, attendeeName, attendeeClass) {
   if (!rankingsChars || !attendeeName) return null
   const n = normName(attendeeName)
   const cLower = normName(attendeeClass)
-  return (
-    rankingsChars.find(
-      (c) => normName(c.name) === n && (!cLower || normName(c.class) === cLower),
-    ) || null
-  )
+
+  if (cLower) {
+    const strict = rankingsChars.find(
+      (c) => normName(c.name) === n && classesMatchForRanking(attendeeClass, c.class),
+    )
+    if (strict) return strict
+  }
+
+  const byName = findRankingCharsByName(rankingsChars, attendeeName)
+  if (byName.length === 0) return null
+  if (byName.length === 1) return byName[0]
+  return byName.reduce((best, c) => {
+    const pct = extractGearPct(c)
+    const bestPct = extractGearPct(best)
+    if (pct == null) return best
+    if (bestPct == null) return c
+    return pct > bestPct ? c : best
+  })
 }
 
 /**
@@ -135,7 +178,8 @@ export function buildAccountCoverage({
     matchedToons += 1
 
     const gearPct = extractGearPct(mageloChar)
-    const abbrev = classNameToAbbrev(className || mageloChar.class)
+    const mageloClass = (mageloChar.class || '').trim()
+    const abbrev = classNameToAbbrev(mageloClass || className)
     if (!abbrev || !isViableGearPct(gearPct, abbrev)) continue
 
     viableToons += 1
@@ -143,7 +187,7 @@ export function buildAccountCoverage({
       char_id: charId,
       char_name: name,
       abbrev,
-      class_name: className || (mageloChar.class || '').trim() || abbrev,
+      class_name: mageloClass || className || abbrev,
       gear_pct: Math.round(Number(gearPct) * 10) / 10,
     }
     if (!candidatesByAccount.has(accountId)) {

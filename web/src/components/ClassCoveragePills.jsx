@@ -1,4 +1,4 @@
-import { CLASS_ORDER } from '../lib/classCoverage'
+import { CLASS_ORDER, isHighlightedGearPct } from '../lib/classCoverage'
 
 /**
  * Compact class abbrev pills for raider roster flexibility.
@@ -18,12 +18,13 @@ export default function ClassCoveragePills({ classes = [] }) {
   return (
     <span style={{ display: 'inline-flex', flexWrap: 'wrap', gap: '0.25rem', alignItems: 'center' }}>
       {sorted.map((c) => {
-        const main = c.is_main === true
+        const highlighted = isHighlightedGearPct(c.gear_pct)
         const label = (c.abbrev || '').trim() || '—'
         const tip = [
           c.class_name || label,
           c.gear_pct != null ? `${c.gear_pct}%` : null,
-          c.char_name ? `(${c.char_name}${main ? ', main' : ', alt'})` : main ? '(main)' : '(alt)',
+          c.char_name ? `(${c.char_name})` : null,
+          highlighted ? '>85% gear' : null,
         ]
           .filter(Boolean)
           .join(' ')
@@ -40,9 +41,9 @@ export default function ClassCoveragePills({ classes = [] }) {
               fontWeight: 700,
               letterSpacing: '0.02em',
               lineHeight: 1.3,
-              background: main ? '#166534' : '#3f3f46',
-              color: main ? '#bbf7d0' : '#a1a1aa',
-              border: main ? '1px solid #22c55e' : '1px solid #52525b',
+              background: highlighted ? '#166534' : '#3f3f46',
+              color: highlighted ? '#bbf7d0' : '#a1a1aa',
+              border: highlighted ? '1px solid #22c55e' : '1px solid #52525b',
             }}
           >
             {label}

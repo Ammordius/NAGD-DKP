@@ -5,6 +5,7 @@ import { usePersistedState } from '../lib/usePersistedState'
 import ClassCoveragePills from '../components/ClassCoveragePills'
 import {
   buildAccountCoverage,
+  CLASS_ORDER,
   coverageRowsToMap,
   coverageToUpsertRows,
 } from '../lib/classCoverage'
@@ -128,6 +129,7 @@ export default function OfficerRaiderActivity({ isOfficer }) {
   const [statusFilter, setStatusFilter] = usePersistedState('/officer/raider-activity:status', '')
   const [sortBy, setSortBy] = usePersistedState('/officer/raider-activity:sortBy', 'ra30')
   const [absentRaids, setAbsentRaids] = usePersistedState('/officer/raider-activity:absentRaids', 5)
+  const [classFilter, setClassFilter] = usePersistedState('/officer/raider-activity:classFilter', [])
 
   const loadCoverage = useCallback(async () => {
     setCoverageLoading(true)
@@ -258,15 +260,18 @@ export default function OfficerRaiderActivity({ isOfficer }) {
     const rosterIds = new Set((snapshot.roster_account_ids || []).map(String))
     const summary = buildActivitySummary(rows, rosterIds, raidsSorted, periodDays, now)
     const watchlists = buildWatchlists(rows, { absentRaids: Number(absentRaids) || 5, now, raidsSorted })
-    const filtered = filterAndSortRows(rows, { search, statusFilter, sortBy }).map((r) => {
-      const cov = coverageMap.get(String(r.accountId))
-      return {
-        ...r,
-        classCoverage: cov?.classes || [],
-      }
+    const rowsWithCoverage = rows.map((r) => ({
+      ...r,
+      classCoverage: coverageMap.get(String(r.accountId))?.classes || [],
+    }))
+    const filtered = filterAndSortRows(rowsWithCoverage, {
+      search,
+      statusFilter,
+      sortBy,
+      classFilter,
     })
     return { rows, raidsSorted, summary, watchlists, filtered, rosterIds }
-  }, [snapshot, periodDays, search, statusFilter, sortBy, absentRaids, coverageMap])
+  }, [snapshot, periodDays, search, statusFilter, sortBy, absentRaids, coverageMap, classFilter])
 
   if (!isOfficer) return null
 
@@ -313,7 +318,7 @@ export default function OfficerRaiderActivity({ isOfficer }) {
           : coverageLoading
             ? 'loading…'
             : 'not loaded yet — run CI or Reload coverage'}
-        . Green = main toon; muted = alt. Thresholds: &gt;75% overall (&gt;85% PAL/WAR/SHD).
+        . Green = class at &gt;85% gear; muted = viable below that. Viability: &gt;75% overall (&gt;85% PAL/WAR/SHD).
       </p>
 
       {computed && (
@@ -414,6 +419,56 @@ export default function OfficerRaiderActivity({ isOfficer }) {
                 ))}
               </select>
             </label>
+            <div
+              style={{
+                display: 'flex',
+                flexWrap: 'wrap',
+                alignItems: 'center',
+                gap: '0.35rem',
+                flex: '1 1 100%',
+              }}
+            >
+              <span style={{ fontSize: '0.9rem' }}>Classes:</span>
+              {CLASS_ORDER.map((abbrev) => {
+                const active = classFilter.includes(abbrev)
+                return (
+                  <button
+                    key={abbrev}
+                    type="button"
+                    className="btn btn-ghost"
+                    onClick={() => {
+                      setClassFilter((prev) => {
+                        const list = Array.isArray(prev) ? prev : []
+                        return active
+                          ? list.filter((a) => a !== abbrev)
+                          : [...list, abbrev]
+                      })
+                    }}
+                    style={{
+                      padding: '0.15rem 0.45rem',
+                      fontSize: '0.75rem',
+                      fontWeight: 700,
+                      background: active ? '#166534' : undefined,
+                      color: active ? '#bbf7d0' : undefined,
+                      border: active ? '1px solid #22c55e' : undefined,
+                    }}
+                    title={`Filter raiders with viable ${abbrev}`}
+                  >
+                    {abbrev}
+                  </button>
+                )
+              })}
+              {classFilter.length > 0 ? (
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  onClick={() => setClassFilter([])}
+                  style={{ fontSize: '0.75rem' }}
+                >
+                  Clear classes
+                </button>
+              ) : null}
+            </div>
             <button type="button" className="btn btn-ghost" onClick={loadData} disabled={loading}>
               {loading ? 'Refreshing…' : 'Refresh'}
             </button>

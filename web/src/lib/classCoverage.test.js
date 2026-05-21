@@ -4,6 +4,9 @@ import {
   viabilityThresholdForClass,
   extractGearPct,
   isViableGearPct,
+  isHighlightedGearPct,
+  HIGHLIGHT_GEAR_PCT,
+  classesMatchForRanking,
   findRankingChar,
   buildAccountCoverage,
   coverageToUpsertRows,
@@ -43,6 +46,22 @@ describe('isViableGearPct', () => {
   })
 })
 
+describe('isHighlightedGearPct', () => {
+  it('requires strictly above 85', () => {
+    assert.equal(HIGHLIGHT_GEAR_PCT, 85)
+    assert.equal(isHighlightedGearPct(85), false)
+    assert.equal(isHighlightedGearPct(85.1), true)
+    assert.equal(isHighlightedGearPct(88), true)
+  })
+})
+
+describe('classesMatchForRanking', () => {
+  it('matches WAR abbrev to Warrior', () => {
+    assert.equal(classesMatchForRanking('WAR', 'Warrior'), true)
+    assert.equal(classesMatchForRanking('Warrior', 'WAR'), true)
+  })
+})
+
 describe('findRankingChar', () => {
   const chars = [
     { name: 'Alice', class: 'Cleric' },
@@ -53,6 +72,16 @@ describe('findRankingChar', () => {
   })
   it('matches name when class omitted', () => {
     assert.equal(findRankingChar(chars, 'Bob', '')?.class, 'Warrior')
+  })
+  it('matches WAR db class to Warrior magelo row', () => {
+    assert.equal(findRankingChar(chars, 'Bob', 'WAR')?.class, 'Warrior')
+  })
+  it('falls back to name-only when db class mismatches', () => {
+    const multi = [
+      { name: 'Badammo', class: 'Warrior', overall_score: 88 },
+      { name: 'Badammo', class: 'Cleric', overall_score: 50 },
+    ]
+    assert.equal(findRankingChar(multi, 'Badammo', 'Bard')?.class, 'Warrior')
   })
 })
 
@@ -101,6 +130,34 @@ describe('buildAccountCoverage', () => {
       spendByCharId: {},
     })
     assert.equal(built.byAccount.get('acc2'), undefined)
+  })
+
+  it('attributes WAR from magelo when db class is wrong', () => {
+    const built = buildAccountCoverage({
+      links: [{ char_id: 'bad1', account_id: 'ammordius' }],
+      characters: [{ char_id: 'bad1', name: 'Badammo', class_name: 'Bard' }],
+      rankingsChars: [{ name: 'Badammo', class: 'Warrior', overall_score: 88 }],
+      spendByCharId: {},
+    })
+    const cov = built.byAccount.get('ammordius')
+    assert.ok(cov)
+    const war = cov.classes.find((c) => c.abbrev === 'WAR')
+    assert.ok(war)
+    assert.equal(war.gear_pct, 88)
+    assert.equal(war.char_name, 'Badammo')
+    assert.equal(war.class_name, 'Warrior')
+  })
+
+  it('matches db WAR abbrev to magelo Warrior', () => {
+    const built = buildAccountCoverage({
+      links: [{ char_id: 'w1', account_id: 'acc3' }],
+      characters: [{ char_id: 'w1', name: 'Tank', class_name: 'WAR' }],
+      rankingsChars: [{ name: 'Tank', class: 'Warrior', overall_score: 88 }],
+      spendByCharId: {},
+    })
+    const war = built.byAccount.get('acc3')?.classes.find((c) => c.abbrev === 'WAR')
+    assert.ok(war)
+    assert.equal(war.gear_pct, 88)
   })
 })
 
