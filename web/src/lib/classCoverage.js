@@ -1,7 +1,7 @@
 /**
  * Raid class coverage from Magelo class_rankings.json.
- * Viability: >75% overall gear (general), >85% for PAL/WAR/SHD tanks.
- * Canonical gear field: overall_score (NAGD class_rankings.json); falls back to overall_pct, overall, etc.
+ * Viability: >75% normalized gear (general), >85% for PAL/WAR/SHD tanks.
+ * gear_pct = 100 * (raw overall_score / best raw in class in the export), same as Magelo rankings UI.
  */
 
 import { CLASS_TO_ABBREV } from './mageloUpgradeEngine.js'
@@ -56,25 +56,79 @@ export function viabilityThresholdForClass(abbrev) {
 }
 
 /**
+ * Raw Magelo gear power (not class-normalized). Do not use overall_pct here.
  * @param {object} mageloChar - row from class_rankings.characters[]
  * @returns {number | null}
  */
-export function extractGearPct(mageloChar) {
+export function extractRawGearScore(mageloChar) {
   if (!mageloChar || typeof mageloChar !== 'object') return null
   const candidates = [
     mageloChar.overall_score,
-    mageloChar.overall_pct,
     mageloChar.overall,
     mageloChar.gear_score_pct,
     mageloChar.scores?.overall_score,
     mageloChar.scores?.overall,
-    mageloChar.scores?.overall_pct,
   ]
   for (const raw of candidates) {
     const n = Number(raw)
     if (Number.isFinite(n)) return n
   }
   return null
+}
+
+/**
+ * Max raw overall_score per class abbrev across the full rankings export.
+ * @param {object[]} rankingsChars
+ * @returns {Map<string, number>}
+ */
+export function buildMaxRawScoreByClass(rankingsChars) {
+  /** @type {Map<string, number>} */
+  const maxByClass = new Map()
+  for (const c of rankingsChars || []) {
+    const abbrev = classNameToAbbrev(c.class)
+    const raw = extractRawGearScore(c)
+    if (!abbrev || raw == null) continue
+    const prev = maxByClass.get(abbrev)
+    if (prev == null || raw > prev) maxByClass.set(abbrev, raw)
+  }
+  return maxByClass
+}
+
+/**
+ * Class-normalized gear % (Magelo rankings table parity): 100 * raw / best-in-class raw.
+ * @param {object} mageloChar
+ * @param {Map<string, number>} maxByClass
+ * @returns {number | null}
+ */
+export function normalizedGearPct(mageloChar, maxByClass) {
+  if (!mageloChar || typeof mageloChar !== 'object') return null
+
+  if (!maxByClass || maxByClass.size === 0) {
+    const exported = mageloChar.overall_pct ?? mageloChar.scores?.overall_pct
+    const n = Number(exported)
+    if (Number.isFinite(n)) return Math.round(n * 10) / 10
+    const abbrev = classNameToAbbrev(mageloChar.class)
+    const raw = extractRawGearScore(mageloChar)
+    if (!abbrev || raw == null) return null
+    return 100
+  }
+
+  const abbrev = classNameToAbbrev(mageloChar.class)
+  const raw = extractRawGearScore(mageloChar)
+  if (!abbrev || raw == null) return null
+
+  const max = maxByClass.get(abbrev)
+  if (max == null || max <= 0) return null
+  return Math.round((raw / max) * 1000) / 10
+}
+
+/**
+ * @param {object} mageloChar
+ * @param {Map<string, number>} [maxByClass]
+ * @returns {number | null}
+ */
+export function extractGearPct(mageloChar, maxByClass) {
+  return normalizedGearPct(mageloChar, maxByClass)
 }
 
 export function isViableGearPct(pct, classAbbrev) {
@@ -125,11 +179,11 @@ export function findRankingChar(rankingsChars, attendeeName, attendeeClass) {
   if (byName.length === 0) return null
   if (byName.length === 1) return byName[0]
   return byName.reduce((best, c) => {
-    const pct = extractGearPct(c)
-    const bestPct = extractGearPct(best)
-    if (pct == null) return best
-    if (bestPct == null) return c
-    return pct > bestPct ? c : best
+    const raw = extractRawGearScore(c)
+    const bestRaw = extractRawGearScore(best)
+    if (raw == null) return best
+    if (bestRaw == null) return c
+    return raw > bestRaw ? c : best
   })
 }
 
@@ -147,6 +201,8 @@ export function buildAccountCoverage({
   rankingsChars = [],
   spendByCharId = {},
 }) {
+  const maxByClass = buildMaxRawScoreByClass(rankingsChars)
+
   const charById = new Map()
   for (const c of characters) {
     const id = (c.char_id || '').trim()
@@ -177,9 +233,9 @@ export function buildAccountCoverage({
     }
     matchedToons += 1
 
-    const gearPct = extractGearPct(mageloChar)
     const mageloClass = (mageloChar.class || '').trim()
     const abbrev = classNameToAbbrev(mageloClass || className)
+    const gearPct = normalizedGearPct(mageloChar, maxByClass)
     if (!abbrev || !isViableGearPct(gearPct, abbrev)) continue
 
     viableToons += 1
@@ -188,7 +244,7 @@ export function buildAccountCoverage({
       char_name: name,
       abbrev,
       class_name: mageloClass || className || abbrev,
-      gear_pct: Math.round(Number(gearPct) * 10) / 10,
+      gear_pct: gearPct,
     }
     if (!candidatesByAccount.has(accountId)) {
       candidatesByAccount.set(accountId, [])

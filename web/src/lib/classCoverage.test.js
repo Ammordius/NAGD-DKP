@@ -2,6 +2,9 @@ import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   viabilityThresholdForClass,
+  extractRawGearScore,
+  buildMaxRawScoreByClass,
+  normalizedGearPct,
   extractGearPct,
   isViableGearPct,
   isHighlightedGearPct,
@@ -25,15 +28,48 @@ describe('viabilityThresholdForClass', () => {
   })
 })
 
-describe('extractGearPct', () => {
-  it('prefers overall_score (NAGD export)', () => {
-    assert.equal(extractGearPct({ overall_score: 88.2, overall_pct: 50 }), 88.2)
-  })
-  it('prefers overall_pct when overall_score missing', () => {
-    assert.equal(extractGearPct({ overall_pct: 82, overall: 50 }), 82)
+describe('extractRawGearScore', () => {
+  it('prefers overall_score and ignores overall_pct', () => {
+    assert.equal(extractRawGearScore({ overall_score: 7944, overall_pct: 88.3 }), 7944)
   })
   it('falls back to overall', () => {
-    assert.equal(extractGearPct({ overall: 76 }), 76)
+    assert.equal(extractRawGearScore({ overall: 76 }), 76)
+  })
+})
+
+describe('normalizedGearPct', () => {
+  const rankingsChars = [
+    { name: 'TopWar', class: 'Warrior', overall_score: 9000 },
+    { name: 'Badammo', class: 'Warrior', overall_score: 7944 },
+  ]
+  const maxByClass = buildMaxRawScoreByClass(rankingsChars)
+
+  it('normalizes vs best raw in class', () => {
+    const badammo = rankingsChars.find((c) => c.name === 'Badammo')
+    assert.equal(normalizedGearPct(badammo, maxByClass), 88.3)
+  })
+
+  it('single toon in class is 100%', () => {
+    const solo = [{ name: 'Only', class: 'Wizard', overall_score: 42 }]
+    const max = buildMaxRawScoreByClass(solo)
+    assert.equal(normalizedGearPct(solo[0], max), 100)
+  })
+
+  it('uses overall_pct when max index empty', () => {
+    assert.equal(normalizedGearPct({ class: 'Warrior', overall_pct: 82 }, new Map()), 82)
+  })
+})
+
+describe('extractGearPct', () => {
+  it('delegates to normalizedGearPct when maxByClass provided', () => {
+    const max = buildMaxRawScoreByClass([
+      { class: 'Warrior', overall_score: 100 },
+      { class: 'Warrior', overall_score: 85 },
+    ])
+    assert.equal(
+      extractGearPct({ class: 'Warrior', overall_score: 85 }, max),
+      85,
+    )
   })
 })
 
@@ -87,13 +123,15 @@ describe('findRankingChar', () => {
 
 describe('buildAccountCoverage', () => {
   const rankingsChars = [
+    { name: 'TopWiz', class: 'Wizard', overall_score: 100 },
     { name: 'MainWiz', class: 'Wizard', overall_score: 90 },
     { name: 'AltClr', class: 'Cleric', overall_score: 80 },
     { name: 'TankWar', class: 'Warrior', overall_score: 86 },
+    { name: 'TopRog', class: 'Rogue', overall_score: 100 },
     { name: 'LowRog', class: 'Rogue', overall_score: 70 },
   ]
 
-  it('dedupes by class and applies tank threshold', () => {
+  it('dedupes by class and applies tank threshold on normalized %', () => {
     const built = buildAccountCoverage({
       links: [
         { char_id: 'c1', account_id: 'acc1' },
@@ -120,16 +158,38 @@ describe('buildAccountCoverage', () => {
     assert.equal(wiz.gear_pct, 90)
     const clr = cov.classes.find((c) => c.abbrev === 'CLR')
     assert.equal(clr.is_main, false)
+    assert.equal(clr.gear_pct, 100)
   })
 
-  it('excludes warrior at exactly 85%', () => {
+  it('excludes warrior at exactly 85% normalized', () => {
     const built = buildAccountCoverage({
       links: [{ char_id: 'w1', account_id: 'acc2' }],
       characters: [{ char_id: 'w1', name: 'EdgeWar', class_name: 'Warrior' }],
-      rankingsChars: [{ name: 'EdgeWar', class: 'Warrior', overall_score: 85 }],
+      rankingsChars: [
+        { name: 'BestWar', class: 'Warrior', overall_score: 100 },
+        { name: 'EdgeWar', class: 'Warrior', overall_score: 85 },
+      ],
       spendByCharId: {},
     })
     assert.equal(built.byAccount.get('acc2'), undefined)
+  })
+
+  it('includes Badammo WAR when raw is below tank cutoff but normalized is above', () => {
+    const built = buildAccountCoverage({
+      links: [{ char_id: 'bad1', account_id: 'ammordius' }],
+      characters: [{ char_id: 'bad1', name: 'Badammo', class_name: 'Warrior' }],
+      rankingsChars: [
+        { name: 'TopWar', class: 'Warrior', overall_score: 9000 },
+        { name: 'Badammo', class: 'Warrior', overall_score: 7944 },
+      ],
+      spendByCharId: {},
+    })
+    const cov = built.byAccount.get('ammordius')
+    assert.ok(cov)
+    const war = cov.classes.find((c) => c.abbrev === 'WAR')
+    assert.ok(war)
+    assert.equal(war.gear_pct, 88.3)
+    assert.equal(war.char_name, 'Badammo')
   })
 
   it('attributes WAR from magelo when db class is wrong', () => {
@@ -143,9 +203,8 @@ describe('buildAccountCoverage', () => {
     assert.ok(cov)
     const war = cov.classes.find((c) => c.abbrev === 'WAR')
     assert.ok(war)
-    assert.equal(war.gear_pct, 88)
+    assert.equal(war.gear_pct, 100)
     assert.equal(war.char_name, 'Badammo')
-    assert.equal(war.class_name, 'Warrior')
   })
 
   it('matches db WAR abbrev to magelo Warrior', () => {
@@ -157,7 +216,7 @@ describe('buildAccountCoverage', () => {
     })
     const war = built.byAccount.get('acc3')?.classes.find((c) => c.abbrev === 'WAR')
     assert.ok(war)
-    assert.equal(war.gear_pct, 88)
+    assert.equal(war.gear_pct, 100)
   })
 })
 

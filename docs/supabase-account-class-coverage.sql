@@ -12,10 +12,10 @@ CREATE TABLE IF NOT EXISTS public.account_class_coverage (
 );
 
 COMMENT ON TABLE public.account_class_coverage IS
-  'Per-account viable raid classes from Magelo gear rankings (>75% general, >85% tanks). Refreshed by CI, not on page load.';
+  'Per-account viable raid classes from Magelo gear rankings. gear_pct is class-normalized (>75% general, >85% tanks). Refreshed by CI, not on page load.';
 
 COMMENT ON COLUMN public.account_class_coverage.classes IS
-  'JSON array: { abbrev, class_name, gear_pct, is_main, char_id, char_name } — one entry per class (best gear_pct).';
+  'JSON array: { abbrev, class_name, gear_pct, is_main, char_id, char_name }. gear_pct = 100 * raw / best-in-class raw in class_rankings export (Magelo rankings table parity).';
 
 CREATE INDEX IF NOT EXISTS idx_account_class_coverage_refreshed
   ON public.account_class_coverage(refreshed_at DESC);

@@ -318,7 +318,8 @@ export default function OfficerRaiderActivity({ isOfficer }) {
           : coverageLoading
             ? 'loading…'
             : 'not loaded yet — run CI or Reload coverage'}
-        . Green = class at &gt;85% gear; muted = viable below that. Viability: &gt;75% overall (&gt;85% PAL/WAR/SHD).
+        . Percent = Magelo class-normalized gear (vs best in class in rankings export), not raw overall_score.
+        Green = &gt;85%; muted = viable below that. Viability: &gt;75% normalized (&gt;85% PAL/WAR/SHD).
       </p>
 
       {computed && (
@@ -506,7 +507,7 @@ export default function OfficerRaiderActivity({ isOfficer }) {
               <thead>
                 <tr>
                   <th>Raider</th>
-                  <th title="Viable raid-ready classes from Magelo gear rankings">Class coverage</th>
+                  <th title="Viable raid-ready classes; % normalized vs best in class (Magelo rankings)">Class coverage</th>
                   <th>RA 30d</th>
                   <th>RA 60d</th>
                   <th>RA 90d</th>
