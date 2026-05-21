@@ -1195,6 +1195,8 @@ export default function Officer({ isOfficer }) {
           <Link to="/officer/global-loot-bid-forecast">Global bid</Link>
           {' · '}
           <Link to="/officer/who-parser">Who parser</Link>
+          {' · '}
+          <Link to="/officer/raider-activity">Raider Activity</Link>
         </p>
       </section>
       {error && <p className="error" style={{ marginBottom: '1rem' }}>{error}</p>}

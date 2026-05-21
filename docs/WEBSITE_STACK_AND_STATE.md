@@ -59,6 +59,7 @@ Defined in `web/src/App.jsx`.
 | `/officer/loot-bid-forecast` | `OfficerLootBidForecast` | Signed in (officer) |
 | `/officer/global-loot-bid-forecast` | `OfficerGlobalLootBidForecast` | Signed in (officer) |
 | `/officer/claim-cooldowns` | `OfficerClaimCooldowns` | Signed in (officer) |
+| `/officer/raider-activity` | `OfficerRaiderActivity` | Signed in (officer) |
 | `/loot` | `LootSearch` | Signed in |
 | `/loot-recipients` | `LootRecipients` | Signed in |
 | `/mobs` | `MobLoot` | Signed in |
