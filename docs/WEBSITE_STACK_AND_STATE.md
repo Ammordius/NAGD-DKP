@@ -137,6 +137,8 @@ If a bookmark to `/` unexpectedly jumps elsewhere, this behavior is why.
 | `/accounts/:accountId` | `tab` | `activity` \| `characters` \| `loot` \| `history` (default: activity; default tab may omit query) |
 | `/profile` | `tab` | `activity` \| `characters` |
 
+**History tab charts:** bounded to account raids with earn/tic/loot (not guild absence rows). Default window is last 12 months, clipped to actual activity dates; window selector persisted as `pageState:/accounts/history:months` (12 / 24 / 36 / all).
+
 **Note:** Top nav `<Link to="/officer">` does not preserve `?raid=`; deep links and browser history still do. Activity tab pagination on account pages uses `pageState:/accounts/detail:{accountId}:activityPage` (not the URL).
 
 ## Local development

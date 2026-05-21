@@ -1,14 +1,38 @@
 import { useMemo } from 'react'
 import DkpLineChart from './DkpLineChart'
-import { buildAccountDkpTimeSeries } from '../lib/accountDkpTimeSeries'
+import {
+  buildAccountDkpTimeSeries,
+  formatChartMonthYear,
+} from '../lib/accountDkpTimeSeries'
+import { usePersistedState } from '../lib/usePersistedState'
+
+const HISTORY_MONTH_OPTIONS = [
+  { value: 12, label: 'Last 12 months' },
+  { value: 24, label: 'Last 24 months' },
+  { value: 36, label: 'Last 36 months' },
+  { value: 0, label: 'All activity' },
+]
+
+function chartWindowSubtitle(chartBounds) {
+  const { start, end, months } = chartBounds || {}
+  if (!start || !end) return null
+  const range = `${formatChartMonthYear(start)} – ${formatChartMonthYear(end)}`
+  if (!months || months === 0) {
+    return `Charts: all account activity (${range})`
+  }
+  return `Charts: last ${months} months of account activity (${range})`
+}
 
 export default function AccountLootHistoryTab({ activityByRaid, dkpByCharacterKey, characters }) {
+  const [months, setMonths] = usePersistedState('/accounts/history:months', 12)
+
   const charts = useMemo(
-    () => buildAccountDkpTimeSeries(activityByRaid, characters, dkpByCharacterKey),
-    [activityByRaid, characters, dkpByCharacterKey],
+    () => buildAccountDkpTimeSeries(activityByRaid, characters, dkpByCharacterKey, { months }),
+    [activityByRaid, characters, dkpByCharacterKey, months],
   )
 
-  const { hasDatedRaids, netSeries, investedSeries, topCharCharts } = charts
+  const { hasDatedRaids, netSeries, investedSeries, topCharCharts, chartBounds } = charts
+  const windowSubtitle = chartWindowSubtitle(chartBounds)
 
   if (!hasDatedRaids) {
     return (
@@ -21,8 +45,25 @@ export default function AccountLootHistoryTab({ activityByRaid, dkpByCharacterKe
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '0.75rem' }}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#a1a1aa', fontSize: '0.875rem' }}>
+          Chart window
+          <select
+            value={months}
+            onChange={(e) => setMonths(Number(e.target.value))}
+            style={{ padding: '0.35rem 0.5rem' }}
+          >
+            {HISTORY_MONTH_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
+        </label>
+      </div>
+      {windowSubtitle && (
+        <p style={{ color: '#71717a', fontSize: '0.875rem', margin: 0 }}>{windowSubtitle}</p>
+      )}
       <p style={{ color: '#a1a1aa', fontSize: '0.875rem', margin: 0 }}>
-        Cumulative DKP from raid dates on this account. Net = earned minus spent on loot attributed to this account.
+        Cumulative DKP from raids with earn, tic, or loot on this account. Net = earned minus spent on loot attributed to this account.
       </p>
 
       {netSeries.length > 0 && (
@@ -31,6 +72,7 @@ export default function AccountLootHistoryTab({ activityByRaid, dkpByCharacterKe
           valueKey="net"
           title="Net DKP over time"
           subtitle="Running balance (earned − spent) after each raid"
+          legendLabel="Net DKP (cumulative)"
           strokeColor="#a78bfa"
           yAxisLabel="Net DKP"
         />
@@ -42,6 +84,7 @@ export default function AccountLootHistoryTab({ activityByRaid, dkpByCharacterKe
           valueKey="invested"
           title="DKP invested (account)"
           subtitle="Total DKP spent on loot for all characters on this account"
+          legendLabel="DKP spent (cumulative)"
           strokeColor="#34d399"
           yAxisLabel="DKP spent"
         />
@@ -62,6 +105,7 @@ export default function AccountLootHistoryTab({ activityByRaid, dkpByCharacterKe
                   valueKey="invested"
                   title={ch.displayName}
                   subtitle={`Lifetime spent: ${Math.round(ch.lifetimeSpent)} DKP`}
+                  legendLabel={`${ch.displayName} — DKP spent (cumulative)`}
                   strokeColor="#60a5fa"
                   yAxisLabel="DKP spent"
                 />
@@ -69,7 +113,7 @@ export default function AccountLootHistoryTab({ activityByRaid, dkpByCharacterKe
                 <div key={ch.canonical} className="card">
                   <h3 style={{ marginTop: 0 }}>{ch.displayName}</h3>
                   <p style={{ color: '#71717a', fontSize: '0.875rem' }}>
-                    Lifetime spent {Math.round(ch.lifetimeSpent)} DKP — no dated loot events to plot.
+                    Lifetime spent {Math.round(ch.lifetimeSpent)} DKP — no dated loot events in this window.
                   </p>
                 </div>
               )
