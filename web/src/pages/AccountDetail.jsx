@@ -12,10 +12,11 @@ import { useDkpData } from '../lib/dkpLeaderboard'
 import { formatAccountCharacter, formatCharacterClassSpentLine } from '../lib/formatAccountCharacter'
 import { usePersistedState } from '../lib/usePersistedState'
 import { fetchLootForAccountChars } from '../lib/accountData'
+import AccountLootHistoryTab from '../components/AccountLootHistoryTab'
 
 const MAGELO_BASE = 'https://www.takproject.net/magelo/character.php?char='
 
-const ACCOUNT_TABS = ['activity', 'characters', 'loot']
+const ACCOUNT_TABS = ['activity', 'characters', 'loot', 'history']
 
 function normalizeAccountTab(raw) {
   const t = (raw || '').trim().toLowerCase()
@@ -518,6 +519,13 @@ export default function AccountDetail({ isOfficer, profile, session }) {
         >
           Loot
         </button>
+        <button
+          type="button"
+          className={tab === 'history' ? 'btn' : 'btn btn-ghost'}
+          onClick={() => setTab('history')}
+        >
+          History
+        </button>
       </div>
 
       {tab === 'characters' && (
@@ -676,6 +684,14 @@ export default function AccountDetail({ isOfficer, profile, session }) {
             </table>
           )}
         </div>
+      )}
+
+      {tab === 'history' && (
+        <AccountLootHistoryTab
+          activityByRaid={activityByRaid}
+          dkpByCharacterKey={dkpByCharacterKey}
+          characters={characters}
+        />
       )}
 
       {addCharOpen && (

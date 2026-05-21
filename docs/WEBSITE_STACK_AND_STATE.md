@@ -134,7 +134,7 @@ If a bookmark to `/` unexpectedly jumps elsewhere, this behavior is why.
 |--------|--------|---------|
 | `/officer` | `raid` | Selected raid for officer editing (synced with dropdown) |
 | `/officer/loot-bid-forecast` | `raid` | Raid scope for bid hints |
-| `/accounts/:accountId` | `tab` | `activity` \| `characters` \| `loot` (default: activity; default tab may omit query) |
+| `/accounts/:accountId` | `tab` | `activity` \| `characters` \| `loot` \| `history` (default: activity; default tab may omit query) |
 | `/profile` | `tab` | `activity` \| `characters` |
 
 **Note:** Top nav `<Link to="/officer">` does not preserve `?raid=`; deep links and browser history still do. Activity tab pagination on account pages uses `pageState:/accounts/detail:{accountId}:activityPage` (not the URL).
