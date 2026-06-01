@@ -3,13 +3,40 @@ import assert from 'node:assert/strict'
 import {
   addDays,
   buildScheduleOutput,
+  buildScheduleOutputFromSlots,
   computeUpcomingSlots,
+  createDefaultRows,
   formatOutputLine,
   getTodayNyDate,
   nextDateOnOrAfter,
   nyLocalToUnixEpoch,
+  parseSchedulePaste,
   SCHEDULE_SLOTS,
+  slotFromDateIso,
 } from './discordSchedule.js'
+
+const SAMPLE_PASTE = `-------
+04/22 - 05/05 Raid Schedule
+-------
+Week 1:
+-------
+Thursday 4/23 9pm edt: Fire Minis + Seru/Praes - April 23, 2026 8:00 PM
+-------
+Monday 04/27 9pm edt: Fire Minis + Recharge - April 27, 2026 8:00 PM
+-------
+Tuesday 04/28 8pm edt: PoTime Early Start - April 28, 2026 7:00 PM
+-------
+InachtRole icon, Raid Director — 5/6/2026 12:12 AM
+Week 2
+-------
+Thursday 04/30 9pm edt: PoTime Day 2 - April 30, 2026 8:00 PM
+-------
+Monday 05/04 9pm edt: Fire Minis + Fennin - May 4, 2026 8:00 PM
+-------
+Tuesday 05/05 9pm edt: Seru/Praes + Non DKP Shei - May 5, 2026 8:00 PM
+-------
+AC Burrower and CT Slime Ring are available as non dkp targets.  PoWater and SSRA are FFA
+-------`
 
 describe('discordSchedule', () => {
   it('getTodayNyDate uses America/New_York not local machine date', () => {
@@ -63,16 +90,60 @@ describe('discordSchedule', () => {
     )
   })
 
-  it('buildScheduleOutput inserts Week 2 after third row divider', () => {
-    const slots = computeUpcomingSlots('2026-06-01')
-    const names = ['A', 'B', 'C', 'D', 'E', 'F']
-    const times = Array(6).fill({ hour24: 21, minute: 0 })
-    const out = buildScheduleOutput(slots, names, times)
+  it('buildScheduleOutput inserts Week 2 after Week 1 block', () => {
+    const rows = createDefaultRows('2026-06-01').map((row, i) => ({
+      ...row,
+      eventName: ['A', 'B', 'C', 'D', 'E', 'F'][i],
+    }))
+    const out = buildScheduleOutput(rows)
     const lines = out.split('\n')
     const week2Idx = lines.indexOf('Week 2')
     assert.ok(week2Idx > 0)
     assert.equal(lines[week2Idx - 1], '-------')
     assert.equal(lines[week2Idx + 1].startsWith('Thursday'), true)
+  })
+
+  it('buildScheduleOutputFromSlots matches legacy API', () => {
+    const slots = computeUpcomingSlots('2026-06-01')
+    const names = ['A', 'B', 'C', 'D', 'E', 'F']
+    const times = Array(6).fill({ hour24: 21, minute: 0 })
+    assert.equal(buildScheduleOutputFromSlots(slots, names, times), buildScheduleOutput(
+      slots.map((slot, i) => ({
+        week: slot.week,
+        dateIso: slot.dateIso,
+        eventName: names[i],
+        time: times[i],
+      }))
+    ))
+  })
+
+  it('parseSchedulePaste extracts six raids from a Discord schedule block', () => {
+    const rows = parseSchedulePaste(SAMPLE_PASTE)
+    assert.equal(rows.length, 6)
+    assert.deepEqual(
+      rows.map((r) => r.dateIso),
+      [
+        '2026-04-23',
+        '2026-04-27',
+        '2026-04-28',
+        '2026-04-30',
+        '2026-05-04',
+        '2026-05-05',
+      ]
+    )
+    assert.deepEqual(
+      rows.map((r) => r.week),
+      [1, 1, 1, 2, 2, 2]
+    )
+    assert.equal(rows[0].eventName, 'Fire Minis + Seru/Praes')
+    assert.equal(rows[2].time.hour24, 20)
+    assert.equal(rows[2].eventName, 'PoTime Early Start')
+  })
+
+  it('slotFromDateIso builds display fields from dateIso', () => {
+    const slot = slotFromDateIso('2026-04-23', 1)
+    assert.equal(slot.dayLabel, 'Thursday 04/23')
+    assert.equal(slot.dayName, 'Thursday')
   })
 
   it('addDays handles month boundaries', () => {

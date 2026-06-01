@@ -202,6 +202,138 @@ export function parseTimeOptionKey(key) {
   return { hour24: h, minute: m }
 }
 
+/** @param {string} dateIso @param {number} [week=1] */
+export function slotFromDateIso(dateIso, week = 1) {
+  const dayName = DAY_NAMES[getDayOfWeek(dateIso)]
+  const mmdd = formatMmDd(dateIso)
+  return {
+    week,
+    dateIso,
+    dayName,
+    mmdd,
+    dayLabel: formatDayLabel(dateIso),
+  }
+}
+
+let rowIdCounter = 0
+export function createRowId() {
+  rowIdCounter += 1
+  return `row-${Date.now()}-${rowIdCounter}`
+}
+
+/**
+ * @param {string} [anchorDate]
+ * @returns {Array<{ id: string, week: number, dateIso: string, eventName: string, time: { hour24: number, minute: number } }>}
+ */
+export function createDefaultRows(anchorDate = getTodayNyDate()) {
+  return computeUpcomingSlots(anchorDate).map((slot) => ({
+    id: createRowId(),
+    week: slot.week,
+    dateIso: slot.dateIso,
+    eventName: '',
+    time: { ...DEFAULT_TIME },
+  }))
+}
+
+/** @param {number} hour12 @param {string} ampm @param {number} [minute=0] */
+export function parseCompactTime(hour12, ampm, minute = 0) {
+  let h = Number(hour12)
+  const pm = ampm.toLowerCase() === 'pm'
+  if (h === 12) return { hour24: pm ? 12 : 0, minute }
+  return { hour24: pm ? h + 12 : h, minute }
+}
+
+const RAID_LINE_RE =
+  /^(Sunday|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday)\s+(\d{1,2})\/(\d{1,2})\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)\s*(edt|est)\s*:\s*(.+)$/i
+
+const WEEK2_RE = /^week\s*2\b/i
+const SKIP_LINE_RE =
+  /^-+$|^week\s*1:?$|raid schedule$|raid director|ac burrower|powater|ssra|po water/i
+
+function parseLongDateToIso(str) {
+  const d = new Date(String(str || '').trim())
+  if (Number.isNaN(d.getTime())) return null
+  return formatDateIso({
+    year: d.getFullYear(),
+    month: d.getMonth() + 1,
+    day: d.getDate(),
+  })
+}
+
+function inferYearFromIso(dateIso, fallbackYear) {
+  const { month } = parseDateIso(dateIso)
+  const today = parseDateIso(getTodayNyDate())
+  let year = fallbackYear
+  if (month < today.month - 6) year += 1
+  return year
+}
+
+/**
+ * Parse a pasted Discord raid schedule block into editable rows.
+ * @param {string} text
+ * @returns {Array<{ id: string, week: number, dateIso: string, eventName: string, time: { hour24: number, minute: number } }>}
+ */
+export function parseSchedulePaste(text) {
+  const lines = String(text || '')
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean)
+
+  let currentWeek = 1
+  let fallbackYear = new Date().getFullYear()
+  const rows = []
+
+  for (const rawLine of lines) {
+    const line = rawLine.replace(/^[^\]]+\]\s*/, '').trim()
+    if (!line || SKIP_LINE_RE.test(line) || /^[\d/]+\s*-\s*[\d/]+\s/i.test(line)) continue
+    if (WEEK2_RE.test(line)) {
+      currentWeek = 2
+      continue
+    }
+    if (/^\d{1,2}\/\d{1,2}\s*-\s*\d{1,2}\/\d{1,2}/i.test(line)) continue
+
+    const match = line.match(RAID_LINE_RE)
+    if (!match) continue
+
+    const [, dayName, monthStr, dayStr, hourStr, minuteStr, ampm, , rest] = match
+    let eventName = rest.trim()
+    let dateIso = null
+
+    const dashIdx = eventName.lastIndexOf(' - ')
+    if (dashIdx >= 0) {
+      const tail = eventName.slice(dashIdx + 3).trim()
+      const parsedIso = parseLongDateToIso(tail)
+      if (parsedIso) {
+        dateIso = parsedIso
+        fallbackYear = parseDateIso(parsedIso).year
+        eventName = eventName.slice(0, dashIdx).trim()
+      }
+    }
+
+    if (!dateIso) {
+      const month = Number(monthStr)
+      const day = Number(dayStr)
+      const year = inferYearFromIso(formatDateIso({ year: fallbackYear, month, day }), fallbackYear)
+      dateIso = formatDateIso({ year, month, day })
+    }
+
+    const parsedDay = DAY_NAMES[getDayOfWeek(dateIso)]
+    if (parsedDay.toLowerCase() !== dayName.toLowerCase()) {
+      // Prefer calendar date from long tail; day name in prefix can be wrong after edits.
+    }
+
+    rows.push({
+      id: createRowId(),
+      week: currentWeek,
+      dateIso,
+      eventName,
+      time: parseCompactTime(hourStr, ampm, minuteStr ? Number(minuteStr) : 0),
+    })
+  }
+
+  return rows
+}
+
 /**
  * @param {{ dateIso: string, dayName: string, mmdd: string }} slot
  * @param {string} eventName
@@ -215,21 +347,36 @@ export function formatOutputLine(slot, eventName, time) {
 }
 
 /**
- * @param {Array<{ week: number, dateIso: string, dayName: string, mmdd: string }>} slots
- * @param {string[]} eventNames
- * @param {Array<{ hour24: number, minute: number }>} times
+ * @param {Array<{ week: number, dateIso: string, eventName?: string, time?: { hour24: number, minute: number } }>} rows
  */
-export function buildScheduleOutput(slots, eventNames, times) {
+export function buildScheduleOutput(rows) {
+  const week1 = rows.filter((r) => r.week === 1)
+  const week2 = rows.filter((r) => r.week === 2)
   const lines = []
-  for (let i = 0; i < slots.length; i++) {
-    const slot = slots[i]
-    const name = eventNames[i] ?? ''
-    const time = times[i] ?? DEFAULT_TIME
-    lines.push(formatOutputLine(slot, name, time))
+
+  for (const row of week1) {
+    const slot = slotFromDateIso(row.dateIso, 1)
+    lines.push(formatOutputLine(slot, row.eventName ?? '', row.time ?? DEFAULT_TIME))
     lines.push('-------')
-    if (i === 2) {
-      lines.push('Week 2')
-    }
+  }
+  if (week2.length) {
+    lines.push('Week 2')
+  }
+  for (const row of week2) {
+    const slot = slotFromDateIso(row.dateIso, 2)
+    lines.push(formatOutputLine(slot, row.eventName ?? '', row.time ?? DEFAULT_TIME))
+    lines.push('-------')
   }
   return lines.join('\n')
+}
+
+/** Back-compat helper for legacy slot/name/time arrays. */
+export function buildScheduleOutputFromSlots(slots, eventNames, times) {
+  const rows = slots.map((slot, i) => ({
+    week: slot.week,
+    dateIso: slot.dateIso,
+    eventName: eventNames[i] ?? '',
+    time: times[i] ?? DEFAULT_TIME,
+  }))
+  return buildScheduleOutput(rows)
 }
