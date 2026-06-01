@@ -1196,6 +1196,8 @@ export default function Officer({ isOfficer }) {
           {' · '}
           <Link to="/officer/who-parser">Who parser</Link>
           {' · '}
+          <Link to="/tools/discord-schedule">Discord schedule</Link>
+          {' · '}
           <Link to="/officer/raider-activity">Raider Activity</Link>
         </p>
       </section>

@@ -21,6 +21,7 @@ import OfficerLootBidForecast from './pages/OfficerLootBidForecast'
 import OfficerGlobalLootBidForecast from './pages/OfficerGlobalLootBidForecast'
 import OfficerWhoParser from './pages/OfficerWhoParser'
 import OfficerRaiderActivity from './pages/OfficerRaiderActivity'
+import DiscordSchedule from './pages/DiscordSchedule'
 import Profile from './pages/Profile'
 
 export default function App() {
@@ -136,6 +137,7 @@ export default function App() {
         <Route path="/officer/who-parser" element={<RequireAuth><OfficerWhoParser isOfficer={isOfficer} /></RequireAuth>} />
         <Route path="/officer/claim-cooldowns" element={<RequireAuth><OfficerClaimCooldowns isOfficer={isOfficer} /></RequireAuth>} />
         <Route path="/officer/raider-activity" element={<RequireAuth><OfficerRaiderActivity isOfficer={isOfficer} /></RequireAuth>} />
+        <Route path="/tools/discord-schedule" element={<RequireAuth><DiscordSchedule /></RequireAuth>} />
         <Route path="/loot" element={<RequireAuth><LootSearch /></RequireAuth>} />
         <Route path="/loot-recipients" element={<RequireAuth><LootRecipients /></RequireAuth>} />
         <Route path="/mobs" element={<RequireAuth><MobLoot /></RequireAuth>} />
