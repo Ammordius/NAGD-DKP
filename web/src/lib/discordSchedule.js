@@ -269,11 +269,70 @@ function inferYearFromIso(dateIso, fallbackYear) {
 }
 
 /**
- * Parse a pasted Discord raid schedule block into editable rows.
- * @param {string} text
- * @returns {Array<{ id: string, week: number, dateIso: string, eventName: string, time: { hour24: number, minute: number } }>}
+ * The Wednesday after the upcoming Wednesday (NY calendar), used as the
+ * default start of the two-week posting window.
+ * @param {string} [fromDate] YYYY-MM-DD in NY
  */
-export function parseSchedulePaste(text) {
+export function getNextNextWednesdayNy(fromDate = getTodayNyDate()) {
+  const firstWed = nextDateOnOrAfter(addDays(fromDate, 1), 3)
+  return addDays(firstWed, 7)
+}
+
+/** @param {string} dateIso */
+export function snapToWednesdayNy(dateIso) {
+  if (getDayOfWeek(dateIso) === 3) return dateIso
+  return nextDateOnOrAfter(dateIso, 3)
+}
+
+/**
+ * Map parsed rows onto a two-week window (Wed–Tue × 2). Preserves week grouping,
+ * row order, and weekday from each row's dateIso.
+ * @param {Array<{ id?: string, week: number, dateIso: string, eventName: string, time: object }>} rows
+ * @param {{ fromDate?: string, periodStart?: string }} [options]
+ */
+export function projectParsedRowsToUpcoming(rows, { fromDate = getTodayNyDate(), periodStart } = {}) {
+  const periodStartWednesday = snapToWednesdayNy(periodStart || getNextNextWednesdayNy(fromDate))
+  const week1Start = periodStartWednesday
+  const week1End = addDays(periodStartWednesday, 6)
+  const week2Start = addDays(periodStartWednesday, 7)
+  const week2End = addDays(periodStartWednesday, 13)
+
+  function assignWeekDates(weekRows, windowStart, windowEnd) {
+    let cursor = windowStart
+    return weekRows.map((row) => {
+      const dow = getDayOfWeek(row.dateIso)
+      let dateIso = nextDateOnOrAfter(cursor, dow)
+      if (dateIso > windowEnd) {
+        dateIso = nextDateOnOrAfter(windowStart, dow)
+      }
+      cursor = addDays(dateIso, 1)
+      return { ...row, id: row.id || createRowId(), dateIso }
+    })
+  }
+
+  const week1 = rows.filter((r) => r.week === 1)
+  const week2 = rows.filter((r) => r.week === 2)
+  return {
+    periodStart: periodStartWednesday,
+    rows: [
+      ...assignWeekDates(week1, week1Start, week1End),
+      ...assignWeekDates(week2, week2Start, week2End),
+    ],
+  }
+}
+
+/**
+ * Parse a pasted Discord raid schedule and project rows onto a two-week window.
+ * @param {string} text
+ * @param {{ fromDate?: string, periodStart?: string }} [options]
+ */
+export function parseSchedulePaste(text, { fromDate = getTodayNyDate(), periodStart } = {}) {
+  const rows = parseSchedulePasteRaw(text)
+  return projectParsedRowsToUpcoming(rows, { fromDate, periodStart }).rows
+}
+
+/** @deprecated internal – use parseSchedulePaste; exposed for tests */
+export function parseSchedulePasteRaw(text) {
   const lines = String(text || '')
     .split(/\r?\n/)
     .map((l) => l.trim())
@@ -315,11 +374,6 @@ export function parseSchedulePaste(text) {
       const day = Number(dayStr)
       const year = inferYearFromIso(formatDateIso({ year: fallbackYear, month, day }), fallbackYear)
       dateIso = formatDateIso({ year, month, day })
-    }
-
-    const parsedDay = DAY_NAMES[getDayOfWeek(dateIso)]
-    if (parsedDay.toLowerCase() !== dayName.toLowerCase()) {
-      // Prefer calendar date from long tail; day name in prefix can be wrong after edits.
     }
 
     rows.push({

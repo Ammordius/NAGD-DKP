@@ -6,10 +6,14 @@ import {
   createDefaultRows,
   createRowId,
   DEFAULT_TIME,
+  getNextNextWednesdayNy,
   getNyTzSuffix,
   getTodayNyDate,
   parseSchedulePaste,
+  parseSchedulePasteRaw,
+  projectParsedRowsToUpcoming,
   slotFromDateIso,
+  snapToWednesdayNy,
   TIME_OPTIONS,
   timeOptionKey,
 } from '../lib/discordSchedule'
@@ -127,6 +131,17 @@ function ScheduleRow({
 }
 
 export default function DiscordScheduleTool() {
+  const defaultPeriodStart = useMemo(
+    () => getNextNextWednesdayNy(getTodayNyDate()),
+    []
+  )
+  const [periodStart, setPeriodStart] = usePersistedState(
+    '/tools/discord-schedule:periodStart',
+    null
+  )
+  const effectivePeriodStart = periodStart || defaultPeriodStart
+  const periodStartSlot = slotFromDateIso(effectivePeriodStart)
+
   const [rows, setRows] = usePersistedState('/tools/discord-schedule:rows', null)
   const [paste, setPaste] = usePersistedState('/tools/discord-schedule:paste', '')
   const [parseError, setParseError] = useState('')
@@ -194,7 +209,7 @@ export default function DiscordScheduleTool() {
 
   function handleParsePaste() {
     setParseError('')
-    const parsed = parseSchedulePaste(paste)
+    const parsed = parseSchedulePaste(paste, { periodStart: effectivePeriodStart })
     if (!parsed.length) {
       setParseError('No raid lines found. Paste a schedule with lines like "Thursday 4/23 9pm edt: ..."')
       return
@@ -202,8 +217,29 @@ export default function DiscordScheduleTool() {
     setRows(parsed)
   }
 
+  function handleReprojectRows() {
+    setParseError('')
+    const base = normalizeRows(rows)
+    if (!base.length) return
+    const { rows: projected, periodStart: snapped } = projectParsedRowsToUpcoming(base, {
+      periodStart: effectivePeriodStart,
+    })
+    setPeriodStart(snapped)
+    setRows(projected)
+  }
+
+  function handlePeriodStartChange(value) {
+    if (!value) return
+    setPeriodStart(snapToWednesdayNy(value))
+  }
+
+  function handleResetPeriodStart() {
+    setPeriodStart(getNextNextWednesdayNy(getTodayNyDate()))
+  }
+
   function handleResetUpcoming() {
     setParseError('')
+    setPeriodStart(getNextNextWednesdayNy(getTodayNyDate()))
     setRows(createDefaultRows())
   }
 
@@ -270,8 +306,35 @@ export default function DiscordScheduleTool() {
       <section className="card" style={{ marginBottom: '1rem' }}>
         <h2 style={{ marginTop: 0 }}>Import from previous schedule</h2>
         <p style={{ color: '#71717a', fontSize: '0.9rem', marginTop: 0 }}>
-          Paste an old Discord raid schedule to pre-fill event names, dates, and times. Then adjust rows below.
+          Paste an old Discord raid schedule to pre-fill event names, times, and weekday order. Dates are
+          projected onto a two-week window (Wed–Tue × 2) from the start Wednesday you choose below.
         </p>
+        <div
+          className="form-group"
+          style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', alignItems: 'flex-end', marginBottom: '1rem' }}
+        >
+          <div>
+            <label htmlFor="period-start">Period start (Wednesday)</label>
+            <input
+              id="period-start"
+              type="date"
+              value={effectivePeriodStart}
+              onChange={(e) => handlePeriodStartChange(e.target.value)}
+              style={{ maxWidth: '200px' }}
+            />
+            <div style={{ fontSize: '0.75rem', color: '#71717a', marginTop: '0.2rem' }}>
+              {periodStartSlot.dayLabel} · Week 1 Wed–Tue, then Week 2 Wed–Tue
+            </div>
+          </div>
+          <button type="button" className="btn btn-ghost" onClick={handleResetPeriodStart}>
+            Default (Wed after next)
+          </button>
+          {effectiveRows.length > 0 && (
+            <button type="button" className="btn btn-ghost" onClick={handleReprojectRows}>
+              Re-project row dates
+            </button>
+          )}
+        </div>
         <textarea
           value={paste}
           onChange={(e) => setPaste(e.target.value)}

@@ -7,10 +7,14 @@ import {
   computeUpcomingSlots,
   createDefaultRows,
   formatOutputLine,
+  getNextNextWednesdayNy,
   getTodayNyDate,
   nextDateOnOrAfter,
   nyLocalToUnixEpoch,
   parseSchedulePaste,
+  parseSchedulePasteRaw,
+  projectParsedRowsToUpcoming,
+  snapToWednesdayNy,
   SCHEDULE_SLOTS,
   slotFromDateIso,
 } from './discordSchedule.js'
@@ -117,8 +121,13 @@ describe('discordSchedule', () => {
     ))
   })
 
-  it('parseSchedulePaste extracts six raids from a Discord schedule block', () => {
-    const rows = parseSchedulePaste(SAMPLE_PASTE)
+  it('getNextNextWednesdayNy skips the upcoming Wednesday', () => {
+    assert.equal(getNextNextWednesdayNy('2026-06-01'), '2026-06-10')
+    assert.equal(getNextNextWednesdayNy('2026-06-03'), '2026-06-17') // Wed → next Wed Jun 10, +7
+  })
+
+  it('parseSchedulePasteRaw extracts historical dates from a Discord schedule block', () => {
+    const rows = parseSchedulePasteRaw(SAMPLE_PASTE)
     assert.equal(rows.length, 6)
     assert.deepEqual(
       rows.map((r) => r.dateIso),
@@ -131,12 +140,69 @@ describe('discordSchedule', () => {
         '2026-05-05',
       ]
     )
+    assert.equal(rows[0].eventName, 'Fire Minis + Seru/Praes')
+    assert.equal(rows[2].time.hour24, 20)
+  })
+
+  it('snapToWednesdayNy moves non-Wednesdays forward to the next Wednesday', () => {
+    assert.equal(snapToWednesdayNy('2026-06-10'), '2026-06-10')
+    assert.equal(snapToWednesdayNy('2026-06-11'), '2026-06-17')
+    assert.equal(snapToWednesdayNy('2026-06-09'), '2026-06-10')
+  })
+
+  it('projectParsedRowsToUpcoming maps weekdays onto the next-next-Wednesday window', () => {
+    const raw = parseSchedulePasteRaw(SAMPLE_PASTE)
+    const { rows, periodStart } = projectParsedRowsToUpcoming(raw, { fromDate: '2026-06-01' })
+    assert.equal(periodStart, '2026-06-10')
+    assert.deepEqual(
+      rows.map((r) => r.dateIso),
+      [
+        '2026-06-11',
+        '2026-06-15',
+        '2026-06-16',
+        '2026-06-18',
+        '2026-06-22',
+        '2026-06-23',
+      ]
+    )
+    assert.deepEqual(rows.map((r) => r.week), [1, 1, 1, 2, 2, 2])
+  })
+
+  it('projectParsedRowsToUpcoming honors a custom period start Wednesday', () => {
+    const raw = parseSchedulePasteRaw(SAMPLE_PASTE)
+    const { rows, periodStart } = projectParsedRowsToUpcoming(raw, { periodStart: '2026-06-17' })
+    assert.equal(periodStart, '2026-06-17')
+    assert.deepEqual(
+      rows.map((r) => r.dateIso),
+      [
+        '2026-06-18',
+        '2026-06-22',
+        '2026-06-23',
+        '2026-06-25',
+        '2026-06-29',
+        '2026-06-30',
+      ]
+    )
+  })
+
+  it('parseSchedulePaste projects parsed rows onto upcoming two-week period', () => {
+    const rows = parseSchedulePaste(SAMPLE_PASTE, { fromDate: '2026-06-01' })
+    assert.equal(rows.length, 6)
+    assert.deepEqual(
+      rows.map((r) => r.dateIso),
+      [
+        '2026-06-11',
+        '2026-06-15',
+        '2026-06-16',
+        '2026-06-18',
+        '2026-06-22',
+        '2026-06-23',
+      ]
+    )
     assert.deepEqual(
       rows.map((r) => r.week),
       [1, 1, 1, 2, 2, 2]
     )
-    assert.equal(rows[0].eventName, 'Fire Minis + Seru/Praes')
-    assert.equal(rows[2].time.hour24, 20)
     assert.equal(rows[2].eventName, 'PoTime Early Start')
   })
 
