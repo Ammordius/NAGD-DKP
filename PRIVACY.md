@@ -42,3 +42,9 @@ or rotate data manually if needed.
 
 For privacy or data-removal requests, contact the maintainer or guild officers
 responsible for the deployed instance.
+
+## Children
+
+This application is intended for use by guild/community members and is not directed to children under 13.
+
+Users under 13 should not create accounts or use account-based features. The operator does not knowingly collect personal information from children under 13.
