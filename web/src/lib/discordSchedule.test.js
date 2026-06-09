@@ -4,6 +4,9 @@ import {
   addDays,
   buildScheduleOutput,
   buildScheduleOutputFromSlots,
+  buildWeek1Post,
+  buildWeek2Post,
+  computeScheduleTitle,
   computeUpcomingSlots,
   createDefaultRows,
   formatOutputLine,
@@ -11,6 +14,7 @@ import {
   getTodayNyDate,
   nextDateOnOrAfter,
   nyLocalToUnixEpoch,
+  parseScheduleMetadata,
   parseSchedulePaste,
   parseSchedulePasteRaw,
   projectParsedRowsToUpcoming,
@@ -104,7 +108,58 @@ describe('discordSchedule', () => {
     const week2Idx = lines.indexOf('Week 2')
     assert.ok(week2Idx > 0)
     assert.equal(lines[week2Idx - 1], '-------')
-    assert.equal(lines[week2Idx + 1].startsWith('Thursday'), true)
+    assert.equal(lines[week2Idx + 1], '-------')
+    assert.equal(lines[week2Idx + 2].startsWith('Thursday'), true)
+  })
+
+  it('computeScheduleTitle derives title from period start Wednesday', () => {
+    assert.equal(computeScheduleTitle('2026-06-03'), '06/03 - 06/16 Raid Schedule')
+  })
+
+  it('parseScheduleMetadata extracts title and week-2 footer from SAMPLE_PASTE', () => {
+    const meta = parseScheduleMetadata(SAMPLE_PASTE)
+    assert.equal(meta.scheduleTitle, '04/22 - 05/05 Raid Schedule')
+    assert.equal(
+      meta.week2Footer,
+      'AC Burrower and CT Slime Ring are available as non dkp targets.  PoWater and SSRA are FFA'
+    )
+  })
+
+  it('buildWeek1Post includes title, Week 1 label, and raid lines', () => {
+    const rows = createDefaultRows('2026-06-01').map((row, i) => ({
+      ...row,
+      eventName: ['A', 'B', 'C', 'D', 'E', 'F'][i],
+    }))
+    const out = buildWeek1Post(rows, { scheduleTitle: '06/03 - 06/16 Raid Schedule' })
+    const lines = out.split('\n')
+    assert.deepEqual(lines.slice(0, 5), [
+      '-------',
+      '06/03 - 06/16 Raid Schedule',
+      '-------',
+      'Week 1:',
+      '-------',
+    ])
+    assert.equal(lines[5].startsWith('Tuesday'), true)
+    assert.equal(lines[6], '-------')
+    assert.ok(!lines.includes('Week 2'))
+    assert.ok(!lines.some((l, i) => l === '-------' && lines[i + 1] === '-------'))
+  })
+
+  it('buildWeek2Post includes Week 2 label, raids, and footer', () => {
+    const rows = createDefaultRows('2026-06-01').map((row, i) => ({
+      ...row,
+      eventName: ['A', 'B', 'C', 'D', 'E', 'F'][i],
+    }))
+    const footer =
+      'AC Burrower and CT Slime Ring are available as non dkp targets.  PoWater and SSRA are FFA'
+    const out = buildWeek2Post(rows, { week2Footer: footer })
+    const lines = out.split('\n')
+    assert.equal(lines[0], 'Week 2')
+    assert.equal(lines[1], '-------')
+    assert.equal(lines[2].startsWith('Thursday'), true)
+    assert.equal(lines[lines.length - 2], footer)
+    assert.equal(lines[lines.length - 1], '-------')
+    assert.ok(!lines.some((l, i) => l === '-------' && lines[i + 1] === '-------'))
   })
 
   it('buildScheduleOutputFromSlots matches legacy API', () => {
@@ -186,7 +241,7 @@ describe('discordSchedule', () => {
   })
 
   it('parseSchedulePaste projects parsed rows onto upcoming two-week period', () => {
-    const rows = parseSchedulePaste(SAMPLE_PASTE, { fromDate: '2026-06-01' })
+    const { rows, metadata } = parseSchedulePaste(SAMPLE_PASTE, { fromDate: '2026-06-01' })
     assert.equal(rows.length, 6)
     assert.deepEqual(
       rows.map((r) => r.dateIso),
@@ -204,6 +259,8 @@ describe('discordSchedule', () => {
       [1, 1, 1, 2, 2, 2]
     )
     assert.equal(rows[2].eventName, 'PoTime Early Start')
+    assert.equal(metadata.scheduleTitle, '04/22 - 05/05 Raid Schedule')
+    assert.ok(metadata.week2Footer.includes('non dkp targets'))
   })
 
   it('slotFromDateIso builds display fields from dateIso', () => {

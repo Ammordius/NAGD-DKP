@@ -2,7 +2,9 @@ import { useMemo, useState } from 'react'
 import { usePersistedState } from '../lib/usePersistedState'
 import {
   addDays,
-  buildScheduleOutput,
+  buildWeek1Post,
+  buildWeek2Post,
+  computeScheduleTitle,
   createDefaultRows,
   createRowId,
   DEFAULT_TIME,
@@ -10,7 +12,6 @@ import {
   getNyTzSuffix,
   getTodayNyDate,
   parseSchedulePaste,
-  parseSchedulePasteRaw,
   projectParsedRowsToUpcoming,
   slotFromDateIso,
   snapToWednesdayNy,
@@ -144,6 +145,10 @@ export default function DiscordScheduleTool() {
 
   const [rows, setRows] = usePersistedState('/tools/discord-schedule:rows', null)
   const [paste, setPaste] = usePersistedState('/tools/discord-schedule:paste', '')
+  const [week2Footer, setWeek2Footer] = usePersistedState(
+    '/tools/discord-schedule:week2Footer',
+    ''
+  )
   const [parseError, setParseError] = useState('')
   const [copyStatus, setCopyStatus] = useState('')
 
@@ -151,7 +156,18 @@ export default function DiscordScheduleTool() {
   const week1Rows = effectiveRows.filter((r) => r.week === 1)
   const week2Rows = effectiveRows.filter((r) => r.week === 2)
 
-  const output = useMemo(() => buildScheduleOutput(effectiveRows), [effectiveRows])
+  const scheduleTitle = useMemo(
+    () => computeScheduleTitle(effectivePeriodStart),
+    [effectivePeriodStart]
+  )
+  const week1Output = useMemo(
+    () => buildWeek1Post(effectiveRows, { scheduleTitle }),
+    [effectiveRows, scheduleTitle]
+  )
+  const week2Output = useMemo(
+    () => buildWeek2Post(effectiveRows, { week2Footer: week2Footer || '' }),
+    [effectiveRows, week2Footer]
+  )
 
   function updateRows(updater) {
     setRows((prev) => {
@@ -209,12 +225,17 @@ export default function DiscordScheduleTool() {
 
   function handleParsePaste() {
     setParseError('')
-    const parsed = parseSchedulePaste(paste, { periodStart: effectivePeriodStart })
+    const { rows: parsed, metadata } = parseSchedulePaste(paste, {
+      periodStart: effectivePeriodStart,
+    })
     if (!parsed.length) {
       setParseError('No raid lines found. Paste a schedule with lines like "Thursday 4/23 9pm edt: ..."')
       return
     }
     setRows(parsed)
+    if (metadata.week2Footer) {
+      setWeek2Footer(metadata.week2Footer)
+    }
   }
 
   function handleReprojectRows() {
@@ -243,14 +264,15 @@ export default function DiscordScheduleTool() {
     setRows(createDefaultRows())
   }
 
-  async function handleCopy() {
-    if (!output.trim()) {
-      setCopyStatus('Nothing to copy.')
+  async function handleCopyWeek(week) {
+    const text = week === 1 ? week1Output : week2Output
+    if (!text.trim()) {
+      setCopyStatus(`Nothing to copy for Week ${week}.`)
       return
     }
     try {
-      await navigator.clipboard.writeText(output)
-      setCopyStatus('Copied to clipboard.')
+      await navigator.clipboard.writeText(text)
+      setCopyStatus(`Week ${week} copied to clipboard.`)
     } catch {
       setCopyStatus('Clipboard write failed in this browser.')
     }
@@ -362,15 +384,15 @@ export default function DiscordScheduleTool() {
       {renderWeekSection(1, week1Rows)}
       {renderWeekSection(2, week2Rows)}
 
-      <section className="card">
-        <h2 style={{ marginTop: 0 }}>Discord output</h2>
+      <section className="card" style={{ marginBottom: '1rem' }}>
+        <h2 style={{ marginTop: 0 }}>Week 1 Discord post</h2>
         <p style={{ color: '#71717a', fontSize: '0.9rem', marginTop: 0 }}>
           Copy this block into Discord. Timestamps render in each player&apos;s local timezone.
         </p>
         <textarea
           readOnly
-          value={output}
-          rows={16}
+          value={week1Output}
+          rows={12}
           style={{
             width: '100%',
             maxWidth: '800px',
@@ -380,14 +402,50 @@ export default function DiscordScheduleTool() {
           }}
         />
         <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
-          <button type="button" className="btn" onClick={handleCopy}>
-            Copy to Clipboard
+          <button type="button" className="btn" onClick={() => handleCopyWeek(1)}>
+            Copy Week 1
           </button>
           {copyStatus && (
             <span style={{ color: '#a1a1aa', fontSize: '0.9rem' }}>{copyStatus}</span>
           )}
         </div>
       </section>
+
+      {week2Rows.length > 0 && (
+        <section className="card">
+          <h2 style={{ marginTop: 0 }}>Week 2 Discord post</h2>
+          <p style={{ color: '#71717a', fontSize: '0.9rem', marginTop: 0 }}>
+            Separate Discord post for week 2. Edit the footer below if needed.
+          </p>
+          <div className="form-group" style={{ marginBottom: '0.75rem' }}>
+            <label htmlFor="week2-footer">Week 2 footer (non-DKP targets)</label>
+            <input
+              id="week2-footer"
+              type="text"
+              value={week2Footer}
+              onChange={(e) => setWeek2Footer(e.target.value)}
+              placeholder="AC Burrower and CT Slime Ring are available as non dkp targets.  PoWater and SSRA are FFA"
+              style={{ maxWidth: '800px', width: '100%' }}
+            />
+          </div>
+          <textarea
+            readOnly
+            value={week2Output}
+            rows={12}
+            style={{
+              width: '100%',
+              maxWidth: '800px',
+              fontFamily: 'monospace',
+              padding: '0.5rem',
+              marginBottom: '0.75rem',
+            }}
+          />
+          <button type="button" className="btn" onClick={() => handleCopyWeek(2)}>
+            Copy Week 2
+          </button>
+        </section>
+      )}
+
     </>
   )
 }

@@ -247,8 +247,12 @@ const RAID_LINE_RE =
   /^(Sunday|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday)\s+(\d{1,2})\/(\d{1,2})\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)\s*(edt|est)\s*:\s*(.+)$/i
 
 const WEEK2_RE = /^week\s*2\b/i
-const SKIP_LINE_RE =
-  /^-+$|^week\s*1:?$|raid schedule$|raid director|ac burrower|powater|ssra|po water/i
+const SCHEDULE_TITLE_RE = /^(\d{1,2}\/\d{1,2})\s*-\s*(\d{1,2}\/\d{1,2})\s+raid schedule/i
+const SKIP_LINE_RE = /^-+$|^week\s*1:?$|^raid director/i
+
+function isWeek2FooterLine(line) {
+  return /non\s*dkp\s+targets|are\s+ffa/i.test(line) && !RAID_LINE_RE.test(line)
+}
 
 function parseLongDateToIso(str) {
   const d = new Date(String(str || '').trim())
@@ -321,14 +325,53 @@ export function projectParsedRowsToUpcoming(rows, { fromDate = getTodayNyDate(),
   }
 }
 
+/** @param {string} periodStart YYYY-MM-DD (Wednesday) */
+export function computeScheduleTitle(periodStart) {
+  const start = formatMmDd(periodStart)
+  const end = formatMmDd(addDays(periodStart, 13))
+  return `${start} - ${end} Raid Schedule`
+}
+
+/**
+ * Extract schedule title and week-2 footer from a pasted Discord block.
+ * @param {string} text
+ * @returns {{ scheduleTitle: string, week2Footer: string }}
+ */
+export function parseScheduleMetadata(text) {
+  const lines = String(text || '')
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean)
+
+  let scheduleTitle = ''
+  let week2Footer = ''
+
+  for (const rawLine of lines) {
+    const line = rawLine.replace(/^[^\]]+\]\s*/, '').trim()
+    if (!line || /^-+$/.test(line)) continue
+    if (SCHEDULE_TITLE_RE.test(line)) {
+      scheduleTitle = line
+      continue
+    }
+    if (isWeek2FooterLine(line)) {
+      week2Footer = line
+    }
+  }
+
+  return { scheduleTitle, week2Footer }
+}
+
 /**
  * Parse a pasted Discord raid schedule and project rows onto a two-week window.
  * @param {string} text
  * @param {{ fromDate?: string, periodStart?: string }} [options]
+ * @returns {{ rows: Array, metadata: { scheduleTitle: string, week2Footer: string }, periodStart: string }}
  */
 export function parseSchedulePaste(text, { fromDate = getTodayNyDate(), periodStart } = {}) {
   const rows = parseSchedulePasteRaw(text)
-  return projectParsedRowsToUpcoming(rows, { fromDate, periodStart }).rows
+  const metadata = parseScheduleMetadata(text)
+  const projected = projectParsedRowsToUpcoming(rows, { fromDate, periodStart })
+  return { rows: projected.rows, metadata, periodStart: projected.periodStart }
 }
 
 /** @deprecated internal – use parseSchedulePaste; exposed for tests */
@@ -344,7 +387,14 @@ export function parseSchedulePasteRaw(text) {
 
   for (const rawLine of lines) {
     const line = rawLine.replace(/^[^\]]+\]\s*/, '').trim()
-    if (!line || SKIP_LINE_RE.test(line) || /^[\d/]+\s*-\s*[\d/]+\s/i.test(line)) continue
+    if (
+      !line ||
+      SKIP_LINE_RE.test(line) ||
+      SCHEDULE_TITLE_RE.test(line) ||
+      isWeek2FooterLine(line)
+    ) {
+      continue
+    }
     if (WEEK2_RE.test(line)) {
       currentWeek = 2
       continue
@@ -402,26 +452,59 @@ export function formatOutputLine(slot, eventName, time) {
 
 /**
  * @param {Array<{ week: number, dateIso: string, eventName?: string, time?: { hour24: number, minute: number } }>} rows
+ * @param {number} week
  */
-export function buildScheduleOutput(rows) {
-  const week1 = rows.filter((r) => r.week === 1)
-  const week2 = rows.filter((r) => r.week === 2)
+export function formatWeekRaidLines(rows, week) {
+  const weekRows = rows.filter((r) => r.week === week)
   const lines = []
+  for (const row of weekRows) {
+    const slot = slotFromDateIso(row.dateIso, week)
+    lines.push(formatOutputLine(slot, row.eventName ?? '', row.time ?? DEFAULT_TIME))
+    lines.push('-------')
+  }
+  return lines
+}
 
-  for (const row of week1) {
-    const slot = slotFromDateIso(row.dateIso, 1)
-    lines.push(formatOutputLine(slot, row.eventName ?? '', row.time ?? DEFAULT_TIME))
-    lines.push('-------')
+/**
+ * @param {Array<{ week: number, dateIso: string, eventName?: string, time?: { hour24: number, minute: number } }>} rows
+ * @param {{ scheduleTitle?: string }} [options]
+ */
+export function buildWeek1Post(rows, { scheduleTitle = '' } = {}) {
+  const raidLines = formatWeekRaidLines(rows, 1)
+  if (!raidLines.length && !scheduleTitle) return ''
+  const lines = []
+  if (scheduleTitle) {
+    lines.push('-------', scheduleTitle, '-------', 'Week 1:', '-------')
   }
-  if (week2.length) {
-    lines.push('Week 2')
-  }
-  for (const row of week2) {
-    const slot = slotFromDateIso(row.dateIso, 2)
-    lines.push(formatOutputLine(slot, row.eventName ?? '', row.time ?? DEFAULT_TIME))
-    lines.push('-------')
+  lines.push(...raidLines)
+  return lines.join('\n')
+}
+
+/**
+ * @param {Array<{ week: number, dateIso: string, eventName?: string, time?: { hour24: number, minute: number } }>} rows
+ * @param {{ week2Footer?: string }} [options]
+ */
+export function buildWeek2Post(rows, { week2Footer = '' } = {}) {
+  const week2Rows = rows.filter((r) => r.week === 2)
+  if (!week2Rows.length) return ''
+  const lines = ['Week 2', '-------', ...formatWeekRaidLines(rows, 2)]
+  if (week2Footer) {
+    lines.push(week2Footer, '-------')
   }
   return lines.join('\n')
+}
+
+/**
+ * @param {Array<{ week: number, dateIso: string, eventName?: string, time?: { hour24: number, minute: number } }>} rows
+ * @param {{ scheduleTitle?: string, week2Footer?: string }} [options]
+ */
+export function buildScheduleOutput(rows, { scheduleTitle = '', week2Footer = '' } = {}) {
+  const w1 = buildWeek1Post(rows, { scheduleTitle })
+  const w2 = buildWeek2Post(rows, { week2Footer })
+  if (!w1 && !w2) return ''
+  if (!w2) return w1
+  if (!w1) return w2
+  return `${w1}\n${w2}`
 }
 
 /** Back-compat helper for legacy slot/name/time arrays. */
