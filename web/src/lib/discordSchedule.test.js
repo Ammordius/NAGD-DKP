@@ -2,6 +2,7 @@ import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   addDays,
+  assignWeeksFromPeriodStart,
   buildScheduleOutput,
   buildScheduleOutputFromSlots,
   buildWeek1Post,
@@ -17,10 +18,13 @@ import {
   parseScheduleMetadata,
   parseSchedulePaste,
   parseSchedulePasteRaw,
+  parseTitlePeriodStart,
   projectParsedRowsToUpcoming,
   snapToWednesdayNy,
+  snapToWednesdayOnOrBefore,
   SCHEDULE_SLOTS,
   slotFromDateIso,
+  stripEventNameSuffix,
 } from './discordSchedule.js'
 
 const SAMPLE_PASTE = `-------
@@ -240,8 +244,74 @@ describe('discordSchedule', () => {
     )
   })
 
-  it('parseSchedulePaste projects parsed rows onto upcoming two-week period', () => {
-    const { rows, metadata } = parseSchedulePaste(SAMPLE_PASTE, { fromDate: '2026-06-01' })
+  it('stripEventNameSuffix removes Discord timestamp tokens', () => {
+    assert.deepEqual(stripEventNameSuffix('Fire Minis - <t:1234567890:f>'), {
+      eventName: 'Fire Minis',
+      dateIso: null,
+    })
+    assert.deepEqual(
+      stripEventNameSuffix('Fire Minis - <t:123:f> - <t:456:t>'),
+      { eventName: 'Fire Minis', dateIso: null }
+    )
+  })
+
+  it('stripEventNameSuffix removes human-readable date tails', () => {
+    const result = stripEventNameSuffix('Fire Minis + Seru/Praes - April 23, 2026 8:00 PM')
+    assert.equal(result.eventName, 'Fire Minis + Seru/Praes')
+    assert.equal(result.dateIso, '2026-04-23')
+  })
+
+  it('snapToWednesdayOnOrBefore walks back to the containing Wednesday', () => {
+    assert.equal(snapToWednesdayOnOrBefore('2026-04-23'), '2026-04-22')
+    assert.equal(snapToWednesdayOnOrBefore('2026-04-22'), '2026-04-22')
+  })
+
+  it('parseTitlePeriodStart extracts the first date from a schedule title', () => {
+    assert.equal(
+      parseTitlePeriodStart('04/22 - 05/05 Raid Schedule', 2026),
+      '2026-04-22'
+    )
+  })
+
+  it('assignWeeksFromPeriodStart assigns weeks from Wed-Tue windows', () => {
+    const raw = parseSchedulePasteRaw(SAMPLE_PASTE)
+    const rows = assignWeeksFromPeriodStart(raw, '2026-04-22')
+    assert.deepEqual(rows.map((r) => r.week), [1, 1, 1, 2, 2, 2])
+  })
+
+  it('assignWeeksFromPeriodStart works when Week 2 header is missing', () => {
+    const withoutWeek2Header = SAMPLE_PASTE.replace(/^Week 2\r?\n/m, '')
+    const raw = parseSchedulePasteRaw(withoutWeek2Header)
+    const rows = assignWeeksFromPeriodStart(raw, '2026-04-22')
+    assert.deepEqual(rows.map((r) => r.week), [1, 1, 1, 2, 2, 2])
+  })
+
+  it('parseSchedulePaste keeps original dates by default', () => {
+    const { rows, metadata, periodStart } = parseSchedulePaste(SAMPLE_PASTE)
+    assert.equal(rows.length, 6)
+    assert.deepEqual(
+      rows.map((r) => r.dateIso),
+      [
+        '2026-04-23',
+        '2026-04-27',
+        '2026-04-28',
+        '2026-04-30',
+        '2026-05-04',
+        '2026-05-05',
+      ]
+    )
+    assert.deepEqual(rows.map((r) => r.week), [1, 1, 1, 2, 2, 2])
+    assert.equal(periodStart, '2026-04-22')
+    assert.equal(rows[2].eventName, 'PoTime Early Start')
+    assert.equal(metadata.scheduleTitle, '04/22 - 05/05 Raid Schedule')
+    assert.ok(metadata.week2Footer.includes('non dkp targets'))
+  })
+
+  it('parseSchedulePaste projects parsed rows when projectDates is true', () => {
+    const { rows, metadata } = parseSchedulePaste(SAMPLE_PASTE, {
+      fromDate: '2026-06-01',
+      projectDates: true,
+    })
     assert.equal(rows.length, 6)
     assert.deepEqual(
       rows.map((r) => r.dateIso),
@@ -254,13 +324,24 @@ describe('discordSchedule', () => {
         '2026-06-23',
       ]
     )
-    assert.deepEqual(
-      rows.map((r) => r.week),
-      [1, 1, 1, 2, 2, 2]
-    )
+    assert.deepEqual(rows.map((r) => r.week), [1, 1, 1, 2, 2, 2])
     assert.equal(rows[2].eventName, 'PoTime Early Start')
     assert.equal(metadata.scheduleTitle, '04/22 - 05/05 Raid Schedule')
     assert.ok(metadata.week2Footer.includes('non dkp targets'))
+  })
+
+  it('formatOutputLine does not duplicate old Discord timestamps', () => {
+    const line = formatOutputLine(
+      { dateIso: '2026-06-04', dayName: 'Thursday', mmdd: '06/04' },
+      'Memory Farm - <t:1111111111:f>',
+      { hour24: 21, minute: 0 }
+    )
+    const epoch = nyLocalToUnixEpoch('2026-06-04', 21, 0)
+    assert.equal(
+      line,
+      `Thursday 06/04 9pm edt: Memory Farm - <t:${epoch}:f>`
+    )
+    assert.equal((line.match(/<t:/g) || []).length, 1)
   })
 
   it('slotFromDateIso builds display fields from dateIso', () => {

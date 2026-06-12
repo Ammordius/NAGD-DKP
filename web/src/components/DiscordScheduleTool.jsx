@@ -225,14 +225,13 @@ export default function DiscordScheduleTool() {
 
   function handleParsePaste() {
     setParseError('')
-    const { rows: parsed, metadata } = parseSchedulePaste(paste, {
-      periodStart: effectivePeriodStart,
-    })
+    const { rows: parsed, metadata, periodStart: parsedPeriodStart } = parseSchedulePaste(paste)
     if (!parsed.length) {
       setParseError('No raid lines found. Paste a schedule with lines like "Thursday 4/23 9pm edt: ..."')
       return
     }
     setRows(parsed)
+    setPeriodStart(parsedPeriodStart)
     if (metadata.week2Footer) {
       setWeek2Footer(metadata.week2Footer)
     }
@@ -328,8 +327,9 @@ export default function DiscordScheduleTool() {
       <section className="card" style={{ marginBottom: '1rem' }}>
         <h2 style={{ marginTop: 0 }}>Import from previous schedule</h2>
         <p style={{ color: '#71717a', fontSize: '0.9rem', marginTop: 0 }}>
-          Paste an old Discord raid schedule to pre-fill event names, times, and weekday order. Dates are
-          projected onto a two-week window (Wed–Tue × 2) from the start Wednesday you choose below.
+          Paste an old Discord raid schedule to pre-fill event names, times, dates, and week grouping.
+          Parsing keeps the original dates as-is. Use <strong>Re-project row dates</strong> below to shift
+          rows onto an upcoming two-week window (Wed–Tue × 2) from the start Wednesday you choose.
         </p>
         <div
           className="form-group"

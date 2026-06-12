@@ -249,6 +249,7 @@ const RAID_LINE_RE =
 const WEEK2_RE = /^week\s*2\b/i
 const SCHEDULE_TITLE_RE = /^(\d{1,2}\/\d{1,2})\s*-\s*(\d{1,2}\/\d{1,2})\s+raid schedule/i
 const SKIP_LINE_RE = /^-+$|^week\s*1:?$|^raid director/i
+const DISCORD_TS_SUFFIX_RE = /\s*-\s*<t:\d+:[fFdDtTR]>$/i
 
 function isWeek2FooterLine(line) {
   return /non\s*dkp\s+targets|are\s+ffa/i.test(line) && !RAID_LINE_RE.test(line)
@@ -262,6 +263,34 @@ function parseLongDateToIso(str) {
     month: d.getMonth() + 1,
     day: d.getDate(),
   })
+}
+
+/**
+ * Strip trailing Discord timestamp suffixes ("hammer times") from an event name.
+ * @param {string} eventName
+ * @returns {{ eventName: string, dateIso: string | null }}
+ */
+export function stripEventNameSuffix(eventName) {
+  let name = String(eventName || '').trim()
+  let dateIso = null
+
+  let prev
+  do {
+    prev = name
+    name = name.replace(DISCORD_TS_SUFFIX_RE, '').trim()
+  } while (name !== prev)
+
+  const dashIdx = name.lastIndexOf(' - ')
+  if (dashIdx >= 0) {
+    const tail = name.slice(dashIdx + 3).trim()
+    const parsedIso = parseLongDateToIso(tail)
+    if (parsedIso) {
+      dateIso = parsedIso
+      name = name.slice(0, dashIdx).trim()
+    }
+  }
+
+  return { eventName: name, dateIso }
 }
 
 function inferYearFromIso(dateIso, fallbackYear) {
@@ -286,6 +315,57 @@ export function getNextNextWednesdayNy(fromDate = getTodayNyDate()) {
 export function snapToWednesdayNy(dateIso) {
   if (getDayOfWeek(dateIso) === 3) return dateIso
   return nextDateOnOrAfter(dateIso, 3)
+}
+
+/** @param {string} dateIso */
+export function snapToWednesdayOnOrBefore(dateIso) {
+  let cursor = dateIso
+  for (let i = 0; i < 7; i++) {
+    if (getDayOfWeek(cursor) === 3) return cursor
+    cursor = addDays(cursor, -1)
+  }
+  throw new Error(`No Wednesday within 7 days before ${dateIso}`)
+}
+
+/**
+ * @param {string} scheduleTitle
+ * @param {number} fallbackYear
+ * @returns {string | null} YYYY-MM-DD
+ */
+export function parseTitlePeriodStart(scheduleTitle, fallbackYear) {
+  const m = String(scheduleTitle || '').match(SCHEDULE_TITLE_RE)
+  if (!m) return null
+  const [month, day] = m[1].split('/').map(Number)
+  const year = inferYearFromIso(formatDateIso({ year: fallbackYear, month, day }), fallbackYear)
+  return formatDateIso({ year, month, day })
+}
+
+/**
+ * @param {Array<{ week?: number, dateIso: string }>} rows
+ * @param {string} periodStart YYYY-MM-DD (Wednesday)
+ */
+export function assignWeeksFromPeriodStart(rows, periodStart) {
+  const week1End = addDays(periodStart, 6)
+  return rows.map((row) => ({
+    ...row,
+    week: row.dateIso <= week1End ? 1 : 2,
+  }))
+}
+
+function inferPeriodStart(rows, scheduleTitle) {
+  const fallbackYear = rows.length
+    ? parseDateIso(rows[0].dateIso).year
+    : new Date().getFullYear()
+  const titleStart = parseTitlePeriodStart(scheduleTitle, fallbackYear)
+  if (titleStart) return snapToWednesdayOnOrBefore(titleStart)
+  if (rows.length) {
+    const minDate = rows.reduce(
+      (min, row) => (row.dateIso < min ? row.dateIso : min),
+      rows[0].dateIso
+    )
+    return snapToWednesdayOnOrBefore(minDate)
+  }
+  return null
 }
 
 /**
@@ -362,16 +442,33 @@ export function parseScheduleMetadata(text) {
 }
 
 /**
- * Parse a pasted Discord raid schedule and project rows onto a two-week window.
+ * Parse a pasted Discord raid schedule. By default keeps original dates; set
+ * projectDates true to remap onto a two-week window.
  * @param {string} text
- * @param {{ fromDate?: string, periodStart?: string }} [options]
+ * @param {{ fromDate?: string, periodStart?: string, projectDates?: boolean }} [options]
  * @returns {{ rows: Array, metadata: { scheduleTitle: string, week2Footer: string }, periodStart: string }}
  */
-export function parseSchedulePaste(text, { fromDate = getTodayNyDate(), periodStart } = {}) {
+export function parseSchedulePaste(text, {
+  fromDate = getTodayNyDate(),
+  periodStart,
+  projectDates = false,
+} = {}) {
   const rows = parseSchedulePasteRaw(text)
   const metadata = parseScheduleMetadata(text)
-  const projected = projectParsedRowsToUpcoming(rows, { fromDate, periodStart })
-  return { rows: projected.rows, metadata, periodStart: projected.periodStart }
+  const inferredStart = inferPeriodStart(rows, metadata.scheduleTitle)
+  const finalRows = inferredStart
+    ? assignWeeksFromPeriodStart(rows, inferredStart)
+    : rows
+  const resolvedPeriodStart = snapToWednesdayNy(
+    periodStart || inferredStart || getNextNextWednesdayNy(fromDate)
+  )
+
+  if (projectDates) {
+    const projected = projectParsedRowsToUpcoming(finalRows, { fromDate, periodStart })
+    return { rows: projected.rows, metadata, periodStart: projected.periodStart }
+  }
+
+  return { rows: finalRows, metadata, periodStart: resolvedPeriodStart }
 }
 
 /** @deprecated internal – use parseSchedulePaste; exposed for tests */
@@ -404,19 +501,12 @@ export function parseSchedulePasteRaw(text) {
     const match = line.match(RAID_LINE_RE)
     if (!match) continue
 
-    const [, dayName, monthStr, dayStr, hourStr, minuteStr, ampm, , rest] = match
-    let eventName = rest.trim()
-    let dateIso = null
+    const [, , monthStr, dayStr, hourStr, minuteStr, ampm, , rest] = match
+    const { eventName, dateIso: suffixDateIso } = stripEventNameSuffix(rest.trim())
+    let dateIso = suffixDateIso
 
-    const dashIdx = eventName.lastIndexOf(' - ')
-    if (dashIdx >= 0) {
-      const tail = eventName.slice(dashIdx + 3).trim()
-      const parsedIso = parseLongDateToIso(tail)
-      if (parsedIso) {
-        dateIso = parsedIso
-        fallbackYear = parseDateIso(parsedIso).year
-        eventName = eventName.slice(0, dashIdx).trim()
-      }
+    if (suffixDateIso) {
+      fallbackYear = parseDateIso(suffixDateIso).year
     }
 
     if (!dateIso) {
@@ -444,10 +534,11 @@ export function parseSchedulePasteRaw(text) {
  * @param {{ hour24: number, minute: number }} time
  */
 export function formatOutputLine(slot, eventName, time) {
+  const { eventName: cleanName } = stripEventNameSuffix(eventName)
   const tz = getNyTzSuffix(slot.dateIso, time.hour24, time.minute)
   const timeStr = formatOutputTime(time.hour24, time.minute, tz)
   const epoch = nyLocalToUnixEpoch(slot.dateIso, time.hour24, time.minute)
-  return `${slot.dayName} ${slot.mmdd} ${timeStr}: ${eventName} - <t:${epoch}:f>`
+  return `${slot.dayName} ${slot.mmdd} ${timeStr}: ${cleanName} - <t:${epoch}:f>`
 }
 
 /**
