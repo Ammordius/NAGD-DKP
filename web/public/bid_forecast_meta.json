@@ -1,15 +1,15 @@
 {
   "version": 1,
-  "generated_at": "2026-07-26T19:19:27.869Z",
+  "generated_at": "2026-07-27T19:43:04.936Z",
   "activity_days": 120,
   "sharded": true,
   "shards_dir": "bid_forecast_items",
-  "rankings_hash": "aa2268966d833e19",
+  "rankings_hash": "5f29c7a1e14a9ae2",
   "item_stats_hash": "a1583535e37a7d8d",
   "magelo_characters_total": 3266,
   "guild_magelo_matched": 441,
   "skipped_no_roster_match": 2825,
   "skipped_no_class_weights": 0,
-  "upgrade_entries": 36119,
+  "upgrade_entries": 36219,
   "distinct_items": 528
 }
