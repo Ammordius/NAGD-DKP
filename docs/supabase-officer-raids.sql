@@ -164,3 +164,73 @@ $$;
 
 GRANT EXECUTE ON FUNCTION public.delete_tic(TEXT, TEXT, TEXT[]) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.delete_tic(TEXT, TEXT, TEXT[]) TO service_role;
+
+-- Remove one attendee from a tic. Officer only.
+-- Disables refresh triggers during delete, then runs one refresh (avoids authenticated 8s timeout
+-- from client DELETE + full refresh_dkp_summary, which Officer/RaidDetail used to do).
+CREATE OR REPLACE FUNCTION public.remove_attendee_from_tic(
+  p_raid_id TEXT,
+  p_event_id TEXT,
+  p_char_id TEXT,
+  p_extra_account_ids TEXT[] DEFAULT '{}'
+)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+SET statement_timeout = '60s'
+AS $$
+BEGIN
+  IF NOT public.is_officer() THEN
+    RAISE EXCEPTION 'Only officers can remove attendees from tics';
+  END IF;
+
+  IF p_raid_id IS NULL OR trim(p_raid_id) = '' THEN
+    RAISE EXCEPTION 'raid_id is required';
+  END IF;
+  IF p_event_id IS NULL OR trim(p_event_id) = '' THEN
+    RAISE EXCEPTION 'event_id is required';
+  END IF;
+  IF p_char_id IS NULL OR trim(p_char_id) = '' THEN
+    RAISE EXCEPTION 'char_id is required';
+  END IF;
+
+  SET LOCAL statement_timeout = '60s';
+
+  ALTER TABLE raid_event_attendance DISABLE TRIGGER full_refresh_dkp_after_event_attendance_change;
+  ALTER TABLE raid_event_attendance DISABLE TRIGGER refresh_raid_totals_after_event_attendance_del;
+  ALTER TABLE raid_attendance DISABLE TRIGGER full_refresh_dkp_after_attendance_change;
+
+  DELETE FROM raid_event_attendance
+  WHERE raid_id = trim(p_raid_id)
+    AND event_id = trim(p_event_id)
+    AND char_id = trim(p_char_id);
+
+  DELETE FROM raid_attendance ra
+  WHERE ra.raid_id = trim(p_raid_id)
+    AND ra.char_id = trim(p_char_id)
+    AND NOT EXISTS (
+      SELECT 1 FROM raid_event_attendance rea
+      WHERE rea.raid_id = ra.raid_id AND rea.char_id = ra.char_id
+    );
+
+  UPDATE raids
+  SET attendees = (SELECT count(*)::text FROM raid_attendance WHERE raid_id = trim(p_raid_id))
+  WHERE raid_id = trim(p_raid_id);
+
+  ALTER TABLE raid_attendance ENABLE TRIGGER full_refresh_dkp_after_attendance_change;
+  ALTER TABLE raid_event_attendance ENABLE TRIGGER refresh_raid_totals_after_event_attendance_del;
+  ALTER TABLE raid_event_attendance ENABLE TRIGGER full_refresh_dkp_after_event_attendance_change;
+
+  PERFORM refresh_raid_attendance_totals(trim(p_raid_id));
+  PERFORM refresh_dkp_summary_internal();
+  IF EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'public' AND p.proname = 'refresh_account_dkp_summary_for_raid') THEN
+    PERFORM refresh_account_dkp_summary_for_raid(trim(p_raid_id), p_extra_account_ids);
+  ELSIF EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'public' AND p.proname = 'refresh_account_dkp_summary_internal') THEN
+    PERFORM refresh_account_dkp_summary_internal();
+  END IF;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.remove_attendee_from_tic(TEXT, TEXT, TEXT, TEXT[]) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.remove_attendee_from_tic(TEXT, TEXT, TEXT, TEXT[]) TO service_role;

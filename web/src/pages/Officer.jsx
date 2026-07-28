@@ -1061,34 +1061,22 @@ export default function Officer({ isOfficer }) {
     const removedAccountId = charIdToAccountId[charId] ? String(charIdToAccountId[charId]) : null
     setMutating(true)
     setError(null)
-    const { error: delEvErr } = await supabase.from('raid_event_attendance').delete().eq('raid_id', selectedRaidId).eq('event_id', eventId).eq('char_id', charId)
-    if (delEvErr) {
+    const { error: rpcErr } = await supabase.rpc('remove_attendee_from_tic', {
+      p_raid_id: selectedRaidId,
+      p_event_id: eventId,
+      p_char_id: String(charId ?? ''),
+      p_extra_account_ids: removedAccountId ? [removedAccountId] : [],
+    })
+    if (rpcErr) {
       setMutating(false)
-      setError(delEvErr.message)
+      setError(rpcErr.message)
       return
-    }
-    const { data: remainingEventAtt } = await supabase.from('raid_event_attendance').select('char_id').eq('raid_id', selectedRaidId)
-    const charIdsStillInEvents = new Set((remainingEventAtt || []).map((r) => String(r.char_id ?? '')).filter(Boolean))
-    if (!charIdsStillInEvents.has(String(charId))) {
-      const { error: delAttErr } = await supabase.from('raid_attendance').delete().eq('raid_id', selectedRaidId).eq('char_id', charId)
-      if (delAttErr) {
-        setMutating(false)
-        setError(delAttErr.message)
-        return
-      }
     }
     await logOfficerAudit(supabase, {
       action: 'remove_attendee_from_tic',
       target_type: 'raid_event_attendance',
       target_id: eventId,
       delta: { r: selectedRaidId, e: eventId, c: charName },
-    })
-    const { count } = await supabase.from('raid_attendance').select('*', { count: 'exact', head: true }).eq('raid_id', selectedRaidId)
-    if (count != null) await supabase.from('raids').update({ attendees: String(count) }).eq('raid_id', selectedRaidId)
-    await supabase.rpc('refresh_dkp_summary')
-    await supabase.rpc('refresh_account_dkp_summary_for_raid', {
-      p_raid_id: selectedRaidId,
-      p_extra_account_ids: removedAccountId ? [removedAccountId] : [],
     })
     try { sessionStorage.removeItem('dkp_leaderboard_v2') } catch (_) {}
     loadSelectedRaid()
@@ -1276,7 +1264,7 @@ export default function Officer({ isOfficer }) {
         {newAccountError && <p className="error" style={{ marginTop: '0.5rem', marginBottom: 0 }}>{newAccountError}</p>}
         {newAccountResult && (
           <p style={{ color: '#22c55e', marginTop: '0.5rem', marginBottom: 0 }}>
-            Created. <Link to={`/accounts/${newAccountResult}`}>View account</Link> — share this link so the player can claim it.
+            Created. <Link to={`/accounts/${newAccountResult}`}>View account</Link> — add characters on the Characters tab (create does not auto-attach toons), then share the link so the player can claim it.
           </p>
         )}
       </section>

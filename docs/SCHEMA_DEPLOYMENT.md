@@ -12,7 +12,7 @@ This document is the **canonical reference** for standing up or mirroring the DK
 
 | File | Purpose |
 |------|---------|
-| **docs/supabase-schema-full.sql** | **Run this once.** Creates everything: tables, RLS, triggers, `refresh_dkp_summary`, `refresh_account_dkp_summary`, `refresh_account_dkp_summary_for_raid`, `end_restore_load`, `truncate_dkp_for_restore`, officer RLS and `delete_raid` / `delete_tic`, `delete_raid_for_reupload`, `insert_raid_event_attendance_for_upload`. |
+| **docs/supabase-schema-full.sql** | **Run this once.** Creates everything: tables, RLS, triggers, `refresh_dkp_summary`, `refresh_account_dkp_summary`, `refresh_account_dkp_summary_for_raid`, `end_restore_load`, `truncate_dkp_for_restore`, officer RLS and `delete_raid` / `delete_tic` / `remove_attendee_from_tic`, `delete_raid_for_reupload`, `insert_raid_event_attendance_for_upload`. |
 
 After running it you have:
 

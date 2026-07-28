@@ -19,7 +19,7 @@ Single index of **all public RPCs/functions** and **one-off SQL** in this repo: 
 
 | RPC / function | Canonical definition | Supplemental / one-off definition | Used by |
 |----------------|----------------------|-----------------------------------|---------|
-| **add_character_to_my_account** | supabase-schema.sql | — | Profile.jsx, AccountDetail.jsx |
+| **add_character_to_my_account** | supabase-schema-full.sql | fix_add_character_refresh_account_dkp.sql | Profile.jsx, AccountDetail.jsx (refreshes account_dkp_summary after link) |
 | **claim_account** | supabase-schema.sql | — | AccountDetail.jsx |
 | **create_account** | supabase-schema.sql | supabase-create-my-account-rpc.sql (standalone add-on) | Officer.jsx |
 | **create_my_account** | supabase-schema.sql | supabase-create-my-account-rpc.sql (standalone add-on) | — |
@@ -27,16 +27,17 @@ Single index of **all public RPCs/functions** and **one-off SQL** in this repo: 
 | **reset_claim_cooldown** | supabase-schema.sql | — | OfficerClaimCooldowns.jsx |
 | **delete_raid** | supabase-officer-raids.sql | — | Officer.jsx (permanent delete raid + tics) |
 | **delete_tic** | supabase-officer-raids.sql | — | Officer.jsx (remove one tic + attendance; avoids timeout) |
+| **remove_attendee_from_tic** | supabase-officer-raids.sql | — | Officer.jsx, RaidDetail.jsx (remove one attendee from a tic; avoids timeout) |
 | **officer_raider_activity** | — | supabase-officer-raider-activity.sql | OfficerRaiderActivity.jsx |
 | **officer_upsert_account_class_coverage** | — | supabase-account-class-coverage.sql | OfficerRaiderActivity.jsx (manual Reload coverage) |
 | **account_class_coverage** (table) | — | supabase-account-class-coverage.sql | OfficerRaiderActivity.jsx; CI `scripts/build_account_class_coverage.mjs` |
 | **delete_raid_for_reupload** | upload_script_rpcs.sql | delete_raid_for_reupload_rpc.sql (superseded) | upload_raid_detail_to_supabase.py |
 | **insert_raid_event_attendance_for_upload** | upload_script_rpcs.sql | — | upload_raid_detail_to_supabase.py |
 | **refresh_dkp_summary** | supabase-schema.sql | — | Officer.jsx, RaidDetail.jsx, DKP.jsx, upload script, restore, dedupe, zerodkp |
-| **refresh_dkp_summary_internal** | supabase-schema.sql | — | Triggers, delete_raid, delete_tic, delete_raid_for_reupload, insert_raid_event_attendance_for_upload (via end_restore_load), end_restore_load |
+| **refresh_dkp_summary_internal** | supabase-schema.sql | — | Triggers, delete_raid, delete_tic, remove_attendee_from_tic, delete_raid_for_reupload, insert_raid_event_attendance_for_upload (via end_restore_load), end_restore_load |
 | **refresh_account_dkp_summary** | supabase-account-dkp-schema.sql | — | DKP.jsx, upload script (fallback), restore_supabase_from_backup.py |
 | **refresh_account_dkp_summary_internal** | supabase-account-dkp-schema.sql | — | end_restore_load, delete_raid (if present), delete_raid_for_reupload |
-| **refresh_account_dkp_summary_for_raid** | supabase-account-dkp-schema.sql | fix_refresh_dkp_summary_includes_account_summary.sql (for DBs without account schema) | Officer.jsx, RaidDetail.jsx, upload_raid_detail_to_supabase.py, delete_tic |
+| **refresh_account_dkp_summary_for_raid** | supabase-account-dkp-schema.sql | fix_refresh_dkp_summary_includes_account_summary.sql (for DBs without account schema) | Officer.jsx, RaidDetail.jsx, upload_raid_detail_to_supabase.py, delete_tic, remove_attendee_from_tic |
 | **refresh_raid_attendance_totals** | supabase-schema.sql (base); supabase-account-dkp-schema.sql (account version) | — | Triggers, delete_raid_for_reupload, insert_raid_event_attendance_for_upload (via end_restore_load) |
 | **refresh_all_raid_attendance_totals** | supabase-schema.sql | — | end_restore_load, restore script |
 | **truncate_dkp_for_restore** | supabase-schema.sql; supabase-account-dkp-schema.sql (extends) | supabase-restore-truncate-rpc.sql (standalone) | restore_supabase_from_backup.py |

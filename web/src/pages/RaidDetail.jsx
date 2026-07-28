@@ -397,34 +397,22 @@ export default function RaidDetail({ isOfficer }) {
     const removedAccountId = getAccountId(charId) || getAccountId(charName)
     setMutating(true)
     setMutationError('')
-    const { error: delEvErr } = await supabase.from('raid_event_attendance').delete().eq('raid_id', raidId).eq('event_id', eventId).eq('char_id', charId)
-    if (delEvErr) {
+    const { error: rpcErr } = await supabase.rpc('remove_attendee_from_tic', {
+      p_raid_id: raidId,
+      p_event_id: eventId,
+      p_char_id: String(charId ?? ''),
+      p_extra_account_ids: removedAccountId ? [String(removedAccountId)] : [],
+    })
+    if (rpcErr) {
       setMutating(false)
-      setMutationError(delEvErr.message)
+      setMutationError(rpcErr.message)
       return
-    }
-    const { data: remainingEventAtt } = await supabase.from('raid_event_attendance').select('char_id').eq('raid_id', raidId)
-    const charIdsStillInEvents = new Set((remainingEventAtt || []).map((r) => String(r.char_id ?? '')).filter(Boolean))
-    if (!charIdsStillInEvents.has(String(charId))) {
-      const { error: delAttErr } = await supabase.from('raid_attendance').delete().eq('raid_id', raidId).eq('char_id', charId)
-      if (delAttErr) {
-        setMutating(false)
-        setMutationError(delAttErr.message)
-        return
-      }
     }
     await logOfficerAudit(supabase, {
       action: 'remove_attendee_from_tic',
       target_type: 'raid_event_attendance',
       target_id: eventId,
       delta: { r: raidId, e: eventId, c: charName },
-    })
-    const { count } = await supabase.from('raid_attendance').select('*', { count: 'exact', head: true }).eq('raid_id', raidId)
-    if (count != null) await supabase.from('raids').update({ attendees: String(count) }).eq('raid_id', raidId)
-    await supabase.rpc('refresh_dkp_summary')
-    await supabase.rpc('refresh_account_dkp_summary_for_raid', {
-      p_raid_id: raidId,
-      p_extra_account_ids: removedAccountId ? [String(removedAccountId)] : [],
     })
     try { sessionStorage.removeItem('dkp_leaderboard_v2') } catch (_) {}
     mutate()
