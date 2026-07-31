@@ -15,6 +15,9 @@ Uses .env / web/.env for SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.
 
 With --apply, buyer char_id values from the HTML (Magelo numeric char=) are resolved to
 public.characters.char_id using character_name so inserts match FKs when char_id is a name key.
+
+When an attendee or loot buyer has no resolvable account, --apply prompts to create a new
+account by that name (characters + character_account link together). Dry run lists those names.
 """
 
 from __future__ import annotations
@@ -41,6 +44,7 @@ RPC_RETRY_DELAY_SEC = 5
 ACCOUNT_REFRESH_RPC_RETRIES = 5
 
 CHARACTERS_PAGE_SIZE = 1000
+CA_PAGE_SIZE = 1000
 
 
 def _fetch_characters_maps(client) -> tuple[set[str], dict[str, str]]:
@@ -80,6 +84,146 @@ def _fetch_characters_maps(client) -> tuple[set[str], dict[str, str]]:
             file=sys.stderr,
         )
     return known_char_ids, lower_name_to_char_id
+
+
+def _fetch_char_to_account(client) -> dict[str, str]:
+    """Load char_id -> account_id from character_account (first account wins per char_id)."""
+    char_to_account: dict[str, str] = {}
+    ca_from = 0
+    while True:
+        r = (
+            client.table("character_account")
+            .select("char_id, account_id")
+            .range(ca_from, ca_from + CA_PAGE_SIZE - 1)
+            .execute()
+        )
+        rows = (r.data or []) if hasattr(r, "data") else []
+        for row in rows:
+            cid = (row.get("char_id") or "").strip()
+            aid = (row.get("account_id") or "").strip()
+            if cid and aid and cid not in char_to_account:
+                char_to_account[cid] = aid
+        if len(rows) < CA_PAGE_SIZE:
+            break
+        ca_from += CA_PAGE_SIZE
+    return char_to_account
+
+
+def _collect_names_missing_account(
+    *,
+    loot: list[dict],
+    attendees: list[dict],
+    attendee_sections: list[tuple] | None,
+    known_char_ids: set[str],
+    name_to_char_id: dict[str, str],
+    char_to_account: dict[str, str],
+) -> list[str]:
+    """Unique character_name values (display casing) with no resolvable account_id."""
+    candidates: list[tuple[str | None, str | None]] = []
+    for r in loot:
+        candidates.append((r.get("char_id"), r.get("character_name")))
+    for r in attendees:
+        candidates.append((r.get("char_id"), r.get("character_name")))
+    if attendee_sections:
+        for _, att_list in attendee_sections:
+            for cid, cname in att_list:
+                candidates.append((cid, cname))
+
+    missing_by_lower: dict[str, str] = {}
+    for raw_cid, raw_cname in candidates:
+        cname = (raw_cname or "").strip()
+        if not cname:
+            continue
+        resolved_cid, _ = _resolve_upload_char_id(
+            (raw_cid or "").strip() or None,
+            cname,
+            known_char_ids=known_char_ids,
+            name_to_char_id=name_to_char_id,
+        )
+        cid = (resolved_cid or "").strip()
+        if cid and char_to_account.get(cid):
+            continue
+        key = cname.lower()
+        if key not in missing_by_lower:
+            missing_by_lower[key] = cname
+    return sorted(missing_by_lower.values(), key=str.lower)
+
+
+def _create_account_for_name(
+    client,
+    name: str,
+    *,
+    known_char_ids: set[str],
+    name_to_char_id: dict[str, str],
+    char_to_account: dict[str, str],
+) -> str:
+    """Create account + character + link for a new player. Updates in-memory maps. Returns account_id."""
+    display = name.strip()
+    account_id = display
+    existing_cid = name_to_char_id.get(display.lower())
+    char_id = existing_cid or display
+
+    client.table("accounts").upsert(
+        [
+            {
+                "account_id": account_id,
+                "display_name": display,
+                "toon_count": 1,
+                "char_ids": char_id,
+                "toon_names": display,
+            }
+        ],
+        on_conflict="account_id",
+    ).execute()
+    client.table("characters").upsert(
+        [{"char_id": char_id, "name": display}],
+        on_conflict="char_id",
+    ).execute()
+    client.table("character_account").upsert(
+        [{"char_id": char_id, "account_id": account_id}],
+        on_conflict="char_id,account_id",
+    ).execute()
+
+    known_char_ids.add(char_id)
+    name_to_char_id[display.lower()] = char_id
+    char_to_account[char_id] = account_id
+    print(f"  Created account {account_id!r} with character {char_id!r} and link.")
+    return account_id
+
+
+def _prompt_create_missing_accounts(
+    client,
+    missing_names: list[str],
+    *,
+    known_char_ids: set[str],
+    name_to_char_id: dict[str, str],
+    char_to_account: dict[str, str],
+) -> list[str]:
+    """Ask y/N per name; create account+character+link on yes. Returns names created."""
+    created: list[str] = []
+    if not missing_names:
+        return created
+    print(f"\n{len(missing_names)} raider(s) have no account:")
+    for name in missing_names:
+        try:
+            answer = input(
+                f"No account for {name!r}. Create new account named {name} "
+                f"(character + link)? [y/N] "
+            ).strip().lower()
+        except EOFError:
+            answer = ""
+        if answer in ("y", "yes"):
+            _create_account_for_name(
+                client,
+                name,
+                known_char_ids=known_char_ids,
+                name_to_char_id=name_to_char_id,
+                char_to_account=char_to_account,
+            )
+            created.append(name)
+        else:
+            print(f"  Skipping {name!r} (will upload with null account_id).")
+    return created
 
 
 def _resolve_upload_char_id(
@@ -383,23 +527,64 @@ def main() -> int:
                 f"cost={r.get('cost')!r}"
             )
 
-    # Dry run: show per-event attendees and loot, but do not touch Supabase.
-    if not args.apply:
-        attendees_file = raids_dir / f"raid_{raid_id}_attendees.html"
-        if attendees_file.exists() and events:
-            try:
-                from parse_raid_attendees import parse_attendees_html
+    attendees_file = raids_dir / f"raid_{raid_id}_attendees.html"
+    attendee_sections = None
+    if attendees_file.exists() and events:
+        try:
+            from parse_raid_attendees import parse_attendees_html
 
-                att_html = attendees_file.read_text(encoding="utf-8")
-                sections = parse_attendees_html(att_html, raid_id)
-                event_ids = [e["event_id"] for e in events]
-                print("Per-event attendees from HTML (dry run, no account dedupe):")
-                for i, (event_name, att_list) in enumerate(sections):
-                    eid = event_ids[i] if i < len(event_ids) else "?"
-                    names = [name for _, name in att_list]
-                    print(f"  #{i+1} event_id={eid} name={event_name!r}: {len(names)} attendees -> {names}")
+            att_html = attendees_file.read_text(encoding="utf-8")
+            attendee_sections = parse_attendees_html(att_html, raid_id)
+        except Exception as e:
+            print(f"Warning: could not parse attendees HTML: {e}", file=sys.stderr)
+
+    # Dry run: show per-event attendees and loot; list names that would prompt for accounts.
+    if not args.apply:
+        if attendee_sections:
+            event_ids = [e["event_id"] for e in events]
+            print("Per-event attendees from HTML (dry run, no account dedupe):")
+            for i, (event_name, att_list) in enumerate(attendee_sections):
+                eid = event_ids[i] if i < len(event_ids) else "?"
+                names = [name for _, name in att_list]
+                print(f"  #{i+1} event_id={eid} name={event_name!r}: {len(names)} attendees -> {names}")
+        for path in (ROOT / ".env", ROOT / "web" / ".env", ROOT / "web" / ".env.local"):
+            if path.exists():
+                _load_env(path)
+        url = os.environ.get("SUPABASE_URL", "").strip()
+        key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").strip() or os.environ.get("SUPABASE_ANON_KEY", "").strip()
+        if url and key:
+            try:
+                from supabase import create_client
+                from supabase.lib.client_options import SyncClientOptions
+
+                dry_client = create_client(
+                    url,
+                    key,
+                    options=SyncClientOptions(postgrest_client_timeout=args.postgrest_timeout),
+                )
+                known_char_ids, name_to_char_id = _fetch_characters_maps(dry_client)
+                char_to_account = _fetch_char_to_account(dry_client)
+                missing = _collect_names_missing_account(
+                    loot=loot,
+                    attendees=attendees,
+                    attendee_sections=attendee_sections,
+                    known_char_ids=known_char_ids,
+                    name_to_char_id=name_to_char_id,
+                    char_to_account=char_to_account,
+                )
+                if missing:
+                    print(f"\nWould prompt to create new accounts for {len(missing)} raider(s) with no account:")
+                    for name in missing:
+                        print(f"  - {name}")
+                else:
+                    print("\nNo raiders missing accounts (would not prompt).")
             except Exception as e:
-                print(f"Warning: could not parse attendees HTML for dry run: {e}", file=sys.stderr)
+                print(f"Warning: could not check missing accounts for dry run: {e}", file=sys.stderr)
+        else:
+            print(
+                "\n(Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY to list raiders missing accounts.)",
+                file=sys.stderr,
+            )
         print("Dry run. Re-run with --apply to upload to Supabase.")
         return 0
 
@@ -430,6 +615,48 @@ def main() -> int:
     except Exception as e:
         print(f"ERROR: could not load characters for char_id resolution: {e}", file=sys.stderr)
         return 1
+
+    try:
+        char_to_account = _fetch_char_to_account(client)
+    except Exception as e:
+        print(f"ERROR: could not load character_account: {e}", file=sys.stderr)
+        return 1
+
+    if attendee_sections is None and attendees_file.exists() and events:
+        print(
+            f"ERROR: could not parse per-event attendee sections from {attendees_file.name}.",
+            file=sys.stderr,
+        )
+        return 4
+    if attendee_sections is not None and not attendee_sections:
+        att_html = attendees_file.read_text(encoding="utf-8") if attendees_file.exists() else ""
+        login_hint = (
+            "The file appears to be a login/unauthorized page. " if _looks_like_login_page(att_html) else ""
+        )
+        print(
+            f"ERROR: could not parse per-event attendee sections from {attendees_file.name}. "
+            f"{login_hint}"
+            "Open the raid attendees page while logged in, Save As again, and re-run this upload.",
+            file=sys.stderr,
+        )
+        return 4
+
+    missing = _collect_names_missing_account(
+        loot=loot,
+        attendees=attendees,
+        attendee_sections=attendee_sections,
+        known_char_ids=known_char_ids,
+        name_to_char_id=name_to_char_id,
+        char_to_account=char_to_account,
+    )
+    if missing:
+        _prompt_create_missing_accounts(
+            client,
+            missing,
+            known_char_ids=known_char_ids,
+            name_to_char_id=name_to_char_id,
+            char_to_account=char_to_account,
+        )
 
     if loot:
         _apply_char_id_resolution(
@@ -502,41 +729,8 @@ def main() -> int:
 
     # Per-event attendance from attendees HTML (so DKP earned is by tic).
     # Only one character per account per tic: dedupe by account (keep first occurrence).
-    attendees_file = raids_dir / f"raid_{raid_id}_attendees.html"
-    if attendees_file.exists() and events:
-        from parse_raid_attendees import parse_attendees_html
-        # Fetch character_account so we can dedupe by account per event
-        char_to_account: dict[str, str] = {}
-        ca_from = 0
-        ca_page_size = 1000
-        while True:
-            try:
-                r = client.table("character_account").select("char_id, account_id").range(ca_from, ca_from + ca_page_size - 1).execute()
-            except Exception as e:
-                print(f"Warning: could not fetch character_account: {e}", file=sys.stderr)
-                break
-            rows = (r.data or []) if hasattr(r, "data") else []
-            for row in rows:
-                cid = (row.get("char_id") or "").strip()
-                aid = (row.get("account_id") or "").strip()
-                if cid and aid and cid not in char_to_account:
-                    char_to_account[cid] = aid
-            if len(rows) < ca_page_size:
-                break
-            ca_from += ca_page_size
-        att_html = attendees_file.read_text(encoding="utf-8")
-        sections = parse_attendees_html(att_html, raid_id)
-        if not sections:
-            login_hint = (
-                "The file appears to be a login/unauthorized page. " if _looks_like_login_page(att_html) else ""
-            )
-            print(
-                f"ERROR: could not parse per-event attendee sections from {attendees_file.name}. "
-                f"{login_hint}"
-                "Open the raid attendees page while logged in, Save As again, and re-run this upload.",
-                file=sys.stderr,
-            )
-            return 4
+    if attendee_sections and events:
+        sections = attendee_sections
         event_ids = [e["event_id"] for e in events]
         print("Per-event attendees from HTML (raw, before dedupe):")
         for i, (event_name, att_list) in enumerate(sections):
