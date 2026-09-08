@@ -14,6 +14,7 @@ export const CLASS_ORDER = [
   'PAL',
   'RNG',
   'SHD',
+  'DRU',
   'BRD',
   'ROG',
   'SHM',

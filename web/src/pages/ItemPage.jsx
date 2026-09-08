@@ -10,7 +10,7 @@ import { getDkpMobLoot, getRaidItemSources } from '../lib/staticData'
 import { ensureElementalArmorLoaded, getMoldInfo, getArmorIdForMoldAndClass, isElementalMold } from '../lib/elementalArmor'
 import { formatAccountCharacter } from '../lib/formatAccountCharacter'
 
-const CLASS_OPTIONS = ['WAR', 'CLR', 'PAL', 'RNG', 'SHD', 'BRD', 'ROG', 'SHM', 'MNK', 'NEC', 'WIZ', 'MAG', 'ENC', 'BST']
+const CLASS_OPTIONS = ['WAR', 'CLR', 'PAL', 'RNG', 'SHD', 'DRU', 'BRD', 'ROG', 'SHM', 'MNK', 'NEC', 'WIZ', 'MAG', 'ENC', 'BST']
 
 const FACT_IN_CHUNK = 100
 const RPC_FALLBACK_MAX = 10

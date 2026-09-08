@@ -12,7 +12,7 @@ const ITEMS_PER_PAGE = 20
 /** EQ slot options for filter (order for dropdown). */
 const SLOT_OPTIONS = ['HEAD', 'FACE', 'NECK', 'SHOULDERS', 'ARMS', 'BACK', 'CHEST', 'WRIST', 'HANDS', 'WAIST', 'LEGS', 'FEET', 'PRIMARY', 'SECONDARY', 'RANGE', 'EAR', 'FINGERS', 'AMMO']
 /** EQ class abbreviations for filter. */
-const CLASS_OPTIONS = ['WAR', 'CLR', 'PAL', 'RNG', 'SHD', 'BRD', 'ROG', 'SHM', 'MNK', 'NEC', 'WIZ', 'MAG', 'ENC', 'BST']
+const CLASS_OPTIONS = ['WAR', 'CLR', 'PAL', 'RNG', 'SHD', 'DRU', 'BRD', 'ROG', 'SHM', 'MNK', 'NEC', 'WIZ', 'MAG', 'ENC', 'BST']
 const TAKP_ITEM_BASE = 'https://www.takproject.net/allaclone/item.php?id='
 
 /** Map elemental_mold_armor slot (e.g. "head", "wrists") to filter slot (HEAD, WRIST). */
