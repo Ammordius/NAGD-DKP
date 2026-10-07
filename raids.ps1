@@ -9,7 +9,7 @@
 #   .\raids.ps1 pull-attendees
 #   .\raids.ps1 upload-raids
 #   .\raids.ps1 upload-raids-ids 1598692 1598705
-#   .\raids.ps1 sync-raids   # pull -> pull attendees -> confirm -> upload
+#   .\raids.ps1 sync-raids   # pull -> upload missing only -> audit-dkp
 #   .\raids.ps1 pull-members-dkp   # download Current Member DKP page
 #   .\raids.ps1 audit-dkp          # download + parse + audit vs Supabase
 
@@ -128,27 +128,84 @@ function Sync-Raids {
     Pull-Raids
     if ($LASTEXITCODE -ne 0) { return }
     Write-Host ""
-    Write-Host "Raids in index with both detail + attendees (would be uploaded):"
+    Write-Host "Raids ready (upload only if not already in Supabase):"
     if (-not (Test-Path $Index)) { Write-Error "No $Index. Run pull-raids and pull-attendees first." }
     $csv = Import-Csv $Index
     $raidsDirPath = $RaidsDir
-    $toUpload = @()
+    $candidates = [System.Collections.Generic.List[string]]::new()
+    $nameById = @{}
     foreach ($r in $csv) {
         $rid = ($r.raid_id -replace '"', '').Trim()
         if (-not $rid) { continue }
         $detail = Join-Path $raidsDirPath "raid_$rid.html"
         $att = Join-Path $raidsDirPath "raid_${rid}_attendees.html"
-        if ((Test-Path $detail) -and (Test-Path $att)) { $toUpload += $rid }
+        if ((Test-Path $detail) -and (Test-Path $att)) {
+            $candidates.Add($rid) | Out-Null
+            $rname = ""
+            if ($r.PSObject.Properties.Name -contains "raid_name") {
+                $rname = ($r.raid_name -replace '"', '').Trim()
+            }
+            $nameById[$rid] = $rname
+        }
     }
-    if ($toUpload.Count -eq 0) {
+    if ($candidates.Count -eq 0) {
         Write-Host "  (none - no raids have both detail and attendees HTML)"
+        Write-Host ""
+        Write-Host "Running audit-dkp..."
+        Audit-Dkp
         return
     }
-    $toUpload | ForEach-Object { Write-Host "  $_" }
+
+    $idsStr = ($candidates -join ",")
+    $missingOut = python $ScriptDir/upload_saved_raids_supabase.py `
+        --raids-dir $RaidsDir `
+        --index $Index `
+        --raid-ids $idsStr `
+        --list-missing 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host $missingOut
+        Write-Error "Failed to check which raids are already in Supabase."
+        return
+    }
+    $missingSet = @{}
+    foreach ($line in @($missingOut | ForEach-Object { "$_" })) {
+        $mid = $line.Trim()
+        if ($mid -match '^\d+$') { $missingSet[$mid] = $true }
+    }
+
+    $toUpload = [System.Collections.Generic.List[string]]::new()
+    foreach ($rid in $candidates) {
+        $label = if ($nameById[$rid]) { $nameById[$rid] } else { "" }
+        if ($missingSet.ContainsKey($rid)) {
+            $toUpload.Add($rid) | Out-Null
+            if ($label) { Write-Host "  $rid  $label" } else { Write-Host "  $rid" }
+        } else {
+            if ($label) {
+                Write-Host "  $rid  ${label}: skip (already in Supabase)"
+            } else {
+                Write-Host "  $rid: skip (already in Supabase)"
+            }
+        }
+    }
+
+    if ($toUpload.Count -eq 0) {
+        Write-Host ""
+        Write-Host "All candidate raid(s) already in Supabase. Nothing to upload."
+        Write-Host ""
+        Write-Host "Running audit-dkp..."
+        Audit-Dkp
+        return
+    }
+
     Write-Host ""
     $confirm = Read-Host "Upload these $($toUpload.Count) raid(s) to Supabase? (y/n)"
     if ($confirm -eq 'y' -or $confirm -eq 'Y') {
-        Upload-Raids
+        $script:RaidIds = @($toUpload.ToArray())
+        Upload-RaidsIds
+        if ($LASTEXITCODE -ne 0) { return }
+        Write-Host ""
+        Write-Host "Running audit-dkp..."
+        Audit-Dkp
     } else {
         Write-Host "Upload skipped."
     }
@@ -186,10 +243,10 @@ Local raid pull & upload (Windows). Use this instead of make/nmake.
   .\raids.ps1 upload-raids
   .\raids.ps1 upload-raids-ids 1598692 1598705   # upload only these (spaces or commas)
   .\raids.ps1 upload-raid-ids 1598730           # same as upload-raids-ids
-  .\raids.ps1 sync-raids              # pull -> pull attendees -> confirm -> upload
+  .\raids.ps1 sync-raids              # pull -> upload missing IDs only -> audit-dkp
   .\raids.ps1 upload-raid-detail 1598705
   .\raids.ps1 pull-members-dkp        # download Current Member DKP page
-  .\raids.ps1 audit-dkp               # download + parse + audit vs Supabase
+  .\raids.ps1 audit-dkp               # download + parse + audit vs Supabase (hides 0/0 unmatched)
 
 Since-date: edit .raids-since-date (one line YYYY-MM-DD). After each pull it is set to today.
 Prereqs: cookies.txt (Cookie header), .env with SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.

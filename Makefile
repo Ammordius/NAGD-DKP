@@ -11,7 +11,7 @@
 #   .\raids.ps1 pull-attendees
 #   .\raids.ps1 upload-raids
 #   .\raids.ps1 upload-raids-ids 1598692,1598705   # upload only these two
-#   .\raids.ps1 sync-raids
+#   .\raids.ps1 sync-raids              # pull -> upload missing only -> audit-dkp
 #   .\raids.ps1 pull-members-dkp        # download Current Member DKP page
 #   .\raids.ps1 audit-dkp               # download + parse + audit vs Supabase
 #
@@ -21,7 +21,7 @@
 #   make upload-raids
 #   make upload-raids-ids RAID_IDS=1598692,1598705   # upload only these, skip 1598690
 #   make pull-raids-ids RAID_IDS=1598692,1598705
-#   make sync-raids
+#   make sync-raids          # pull -> upload missing IDs only -> audit-dkp
 #   make pull-members-dkp    # download members DKP page to data/members_dkp.html
 #   make audit-dkp           # pull members + parse + audit vs Supabase (exit 0 = match)
 
@@ -107,14 +107,43 @@ upload-raid-detail:
 	  --raids-dir $(RAIDS_DIR) \
 	  --apply
 
-# Full sync: pull (raids + attendees) -> prompt to confirm -> upload.
+# Full sync: pull -> upload missing IDs only (via upload-raids-ids) -> audit-dkp.
+# Skips raid IDs already in Supabase. Declining upload also skips audit.
 sync-raids: pull-raids
-	@echo ""; echo "Raids with both detail + attendees (would be uploaded):"; \
+	@echo ""; echo "Raids ready (upload only if not already in Supabase):"; \
+	cands=""; \
 	for id in $$(tail -n +2 $(INDEX) 2>/dev/null | cut -d',' -f1 | tr -d '"'); do \
-	  if [ -f "$(RAIDS_DIR)/raid_$$id.html" ] && [ -f "$(RAIDS_DIR)/raid_$$id_attendees.html" ]; then echo "  $$id"; fi; \
+	  if [ -f "$(RAIDS_DIR)/raid_$$id.html" ] && [ -f "$(RAIDS_DIR)/raid_$$id_attendees.html" ]; then \
+	    cands="$$cands $$id"; \
+	  fi; \
 	done; \
-	echo ""; read -p "Upload these to Supabase? (y/n) " confirm; \
-	if [ "$$confirm" = "y" ] || [ "$$confirm" = "Y" ]; then $(MAKE) upload-raids; else echo "Upload skipped."; fi
+	cands=$$(echo $$cands | xargs); \
+	if [ -z "$$cands" ]; then \
+	  echo "  (none - no raids have both detail and attendees HTML)"; \
+	  echo ""; echo "Running audit-dkp..."; $(MAKE) audit-dkp; exit 0; \
+	fi; \
+	ids_csv=$$(echo $$cands | tr ' ' ','); \
+	missing=$$($(PYTHON) $(SCRIPTS)/upload_saved_raids_supabase.py --raids-dir $(RAIDS_DIR) --index $(INDEX) --raid-ids "$$ids_csv" --list-missing); \
+	to_upload=""; \
+	for id in $$cands; do \
+	  if echo "$$missing" | grep -qx "$$id"; then \
+	    echo "  $$id"; to_upload="$$to_upload $$id"; \
+	  else \
+	    echo "  $$id: skip (already in Supabase)"; \
+	  fi; \
+	done; \
+	to_upload=$$(echo $$to_upload | xargs); \
+	if [ -z "$$to_upload" ]; then \
+	  echo ""; echo "All candidate raid(s) already in Supabase. Nothing to upload."; \
+	  echo ""; echo "Running audit-dkp..."; $(MAKE) audit-dkp; exit 0; \
+	fi; \
+	echo ""; read -p "Upload these $$(echo $$to_upload | wc -w | tr -d ' ') raid(s) to Supabase? (y/n) " confirm; \
+	if [ "$$confirm" = "y" ] || [ "$$confirm" = "Y" ]; then \
+	  $(MAKE) upload-raids-ids RAID_IDS=$$(echo $$to_upload | tr ' ' ','); \
+	  echo ""; echo "Running audit-dkp..."; $(MAKE) audit-dkp; \
+	else \
+	  echo "Upload skipped."; \
+	fi
 
 # Download Current Member DKP page from Gamer Launch (requires cookies.txt).
 MEMBERS_HTML := data/members_dkp.html

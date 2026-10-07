@@ -5,6 +5,7 @@ but are not yet in Supabase, and optionally upload them to the raids table.
 
   python scripts/upload_saved_raids_supabase.py [--dry-run] [--apply]
   python scripts/upload_saved_raids_supabase.py --apply   # upload missing raids
+  python scripts/upload_saved_raids_supabase.py --list-missing --raid-ids 1,2,3  # print IDs not in Supabase
 
 Uses raids/ directory (repo root). Reads raids_index.csv if present for metadata.
 Parses raid_id and raid_pool from saved HTML (e.g. from "saved from url=...raidId=...&raid_pool=...").
@@ -219,12 +220,45 @@ def main() -> int:
     ap.add_argument("--raid-ids", type=str, default="", help="Comma-separated raid IDs to upload (default: all discovered)")
     ap.add_argument("--dry-run", action="store_true", help="Only list what would be uploaded")
     ap.add_argument("--apply", action="store_true", help="Insert missing raids into Supabase")
+    ap.add_argument(
+        "--list-missing",
+        action="store_true",
+        help="Print raid_ids not yet in Supabase (one per line) and exit; no insert",
+    )
     args = ap.parse_args()
 
     raids_dir = args.raids_dir
     if not raids_dir.is_dir():
         print(f"Raids directory not found: {raids_dir}", file=sys.stderr)
         return 1
+
+    # --list-missing: check given IDs (or all discovered) against Supabase; print missing only
+    if args.list_missing:
+        if args.raid_ids:
+            check_ids = {x.strip() for x in args.raid_ids.split(",") if x.strip()}
+        else:
+            check_ids = discover_saved_raid_ids(raids_dir)
+        if not check_ids:
+            return 0
+        url = os.environ.get("SUPABASE_URL", "").strip()
+        key = (
+            os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").strip()
+            or os.environ.get("SUPABASE_ANON_KEY", "").strip()
+        )
+        if not url or not key:
+            print("Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY (or SUPABASE_ANON_KEY).", file=sys.stderr)
+            return 1
+        try:
+            from supabase import create_client
+        except ImportError:
+            print("Install supabase: pip install supabase", file=sys.stderr)
+            return 1
+        client = create_client(url, key)
+        existing_ids = fetch_all_raid_ids(client)
+        for rid in sorted(check_ids):
+            if rid not in existing_ids:
+                print(rid)
+        return 0
 
     saved_ids = discover_saved_raid_ids(raids_dir)
     if args.raid_ids:

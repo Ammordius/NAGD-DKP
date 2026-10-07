@@ -169,6 +169,17 @@ def parse_members_dkp_html(html_path: Path) -> list[dict[str, Any]]:
     return rows
 
 
+def _set_name_to_account(name_to_aid: dict[str, str], name: str, account_id: str) -> None:
+    if not name or not account_id:
+        return
+    current = name_to_aid.get(name)
+    if not current:
+        name_to_aid[name] = account_id
+        return
+    if account_id.isdigit() and not current.isdigit():
+        name_to_aid[name] = account_id
+
+
 def build_name_to_account_id(
     accounts: list[dict[str, Any]],
     character_account: list[dict[str, Any]],
@@ -187,18 +198,18 @@ def build_name_to_account_id(
             continue
         dn = _norm(r.get("display_name", ""))
         if dn:
-            name_to_aid[dn] = aid
+            _set_name_to_account(name_to_aid, dn, aid)
         for part in (_norm(r.get("toon_names", "")) or "").split(","):
             n = part.strip()
             if n:
-                name_to_aid[n] = aid
+                _set_name_to_account(name_to_aid, n, aid)
     for r in character_account:
         cid = _norm(r.get("char_id", ""))
         aid = _norm(r.get("account_id", ""))
         if cid and aid:
             name = char_id_to_name.get(cid, "")
             if name:
-                name_to_aid[name] = aid
+                _set_name_to_account(name_to_aid, name, aid)
     return name_to_aid
 
 
@@ -323,6 +334,7 @@ def run_audit(
     html_path: Path | None,
     by_account: bool,
     json_out: Path | None = None,
+    include_zero_dkp: bool = False,
 ) -> int:
     """Load snapshot (from JSON or by parsing HTML), query DB once for all dkp_summary, compare."""
     _log("audit_start")
@@ -453,15 +465,32 @@ def run_audit(
     mismatches = list(mismatches_by_account.values())
     matched = len(account_ids_with_matching_row)
 
+    # By default omit unmatched names with earned=0 spent=0 (noise); --include-zero-dkp keeps them.
+    missing_zero_dkp: list[dict[str, Any]] = []
+    missing_report: list[dict[str, Any]] = []
+    for r in missing_in_db:
+        earned = int(r.get("earned", 0) or 0)
+        spent = int(r.get("spent", 0) or 0)
+        if not include_zero_dkp and earned == 0 and spent == 0:
+            missing_zero_dkp.append(r)
+        else:
+            missing_report.append(r)
+
     print()
     print("=== Audit result (account-level) ===")
     print(f"Snapshot accounts: {len(accounts_snapshot)}")
     print(f"Matched in DB:     {matched}")
-    print(f"Missing in DB:    {len(missing_in_db)}")
+    print(f"Missing in DB:    {len(missing_report)}")
     print(f"Mismatches:       {len(mismatches)}")
+    if missing_zero_dkp:
+        print(f"Omitted {len(missing_zero_dkp)} unmatched account(s) with earned=0 spent=0")
 
-    ok = not mismatches and not missing_in_db
-    _log(f"audit_complete snapshot={len(accounts_snapshot)} matched={matched} missing={len(missing_in_db)} mismatches={len(mismatches)} ok={ok}")
+    ok = not mismatches and not missing_report
+    _log(
+        f"audit_complete snapshot={len(accounts_snapshot)} matched={matched} "
+        f"missing={len(missing_report)} missing_zero_omitted={len(missing_zero_dkp)} "
+        f"mismatches={len(mismatches)} ok={ok}"
+    )
 
     if json_out:
         json_out.parent.mkdir(parents=True, exist_ok=True)
@@ -469,21 +498,25 @@ def run_audit(
             "ok": ok,
             "snapshot_accounts": len(accounts_snapshot),
             "matched": matched,
-            "missing_in_db": len(missing_in_db),
+            "missing_in_db": len(missing_report),
+            "missing_zero_dkp_omitted": len(missing_zero_dkp),
             "mismatches_count": len(mismatches),
-            "missing": [{"account_name": r.get("account_name"), "earned": r.get("earned"), "spent": r.get("spent")} for r in missing_in_db],
+            "missing": [
+                {"account_name": r.get("account_name"), "earned": r.get("earned"), "spent": r.get("spent")}
+                for r in missing_report
+            ],
             "mismatches": mismatches,
         }
         json_out.write_text(json.dumps(payload, indent=2), encoding="utf-8")
         _log(f"wrote_json path={json_out}")
         print(f"Wrote audit result to {json_out}")
 
-    if missing_in_db:
+    if missing_report:
         print("\n--- Not in DB (name not matched to any account) ---")
-        for r in missing_in_db[:30]:
+        for r in missing_report[:30]:
             print(f"  {r.get('account_name')}  earned={r.get('earned')} spent={r.get('spent')}")
-        if len(missing_in_db) > 30:
-            print(f"  ... and {len(missing_in_db) - 30} more")
+        if len(missing_report) > 30:
+            print(f"  ... and {len(missing_report) - 30} more")
 
     if mismatches:
         print("\n--- Mismatches (HTML vs DB account totals) ---")
@@ -521,6 +554,11 @@ def main() -> int:
     p_audit.add_argument("--html", type=Path, dest="html_path", default=None, help="HTML file (alternative to positional)")
     p_audit.add_argument("--by-account", action="store_true", help="Show per-account aggregated totals from snapshot")
     p_audit.add_argument("--json-out", type=Path, dest="json_out", default=None, help="Write machine-readable audit result JSON (ok, counts, missing, mismatches)")
+    p_audit.add_argument(
+        "--include-zero-dkp",
+        action="store_true",
+        help="Include unmatched accounts with earned=0 spent=0 in Not-in-DB print and failure (default: omit)",
+    )
 
     args = parser.parse_args()
 
@@ -539,7 +577,13 @@ def main() -> int:
                 snapshot = snapshot or args.input
             else:
                 html_path = html_path or args.input
-        return run_audit(snapshot, html_path, getattr(args, "by_account", False), getattr(args, "json_out", None))
+        return run_audit(
+            snapshot,
+            html_path,
+            getattr(args, "by_account", False),
+            getattr(args, "json_out", None),
+            include_zero_dkp=getattr(args, "include_zero_dkp", False),
+        )
 
     return 0
 
