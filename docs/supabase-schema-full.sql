@@ -139,7 +139,7 @@ CREATE TABLE IF NOT EXISTS dkp_summary (
   updated_at TIMESTAMPTZ DEFAULT now()
 );
 
--- Total DKP available per period (sum of all event DKP in that window). Updated by full refresh.
+-- Total DKP available per period (sum of all event DKP in that window). Updated when raid_events change, and by a full refresh as the calendar window rolls.
 CREATE TABLE IF NOT EXISTS dkp_period_totals (
   period TEXT PRIMARY KEY,
   total_dkp NUMERIC NOT NULL DEFAULT 0
@@ -799,58 +799,660 @@ END;
 $$;
 COMMENT ON FUNCTION public.fix_serial_sequences_for_restore() IS 'Set serial sequences to max(id) for tables restored from CSV with explicit id; prevents duplicate key on next insert.';
 
--- Trigger: when raid_events change, refresh totals for affected raid(s).
-CREATE OR REPLACE FUNCTION public.trigger_refresh_raid_totals_after_events()
-RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+-- DKP triggers.
+-- Earned is raid_event_attendance times raid_events.dkp_value. raid_attendance is only the roster and does not move DKP.
+-- Spent is raid_loot.cost, rolled to an account through loot_assignment when that row exists, otherwise the loot character.
+-- Each statement updates the touched characters and accounts once. A daily refresh_dkp_summary() still has to roll 30d/60d as dates pass.
+-- Bulk restore uses begin_restore_load(); these triggers no-op until that flag clears.
+
+CREATE OR REPLACE FUNCTION public.dkp_character_key(p_char_id text, p_character_name text)
+RETURNS text
+LANGUAGE sql
+IMMUTABLE
+AS $$
+  SELECT CASE
+    WHEN COALESCE(trim(p_char_id), '') = '' THEN COALESCE(trim(p_character_name), 'unknown')
+    ELSE trim(p_char_id)
+  END
+$$;
+
+CREATE OR REPLACE FUNCTION public.dkp_event_value(p_dkp_value text)
+RETURNS numeric
+LANGUAGE sql
+IMMUTABLE
+AS $$
+  SELECT COALESCE(NULLIF(trim(p_dkp_value), '')::numeric, 0)
+$$;
+
+CREATE OR REPLACE FUNCTION public.resolve_dkp_account_id(p_account_id text, p_char_id text, p_character_name text)
+RETURNS text
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT COALESCE(NULLIF(trim(p_account_id), ''), (
+    SELECT ca.account_id
+    FROM character_account ca
+    WHERE (p_char_id IS NOT NULL AND trim(p_char_id) <> '' AND ca.char_id = trim(p_char_id))
+       OR (p_character_name IS NOT NULL AND trim(p_character_name) <> '' AND EXISTS (
+         SELECT 1 FROM characters c
+         WHERE c.char_id = ca.char_id AND trim(c.name) = trim(p_character_name)
+       ))
+    LIMIT 1
+  ))
+$$;
+
+CREATE OR REPLACE FUNCTION public.resolve_loot_account_id(p_loot_id bigint, p_char_id text, p_character_name text)
+RETURNS text
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_char text;
+  v_name text;
 BEGIN
-  IF restore_load_in_progress() THEN IF TG_OP = 'DELETE' THEN RETURN OLD; ELSE RETURN NEW; END IF; END IF;
-  IF TG_OP = 'DELETE' THEN
-    PERFORM refresh_raid_attendance_totals(OLD.raid_id);
-    RETURN OLD;
-  ELSE
-    PERFORM refresh_raid_attendance_totals(NEW.raid_id);
-    RETURN NEW;
+  IF p_loot_id IS NOT NULL AND to_regclass('public.loot_assignment') IS NOT NULL THEN
+    SELECT NULLIF(trim(assigned_char_id), ''), NULLIF(trim(assigned_character_name), '')
+    INTO v_char, v_name
+    FROM loot_assignment
+    WHERE loot_id = p_loot_id;
+  END IF;
+  RETURN public.resolve_dkp_account_id(
+    NULL,
+    COALESCE(v_char, NULLIF(trim(p_char_id), '')),
+    COALESCE(v_name, NULLIF(trim(p_character_name), ''))
+  );
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.refresh_raid_totals_for_ids(p_raid_ids text[])
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  rid text;
+BEGIN
+  IF p_raid_ids IS NULL THEN
+    RETURN;
+  END IF;
+  FOREACH rid IN ARRAY p_raid_ids LOOP
+    IF rid IS NOT NULL AND trim(rid) <> '' THEN
+      PERFORM refresh_raid_attendance_totals(rid);
+    END IF;
+  END LOOP;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.refresh_dkp_last_activity(p_character_keys text[], p_account_ids text[])
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  IF p_character_keys IS NOT NULL AND cardinality(p_character_keys) > 0 THEN
+    UPDATE dkp_summary s
+    SET last_activity_date = src.last_activity_date
+    FROM (
+      SELECT k.key AS character_key, MAX(d.raid_date) AS last_activity_date
+      FROM unnest(p_character_keys) AS k(key)
+      LEFT JOIN (
+        SELECT public.dkp_character_key(rea.char_id::text, rea.character_name) AS character_key,
+               public.raid_date_parsed(r.date_iso) AS raid_date
+        FROM raid_event_attendance rea
+        JOIN raids r ON r.raid_id = rea.raid_id
+        WHERE public.dkp_character_key(rea.char_id::text, rea.character_name) = ANY (p_character_keys)
+        UNION ALL
+        SELECT public.dkp_character_key(rl.char_id::text, rl.character_name),
+               public.raid_date_parsed(r.date_iso)
+        FROM raid_loot rl
+        JOIN raids r ON r.raid_id = rl.raid_id
+        WHERE public.dkp_character_key(rl.char_id::text, rl.character_name) = ANY (p_character_keys)
+      ) d ON d.character_key = k.key
+      GROUP BY k.key
+    ) src
+    WHERE s.character_key = src.character_key;
+  END IF;
+
+  IF p_account_ids IS NOT NULL AND cardinality(p_account_ids) > 0 THEN
+    UPDATE account_dkp_summary s
+    SET last_activity_date = src.last_activity_date
+    FROM (
+      SELECT k.account_id, MAX(d.raid_date) AS last_activity_date
+      FROM unnest(p_account_ids) AS k(account_id)
+      LEFT JOIN (
+        SELECT public.resolve_dkp_account_id(rea.account_id, rea.char_id::text, rea.character_name) AS account_id,
+               public.raid_date_parsed(r.date_iso) AS raid_date
+        FROM raid_event_attendance rea
+        JOIN raids r ON r.raid_id = rea.raid_id
+        WHERE public.resolve_dkp_account_id(rea.account_id, rea.char_id::text, rea.character_name) = ANY (p_account_ids)
+        UNION ALL
+        SELECT public.resolve_loot_account_id(rl.id, rl.char_id::text, rl.character_name),
+               public.raid_date_parsed(r.date_iso)
+        FROM raid_loot rl
+        JOIN raids r ON r.raid_id = rl.raid_id
+        WHERE public.resolve_loot_account_id(rl.id, rl.char_id::text, rl.character_name) = ANY (p_account_ids)
+      ) d ON d.account_id = k.account_id
+      GROUP BY k.account_id
+    ) src
+    WHERE s.account_id = src.account_id;
   END IF;
 END;
 $$;
 
-DROP TRIGGER IF EXISTS refresh_raid_totals_after_events_ins ON raid_events;
-DROP TRIGGER IF EXISTS refresh_raid_totals_after_events_upd ON raid_events;
-DROP TRIGGER IF EXISTS refresh_raid_totals_after_events_del ON raid_events;
-CREATE TRIGGER refresh_raid_totals_after_events_ins AFTER INSERT ON raid_events FOR EACH ROW EXECUTE FUNCTION public.trigger_refresh_raid_totals_after_events();
-CREATE TRIGGER refresh_raid_totals_after_events_upd AFTER UPDATE ON raid_events FOR EACH ROW EXECUTE FUNCTION public.trigger_refresh_raid_totals_after_events();
-CREATE TRIGGER refresh_raid_totals_after_events_del AFTER DELETE ON raid_events FOR EACH ROW EXECUTE FUNCTION public.trigger_refresh_raid_totals_after_events();
-
--- Trigger: when raid_event_attendance change, refresh per-character totals for affected raid(s).
-CREATE OR REPLACE FUNCTION public.trigger_refresh_raid_totals_after_event_attendance()
-RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+CREATE OR REPLACE FUNCTION public.apply_earned_deltas(p_rows jsonb)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_keys text[];
+  v_accounts text[];
 BEGIN
-  IF restore_load_in_progress() THEN IF TG_OP = 'DELETE' THEN RETURN OLD; ELSE RETURN NEW; END IF; END IF;
-  IF TG_OP = 'DELETE' THEN
-    PERFORM refresh_raid_attendance_totals(OLD.raid_id);
-    RETURN OLD;
-  ELSE
-    PERFORM refresh_raid_attendance_totals(NEW.raid_id);
-    RETURN NEW;
+  IF p_rows IS NULL OR jsonb_typeof(p_rows) <> 'array' OR jsonb_array_length(p_rows) = 0 THEN
+    RETURN;
   END IF;
+
+  INSERT INTO dkp_summary (character_key, character_name, earned, spent, earned_30d, earned_60d, updated_at)
+  SELECT character_key,
+         MAX(character_name),
+         SUM(earned),
+         0,
+         SUM(earned_30d)::integer,
+         SUM(earned_60d)::integer,
+         now()
+  FROM (
+    SELECT trim(x->>'character_key') AS character_key,
+           NULLIF(trim(x->>'character_name'), '') AS character_name,
+           COALESCE((x->>'earned')::numeric, 0) AS earned,
+           COALESCE((x->>'earned_30d')::numeric, 0) AS earned_30d,
+           COALESCE((x->>'earned_60d')::numeric, 0) AS earned_60d
+    FROM jsonb_array_elements(p_rows) AS x
+  ) d
+  WHERE character_key IS NOT NULL AND character_key <> ''
+  GROUP BY character_key
+  ON CONFLICT (character_key) DO UPDATE SET
+    earned = dkp_summary.earned + EXCLUDED.earned,
+    earned_30d = COALESCE(dkp_summary.earned_30d, 0) + EXCLUDED.earned_30d,
+    earned_60d = COALESCE(dkp_summary.earned_60d, 0) + EXCLUDED.earned_60d,
+    character_name = COALESCE(EXCLUDED.character_name, dkp_summary.character_name),
+    updated_at = now();
+
+  INSERT INTO account_dkp_summary (account_id, display_name, earned, spent, earned_30d, earned_60d, updated_at)
+  SELECT d.account_id,
+         MAX(a.display_name),
+         SUM(d.earned),
+         0,
+         SUM(d.earned_30d)::integer,
+         SUM(d.earned_60d)::integer,
+         now()
+  FROM (
+    SELECT NULLIF(trim(x->>'account_id'), '') AS account_id,
+           COALESCE((x->>'earned')::numeric, 0) AS earned,
+           COALESCE((x->>'earned_30d')::numeric, 0) AS earned_30d,
+           COALESCE((x->>'earned_60d')::numeric, 0) AS earned_60d
+    FROM jsonb_array_elements(p_rows) AS x
+  ) d
+  JOIN accounts a ON a.account_id = d.account_id
+  WHERE d.account_id IS NOT NULL
+  GROUP BY d.account_id
+  ON CONFLICT (account_id) DO UPDATE SET
+    earned = account_dkp_summary.earned + EXCLUDED.earned,
+    earned_30d = COALESCE(account_dkp_summary.earned_30d, 0) + EXCLUDED.earned_30d,
+    earned_60d = COALESCE(account_dkp_summary.earned_60d, 0) + EXCLUDED.earned_60d,
+    display_name = COALESCE(account_dkp_summary.display_name, EXCLUDED.display_name),
+    updated_at = now();
+
+  SELECT ARRAY_AGG(DISTINCT character_key), ARRAY_AGG(DISTINCT account_id)
+  INTO v_keys, v_accounts
+  FROM (
+    SELECT NULLIF(trim(x->>'character_key'), '') AS character_key,
+           NULLIF(trim(x->>'account_id'), '') AS account_id
+    FROM jsonb_array_elements(p_rows) AS x
+  ) d;
+
+  PERFORM refresh_dkp_last_activity(v_keys, v_accounts);
+
+  DELETE FROM dkp_summary
+  WHERE character_key = ANY (v_keys)
+    AND earned = 0
+    AND spent = 0
+    AND COALESCE(earned_30d, 0) = 0
+    AND COALESCE(earned_60d, 0) = 0;
+
+  DELETE FROM account_dkp_summary
+  WHERE account_id = ANY (v_accounts)
+    AND earned = 0
+    AND spent = 0
+    AND COALESCE(earned_30d, 0) = 0
+    AND COALESCE(earned_60d, 0) = 0;
 END;
 $$;
 
--- Statement-level DELETE: refresh each affected raid once (avoids timeout when deleting a tic with many rows).
-CREATE OR REPLACE FUNCTION public.trigger_refresh_raid_totals_after_event_attendance_del_stmt()
+CREATE OR REPLACE FUNCTION public.apply_spent_deltas(p_rows jsonb)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_keys text[];
+  v_accounts text[];
+BEGIN
+  IF p_rows IS NULL OR jsonb_typeof(p_rows) <> 'array' OR jsonb_array_length(p_rows) = 0 THEN
+    RETURN;
+  END IF;
+
+  INSERT INTO dkp_summary (character_key, character_name, earned, spent, earned_30d, earned_60d, updated_at)
+  SELECT character_key,
+         MAX(character_name),
+         0,
+         SUM(spent)::integer,
+         0,
+         0,
+         now()
+  FROM (
+    SELECT trim(x->>'character_key') AS character_key,
+           NULLIF(trim(x->>'character_name'), '') AS character_name,
+           COALESCE((x->>'spent')::numeric, 0) AS spent
+    FROM jsonb_array_elements(p_rows) AS x
+  ) d
+  WHERE character_key IS NOT NULL AND character_key <> ''
+  GROUP BY character_key
+  ON CONFLICT (character_key) DO UPDATE SET
+    spent = dkp_summary.spent + EXCLUDED.spent,
+    character_name = COALESCE(EXCLUDED.character_name, dkp_summary.character_name),
+    updated_at = now();
+
+  INSERT INTO account_dkp_summary (account_id, display_name, earned, spent, earned_30d, earned_60d, updated_at)
+  SELECT d.account_id,
+         MAX(a.display_name),
+         0,
+         SUM(d.spent),
+         0,
+         0,
+         now()
+  FROM (
+    SELECT NULLIF(trim(x->>'account_id'), '') AS account_id,
+           COALESCE((x->>'spent')::numeric, 0) AS spent
+    FROM jsonb_array_elements(p_rows) AS x
+  ) d
+  JOIN accounts a ON a.account_id = d.account_id
+  WHERE d.account_id IS NOT NULL
+  GROUP BY d.account_id
+  ON CONFLICT (account_id) DO UPDATE SET
+    spent = account_dkp_summary.spent + EXCLUDED.spent,
+    display_name = COALESCE(account_dkp_summary.display_name, EXCLUDED.display_name),
+    updated_at = now();
+
+  SELECT ARRAY_AGG(DISTINCT character_key), ARRAY_AGG(DISTINCT account_id)
+  INTO v_keys, v_accounts
+  FROM (
+    SELECT NULLIF(trim(x->>'character_key'), '') AS character_key,
+           NULLIF(trim(x->>'account_id'), '') AS account_id
+    FROM jsonb_array_elements(p_rows) AS x
+  ) d;
+
+  PERFORM refresh_dkp_last_activity(v_keys, v_accounts);
+
+  DELETE FROM dkp_summary
+  WHERE character_key = ANY (v_keys)
+    AND earned = 0
+    AND spent = 0
+    AND COALESCE(earned_30d, 0) = 0
+    AND COALESCE(earned_60d, 0) = 0;
+
+  DELETE FROM account_dkp_summary
+  WHERE account_id = ANY (v_accounts)
+    AND earned = 0
+    AND spent = 0
+    AND COALESCE(earned_30d, 0) = 0
+    AND COALESCE(earned_60d, 0) = 0;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.adjust_dkp_period_totals(p_events jsonb)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  IF p_events IS NULL OR jsonb_typeof(p_events) <> 'array' OR jsonb_array_length(p_events) = 0 THEN
+    RETURN;
+  END IF;
+
+  INSERT INTO dkp_period_totals (period, total_dkp)
+  SELECT '30d', COALESCE(SUM((x->>'dkp')::numeric), 0)
+  FROM jsonb_array_elements(p_events) AS x
+  WHERE NULLIF(x->>'raid_date', '') IS NOT NULL
+    AND (x->>'raid_date')::date >= (current_date - 30)
+  ON CONFLICT (period) DO UPDATE SET total_dkp = dkp_period_totals.total_dkp + EXCLUDED.total_dkp;
+
+  INSERT INTO dkp_period_totals (period, total_dkp)
+  SELECT '60d', COALESCE(SUM((x->>'dkp')::numeric), 0)
+  FROM jsonb_array_elements(p_events) AS x
+  WHERE NULLIF(x->>'raid_date', '') IS NOT NULL
+    AND (x->>'raid_date')::date >= (current_date - 60)
+  ON CONFLICT (period) DO UPDATE SET total_dkp = dkp_period_totals.total_dkp + EXCLUDED.total_dkp;
+END;
+$$;
+
+-- Attendance rows credited by these events. p_sign is 1 when the event value is added, -1 when it is removed.
+CREATE OR REPLACE FUNCTION public.dkp_earned_rows_for_events(p_events jsonb)
+RETURNS jsonb
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT COALESCE(jsonb_agg(jsonb_build_object(
+    'character_key', g.character_key,
+    'character_name', g.character_name,
+    'account_id', g.account_id,
+    'earned', g.earned,
+    'earned_30d', g.earned_30d,
+    'earned_60d', g.earned_60d
+  )), '[]'::jsonb)
+  FROM (
+    SELECT public.dkp_character_key(rea.char_id::text, rea.character_name) AS character_key,
+           MAX(COALESCE(NULLIF(trim(rea.character_name), ''), rea.char_id::text, 'unknown')) AS character_name,
+           public.resolve_dkp_account_id(rea.account_id, rea.char_id::text, rea.character_name) AS account_id,
+           SUM(ev.dkp) AS earned,
+           SUM(CASE WHEN ev.raid_date >= (current_date - 30) THEN ev.dkp ELSE 0 END)::integer AS earned_30d,
+           SUM(CASE WHEN ev.raid_date >= (current_date - 60) THEN ev.dkp ELSE 0 END)::integer AS earned_60d
+    FROM (
+      SELECT x->>'raid_id' AS raid_id,
+             x->>'event_id' AS event_id,
+             COALESCE((x->>'dkp')::numeric, 0) AS dkp,
+             NULLIF(x->>'raid_date', '')::date AS raid_date
+      FROM jsonb_array_elements(COALESCE(p_events, '[]'::jsonb)) AS x
+    ) ev
+    JOIN raid_event_attendance rea ON rea.raid_id = ev.raid_id AND rea.event_id = ev.event_id
+    GROUP BY 1, 3
+  ) g
+$$;
+
+CREATE OR REPLACE FUNCTION public.trigger_raid_events_ins_stmt()
 RETURNS trigger
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
 AS $$
 DECLARE
-  r RECORD;
+  v_events jsonb;
 BEGIN
   IF restore_load_in_progress() THEN RETURN NULL; END IF;
-  FOR r IN SELECT DISTINCT raid_id FROM deleted_rows
-  LOOP
-    PERFORM refresh_raid_attendance_totals(r.raid_id);
-  END LOOP;
+
+  SELECT COALESCE(jsonb_agg(jsonb_build_object(
+    'raid_id', nr.raid_id,
+    'event_id', nr.event_id,
+    'dkp', public.dkp_event_value(nr.dkp_value),
+    'raid_date', public.raid_date_parsed(r.date_iso)
+  )), '[]'::jsonb)
+  INTO v_events
+  FROM new_rows nr
+  LEFT JOIN raids r ON r.raid_id = nr.raid_id;
+
+  PERFORM refresh_raid_totals_for_ids(ARRAY(SELECT DISTINCT raid_id FROM new_rows));
+  PERFORM adjust_dkp_period_totals(v_events);
+  PERFORM apply_earned_deltas(dkp_earned_rows_for_events(v_events));
+  RETURN NULL;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.trigger_raid_events_upd_stmt()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_old jsonb;
+  v_new jsonb;
+BEGIN
+  IF restore_load_in_progress() THEN RETURN NULL; END IF;
+
+  SELECT COALESCE(jsonb_agg(jsonb_build_object(
+    'raid_id', o.raid_id,
+    'event_id', o.event_id,
+    'dkp', -public.dkp_event_value(o.dkp_value),
+    'raid_date', public.raid_date_parsed(r.date_iso)
+  )), '[]'::jsonb)
+  INTO v_old
+  FROM old_rows o
+  JOIN new_rows n ON n.id = o.id
+  LEFT JOIN raids r ON r.raid_id = o.raid_id
+  WHERE public.dkp_event_value(n.dkp_value) IS DISTINCT FROM public.dkp_event_value(o.dkp_value)
+     OR n.raid_id IS DISTINCT FROM o.raid_id
+     OR n.event_id IS DISTINCT FROM o.event_id;
+
+  SELECT COALESCE(jsonb_agg(jsonb_build_object(
+    'raid_id', n.raid_id,
+    'event_id', n.event_id,
+    'dkp', public.dkp_event_value(n.dkp_value),
+    'raid_date', public.raid_date_parsed(r.date_iso)
+  )), '[]'::jsonb)
+  INTO v_new
+  FROM new_rows n
+  JOIN old_rows o ON o.id = n.id
+  LEFT JOIN raids r ON r.raid_id = n.raid_id
+  WHERE public.dkp_event_value(n.dkp_value) IS DISTINCT FROM public.dkp_event_value(o.dkp_value)
+     OR n.raid_id IS DISTINCT FROM o.raid_id
+     OR n.event_id IS DISTINCT FROM o.event_id;
+
+  IF v_old <> '[]'::jsonb OR v_new <> '[]'::jsonb THEN
+    PERFORM refresh_raid_totals_for_ids(ARRAY(
+      SELECT DISTINCT raid_id FROM (
+        SELECT raid_id FROM old_rows
+        UNION
+        SELECT raid_id FROM new_rows
+      ) ids
+    ));
+    PERFORM adjust_dkp_period_totals(v_old);
+    PERFORM adjust_dkp_period_totals(v_new);
+    PERFORM apply_earned_deltas(dkp_earned_rows_for_events(v_old));
+    PERFORM apply_earned_deltas(dkp_earned_rows_for_events(v_new));
+  END IF;
+  RETURN NULL;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.trigger_raid_events_del_stmt()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_events jsonb;
+BEGIN
+  IF restore_load_in_progress() THEN RETURN NULL; END IF;
+
+  SELECT COALESCE(jsonb_agg(jsonb_build_object(
+    'raid_id', o.raid_id,
+    'event_id', o.event_id,
+    'dkp', -public.dkp_event_value(o.dkp_value),
+    'raid_date', public.raid_date_parsed(r.date_iso)
+  )), '[]'::jsonb)
+  INTO v_events
+  FROM old_rows o
+  LEFT JOIN raids r ON r.raid_id = o.raid_id;
+
+  PERFORM apply_earned_deltas(dkp_earned_rows_for_events(v_events));
+  PERFORM adjust_dkp_period_totals(v_events);
+  PERFORM refresh_raid_totals_for_ids(ARRAY(SELECT DISTINCT raid_id FROM old_rows));
+  RETURN NULL;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS refresh_raid_totals_after_events_ins ON raid_events;
+DROP TRIGGER IF EXISTS refresh_raid_totals_after_events_upd ON raid_events;
+DROP TRIGGER IF EXISTS refresh_raid_totals_after_events_del ON raid_events;
+CREATE TRIGGER refresh_raid_totals_after_events_ins
+  AFTER INSERT ON raid_events
+  REFERENCING NEW TABLE AS new_rows
+  FOR EACH STATEMENT EXECUTE FUNCTION public.trigger_raid_events_ins_stmt();
+CREATE TRIGGER refresh_raid_totals_after_events_upd
+  AFTER UPDATE ON raid_events
+  REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows
+  FOR EACH STATEMENT EXECUTE FUNCTION public.trigger_raid_events_upd_stmt();
+CREATE TRIGGER refresh_raid_totals_after_events_del
+  AFTER DELETE ON raid_events
+  REFERENCING OLD TABLE AS old_rows
+  FOR EACH STATEMENT EXECUTE FUNCTION public.trigger_raid_events_del_stmt();
+
+CREATE OR REPLACE FUNCTION public.trigger_refresh_raid_totals_stmt()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  IF restore_load_in_progress() THEN RETURN NULL; END IF;
+  IF TG_OP = 'DELETE' THEN
+    PERFORM refresh_raid_totals_for_ids(ARRAY(SELECT DISTINCT raid_id FROM old_rows));
+  ELSIF TG_OP = 'UPDATE' THEN
+    PERFORM refresh_raid_totals_for_ids(ARRAY(
+      SELECT DISTINCT raid_id FROM (
+        SELECT raid_id FROM old_rows
+        UNION
+        SELECT raid_id FROM new_rows
+      ) ids
+    ));
+  ELSE
+    PERFORM refresh_raid_totals_for_ids(ARRAY(SELECT DISTINCT raid_id FROM new_rows));
+  END IF;
+  RETURN NULL;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.trigger_delta_event_attendance()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  IF restore_load_in_progress() THEN RETURN NULL; END IF;
+  PERFORM apply_earned_deltas((
+    SELECT COALESCE(jsonb_agg(jsonb_build_object(
+      'character_key', g.character_key,
+      'character_name', g.character_name,
+      'account_id', g.account_id,
+      'earned', g.earned,
+      'earned_30d', g.earned_30d,
+      'earned_60d', g.earned_60d
+    )), '[]'::jsonb)
+    FROM (
+      SELECT public.dkp_character_key(nr.char_id::text, nr.character_name) AS character_key,
+             MAX(COALESCE(NULLIF(trim(nr.character_name), ''), nr.char_id::text, 'unknown')) AS character_name,
+             public.resolve_dkp_account_id(nr.account_id, nr.char_id::text, nr.character_name) AS account_id,
+             SUM(public.dkp_event_value(re.dkp_value)) AS earned,
+             SUM(CASE WHEN public.raid_date_parsed(r.date_iso) >= (current_date - 30) THEN public.dkp_event_value(re.dkp_value) ELSE 0 END)::integer AS earned_30d,
+             SUM(CASE WHEN public.raid_date_parsed(r.date_iso) >= (current_date - 60) THEN public.dkp_event_value(re.dkp_value) ELSE 0 END)::integer AS earned_60d
+      FROM new_rows nr
+      LEFT JOIN raid_events re ON re.raid_id = nr.raid_id AND re.event_id = nr.event_id
+      LEFT JOIN raids r ON r.raid_id = nr.raid_id
+      GROUP BY 1, 3
+    ) g
+  ));
+  RETURN NULL;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.trigger_delta_event_attendance_del()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  IF restore_load_in_progress() THEN RETURN NULL; END IF;
+  PERFORM apply_earned_deltas((
+    SELECT COALESCE(jsonb_agg(jsonb_build_object(
+      'character_key', g.character_key,
+      'character_name', g.character_name,
+      'account_id', g.account_id,
+      'earned', g.earned,
+      'earned_30d', g.earned_30d,
+      'earned_60d', g.earned_60d
+    )), '[]'::jsonb)
+    FROM (
+      SELECT public.dkp_character_key(o.char_id::text, o.character_name) AS character_key,
+             MAX(COALESCE(NULLIF(trim(o.character_name), ''), o.char_id::text, 'unknown')) AS character_name,
+             public.resolve_dkp_account_id(o.account_id, o.char_id::text, o.character_name) AS account_id,
+             SUM(-public.dkp_event_value(re.dkp_value)) AS earned,
+             SUM(CASE WHEN public.raid_date_parsed(r.date_iso) >= (current_date - 30) THEN -public.dkp_event_value(re.dkp_value) ELSE 0 END)::integer AS earned_30d,
+             SUM(CASE WHEN public.raid_date_parsed(r.date_iso) >= (current_date - 60) THEN -public.dkp_event_value(re.dkp_value) ELSE 0 END)::integer AS earned_60d
+      FROM old_rows o
+      LEFT JOIN raid_events re ON re.raid_id = o.raid_id AND re.event_id = o.event_id
+      LEFT JOIN raids r ON r.raid_id = o.raid_id
+      GROUP BY 1, 3
+    ) g
+  ));
+  RETURN NULL;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.trigger_delta_event_attendance_upd()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  IF restore_load_in_progress() THEN RETURN NULL; END IF;
+  PERFORM apply_earned_deltas((
+    SELECT COALESCE(jsonb_agg(jsonb_build_object(
+      'character_key', g.character_key,
+      'character_name', g.character_name,
+      'account_id', g.account_id,
+      'earned', g.earned,
+      'earned_30d', g.earned_30d,
+      'earned_60d', g.earned_60d
+    )), '[]'::jsonb)
+    FROM (
+      SELECT public.dkp_character_key(o.char_id::text, o.character_name) AS character_key,
+             MAX(COALESCE(NULLIF(trim(o.character_name), ''), o.char_id::text, 'unknown')) AS character_name,
+             public.resolve_dkp_account_id(o.account_id, o.char_id::text, o.character_name) AS account_id,
+             SUM(-public.dkp_event_value(re.dkp_value)) AS earned,
+             SUM(CASE WHEN public.raid_date_parsed(r.date_iso) >= (current_date - 30) THEN -public.dkp_event_value(re.dkp_value) ELSE 0 END)::integer AS earned_30d,
+             SUM(CASE WHEN public.raid_date_parsed(r.date_iso) >= (current_date - 60) THEN -public.dkp_event_value(re.dkp_value) ELSE 0 END)::integer AS earned_60d
+      FROM old_rows o
+      LEFT JOIN raid_events re ON re.raid_id = o.raid_id AND re.event_id = o.event_id
+      LEFT JOIN raids r ON r.raid_id = o.raid_id
+      GROUP BY 1, 3
+    ) g
+  ));
+  PERFORM apply_earned_deltas((
+    SELECT COALESCE(jsonb_agg(jsonb_build_object(
+      'character_key', g.character_key,
+      'character_name', g.character_name,
+      'account_id', g.account_id,
+      'earned', g.earned,
+      'earned_30d', g.earned_30d,
+      'earned_60d', g.earned_60d
+    )), '[]'::jsonb)
+    FROM (
+      SELECT public.dkp_character_key(n.char_id::text, n.character_name) AS character_key,
+             MAX(COALESCE(NULLIF(trim(n.character_name), ''), n.char_id::text, 'unknown')) AS character_name,
+             public.resolve_dkp_account_id(n.account_id, n.char_id::text, n.character_name) AS account_id,
+             SUM(public.dkp_event_value(re.dkp_value)) AS earned,
+             SUM(CASE WHEN public.raid_date_parsed(r.date_iso) >= (current_date - 30) THEN public.dkp_event_value(re.dkp_value) ELSE 0 END)::integer AS earned_30d,
+             SUM(CASE WHEN public.raid_date_parsed(r.date_iso) >= (current_date - 60) THEN public.dkp_event_value(re.dkp_value) ELSE 0 END)::integer AS earned_60d
+      FROM new_rows n
+      LEFT JOIN raid_events re ON re.raid_id = n.raid_id AND re.event_id = n.event_id
+      LEFT JOIN raids r ON r.raid_id = n.raid_id
+      GROUP BY 1, 3
+    ) g
+  ));
   RETURN NULL;
 END;
 $$;
@@ -858,132 +1460,197 @@ $$;
 DROP TRIGGER IF EXISTS refresh_raid_totals_after_event_attendance_ins ON raid_event_attendance;
 DROP TRIGGER IF EXISTS refresh_raid_totals_after_event_attendance_upd ON raid_event_attendance;
 DROP TRIGGER IF EXISTS refresh_raid_totals_after_event_attendance_del ON raid_event_attendance;
-CREATE TRIGGER refresh_raid_totals_after_event_attendance_ins AFTER INSERT ON raid_event_attendance FOR EACH ROW EXECUTE FUNCTION public.trigger_refresh_raid_totals_after_event_attendance();
-CREATE TRIGGER refresh_raid_totals_after_event_attendance_upd AFTER UPDATE ON raid_event_attendance FOR EACH ROW EXECUTE FUNCTION public.trigger_refresh_raid_totals_after_event_attendance();
-CREATE TRIGGER refresh_raid_totals_after_event_attendance_del
-  AFTER DELETE ON raid_event_attendance
-  REFERENCING OLD TABLE AS deleted_rows
-  FOR EACH STATEMENT
-  EXECUTE FUNCTION public.trigger_refresh_raid_totals_after_event_attendance_del_stmt();
-
--- Incremental delta: cache is refreshed whenever a new row is added (INSERT) to attendance or loot.
--- Apply only NEW rows to dkp_summary (no full table scan). For DELETE/UPDATE we run full refresh.
--- Run a full refresh daily (e.g. pg_cron) so 30d/60d windows roll; delta triggers do not recompute period totals.
-
-CREATE OR REPLACE FUNCTION public.trigger_delta_event_attendance()
-RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
-BEGIN
-  IF restore_load_in_progress() THEN RETURN NULL; END IF;
-  INSERT INTO dkp_summary (character_key, character_name, earned, spent, last_activity_date, updated_at)
-  WITH delta AS (
-    SELECT
-      (CASE WHEN COALESCE(trim(nr.char_id::text), '') = '' THEN COALESCE(trim(nr.character_name), 'unknown') ELSE trim(nr.char_id::text) END) AS character_key,
-      MAX(COALESCE(trim(nr.character_name), nr.char_id::text, 'unknown')) AS character_name,
-      SUM(COALESCE((re.dkp_value::numeric), 0)) AS earned,
-      MAX((r.date_iso::date)) AS last_activity_date
-    FROM new_rows nr
-    LEFT JOIN raid_events re ON re.raid_id = nr.raid_id AND re.event_id = nr.event_id
-    LEFT JOIN raids r ON r.raid_id = nr.raid_id
-    GROUP BY (CASE WHEN COALESCE(trim(nr.char_id::text), '') = '' THEN COALESCE(trim(nr.character_name), 'unknown') ELSE trim(nr.char_id::text) END)
-  )
-  SELECT character_key, character_name, earned, 0, last_activity_date, now() FROM delta
-  ON CONFLICT (character_key) DO UPDATE SET
-    earned = dkp_summary.earned + EXCLUDED.earned,
-    last_activity_date = GREATEST(COALESCE(dkp_summary.last_activity_date, '1970-01-01'::date), COALESCE(EXCLUDED.last_activity_date, '1970-01-01'::date)),
-    updated_at = now(),
-    character_name = COALESCE(EXCLUDED.character_name, dkp_summary.character_name);
-  RETURN NULL;
-END;
-$$;
-
-CREATE OR REPLACE FUNCTION public.trigger_delta_attendance()
-RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
-BEGIN
-  IF restore_load_in_progress() THEN RETURN NULL; END IF;
-  INSERT INTO dkp_summary (character_key, character_name, earned, spent, last_activity_date, updated_at)
-  WITH delta AS (
-    SELECT
-      (CASE WHEN COALESCE(trim(nr.char_id::text), '') = '' THEN COALESCE(trim(nr.character_name), 'unknown') ELSE trim(nr.char_id::text) END) AS character_key,
-      MAX(COALESCE(trim(nr.character_name), nr.char_id::text, 'unknown')) AS character_name,
-      SUM(COALESCE(rt.dkp, 0)) AS earned,
-      MAX((r.date_iso::date)) AS last_activity_date
-    FROM new_rows nr
-    LEFT JOIN raids r ON r.raid_id = nr.raid_id
-    LEFT JOIN (SELECT raid_id, SUM((dkp_value::numeric)) AS dkp FROM raid_events GROUP BY raid_id) rt ON rt.raid_id = nr.raid_id
-    GROUP BY (CASE WHEN COALESCE(trim(nr.char_id::text), '') = '' THEN COALESCE(trim(nr.character_name), 'unknown') ELSE trim(nr.char_id::text) END)
-  )
-  SELECT character_key, character_name, earned, 0, last_activity_date, now() FROM delta
-  ON CONFLICT (character_key) DO UPDATE SET
-    earned = dkp_summary.earned + EXCLUDED.earned,
-    last_activity_date = GREATEST(COALESCE(dkp_summary.last_activity_date, '1970-01-01'::date), COALESCE(EXCLUDED.last_activity_date, '1970-01-01'::date)),
-    updated_at = now(),
-    character_name = COALESCE(EXCLUDED.character_name, dkp_summary.character_name);
-  RETURN NULL;
-END;
-$$;
-
-CREATE OR REPLACE FUNCTION public.trigger_delta_loot()
-RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
-BEGIN
-  IF restore_load_in_progress() THEN RETURN NULL; END IF;
-  INSERT INTO dkp_summary (character_key, character_name, earned, spent, last_activity_date, updated_at)
-  WITH delta AS (
-    SELECT
-      (CASE WHEN COALESCE(trim(nr.char_id::text), '') = '' THEN COALESCE(trim(nr.character_name), 'unknown') ELSE trim(nr.char_id::text) END) AS character_key,
-      MAX(COALESCE(trim(nr.character_name), nr.char_id::text, 'unknown')) AS character_name,
-      SUM(COALESCE((nr.cost::integer), 0)) AS spent,
-      MAX((r.date_iso::date)) AS last_activity_date
-    FROM new_rows nr
-    LEFT JOIN raids r ON r.raid_id = nr.raid_id
-    GROUP BY (CASE WHEN COALESCE(trim(nr.char_id::text), '') = '' THEN COALESCE(trim(nr.character_name), 'unknown') ELSE trim(nr.char_id::text) END)
-  )
-  SELECT character_key, character_name, 0, spent, last_activity_date, now() FROM delta
-  ON CONFLICT (character_key) DO UPDATE SET
-    spent = dkp_summary.spent + EXCLUDED.spent,
-    last_activity_date = GREATEST(COALESCE(dkp_summary.last_activity_date, '1970-01-01'::date), COALESCE(EXCLUDED.last_activity_date, '1970-01-01'::date)),
-    updated_at = now(),
-    character_name = COALESCE(EXCLUDED.character_name, dkp_summary.character_name);
-  RETURN NULL;
-END;
-$$;
-
--- Triggers: only on INSERT so we only apply delta (new rows). For DELETE/UPDATE run full refresh.
 DROP TRIGGER IF EXISTS refresh_dkp_after_event_attendance ON raid_event_attendance;
 DROP TRIGGER IF EXISTS delta_dkp_after_event_attendance ON raid_event_attendance;
+DROP TRIGGER IF EXISTS delta_dkp_after_event_attendance_upd ON raid_event_attendance;
+DROP TRIGGER IF EXISTS delta_dkp_after_event_attendance_del ON raid_event_attendance;
+DROP TRIGGER IF EXISTS full_refresh_dkp_after_event_attendance_change ON raid_event_attendance;
+
+CREATE TRIGGER refresh_raid_totals_after_event_attendance_ins
+  AFTER INSERT ON raid_event_attendance
+  REFERENCING NEW TABLE AS new_rows
+  FOR EACH STATEMENT EXECUTE FUNCTION public.trigger_refresh_raid_totals_stmt();
+CREATE TRIGGER refresh_raid_totals_after_event_attendance_upd
+  AFTER UPDATE ON raid_event_attendance
+  REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows
+  FOR EACH STATEMENT EXECUTE FUNCTION public.trigger_refresh_raid_totals_stmt();
+CREATE TRIGGER refresh_raid_totals_after_event_attendance_del
+  AFTER DELETE ON raid_event_attendance
+  REFERENCING OLD TABLE AS old_rows
+  FOR EACH STATEMENT EXECUTE FUNCTION public.trigger_refresh_raid_totals_stmt();
 CREATE TRIGGER delta_dkp_after_event_attendance
   AFTER INSERT ON raid_event_attendance
   REFERENCING NEW TABLE AS new_rows
   FOR EACH STATEMENT EXECUTE FUNCTION public.trigger_delta_event_attendance();
+CREATE TRIGGER delta_dkp_after_event_attendance_upd
+  AFTER UPDATE ON raid_event_attendance
+  REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows
+  FOR EACH STATEMENT EXECUTE FUNCTION public.trigger_delta_event_attendance_upd();
+CREATE TRIGGER delta_dkp_after_event_attendance_del
+  AFTER DELETE ON raid_event_attendance
+  REFERENCING OLD TABLE AS old_rows
+  FOR EACH STATEMENT EXECUTE FUNCTION public.trigger_delta_event_attendance_del();
 
+-- Roster rows do not grant DKP. Drop the trigger that added the whole raid total on insert.
 DROP TRIGGER IF EXISTS refresh_dkp_after_attendance ON raid_attendance;
 DROP TRIGGER IF EXISTS delta_dkp_after_attendance ON raid_attendance;
-CREATE TRIGGER delta_dkp_after_attendance
-  AFTER INSERT ON raid_attendance
-  REFERENCING NEW TABLE AS new_rows
-  FOR EACH STATEMENT EXECUTE FUNCTION public.trigger_delta_attendance();
+DROP TRIGGER IF EXISTS full_refresh_dkp_after_attendance_change ON raid_attendance;
+DROP FUNCTION IF EXISTS public.trigger_delta_attendance();
+DROP FUNCTION IF EXISTS public.trigger_refresh_raid_totals_after_events();
+DROP FUNCTION IF EXISTS public.trigger_refresh_raid_totals_after_event_attendance();
+DROP FUNCTION IF EXISTS public.trigger_refresh_raid_totals_after_event_attendance_del_stmt();
+
+CREATE OR REPLACE FUNCTION public.trigger_delta_loot()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  IF restore_load_in_progress() THEN RETURN NULL; END IF;
+  PERFORM apply_spent_deltas((
+    SELECT COALESCE(jsonb_agg(jsonb_build_object(
+      'character_key', g.character_key,
+      'character_name', g.character_name,
+      'account_id', g.account_id,
+      'spent', g.spent
+    )), '[]'::jsonb)
+    FROM (
+      SELECT public.dkp_character_key(nr.char_id::text, nr.character_name) AS character_key,
+             MAX(COALESCE(NULLIF(trim(nr.character_name), ''), nr.char_id::text, 'unknown')) AS character_name,
+             public.resolve_loot_account_id(nr.id, nr.char_id::text, nr.character_name) AS account_id,
+             SUM(COALESCE(NULLIF(trim(nr.cost), '')::numeric, 0)) AS spent
+      FROM new_rows nr
+      GROUP BY 1, 3
+    ) g
+  ));
+  RETURN NULL;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.trigger_delta_loot_del()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  IF restore_load_in_progress() THEN RETURN NULL; END IF;
+  CREATE TEMP TABLE IF NOT EXISTS loot_delete_account (
+    loot_id bigint PRIMARY KEY,
+    account_id text
+  ) ON COMMIT DROP;
+  PERFORM apply_spent_deltas((
+    SELECT COALESCE(jsonb_agg(jsonb_build_object(
+      'character_key', g.character_key,
+      'character_name', g.character_name,
+      'account_id', g.account_id,
+      'spent', g.spent
+    )), '[]'::jsonb)
+    FROM (
+      SELECT public.dkp_character_key(o.char_id::text, o.character_name) AS character_key,
+             MAX(COALESCE(NULLIF(trim(o.character_name), ''), o.char_id::text, 'unknown')) AS character_name,
+             COALESCE(
+               (SELECT cap.account_id FROM loot_delete_account cap WHERE cap.loot_id = o.id),
+               public.resolve_loot_account_id(o.id, o.char_id::text, o.character_name)
+             ) AS account_id,
+             SUM(-COALESCE(NULLIF(trim(o.cost), '')::numeric, 0)) AS spent
+      FROM old_rows o
+      GROUP BY 1, 3
+    ) g
+  ));
+  RETURN NULL;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.trigger_delta_loot_upd()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  IF restore_load_in_progress() THEN RETURN NULL; END IF;
+  PERFORM apply_spent_deltas((
+    SELECT COALESCE(jsonb_agg(jsonb_build_object(
+      'character_key', g.character_key,
+      'character_name', g.character_name,
+      'account_id', g.account_id,
+      'spent', g.spent
+    )), '[]'::jsonb)
+    FROM (
+      SELECT public.dkp_character_key(o.char_id::text, o.character_name) AS character_key,
+             MAX(COALESCE(NULLIF(trim(o.character_name), ''), o.char_id::text, 'unknown')) AS character_name,
+             public.resolve_loot_account_id(o.id, o.char_id::text, o.character_name) AS account_id,
+             SUM(-COALESCE(NULLIF(trim(o.cost), '')::numeric, 0)) AS spent
+      FROM old_rows o
+      GROUP BY 1, 3
+    ) g
+  ));
+  PERFORM apply_spent_deltas((
+    SELECT COALESCE(jsonb_agg(jsonb_build_object(
+      'character_key', g.character_key,
+      'character_name', g.character_name,
+      'account_id', g.account_id,
+      'spent', g.spent
+    )), '[]'::jsonb)
+    FROM (
+      SELECT public.dkp_character_key(n.char_id::text, n.character_name) AS character_key,
+             MAX(COALESCE(NULLIF(trim(n.character_name), ''), n.char_id::text, 'unknown')) AS character_name,
+             public.resolve_loot_account_id(n.id, n.char_id::text, n.character_name) AS account_id,
+             SUM(COALESCE(NULLIF(trim(n.cost), '')::numeric, 0)) AS spent
+      FROM new_rows n
+      GROUP BY 1, 3
+    ) g
+  ));
+  RETURN NULL;
+END;
+$$;
 
 DROP TRIGGER IF EXISTS refresh_dkp_after_loot ON raid_loot;
 DROP TRIGGER IF EXISTS delta_dkp_after_loot ON raid_loot;
+DROP TRIGGER IF EXISTS delta_dkp_after_loot_upd ON raid_loot;
+DROP TRIGGER IF EXISTS delta_dkp_after_loot_del ON raid_loot;
+DROP TRIGGER IF EXISTS full_refresh_dkp_after_loot_change ON raid_loot;
 CREATE TRIGGER delta_dkp_after_loot
   AFTER INSERT ON raid_loot
   REFERENCING NEW TABLE AS new_rows
   FOR EACH STATEMENT EXECUTE FUNCTION public.trigger_delta_loot();
+CREATE TRIGGER delta_dkp_after_loot_upd
+  AFTER UPDATE ON raid_loot
+  REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows
+  FOR EACH STATEMENT EXECUTE FUNCTION public.trigger_delta_loot_upd();
+CREATE TRIGGER delta_dkp_after_loot_del
+  AFTER DELETE ON raid_loot
+  REFERENCING OLD TABLE AS old_rows
+  FOR EACH STATEMENT EXECUTE FUNCTION public.trigger_delta_loot_del();
 
--- On UPDATE or DELETE we run full refresh so corrections/deletions are applied (rare path).
-DROP TRIGGER IF EXISTS full_refresh_dkp_after_event_attendance_change ON raid_event_attendance;
-CREATE TRIGGER full_refresh_dkp_after_event_attendance_change
-  AFTER UPDATE OR DELETE ON raid_event_attendance
-  FOR EACH STATEMENT EXECUTE FUNCTION public.trigger_refresh_dkp_summary();
+-- Capture the assigned account before ON DELETE CASCADE removes loot_assignment.
+CREATE OR REPLACE FUNCTION public.trigger_capture_loot_delete_account()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  IF restore_load_in_progress() THEN
+    RETURN OLD;
+  END IF;
+  CREATE TEMP TABLE IF NOT EXISTS loot_delete_account (
+    loot_id bigint PRIMARY KEY,
+    account_id text
+  ) ON COMMIT DROP;
+  INSERT INTO loot_delete_account (loot_id, account_id)
+  VALUES (OLD.id, public.resolve_loot_account_id(OLD.id, OLD.char_id::text, OLD.character_name))
+  ON CONFLICT (loot_id) DO UPDATE SET account_id = EXCLUDED.account_id;
+  RETURN OLD;
+END;
+$$;
 
-DROP TRIGGER IF EXISTS full_refresh_dkp_after_attendance_change ON raid_attendance;
-CREATE TRIGGER full_refresh_dkp_after_attendance_change
-  AFTER UPDATE OR DELETE ON raid_attendance
-  FOR EACH STATEMENT EXECUTE FUNCTION public.trigger_refresh_dkp_summary();
-
-DROP TRIGGER IF EXISTS full_refresh_dkp_after_loot_change ON raid_loot;
-CREATE TRIGGER full_refresh_dkp_after_loot_change
-  AFTER UPDATE OR DELETE ON raid_loot
-  FOR EACH STATEMENT EXECUTE FUNCTION public.trigger_refresh_dkp_summary();
+DROP TRIGGER IF EXISTS capture_loot_delete_account ON raid_loot;
+CREATE TRIGGER capture_loot_delete_account
+  BEFORE DELETE ON raid_loot
+  FOR EACH ROW EXECUTE FUNCTION public.trigger_capture_loot_delete_account();
 
 -- 3) Auto-create profile on signup
 CREATE OR REPLACE FUNCTION public.handle_new_user()
@@ -1107,6 +1774,139 @@ CREATE TABLE IF NOT EXISTS loot_assignment (
   assigned_via_magelo SMALLINT DEFAULT NULL
 );
 COMMENT ON TABLE loot_assignment IS 'Which character has each loot item. Stub from account-dkp-schema; full definition in supabase-loot-assignment-table.sql.';
+
+-- Assignment changes who spent the DKP. Character spent stays on the loot row; only the account moves.
+CREATE OR REPLACE FUNCTION public.apply_account_spent_deltas(p_rows jsonb)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_accounts text[];
+BEGIN
+  IF p_rows IS NULL OR jsonb_typeof(p_rows) <> 'array' OR jsonb_array_length(p_rows) = 0 THEN
+    RETURN;
+  END IF;
+
+  INSERT INTO account_dkp_summary (account_id, display_name, earned, spent, earned_30d, earned_60d, updated_at)
+  SELECT d.account_id, MAX(a.display_name), 0, SUM(d.spent), 0, 0, now()
+  FROM (
+    SELECT NULLIF(trim(x->>'account_id'), '') AS account_id,
+           COALESCE((x->>'spent')::numeric, 0) AS spent
+    FROM jsonb_array_elements(p_rows) AS x
+  ) d
+  JOIN accounts a ON a.account_id = d.account_id
+  WHERE d.account_id IS NOT NULL
+  GROUP BY d.account_id
+  HAVING SUM(d.spent) <> 0
+  ON CONFLICT (account_id) DO UPDATE SET
+    spent = account_dkp_summary.spent + EXCLUDED.spent,
+    display_name = COALESCE(account_dkp_summary.display_name, EXCLUDED.display_name),
+    updated_at = now();
+
+  SELECT ARRAY_AGG(DISTINCT NULLIF(trim(x->>'account_id'), ''))
+  INTO v_accounts
+  FROM jsonb_array_elements(p_rows) AS x;
+
+  DELETE FROM account_dkp_summary
+  WHERE account_id = ANY (v_accounts)
+    AND earned = 0
+    AND spent = 0
+    AND COALESCE(earned_30d, 0) = 0
+    AND COALESCE(earned_60d, 0) = 0;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.trigger_loot_assignment_spent()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  IF restore_load_in_progress() THEN RETURN NULL; END IF;
+
+  IF TG_OP = 'INSERT' THEN
+    PERFORM apply_account_spent_deltas((
+      SELECT COALESCE(jsonb_agg(piece), '[]'::jsonb)
+      FROM (
+        SELECT jsonb_build_object(
+          'account_id', public.resolve_dkp_account_id(NULL, rl.char_id::text, rl.character_name),
+          'spent', -COALESCE(NULLIF(trim(rl.cost), '')::numeric, 0)
+        ) AS piece
+        FROM new_rows n
+        JOIN raid_loot rl ON rl.id = n.loot_id
+        UNION ALL
+        SELECT jsonb_build_object(
+          'account_id', public.resolve_dkp_account_id(NULL, n.assigned_char_id, n.assigned_character_name),
+          'spent', COALESCE(NULLIF(trim(rl.cost), '')::numeric, 0)
+        )
+        FROM new_rows n
+        JOIN raid_loot rl ON rl.id = n.loot_id
+      ) s
+    ));
+  ELSIF TG_OP = 'DELETE' THEN
+    PERFORM apply_account_spent_deltas((
+      SELECT COALESCE(jsonb_agg(piece), '[]'::jsonb)
+      FROM (
+        SELECT jsonb_build_object(
+          'account_id', public.resolve_dkp_account_id(NULL, o.assigned_char_id, o.assigned_character_name),
+          'spent', -COALESCE(NULLIF(trim(rl.cost), '')::numeric, 0)
+        ) AS piece
+        FROM old_rows o
+        JOIN raid_loot rl ON rl.id = o.loot_id
+        UNION ALL
+        SELECT jsonb_build_object(
+          'account_id', public.resolve_dkp_account_id(NULL, rl.char_id::text, rl.character_name),
+          'spent', COALESCE(NULLIF(trim(rl.cost), '')::numeric, 0)
+        )
+        FROM old_rows o
+        JOIN raid_loot rl ON rl.id = o.loot_id
+      ) s
+    ));
+  ELSE
+    PERFORM apply_account_spent_deltas((
+      SELECT COALESCE(jsonb_agg(piece), '[]'::jsonb)
+      FROM (
+        SELECT jsonb_build_object(
+          'account_id', public.resolve_dkp_account_id(NULL, o.assigned_char_id, o.assigned_character_name),
+          'spent', -COALESCE(NULLIF(trim(rl.cost), '')::numeric, 0)
+        ) AS piece
+        FROM old_rows o
+        JOIN new_rows n ON n.loot_id = o.loot_id
+        JOIN raid_loot rl ON rl.id = o.loot_id
+        UNION ALL
+        SELECT jsonb_build_object(
+          'account_id', public.resolve_dkp_account_id(NULL, n.assigned_char_id, n.assigned_character_name),
+          'spent', COALESCE(NULLIF(trim(rl.cost), '')::numeric, 0)
+        )
+        FROM new_rows n
+        JOIN old_rows o ON o.loot_id = n.loot_id
+        JOIN raid_loot rl ON rl.id = n.loot_id
+      ) s
+    ));
+  END IF;
+  RETURN NULL;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS loot_assignment_spent_ins ON loot_assignment;
+DROP TRIGGER IF EXISTS loot_assignment_spent_upd ON loot_assignment;
+DROP TRIGGER IF EXISTS loot_assignment_spent_del ON loot_assignment;
+CREATE TRIGGER loot_assignment_spent_ins
+  AFTER INSERT ON loot_assignment
+  REFERENCING NEW TABLE AS new_rows
+  FOR EACH STATEMENT EXECUTE FUNCTION public.trigger_loot_assignment_spent();
+CREATE TRIGGER loot_assignment_spent_upd
+  AFTER UPDATE ON loot_assignment
+  REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows
+  FOR EACH STATEMENT EXECUTE FUNCTION public.trigger_loot_assignment_spent();
+CREATE TRIGGER loot_assignment_spent_del
+  AFTER DELETE ON loot_assignment
+  REFERENCING OLD TABLE AS old_rows
+  FOR EACH STATEMENT EXECUTE FUNCTION public.trigger_loot_assignment_spent();
+
 
 -- Views for app/CI: raid_loot + assignment columns; per-character assignment count. security_invoker so they run as caller.
 CREATE OR REPLACE VIEW raid_loot_with_assignment WITH (security_invoker = true) AS
@@ -1576,9 +2376,8 @@ CREATE POLICY "Officers manage active_raiders" ON active_raiders FOR ALL TO auth
   USING (public.is_officer())
   WITH CHECK (public.is_officer());
 
--- Cascading delete: removes all attendance, events, loot, and the raid. Officers only.
--- Disables refresh triggers during delete to avoid statement timeout (each trigger would run
--- full refresh or per-row refresh). Runs a single refresh_dkp_summary_internal() at the end.
+-- Deletes leave the DKP triggers enabled. Each DELETE is one statement, so the triggers
+-- subtract that statement's earned or spent and refresh the raid cache once.
 CREATE OR REPLACE FUNCTION public.delete_raid(p_raid_id TEXT)
 RETURNS void
 LANGUAGE plpgsql
@@ -1591,43 +2390,22 @@ BEGIN
     RAISE EXCEPTION 'Only officers can delete raids';
   END IF;
 
-  -- Belt-and-suspenders: role default is 8s (authenticated); function-level SET above overrides for this invocation.
   SET LOCAL statement_timeout = '60s';
 
-  -- Disable triggers that would run full refresh or per-row refresh on each delete (causes timeout).
-  ALTER TABLE raid_loot DISABLE TRIGGER full_refresh_dkp_after_loot_change;
-  ALTER TABLE raid_event_attendance DISABLE TRIGGER full_refresh_dkp_after_event_attendance_change;
-  ALTER TABLE raid_event_attendance DISABLE TRIGGER refresh_raid_totals_after_event_attendance_del;
-  ALTER TABLE raid_attendance DISABLE TRIGGER full_refresh_dkp_after_attendance_change;
-  ALTER TABLE raid_events DISABLE TRIGGER refresh_raid_totals_after_events_del;
-
+  -- Attendance and loot first, while the event rows still exist, so the delete triggers
+  -- can see each tic value. Event delete then adjusts the period pool.
   DELETE FROM raid_loot WHERE raid_id = p_raid_id;
-  DELETE FROM raid_attendance_dkp WHERE raid_id = p_raid_id;
-  DELETE FROM raid_attendance_dkp_by_account WHERE raid_id = p_raid_id;
-  DELETE FROM raid_dkp_totals WHERE raid_id = p_raid_id;
   DELETE FROM raid_event_attendance WHERE raid_id = p_raid_id;
   DELETE FROM raid_attendance WHERE raid_id = p_raid_id;
   DELETE FROM raid_events WHERE raid_id = p_raid_id;
+  DELETE FROM raid_attendance_dkp WHERE raid_id = p_raid_id;
+  DELETE FROM raid_attendance_dkp_by_account WHERE raid_id = p_raid_id;
+  DELETE FROM raid_dkp_totals WHERE raid_id = p_raid_id;
   DELETE FROM raid_classifications WHERE raid_id = p_raid_id;
   DELETE FROM raids WHERE raid_id = p_raid_id;
-
-  -- Single full refresh so dkp_summary, dkp_period_totals, and account_dkp_summary stay correct.
-  PERFORM refresh_dkp_summary_internal();
-  IF EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'public' AND p.proname = 'refresh_account_dkp_summary_internal') THEN
-    PERFORM refresh_account_dkp_summary_internal();
-  END IF;
-
-  -- Re-enable triggers (same order as disable).
-  ALTER TABLE raid_events ENABLE TRIGGER refresh_raid_totals_after_events_del;
-  ALTER TABLE raid_attendance ENABLE TRIGGER full_refresh_dkp_after_attendance_change;
-  ALTER TABLE raid_event_attendance ENABLE TRIGGER refresh_raid_totals_after_event_attendance_del;
-  ALTER TABLE raid_event_attendance ENABLE TRIGGER full_refresh_dkp_after_event_attendance_change;
-  ALTER TABLE raid_loot ENABLE TRIGGER full_refresh_dkp_after_loot_change;
 END;
 $$;
 
--- Delete one tic (event) and its attendance. Officer only.
--- Disables refresh triggers during delete, then runs one refresh so the operation completes without statement timeout.
 CREATE OR REPLACE FUNCTION public.delete_tic(p_raid_id TEXT, p_event_id TEXT, p_extra_account_ids TEXT[] DEFAULT '{}')
 RETURNS void
 LANGUAGE plpgsql
@@ -1642,9 +2420,6 @@ BEGIN
 
   SET LOCAL statement_timeout = '120s';
 
-  ALTER TABLE raid_event_attendance DISABLE TRIGGER full_refresh_dkp_after_event_attendance_change;
-  ALTER TABLE raid_event_attendance DISABLE TRIGGER refresh_raid_totals_after_event_attendance_del;
-
   DELETE FROM raid_event_attendance WHERE raid_id = p_raid_id AND event_id = p_event_id;
   DELETE FROM raid_events WHERE raid_id = p_raid_id AND event_id = p_event_id;
 
@@ -1658,26 +2433,12 @@ BEGIN
   UPDATE raids
   SET attendees = (SELECT count(*)::text FROM raid_attendance WHERE raid_id = p_raid_id)
   WHERE raid_id = p_raid_id;
-
-  ALTER TABLE raid_event_attendance ENABLE TRIGGER refresh_raid_totals_after_event_attendance_del;
-  ALTER TABLE raid_event_attendance ENABLE TRIGGER full_refresh_dkp_after_event_attendance_change;
-
-  PERFORM refresh_raid_attendance_totals(p_raid_id);
-  PERFORM refresh_dkp_summary_internal();
-  IF EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'public' AND p.proname = 'refresh_account_dkp_summary_for_raid') THEN
-    PERFORM refresh_account_dkp_summary_for_raid(p_raid_id, p_extra_account_ids);
-  ELSIF EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'public' AND p.proname = 'refresh_account_dkp_summary_internal') THEN
-    PERFORM refresh_account_dkp_summary_internal();
-  END IF;
 END;
 $$;
 
 GRANT EXECUTE ON FUNCTION public.delete_tic(TEXT, TEXT, TEXT[]) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.delete_tic(TEXT, TEXT, TEXT[]) TO service_role;
 
--- Remove one attendee from a tic. Officer only.
--- Disables refresh triggers during delete, then runs one refresh (avoids authenticated 8s timeout
--- from client DELETE + full refresh_dkp_summary).
 CREATE OR REPLACE FUNCTION public.remove_attendee_from_tic(
   p_raid_id TEXT,
   p_event_id TEXT,
@@ -1707,10 +2468,6 @@ BEGIN
 
   SET LOCAL statement_timeout = '60s';
 
-  ALTER TABLE raid_event_attendance DISABLE TRIGGER full_refresh_dkp_after_event_attendance_change;
-  ALTER TABLE raid_event_attendance DISABLE TRIGGER refresh_raid_totals_after_event_attendance_del;
-  ALTER TABLE raid_attendance DISABLE TRIGGER full_refresh_dkp_after_attendance_change;
-
   DELETE FROM raid_event_attendance
   WHERE raid_id = trim(p_raid_id)
     AND event_id = trim(p_event_id)
@@ -1727,24 +2484,227 @@ BEGIN
   UPDATE raids
   SET attendees = (SELECT count(*)::text FROM raid_attendance WHERE raid_id = trim(p_raid_id))
   WHERE raid_id = trim(p_raid_id);
-
-  ALTER TABLE raid_attendance ENABLE TRIGGER full_refresh_dkp_after_attendance_change;
-  ALTER TABLE raid_event_attendance ENABLE TRIGGER refresh_raid_totals_after_event_attendance_del;
-  ALTER TABLE raid_event_attendance ENABLE TRIGGER full_refresh_dkp_after_event_attendance_change;
-
-  PERFORM refresh_raid_attendance_totals(trim(p_raid_id));
-  PERFORM refresh_dkp_summary_internal();
-  IF EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'public' AND p.proname = 'refresh_account_dkp_summary_for_raid') THEN
-    PERFORM refresh_account_dkp_summary_for_raid(trim(p_raid_id), p_extra_account_ids);
-  ELSIF EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'public' AND p.proname = 'refresh_account_dkp_summary_internal') THEN
-    PERFORM refresh_account_dkp_summary_internal();
-  END IF;
 END;
 $$;
 
 GRANT EXECUTE ON FUNCTION public.remove_attendee_from_tic(TEXT, TEXT, TEXT, TEXT[]) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.remove_attendee_from_tic(TEXT, TEXT, TEXT, TEXT[]) TO service_role;
 
+-- One tic and its attendance. Triggers apply earned DKP and refresh that raid's cache.
+CREATE OR REPLACE FUNCTION public.add_officer_tic(
+  p_raid_id TEXT,
+  p_event_id TEXT,
+  p_event_order INTEGER,
+  p_event_name TEXT,
+  p_dkp_value TEXT,
+  p_event_time TEXT,
+  p_attendees JSONB
+)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+SET statement_timeout = '120s'
+AS $$
+DECLARE
+  rec RECORD;
+  v_account TEXT;
+  v_seen_chars TEXT[] := '{}';
+  v_seen_accounts TEXT[] := '{}';
+  v_rows JSONB := '[]'::jsonb;
+  v_count INT := 0;
+  v_name TEXT;
+BEGIN
+  IF NOT public.is_officer() THEN
+    RAISE EXCEPTION 'Only officers can add tics';
+  END IF;
+
+  IF p_raid_id IS NULL OR trim(p_raid_id) = '' THEN
+    RAISE EXCEPTION 'raid_id is required';
+  END IF;
+  IF p_event_id IS NULL OR trim(p_event_id) = '' THEN
+    RAISE EXCEPTION 'event_id is required';
+  END IF;
+  IF p_attendees IS NULL OR jsonb_typeof(p_attendees) <> 'array' OR jsonb_array_length(p_attendees) = 0 THEN
+    RAISE EXCEPTION 'No attendees to credit';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM raids WHERE raid_id = trim(p_raid_id)) THEN
+    RAISE EXCEPTION 'Raid not found';
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM raid_events
+    WHERE raid_id = trim(p_raid_id) AND event_id = trim(p_event_id)
+  ) THEN
+    RAISE EXCEPTION 'That tic already exists';
+  END IF;
+
+  SET LOCAL statement_timeout = '120s';
+
+  FOR rec IN
+    SELECT
+      trim(x->>'char_id') AS char_id,
+      trim(COALESCE(x->>'character_name', '')) AS character_name
+    FROM jsonb_array_elements(p_attendees) AS x
+  LOOP
+    IF rec.char_id IS NULL OR rec.char_id = '' THEN
+      RAISE EXCEPTION 'Each attendee needs a char_id';
+    END IF;
+    IF rec.char_id = ANY (v_seen_chars) THEN
+      CONTINUE;
+    END IF;
+
+    SELECT ca.account_id INTO v_account
+    FROM character_account ca
+    WHERE ca.char_id = rec.char_id
+    LIMIT 1;
+
+    IF v_account IS NOT NULL AND v_account = ANY (v_seen_accounts) THEN
+      RAISE EXCEPTION 'Only one character per account per tic';
+    END IF;
+
+    v_name := COALESCE(NULLIF(rec.character_name, ''), rec.char_id);
+    v_rows := v_rows || jsonb_build_array(jsonb_build_object(
+      'char_id', rec.char_id,
+      'character_name', v_name,
+      'account_id', v_account
+    ));
+    v_seen_chars := array_append(v_seen_chars, rec.char_id);
+    IF v_account IS NOT NULL THEN
+      v_seen_accounts := array_append(v_seen_accounts, v_account);
+    END IF;
+    v_count := v_count + 1;
+  END LOOP;
+
+  IF v_count = 0 THEN
+    RAISE EXCEPTION 'No attendees to credit';
+  END IF;
+
+  INSERT INTO raid_events (
+    raid_id, event_id, event_order, event_name, dkp_value, attendee_count, event_time
+  ) VALUES (
+    trim(p_raid_id),
+    trim(p_event_id),
+    p_event_order,
+    COALESCE(NULLIF(trim(p_event_name), ''), 'DKP tic'),
+    COALESCE(NULLIF(trim(p_dkp_value), ''), '1'),
+    v_count::text,
+    NULLIF(trim(p_event_time), '')
+  );
+
+  INSERT INTO raid_event_attendance (raid_id, event_id, char_id, character_name, account_id)
+  SELECT trim(p_raid_id), trim(p_event_id), x->>'char_id', x->>'character_name', NULLIF(x->>'account_id', '')
+  FROM jsonb_array_elements(v_rows) AS x;
+
+  INSERT INTO raid_attendance (raid_id, char_id, character_name)
+  SELECT trim(p_raid_id), x->>'char_id', x->>'character_name'
+  FROM jsonb_array_elements(v_rows) AS x
+  WHERE NOT EXISTS (
+    SELECT 1 FROM raid_attendance ra
+    WHERE ra.raid_id = trim(p_raid_id) AND ra.char_id = x->>'char_id'
+  );
+
+  UPDATE raids
+  SET attendees = (SELECT count(*)::text FROM raid_attendance WHERE raid_id = trim(p_raid_id))
+  WHERE raid_id = trim(p_raid_id);
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.add_officer_tic(TEXT, TEXT, INTEGER, TEXT, TEXT, TEXT, JSONB) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.add_officer_tic(TEXT, TEXT, INTEGER, TEXT, TEXT, TEXT, JSONB) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.add_officer_tic(TEXT, TEXT, INTEGER, TEXT, TEXT, TEXT, JSONB) TO service_role;
+
+CREATE OR REPLACE FUNCTION public.add_attendee_to_tic(
+  p_raid_id TEXT,
+  p_event_id TEXT,
+  p_char_id TEXT,
+  p_character_name TEXT
+)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+SET statement_timeout = '60s'
+AS $$
+DECLARE
+  v_account TEXT;
+  v_name TEXT;
+BEGIN
+  IF NOT public.is_officer() THEN
+    RAISE EXCEPTION 'Only officers can add attendees to tics';
+  END IF;
+
+  IF p_raid_id IS NULL OR trim(p_raid_id) = '' THEN
+    RAISE EXCEPTION 'raid_id is required';
+  END IF;
+  IF p_event_id IS NULL OR trim(p_event_id) = '' THEN
+    RAISE EXCEPTION 'event_id is required';
+  END IF;
+  IF p_char_id IS NULL OR trim(p_char_id) = '' THEN
+    RAISE EXCEPTION 'char_id is required';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM raid_events
+    WHERE raid_id = trim(p_raid_id) AND event_id = trim(p_event_id)
+  ) THEN
+    RAISE EXCEPTION 'Tic not found';
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM raid_event_attendance
+    WHERE raid_id = trim(p_raid_id)
+      AND event_id = trim(p_event_id)
+      AND char_id = trim(p_char_id)
+  ) THEN
+    RAISE EXCEPTION 'That character is already on this tic';
+  END IF;
+
+  SELECT ca.account_id INTO v_account
+  FROM character_account ca
+  WHERE ca.char_id = trim(p_char_id)
+  LIMIT 1;
+
+  IF v_account IS NOT NULL AND EXISTS (
+    SELECT 1
+    FROM raid_event_attendance rea
+    JOIN character_account ca ON ca.char_id = rea.char_id
+    WHERE rea.raid_id = trim(p_raid_id)
+      AND rea.event_id = trim(p_event_id)
+      AND ca.account_id = v_account
+  ) THEN
+    RAISE EXCEPTION 'That account already has a character in this tic';
+  END IF;
+
+  SET LOCAL statement_timeout = '60s';
+
+  v_name := COALESCE(NULLIF(trim(p_character_name), ''), trim(p_char_id));
+
+  INSERT INTO raid_event_attendance (raid_id, event_id, char_id, character_name, account_id)
+  VALUES (trim(p_raid_id), trim(p_event_id), trim(p_char_id), v_name, v_account);
+
+  INSERT INTO raid_attendance (raid_id, char_id, character_name)
+  SELECT trim(p_raid_id), trim(p_char_id), v_name
+  WHERE NOT EXISTS (
+    SELECT 1 FROM raid_attendance ra
+    WHERE ra.raid_id = trim(p_raid_id) AND ra.char_id = trim(p_char_id)
+  );
+
+  UPDATE raid_events
+  SET attendee_count = (
+    SELECT count(*)::text FROM raid_event_attendance
+    WHERE raid_id = trim(p_raid_id) AND event_id = trim(p_event_id)
+  )
+  WHERE raid_id = trim(p_raid_id) AND event_id = trim(p_event_id);
+
+  UPDATE raids
+  SET attendees = (SELECT count(*)::text FROM raid_attendance WHERE raid_id = trim(p_raid_id))
+  WHERE raid_id = trim(p_raid_id);
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.add_attendee_to_tic(TEXT, TEXT, TEXT, TEXT) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.add_attendee_to_tic(TEXT, TEXT, TEXT, TEXT) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.add_attendee_to_tic(TEXT, TEXT, TEXT, TEXT) TO service_role;
+
+DROP FUNCTION IF EXISTS public.set_officer_tic_write_triggers(boolean);
 
 
 -- 1) Delete one raid's data for re-upload

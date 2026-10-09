@@ -8,93 +8,13 @@ import { formatAccountCharacter, formatAccountCharacters } from '../lib/formatAc
 import { DKP_DATA_KEY } from '../lib/dkpLeaderboard'
 import { groupRaidLootByEvent } from '../lib/groupRaidLootByEvent'
 import { buildItemNameToIdMap, buildLootMobLookups, subgroupLootRowsByMob } from '../lib/lootMobSubgroups'
-
-// --- Parsing ---
-
-/** Parse Discord-style raid string e.g. "Thursday 02/12 9pm est: Water Minis + Cursed/Emp - February 12, 2026 8:00 PM" */
-function parseRaidString(str) {
-  const s = (str || '').trim()
-  let raidName = ''
-  let dateIso = ''
-  // Try to get "February 12, 2026 8:00 PM" or similar at the end (after " - ")
-  const dashMatch = s.match(/\s+-\s+([^-]+)$/)
-  if (dashMatch) {
-    const datePart = dashMatch[1].trim()
-    raidName = s.replace(/\s+-\s+[^-]+$/, '').replace(/^[^:]+:\s*/, '').trim()
-    const d = new Date(datePart)
-    if (!isNaN(d.getTime())) {
-      dateIso = d.toISOString().slice(0, 19).replace('T', ' ')
-    }
-  }
-  if (!raidName && s) {
-    const colonIdx = s.indexOf(':')
-    if (colonIdx > 0) raidName = s.slice(colonIdx + 1).trim()
-    else raidName = s
-  }
-  return { raidName, dateIso }
-}
-
-/** Parse channel member list lines; returns { eventTime, names[] } (names deduped, trimmed). */
-function parseChannelList(paste) {
-  const lines = (paste || '').split(/\r?\n/).map((l) => l.trim()).filter(Boolean)
-  let eventTime = ''
-  const nameSet = new Set()
-  for (const line of lines) {
-    const tsMatch = line.match(/^\[([^\]]+)\]/)
-    if (tsMatch) {
-      const ts = tsMatch[1].trim()
-      if (!eventTime) eventTime = ts
-      // Skip "Channel X(N) members:"
-      if (/members:\s*$/i.test(line)) continue
-      const rest = line.replace(/^\[[^\]]+\]\s*/, '').trim()
-      rest.split(',').forEach((n) => {
-        const name = n.trim()
-        if (name && !/^\d+$/.test(name)) nameSet.add(name)
-      })
-    }
-  }
-  return { eventTime, names: [...nameSet] }
-}
-
-/**
- * Parse loot log by matching against known character names and item names.
- * - Look for any loot item that appears in the line (DKP raid_loot or JSON loot list); longest match wins.
- * - Look for character names only in the line AFTER removing the matched item text, so item names
- *   like "Tiny Jade Ring" do not match the character "Jade".
- * - Look for number + "dkp" for cost (default 0).
- * Returns per-line: { rawLine, itemName, characterNames[], cost, hasDkp }.
- * 3 matches → add; 1 or 2 matches → report what's missing.
- */
-function parseLootLogByMatch(paste, characterNamesList, itemNamesList) {
-  const lines = (paste || '').split(/\r?\n/).map((l) => l.trim()).filter(Boolean)
-  const results = []
-  const chars = (characterNamesList || []).filter(Boolean).sort((a, b) => (b?.length || 0) - (a?.length || 0))
-  const items = (itemNamesList || []).filter(Boolean).sort((a, b) => (b?.length || 0) - (a?.length || 0))
-  for (const line of lines) {
-    const quoted = (line.match(/'([^']+)'/)?.[1] || line).trim()
-    if (!quoted) continue
-    const lower = quoted.toLowerCase()
-    let itemName = ''
-    for (const name of items) {
-      if (name && lower.includes(name.toLowerCase())) {
-        itemName = name
-        break
-      }
-    }
-    // Match character names only in the line with the item name removed, so "Tiny Jade Ring" doesn't match character "Jade"
-    const itemIndex = itemName ? lower.indexOf(itemName.toLowerCase()) : -1
-    const lineWithoutItem = itemIndex >= 0
-      ? (quoted.slice(0, itemIndex) + quoted.slice(itemIndex + itemName.length)).trim()
-      : quoted
-    const lowerWithoutItem = lineWithoutItem.toLowerCase()
-    const characterNames = chars.filter((name) => name && lowerWithoutItem.includes(name.toLowerCase()))
-    const dkpMatch = quoted.match(/(\d+)\s*dkp/i)
-    const cost = dkpMatch ? parseInt(dkpMatch[1], 10) : 0
-    const hasDkp = !!dkpMatch
-    results.push({ rawLine: quoted, itemName, characterNames: [...characterNames], cost: isNaN(cost) ? 0 : cost, hasDkp })
-  }
-  return results
-}
+import {
+  parseRaidString,
+  parseChannelList,
+  parseLootLogByMatch,
+  generateEventId,
+  resolveTicNames,
+} from '../lib/officerRaidParse'
 
 /** Generate a unique raid_id for officer-created raids (string, no collision with numeric imports). */
 function generateRaidId() {
@@ -113,15 +33,6 @@ function ResultNames({ label, names, tone }) {
       </div>
     </div>
   )
-}
-
-/** Generate event_id for a tic (use timestamp from log or now). */
-function generateEventId(eventTimeStr) {
-  if (eventTimeStr) {
-    const d = new Date(eventTimeStr)
-    if (!isNaN(d.getTime())) return `tic-${d.getTime()}`
-  }
-  return `tic-${Date.now()}`
 }
 
 export default function Officer({ isOfficer }) {
@@ -461,14 +372,14 @@ export default function Officer({ isOfficer }) {
     setMutating(true)
     setAddToTicResult(null)
     setError('')
-    const { error: attErr } = await supabase.from('raid_event_attendance').insert({
-      raid_id: selectedRaidId,
-      event_id: addToTicEventId,
-      char_id: char.char_id,
-      character_name: char.name,
+    const { error: attErr } = await supabase.rpc('add_attendee_to_tic', {
+      p_raid_id: selectedRaidId,
+      p_event_id: addToTicEventId,
+      p_char_id: String(char.char_id),
+      p_character_name: char.name,
     })
     if (attErr) {
-      setError(attErr?.code === '23505' ? 'That character is already on this tic (duplicate blocked).' : attErr.message)
+      setError(attErr.message)
       setMutating(false)
       return
     }
@@ -478,23 +389,10 @@ export default function Officer({ isOfficer }) {
       target_id: addToTicEventId,
       delta: { r: selectedRaidId, e: addToTicEventId, c: char.name },
     })
-    const { data: existingRaidAtt } = await supabase.from('raid_attendance').select('char_id').eq('raid_id', selectedRaidId)
-    const existingCharIds = new Set((existingRaidAtt || []).map((r) => String(r.char_id)))
-    if (!existingCharIds.has(String(char.char_id))) {
-      await supabase.from('raid_attendance').insert({
-        raid_id: selectedRaidId,
-        char_id: char.char_id,
-        character_name: char.name,
-      })
-    }
     setAddToTicResult(char.name)
     setAddToTicCharQuery('')
-    await supabase.rpc('refresh_dkp_summary')
-    await supabase.rpc('refresh_account_dkp_summary_for_raid', { p_raid_id: selectedRaidId })
     try { sessionStorage.removeItem('dkp_leaderboard_v2') } catch (_) {}
-    const { count } = await supabase.from('raid_attendance').select('*', { count: 'exact', head: true }).eq('raid_id', selectedRaidId)
-    if (count != null) await supabase.from('raids').update({ attendees: String(count) }).eq('raid_id', selectedRaidId)
-    loadSelectedRaid()
+    await loadSelectedRaid()
     globalMutate(DKP_DATA_KEY)
     setMutating(false)
   }
@@ -583,34 +481,7 @@ export default function Officer({ isOfficer }) {
     const maxOrder = Math.max(0, ...events.map((e) => e.event_order || 0))
     const isFirstTic = events.length === 0
 
-    // Resolve names to matched (credited) attendees before creating the tic
-    const matched = []
-    const unmatched = []
-    const duplicates = []
-    const sameAccount = []
-    const seenCharId = new Set()
-    const seenAccountKey = new Set()
-    for (const n of names) {
-      const key = n.toLowerCase().trim()
-      const char = nameToChar[key]
-      if (!char) {
-        unmatched.push(n)
-        continue
-      }
-      if (seenCharId.has(char.char_id)) {
-        duplicates.push(n)
-        continue
-      }
-      const accountId = charIdToAccountId[char.char_id] || null
-      const accountKey = accountId != null ? String(accountId) : char.char_id
-      if (seenAccountKey.has(accountKey)) {
-        sameAccount.push(n)
-        continue
-      }
-      seenCharId.add(char.char_id)
-      seenAccountKey.add(accountKey)
-      matched.push({ char_id: char.char_id, character_name: char.name })
-    }
+    const { matched, unmatched, duplicates, sameAccount } = resolveTicNames(names, { nameToChar, charIdToAccountId })
 
     // Only create a tic if we actually credited at least one attendee
     if (matched.length === 0) {
@@ -631,47 +502,19 @@ export default function Officer({ isOfficer }) {
     }
 
     const addedAt = new Date().toISOString()
-    const { error: evErr } = await supabase.from('raid_events').insert({
-      raid_id: selectedRaidId,
-      event_id,
-      event_order: maxOrder + 1,
-      event_name: isFirstTic ? 'On-time' : 'DKP tic',
-      dkp_value: String(dkpValue),
-      attendee_count: String(matched.length),
-      event_time: eventTime || addedAt,
+    const { error: evErr } = await supabase.rpc('add_officer_tic', {
+      p_raid_id: selectedRaidId,
+      p_event_id: event_id,
+      p_event_order: maxOrder + 1,
+      p_event_name: isFirstTic ? 'On-time' : 'DKP tic',
+      p_dkp_value: String(dkpValue),
+      p_event_time: eventTime || addedAt,
+      p_attendees: matched,
     })
     if (evErr) {
       setError(evErr.message)
       setMutating(false)
       return
-    }
-    if (matched.length > 0) {
-      const { error: attErr } = await supabase.from('raid_event_attendance').insert(
-        matched.map((m) => ({
-          raid_id: selectedRaidId,
-          event_id,
-          char_id: m.char_id,
-          character_name: m.character_name,
-        }))
-      )
-      if (attErr) {
-        setError(attErr?.code === '23505' ? 'One or more characters are already on a tic (duplicate blocked).' : attErr.message)
-        setMutating(false)
-        return
-      }
-      const { data: existingRaidAtt } = await supabase.from('raid_attendance').select('char_id').eq('raid_id', selectedRaidId)
-      const existingCharIds = new Set((existingRaidAtt || []).map((r) => String(r.char_id)))
-      const toInsert = matched.filter((m) => !existingCharIds.has(String(m.char_id)))
-      if (toInsert.length > 0) {
-        const { error: raidAttErr } = await supabase.from('raid_attendance').insert(
-          toInsert.map((m) => ({
-            raid_id: selectedRaidId,
-            char_id: m.char_id,
-            character_name: m.character_name,
-          }))
-        )
-        if (raidAttErr) setError(raidAttErr.message)
-      }
     }
 
     // Delta vs other tics in this raid: account-based so toon swaps are not shown as missing/new
@@ -711,18 +554,15 @@ export default function Officer({ isOfficer }) {
       newThisTicDisplay: newThisTic.length > 0 ? newThisTic.map((s) => { const c = resolve(s); return c ? fmt(c.char_id, c.name) : s }) : null,
     })
     setTicPaste('')
+    setExpandedEvents((prev) => ({ ...prev, [event_id]: true }))
     await logOfficerAudit(supabase, {
       action: 'add_tic',
       target_type: 'raid_event',
       target_id: event_id,
       delta: { r: selectedRaidId, e: event_id, v: String(dkpValue), n: matched.length },
     })
-    await supabase.rpc('refresh_dkp_summary')
-    await supabase.rpc('refresh_account_dkp_summary_for_raid', { p_raid_id: selectedRaidId })
     try { sessionStorage.removeItem('dkp_leaderboard_v2') } catch (_) {}
-    const { count } = await supabase.from('raid_attendance').select('*', { count: 'exact', head: true }).eq('raid_id', selectedRaidId)
-    if (count != null) await supabase.from('raids').update({ attendees: String(count) }).eq('raid_id', selectedRaidId)
-    loadSelectedRaid()
+    await loadSelectedRaid()
     globalMutate(DKP_DATA_KEY)
     setMutating(false)
   }
@@ -772,6 +612,19 @@ export default function Officer({ isOfficer }) {
       const a = charIdToAccountId[String(char.char_id)] ?? charIdToAccountId[char.char_id]
       return a ? String(a) : null
     })()
+    const { error: sumErr } = await supabase.rpc('refresh_dkp_summary')
+    const { error: accErr } = recipientAccountId
+      ? await supabase.rpc('refresh_account_dkp_summary_for_raid', {
+          p_raid_id: selectedRaidId,
+          p_extra_account_ids: [recipientAccountId],
+        })
+      : await supabase.rpc('refresh_account_dkp_summary')
+    if (sumErr || accErr) {
+      setError((sumErr || accErr).message)
+      await loadSelectedRaid()
+      setMutating(false)
+      return
+    }
     setLootResult({
       itemName,
       characterName: char.name,
@@ -783,24 +636,13 @@ export default function Officer({ isOfficer }) {
     setLootItemQuery('')
     setLootCharName('')
     setLootCost('0')
-    setLootCharName('')
-    setLootCost('0')
     setItemNames((prev) => {
       const key = itemName.trim().toLowerCase()
       if (prev.some((n) => (n || '').trim().toLowerCase() === key)) return prev
       return [...prev, itemName].sort((a, b) => a.localeCompare(b))
     })
-    await supabase.rpc('refresh_dkp_summary')
-    if (recipientAccountId) {
-      await supabase.rpc('refresh_account_dkp_summary_for_raid', {
-        p_raid_id: selectedRaidId,
-        p_extra_account_ids: [recipientAccountId],
-      })
-    } else {
-      await supabase.rpc('refresh_account_dkp_summary')
-    }
     try { sessionStorage.removeItem('dkp_leaderboard_v2') } catch (_) {}
-    loadSelectedRaid()
+    await loadSelectedRaid()
     globalMutate(DKP_DATA_KEY)
     setMutating(false)
   }
@@ -893,14 +735,18 @@ export default function Officer({ isOfficer }) {
           .filter(Boolean)
       )]
       const needsFullAccountRefresh = unlinkedNamesFromLog.length > 0 || recipientAccountIds.length === 0
-      await supabase.rpc('refresh_dkp_summary')
-      if (needsFullAccountRefresh) {
-        await supabase.rpc('refresh_account_dkp_summary')
-      } else {
-        await supabase.rpc('refresh_account_dkp_summary_for_raid', {
-          p_raid_id: selectedRaidId,
-          p_extra_account_ids: recipientAccountIds,
-        })
+      const { error: sumErr } = await supabase.rpc('refresh_dkp_summary')
+      const { error: accErr } = needsFullAccountRefresh
+        ? await supabase.rpc('refresh_account_dkp_summary')
+        : await supabase.rpc('refresh_account_dkp_summary_for_raid', {
+            p_raid_id: selectedRaidId,
+            p_extra_account_ids: recipientAccountIds,
+          })
+      if (sumErr || accErr) {
+        setError((sumErr || accErr).message)
+        await loadSelectedRaid()
+        setMutating(false)
+        return
       }
       try { sessionStorage.removeItem('dkp_leaderboard_v2') } catch (_) {}
     }
@@ -915,7 +761,7 @@ export default function Officer({ isOfficer }) {
           : undefined,
     })
     if (playerNotFound.length === 0 && itemNotFound.length === 0) setLootLogPaste('')
-    loadSelectedRaid()
+    await loadSelectedRaid()
     globalMutate(DKP_DATA_KEY)
     setMutating(false)
   }
@@ -1147,7 +993,7 @@ export default function Officer({ isOfficer }) {
     return characterNamesList.filter((n) => n.toLowerCase().includes(q)).slice(0, 200)
   }, [characterNamesList, addToTicCharQuery])
 
-  const showAddToTicDropdown = showCharDropdown && (filteredCharacterNames.length > 0 || addToTicCharQuery === '')
+  const showAddToTicDropdown = showCharDropdown
 
   const filteredLootCharacterNames = useMemo(() => {
     const q = lootCharName.toLowerCase().trim()
@@ -1155,7 +1001,7 @@ export default function Officer({ isOfficer }) {
     return characterNamesList.filter((n) => n.toLowerCase().includes(q)).slice(0, 200)
   }, [characterNamesList, lootCharName])
 
-  const showLootCharDropdownList = showLootCharDropdown && (filteredLootCharacterNames.length > 0 || lootCharName === '')
+  const showLootCharDropdownList = showLootCharDropdown
 
   const filteredRaids = useMemo(() => {
     const q = raidPickerQuery.toLowerCase().trim()
@@ -1338,7 +1184,7 @@ export default function Officer({ isOfficer }) {
       {selectedRaidId && raid && (
         <div className="officer-workspace">
           <div className="officer-col">
-          <section className="card">
+          <section className={`card${showAddToTicDropdown ? ' officer-card--menu-open' : ''}`}>
             <h2 style={{ marginTop: 0 }}>Add DKP tic (attendance)</h2>
             <p className="officer-hint">Paste the channel member list. Names are matched to the DKP list.</p>
             <details className="officer-hint">
@@ -1406,7 +1252,7 @@ export default function Officer({ isOfficer }) {
                     <input
                       type="text"
                       value={addToTicCharQuery}
-                      onChange={(e) => { setAddToTicCharQuery(e.target.value); setAddToTicResult(null) }}
+                      onChange={(e) => { setAddToTicCharQuery(e.target.value); setAddToTicResult(null); setShowCharDropdown(true) }}
                       onFocus={() => setShowCharDropdown(true)}
                       onBlur={() => setTimeout(() => setShowCharDropdown(false), 200)}
                       placeholder="Character name (type to filter)"
@@ -1419,7 +1265,7 @@ export default function Officer({ isOfficer }) {
                       <ul id="add-to-tic-char-list" className="card officer-suggest" role="listbox" onMouseDown={(e) => e.preventDefault()}>
                         {filteredCharacterNames.length === 0 ? (
                           <li style={{ color: '#71717a', cursor: 'default' }}>
-                            {characterNamesList.length === 0 ? 'Loading characters…' : 'Type to filter'}
+                            {characterNamesList.length === 0 ? 'Loading characters…' : (addToTicCharQuery.trim() ? 'No matching characters' : 'Type to filter')}
                           </li>
                         ) : (
                           filteredCharacterNames.map((n) => (
@@ -1452,7 +1298,7 @@ export default function Officer({ isOfficer }) {
           </section>
 
           {/* Add loot */}
-          <section className="card">
+          <section className={`card${(showLootDropdown && filteredItemNames.length > 0) || showLootCharDropdownList ? ' officer-card--menu-open' : ''}`}>
             <h2 style={{ marginTop: 0 }}>Add loot</h2>
             <p className="officer-hint">Pick an item, a character on the DKP list, and a cost.</p>
             <div className="officer-loot-fields">
@@ -1460,7 +1306,7 @@ export default function Officer({ isOfficer }) {
                 <input
                   type="text"
                   value={lootItemQuery}
-                  onChange={(e) => setLootItemQuery(e.target.value)}
+                  onChange={(e) => { setLootItemQuery(e.target.value); setShowLootDropdown(true) }}
                   onFocus={() => setShowLootDropdown(true)}
                   onBlur={() => setTimeout(() => setShowLootDropdown(false), 150)}
                   placeholder="Item name (filter list or type new)"
@@ -1488,7 +1334,7 @@ export default function Officer({ isOfficer }) {
                 <input
                   type="text"
                   value={lootCharName}
-                  onChange={(e) => { setLootCharName(e.target.value); setError('') }}
+                  onChange={(e) => { setLootCharName(e.target.value); setError(''); setShowLootCharDropdown(true) }}
                   onFocus={() => setShowLootCharDropdown(true)}
                   onBlur={() => setTimeout(() => setShowLootCharDropdown(false), 200)}
                   placeholder="Character name (type to filter)"
@@ -1500,7 +1346,7 @@ export default function Officer({ isOfficer }) {
                   <ul className="card officer-suggest" role="listbox" onMouseDown={(e) => e.preventDefault()}>
                     {filteredLootCharacterNames.length === 0 ? (
                       <li style={{ color: '#71717a', cursor: 'default' }}>
-                        {characterNamesList.length === 0 ? 'Loading characters…' : 'Type to filter'}
+                        {characterNamesList.length === 0 ? 'Loading characters…' : (lootCharName.trim() ? 'No matching characters' : 'Type to filter')}
                       </li>
                     ) : (
                       filteredLootCharacterNames.map((n) => (

@@ -353,17 +353,27 @@ export default function RaidDetail({ isOfficer }) {
       setMutationError(`${char.name} is already in this tic.`)
       return
     }
+    const accountId = getAccountId(char.char_id) || getAccountId(char.name)
+    if (accountId != null) {
+      const accountAlreadyInTic = eventAttendance.some(
+        (r) => String(r.event_id) === String(addToTicEventId) && (getAccountId(r.char_id) === accountId || getAccountId(r.character_name) === accountId)
+      )
+      if (accountAlreadyInTic) {
+        setMutationError('That account already has a character in this tic. Only one character per account per tic is allowed.')
+        return
+      }
+    }
     setMutating(true)
     setAddToTicResult(null)
     setMutationError('')
-    const { error: attErr } = await supabase.from('raid_event_attendance').insert({
-      raid_id: raidId,
-      event_id: addToTicEventId,
-      char_id: char.char_id,
-      character_name: char.name,
+    const { error: attErr } = await supabase.rpc('add_attendee_to_tic', {
+      p_raid_id: raidId,
+      p_event_id: addToTicEventId,
+      p_char_id: String(char.char_id),
+      p_character_name: char.name,
     })
     if (attErr) {
-      setMutationError(attErr?.code === '23505' ? 'That character is already on this tic (duplicate blocked).' : attErr.message)
+      setMutationError(attErr.message)
       setMutating(false)
       return
     }
@@ -373,22 +383,10 @@ export default function RaidDetail({ isOfficer }) {
       target_id: addToTicEventId,
       delta: { r: raidId, e: addToTicEventId, c: char.name },
     })
-    const existingCharIds = new Set(attendance.map((r) => String(r.char_id)))
-    if (!existingCharIds.has(String(char.char_id))) {
-      await supabase.from('raid_attendance').insert({
-        raid_id: raidId,
-        char_id: char.char_id,
-        character_name: char.name,
-      })
-    }
     setAddToTicResult(char.name)
     setAddToTicCharQuery('')
-    await supabase.rpc('refresh_dkp_summary')
-    await supabase.rpc('refresh_account_dkp_summary_for_raid', { p_raid_id: raidId })
     try { sessionStorage.removeItem('dkp_leaderboard_v2') } catch (_) {}
-    const { count } = await supabase.from('raid_attendance').select('raid_id', { count: 'exact', head: true }).eq('raid_id', raidId)
-    if (count != null) await supabase.from('raids').update({ attendees: String(count) }).eq('raid_id', raidId)
-    mutate()
+    await mutate()
     setMutating(false)
   }
 
@@ -545,7 +543,7 @@ export default function RaidDetail({ isOfficer }) {
       </div>
 
       {isOfficer && events.length > 0 && (
-        <div className="card" style={{ marginTop: '1rem' }}>
+        <div className={`card${showCharDropdown ? ' officer-card--menu-open' : ''}`} style={{ marginTop: '1rem' }}>
           <h3 style={{ marginTop: 0 }}>Add attendee to tic</h3>
           <p style={{ color: '#71717a', fontSize: '0.9rem' }}>Pick a tic and a character to add them (e.g. someone missed the paste).</p>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', alignItems: 'flex-start' }}>
@@ -560,42 +558,40 @@ export default function RaidDetail({ isOfficer }) {
                 </option>
               ))}
             </select>
-            <div style={{ position: 'relative', minWidth: '200px' }}>
+            <div className="officer-suggest-wrap" style={{ minWidth: '200px' }}>
               <input
                 type="text"
                 value={addToTicCharQuery}
-                onChange={(e) => { setAddToTicCharQuery(e.target.value); setAddToTicResult(null) }}
+                onChange={(e) => { setAddToTicCharQuery(e.target.value); setAddToTicResult(null); setShowCharDropdown(true) }}
                 onFocus={() => setShowCharDropdown(true)}
-                onBlur={() => setTimeout(() => setShowCharDropdown(false), 150)}
+                onBlur={() => setTimeout(() => setShowCharDropdown(false), 200)}
                 placeholder="Character name (type to filter)"
+                autoComplete="off"
+                aria-expanded={showCharDropdown}
+                aria-haspopup="listbox"
                 style={{ padding: '0.5rem 0.6rem', fontSize: '1rem', width: '100%', minWidth: '180px', boxSizing: 'border-box' }}
               />
-              {showCharDropdown && filteredCharacterNames.length > 0 && (
-                <ul
-                  className="card"
-                  style={{
-                    position: 'absolute',
-                    top: '100%',
-                    left: 0,
-                    right: 0,
-                    margin: 0,
-                    marginTop: '2px',
-                    padding: '0.25rem 0',
-                    maxHeight: '240px',
-                    overflowY: 'auto',
-                    listStyle: 'none',
-                    zIndex: 10,
-                  }}
-                >
-                  {filteredCharacterNames.map((n) => (
-                    <li
-                      key={n}
-                      style={{ padding: '0.4rem 0.6rem', cursor: 'pointer' }}
-                      onMouseDown={(e) => { e.preventDefault(); setAddToTicCharQuery(n); setShowCharDropdown(false) }}
-                    >
-                      {n}
+              {showCharDropdown && (
+                <ul className="card officer-suggest" role="listbox" onMouseDown={(e) => e.preventDefault()}>
+                  {filteredCharacterNames.length === 0 ? (
+                    <li style={{ color: '#71717a', cursor: 'default' }}>
+                      {characterNamesList.length === 0 ? 'Loading characters…' : (addToTicCharQuery.trim() ? 'No matching characters' : 'Type to filter')}
                     </li>
-                  ))}
+                  ) : (
+                    filteredCharacterNames.map((n) => (
+                      <li
+                        key={n}
+                        role="option"
+                        onMouseDown={(e) => {
+                          e.preventDefault()
+                          setAddToTicCharQuery(n)
+                          setTimeout(() => setShowCharDropdown(false), 0)
+                        }}
+                      >
+                        {n}
+                      </li>
+                    ))
+                  )}
                 </ul>
               )}
             </div>

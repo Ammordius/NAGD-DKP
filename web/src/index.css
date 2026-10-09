@@ -267,6 +267,7 @@ label { display: block; margin-bottom: 0.25rem; font-size: 0.875rem; color: #a1a
   border-radius: 4px;
   color: #e4e4e7;
 }
+.officer-card--menu-open { position: relative; z-index: 25; }
 .officer-suggest-wrap { position: relative; width: 100%; }
 .officer-suggest {
   position: absolute;
@@ -279,6 +280,10 @@ label { display: block; margin-bottom: 0.25rem; font-size: 0.875rem; color: #a1a
   max-height: 240px;
   overflow-y: auto;
   list-style: none;
+  background: #18181b;
+  border: 1px solid #3f3f46;
+  border-radius: 6px;
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.35);
 }
 .officer-suggest li { padding: 0.4rem 0.6rem; cursor: pointer; }
 .officer-suggest li:hover { background: #27272a; }
