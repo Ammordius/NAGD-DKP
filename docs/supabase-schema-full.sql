@@ -926,17 +926,51 @@ BEGIN
       SELECT k.account_id, MAX(d.raid_date) AS last_activity_date
       FROM unnest(p_account_ids) AS k(account_id)
       LEFT JOIN (
-        SELECT public.resolve_dkp_account_id(rea.account_id, rea.char_id::text, rea.character_name) AS account_id,
+        SELECT COALESCE(NULLIF(trim(rea.account_id), ''), ca.account_id) AS account_id,
                public.raid_date_parsed(r.date_iso) AS raid_date
         FROM raid_event_attendance rea
         JOIN raids r ON r.raid_id = rea.raid_id
-        WHERE public.resolve_dkp_account_id(rea.account_id, rea.char_id::text, rea.character_name) = ANY (p_account_ids)
+        LEFT JOIN character_account ca
+          ON NULLIF(trim(rea.account_id), '') IS NULL
+         AND ca.char_id = NULLIF(trim(rea.char_id::text), '')
+        WHERE COALESCE(NULLIF(trim(rea.account_id), ''), ca.account_id) = ANY (p_account_ids)
         UNION ALL
-        SELECT public.resolve_loot_account_id(rl.id, rl.char_id::text, rl.character_name),
+        SELECT ca.account_id,
+               public.raid_date_parsed(r.date_iso)
+        FROM raid_event_attendance rea
+        JOIN raids r ON r.raid_id = rea.raid_id
+        JOIN characters c ON trim(c.name) = trim(rea.character_name)
+        JOIN character_account ca ON ca.char_id = c.char_id
+        WHERE COALESCE(trim(rea.account_id), '') = ''
+          AND COALESCE(trim(rea.char_id::text), '') = ''
+          AND ca.account_id = ANY (p_account_ids)
+        UNION ALL
+        SELECT ca.account_id,
                public.raid_date_parsed(r.date_iso)
         FROM raid_loot rl
         JOIN raids r ON r.raid_id = rl.raid_id
-        WHERE public.resolve_loot_account_id(rl.id, rl.char_id::text, rl.character_name) = ANY (p_account_ids)
+        JOIN character_account ca
+          ON ca.char_id = COALESCE(
+            (SELECT NULLIF(trim(la.assigned_char_id), '')
+             FROM loot_assignment la
+             WHERE la.loot_id = rl.id
+             LIMIT 1),
+            NULLIF(trim(rl.char_id::text), '')
+          )
+        WHERE ca.account_id = ANY (p_account_ids)
+        UNION ALL
+        SELECT ca.account_id,
+               public.raid_date_parsed(r.date_iso)
+        FROM raid_loot rl
+        JOIN raids r ON r.raid_id = rl.raid_id
+        JOIN characters c ON trim(c.name) = trim(rl.character_name)
+        JOIN character_account ca ON ca.char_id = c.char_id
+        WHERE COALESCE(trim(rl.char_id::text), '') = ''
+          AND NOT EXISTS (
+            SELECT 1 FROM loot_assignment la
+            WHERE la.loot_id = rl.id AND COALESCE(trim(la.assigned_char_id), '') <> ''
+          )
+          AND ca.account_id = ANY (p_account_ids)
       ) d ON d.account_id = k.account_id
       GROUP BY k.account_id
     ) src
@@ -1035,7 +1069,208 @@ BEGIN
 END;
 $$;
 
-CREATE OR REPLACE FUNCTION public.apply_spent_deltas(p_rows jsonb)
+-- Move last activity forward to this raid's date. One date compare, no history scan.
+CREATE OR REPLACE FUNCTION public.touch_dkp_last_activity(p_character_keys text[], p_account_ids text[], p_raid_date date)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  IF p_raid_date IS NULL THEN
+    RETURN;
+  END IF;
+
+  IF p_character_keys IS NOT NULL AND cardinality(p_character_keys) > 0 THEN
+    UPDATE dkp_summary
+    SET last_activity_date = p_raid_date
+    WHERE character_key = ANY (p_character_keys)
+      AND (last_activity_date IS NULL OR last_activity_date < p_raid_date);
+  END IF;
+
+  IF p_account_ids IS NOT NULL AND cardinality(p_account_ids) > 0 THEN
+    UPDATE account_dkp_summary
+    SET last_activity_date = p_raid_date
+    WHERE account_id = ANY (p_account_ids)
+      AND (last_activity_date IS NULL OR last_activity_date < p_raid_date);
+  END IF;
+END;
+$$;
+
+-- Used when a loot delete might have removed the stored latest date.
+-- Character rows with a char_id are read through the char_id index.
+-- Account rows are read by account_id or by that account's characters.
+-- Name-only attendance is scanned here only, and only when the deleted raid date is the stored latest date.
+CREATE OR REPLACE FUNCTION public.recompute_dkp_last_activity_if_latest(
+  p_character_keys text[],
+  p_account_ids text[],
+  p_raid_dates date[]
+)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_keys text[];
+  v_id_keys text[];
+  v_name_keys text[];
+  v_accounts text[];
+BEGIN
+  IF p_raid_dates IS NULL OR cardinality(p_raid_dates) = 0 THEN
+    RETURN;
+  END IF;
+
+  SELECT ARRAY_AGG(character_key)
+  INTO v_keys
+  FROM dkp_summary
+  WHERE character_key = ANY (p_character_keys)
+    AND last_activity_date = ANY (p_raid_dates);
+
+  SELECT ARRAY_AGG(account_id)
+  INTO v_accounts
+  FROM account_dkp_summary
+  WHERE account_id = ANY (p_account_ids)
+    AND last_activity_date = ANY (p_raid_dates);
+
+  IF (v_keys IS NULL OR cardinality(v_keys) = 0)
+     AND (v_accounts IS NULL OR cardinality(v_accounts) = 0) THEN
+    RETURN;
+  END IF;
+
+  IF v_keys IS NOT NULL AND cardinality(v_keys) > 0 THEN
+    SELECT ARRAY_AGG(k.key)
+    INTO v_id_keys
+    FROM unnest(v_keys) AS k(key)
+    WHERE EXISTS (SELECT 1 FROM characters c WHERE c.char_id = k.key);
+
+    SELECT ARRAY_AGG(k.key)
+    INTO v_name_keys
+    FROM unnest(v_keys) AS k(key)
+    WHERE NOT EXISTS (SELECT 1 FROM characters c WHERE c.char_id = k.key);
+
+    IF v_id_keys IS NOT NULL AND cardinality(v_id_keys) > 0 THEN
+      UPDATE dkp_summary s
+      SET last_activity_date = src.last_activity_date
+      FROM (
+        SELECT k.key AS character_key, MAX(d.raid_date) AS last_activity_date
+        FROM unnest(v_id_keys) AS k(key)
+        LEFT JOIN (
+          SELECT rea.char_id AS character_key, public.raid_date_parsed(r.date_iso) AS raid_date
+          FROM raid_event_attendance rea
+          JOIN raids r ON r.raid_id = rea.raid_id
+          WHERE rea.char_id = ANY (v_id_keys)
+          UNION ALL
+          SELECT rl.char_id, public.raid_date_parsed(r.date_iso)
+          FROM raid_loot rl
+          JOIN raids r ON r.raid_id = rl.raid_id
+          WHERE rl.char_id = ANY (v_id_keys)
+        ) d ON d.character_key = k.key
+        GROUP BY k.key
+      ) src
+      WHERE s.character_key = src.character_key;
+    END IF;
+
+    IF v_name_keys IS NOT NULL AND cardinality(v_name_keys) > 0 THEN
+      UPDATE dkp_summary s
+      SET last_activity_date = src.last_activity_date
+      FROM (
+        SELECT k.key AS character_key, MAX(d.raid_date) AS last_activity_date
+        FROM unnest(v_name_keys) AS k(key)
+        LEFT JOIN (
+          SELECT COALESCE(NULLIF(trim(rea.character_name), ''), 'unknown') AS character_key,
+                 public.raid_date_parsed(r.date_iso) AS raid_date
+          FROM raid_event_attendance rea
+          JOIN raids r ON r.raid_id = rea.raid_id
+          WHERE COALESCE(trim(rea.char_id::text), '') = ''
+            AND COALESCE(NULLIF(trim(rea.character_name), ''), 'unknown') = ANY (v_name_keys)
+          UNION ALL
+          SELECT COALESCE(NULLIF(trim(rl.character_name), ''), 'unknown'),
+                 public.raid_date_parsed(r.date_iso)
+          FROM raid_loot rl
+          JOIN raids r ON r.raid_id = rl.raid_id
+          WHERE COALESCE(trim(rl.char_id::text), '') = ''
+            AND COALESCE(NULLIF(trim(rl.character_name), ''), 'unknown') = ANY (v_name_keys)
+        ) d ON d.character_key = k.key
+        GROUP BY k.key
+      ) src
+      WHERE s.character_key = src.character_key;
+    END IF;
+  END IF;
+
+  IF v_accounts IS NOT NULL AND cardinality(v_accounts) > 0 THEN
+    UPDATE account_dkp_summary s
+    SET last_activity_date = src.last_activity_date
+    FROM (
+      SELECT k.account_id, MAX(d.raid_date) AS last_activity_date
+      FROM unnest(v_accounts) AS k(account_id)
+      LEFT JOIN (
+        SELECT rea.account_id, public.raid_date_parsed(r.date_iso) AS raid_date
+        FROM raid_event_attendance rea
+        JOIN raids r ON r.raid_id = rea.raid_id
+        WHERE rea.account_id = ANY (v_accounts)
+        UNION ALL
+        SELECT ca.account_id, public.raid_date_parsed(r.date_iso)
+        FROM character_account ca
+        JOIN raid_event_attendance rea ON rea.char_id = ca.char_id
+        JOIN raids r ON r.raid_id = rea.raid_id
+        WHERE ca.account_id = ANY (v_accounts)
+          AND NULLIF(trim(rea.account_id), '') IS NULL
+        UNION ALL
+        SELECT ca.account_id, public.raid_date_parsed(r.date_iso)
+        FROM character_account ca
+        JOIN raid_loot rl ON rl.char_id = ca.char_id
+        JOIN raids r ON r.raid_id = rl.raid_id
+        WHERE ca.account_id = ANY (v_accounts)
+          AND NOT EXISTS (
+            SELECT 1 FROM loot_assignment la
+            WHERE la.loot_id = rl.id
+              AND NULLIF(trim(la.assigned_char_id), '') IS NOT NULL
+              AND NULLIF(trim(la.assigned_char_id), '') <> ca.char_id
+          )
+        UNION ALL
+        SELECT ca.account_id, public.raid_date_parsed(r.date_iso)
+        FROM character_account ca
+        JOIN loot_assignment la ON NULLIF(trim(la.assigned_char_id), '') = ca.char_id
+        JOIN raid_loot rl ON rl.id = la.loot_id
+        JOIN raids r ON r.raid_id = rl.raid_id
+        WHERE ca.account_id = ANY (v_accounts)
+          AND NULLIF(trim(la.assigned_char_id), '') IS DISTINCT FROM NULLIF(trim(rl.char_id::text), '')
+        UNION ALL
+        SELECT ca.account_id, public.raid_date_parsed(r.date_iso)
+        FROM raid_event_attendance rea
+        JOIN raids r ON r.raid_id = rea.raid_id
+        JOIN characters c ON trim(c.name) = trim(rea.character_name)
+        JOIN character_account ca ON ca.char_id = c.char_id
+        WHERE COALESCE(trim(rea.account_id), '') = ''
+          AND COALESCE(trim(rea.char_id::text), '') = ''
+          AND ca.account_id = ANY (v_accounts)
+        UNION ALL
+        SELECT ca.account_id, public.raid_date_parsed(r.date_iso)
+        FROM raid_loot rl
+        JOIN raids r ON r.raid_id = rl.raid_id
+        JOIN characters c ON trim(c.name) = trim(rl.character_name)
+        JOIN character_account ca ON ca.char_id = c.char_id
+        WHERE COALESCE(trim(rl.char_id::text), '') = ''
+          AND NOT EXISTS (
+            SELECT 1 FROM loot_assignment la
+            WHERE la.loot_id = rl.id AND COALESCE(trim(la.assigned_char_id), '') <> ''
+          )
+          AND ca.account_id = ANY (v_accounts)
+      ) d ON d.account_id = k.account_id
+      GROUP BY k.account_id
+    ) src
+    WHERE s.account_id = src.account_id;
+  END IF;
+END;
+$$;
+
+DROP FUNCTION IF EXISTS public.apply_spent_deltas(jsonb);
+CREATE OR REPLACE FUNCTION public.apply_spent_deltas(
+  p_rows jsonb,
+  p_last_activity text DEFAULT 'scan',
+  p_raid_dates date[] DEFAULT NULL
+)
 RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -1099,7 +1334,19 @@ BEGIN
     FROM jsonb_array_elements(p_rows) AS x
   ) d;
 
-  PERFORM refresh_dkp_last_activity(v_keys, v_accounts);
+  IF p_last_activity = 'touch' THEN
+    PERFORM touch_dkp_last_activity(
+      v_keys,
+      v_accounts,
+      (SELECT MAX(d) FROM unnest(COALESCE(p_raid_dates, ARRAY[]::date[])) AS d)
+    );
+  ELSIF p_last_activity = 'recompute' THEN
+    PERFORM recompute_dkp_last_activity_if_latest(v_keys, v_accounts, p_raid_dates);
+  ELSIF p_last_activity = 'skip' THEN
+    NULL;
+  ELSE
+    PERFORM refresh_dkp_last_activity(v_keys, v_accounts);
+  END IF;
 
   DELETE FROM dkp_summary
   WHERE character_key = ANY (v_keys)
@@ -1506,8 +1753,17 @@ LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
 AS $$
+DECLARE
+  v_dates date[];
 BEGIN
   IF restore_load_in_progress() THEN RETURN NULL; END IF;
+
+  SELECT ARRAY_AGG(DISTINCT public.raid_date_parsed(r.date_iso))
+  INTO v_dates
+  FROM new_rows nr
+  JOIN raids r ON r.raid_id = nr.raid_id
+  WHERE public.raid_date_parsed(r.date_iso) IS NOT NULL;
+
   PERFORM apply_spent_deltas((
     SELECT COALESCE(jsonb_agg(jsonb_build_object(
       'character_key', g.character_key,
@@ -1523,7 +1779,7 @@ BEGIN
       FROM new_rows nr
       GROUP BY 1, 3
     ) g
-  ));
+  ), 'touch', v_dates);
   RETURN NULL;
 END;
 $$;
@@ -1534,12 +1790,21 @@ LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
 AS $$
+DECLARE
+  v_dates date[];
 BEGIN
   IF restore_load_in_progress() THEN RETURN NULL; END IF;
   CREATE TEMP TABLE IF NOT EXISTS loot_delete_account (
     loot_id bigint PRIMARY KEY,
     account_id text
   ) ON COMMIT DROP;
+
+  SELECT ARRAY_AGG(DISTINCT public.raid_date_parsed(r.date_iso))
+  INTO v_dates
+  FROM old_rows o
+  JOIN raids r ON r.raid_id = o.raid_id
+  WHERE public.raid_date_parsed(r.date_iso) IS NOT NULL;
+
   PERFORM apply_spent_deltas((
     SELECT COALESCE(jsonb_agg(jsonb_build_object(
       'character_key', g.character_key,
@@ -1558,7 +1823,7 @@ BEGIN
       FROM old_rows o
       GROUP BY 1, 3
     ) g
-  ));
+  ), 'recompute', v_dates);
   RETURN NULL;
 END;
 $$;
@@ -1586,7 +1851,7 @@ BEGIN
       FROM old_rows o
       GROUP BY 1, 3
     ) g
-  ));
+  ), 'skip', NULL);
   PERFORM apply_spent_deltas((
     SELECT COALESCE(jsonb_agg(jsonb_build_object(
       'character_key', g.character_key,
@@ -1602,7 +1867,7 @@ BEGIN
       FROM new_rows n
       GROUP BY 1, 3
     ) g
-  ));
+  ), 'skip', NULL);
   RETURN NULL;
 END;
 $$;
