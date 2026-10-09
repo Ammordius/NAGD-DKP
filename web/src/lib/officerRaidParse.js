@@ -6,7 +6,7 @@ export function parseRaidString(str) {
   const dashMatch = s.match(/\s+-\s+([^-]+)$/)
   if (dashMatch) {
     const datePart = dashMatch[1].trim()
-    raidName = s.replace(/\s+-\s+[^-]+$/, '').replace(/^[^:]+:\s*/, '').trim()
+    raidName = s.replace(/\s+-\s+[^-]+$/, '').replace(/^.*:\s*/, '').trim()
     const d = new Date(datePart)
     if (!isNaN(d.getTime())) {
       dateIso = d.toISOString().slice(0, 19).replace('T', ' ')
@@ -20,11 +20,11 @@ export function parseRaidString(str) {
   return { raidName, dateIso }
 }
 
-/** Parse channel member list lines; returns { eventTime, names[] } (names deduped, trimmed). */
+/** Parse channel member list lines; returns { eventTime, names[] } (trimmed, order kept, repeats kept). */
 export function parseChannelList(paste) {
   const lines = (paste || '').split(/\r?\n/).map((l) => l.trim()).filter(Boolean)
   let eventTime = ''
-  const nameSet = new Set()
+  const names = []
   for (const line of lines) {
     const tsMatch = line.match(/^\[([^\]]+)\]/)
     if (tsMatch) {
@@ -34,11 +34,11 @@ export function parseChannelList(paste) {
       const rest = line.replace(/^\[[^\]]+\]\s*/, '').trim()
       rest.split(',').forEach((n) => {
         const name = n.trim()
-        if (name && !/^\d+$/.test(name)) nameSet.add(name)
+        if (name && !/^\d+$/.test(name)) names.push(name)
       })
     }
   }
-  return { eventTime, names: [...nameSet] }
+  return { eventTime, names }
 }
 
 /**
