@@ -101,6 +101,20 @@ function generateRaidId() {
   return `manual-${Date.now()}`
 }
 
+function ResultNames({ label, names, tone }) {
+  if (!names?.length) return null
+  return (
+    <div className={`officer-result-group officer-result-group--${tone}`}>
+      <div className="officer-result-label">{label} ({names.length})</div>
+      <div className="officer-result-names">
+        {names.map((name, i) => (
+          <span key={`${i}-${name}`} className="officer-result-name">{name}</span>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 /** Generate event_id for a tic (use timestamp from log or now). */
 function generateEventId(eventTimeStr) {
   if (eventTimeStr) {
@@ -153,6 +167,9 @@ export default function Officer({ isOfficer }) {
   // Add raid
   const [raidPaste, setRaidPaste] = useState('')
   const [addRaidResult, setAddRaidResult] = useState(null)
+  const [showCreateRaid, setShowCreateRaid] = useState(() => window.location.hash === '#add-raid')
+  const [raidPickerQuery, setRaidPickerQuery] = useState('')
+  const [showRaidPicker, setShowRaidPicker] = useState(false)
 
   // Add tic
   const [ticPaste, setTicPaste] = useState('')
@@ -367,12 +384,11 @@ export default function Officer({ isOfficer }) {
     loadOfficerData()
   }, [isOfficer, navigate, loadOfficerData])
 
-  // When linked from Raids "+" with #add-raid, scroll to add-raid section
+  // When linked from Raids "+" with #add-raid, open the create panel
   useEffect(() => {
     if (location.hash !== '#add-raid') return
-    const t = setTimeout(() => {
-      if (addRaidSectionRef.current) focusAddRaid()
-    }, 100)
+    setShowCreateRaid(true)
+    const t = setTimeout(() => raidPasteRef.current?.focus(), 100)
     return () => clearTimeout(t)
   }, [location.hash])
 
@@ -532,6 +548,7 @@ export default function Officer({ isOfficer }) {
     })
     setAddRaidResult({ raid_id, raid_name: raidName.trim() })
     setRaidPaste('')
+    setShowCreateRaid(false)
     const dateVal = dateIso || new Date().toISOString().slice(0, 10)
     const newRaidRow = { raid_id, raid_name: raidName.trim(), date_iso: dateVal, date: dateVal }
     setRaids((prev) => {
@@ -1140,18 +1157,42 @@ export default function Officer({ isOfficer }) {
 
   const showLootCharDropdownList = showLootCharDropdown && (filteredLootCharacterNames.length > 0 || lootCharName === '')
 
+  const filteredRaids = useMemo(() => {
+    const q = raidPickerQuery.toLowerCase().trim()
+    const list = !q
+      ? raids
+      : raids.filter((r) => {
+          const label = `${r.date_iso || r.date || ''} ${r.raid_name || ''} ${r.raid_id || ''}`.toLowerCase()
+          return label.includes(q)
+        })
+    return list.slice(0, q ? 80 : 40)
+  }, [raids, raidPickerQuery])
+
+  const selectedRaidLabel = useMemo(() => {
+    const row = raid || raids.find((r) => r.raid_id === selectedRaidId)
+    if (!row) return ''
+    return `${row.date_iso || row.date || '—'} · ${row.raid_name || row.raid_id}`
+  }, [raid, raids, selectedRaidId])
+
+  const attendeeCount = attendance.length > 0
+    ? attendance.length
+    : (raid?.attendees != null && raid.attendees !== '' ? Math.round(Number(raid.attendees)) : 0)
+
   const addRaidSectionRef = useRef(null)
   const raidPasteRef = useRef(null)
   const raidEditSectionRef = useRef(null)
   const focusAddRaid = () => {
-    addRaidSectionRef.current?.scrollIntoView({ behavior: 'smooth' })
-    setTimeout(() => raidPasteRef.current?.focus(), 300)
+    setShowCreateRaid(true)
+    setTimeout(() => {
+      addRaidSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+      raidPasteRef.current?.focus()
+    }, 50)
   }
 
   if (!isOfficer) return null
 
   return (
-    <div className="container">
+    <div className="container container--officer">
       <h1>Officer – Raid management</h1>
       <p style={{ color: '#a1a1aa' }}>
         Add raids from Discord, paste DKP tics (channel lists), add loot manually or from logs. All edits require officer permissions.{' '}
@@ -1168,12 +1209,7 @@ export default function Officer({ isOfficer }) {
         <Link to="/officer/global-loot-bid-forecast">Global item bid (active roster)</Link>
         {' '}(heuristic, officer-only).
       </p>
-      <div style={{ marginBottom: '1rem' }}>
-        <button type="button" className="btn" onClick={focusAddRaid} style={{ fontWeight: 'bold' }}>
-          + New raid
-        </button>
-      </div>
-      <section className="card" style={{ marginBottom: '1rem' }}>
+      <section className="card officer-tools">
         <h2 style={{ marginTop: 0 }}>Officer tools</h2>
         <p style={{ marginBottom: 0 }}>
           <Link to="/officer/dkp-changelog">DKP changelog</Link>
@@ -1188,246 +1224,239 @@ export default function Officer({ isOfficer }) {
           {' · '}
           <Link to="/officer/raider-activity">Raider Activity</Link>
         </p>
-      </section>
-      {error && <p className="error" style={{ marginBottom: '1rem' }}>{error}</p>}
-
-      {/* Add raid */}
-      <section ref={addRaidSectionRef} className="card" style={{ marginBottom: '1.5rem' }}>
-        <h2 style={{ marginTop: 0 }}>Add raid</h2>
-        <p style={{ color: '#71717a', fontSize: '0.9rem' }}>
-          Paste a line from Discord, e.g. <code>Thursday 02/12 9pm est: Water Minis + Cursed/Emp - February 12, 2026 8:00 PM</code>
-        </p>
-        <textarea
-          ref={raidPasteRef}
-          value={raidPaste}
-          onChange={(e) => setRaidPaste(e.target.value)}
-          placeholder="Thursday 02/12 9pm est: Water Minis + Cursed/Emp - February 12, 2026 8:00 PM"
-          rows={2}
-          style={{ width: '100%', maxWidth: '600px', padding: '0.5rem', marginBottom: '0.5rem' }}
-        />
-        <div>
-          <button type="button" className="btn" onClick={handleAddRaid} disabled={mutating || !raidPaste.trim()}>
-            {mutating ? 'Creating…' : 'Create raid'}
-          </button>
-        </div>
-        {addRaidResult && (
-          <p style={{ color: '#22c55e', marginTop: '0.5rem' }}>
-            Created <Link to={`/raids/${addRaidResult.raid_id}`}>{addRaidResult.raid_name}</Link>. You can add tics and loot below.
+        <details>
+          <summary>Create new DKP account</summary>
+          <p className="officer-hint">
+            Create an account that a player can then claim on the account page. Share the account link with them.
+            {' '}
+            <strong>Link every character</strong> that may appear on tics or receive loot (open the account → Characters → add); otherwise tics or loot may not count toward that account’s totals.
           </p>
-        )}
+          <div className="officer-field-row">
+            <input
+              type="text"
+              placeholder="Display name (e.g. player main)"
+              value={newAccountDisplayName}
+              onChange={(e) => setNewAccountDisplayName(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleCreateAccount()}
+            />
+            <button type="button" className="btn" onClick={handleCreateAccount} disabled={newAccountLoading}>
+              {newAccountLoading ? 'Creating…' : 'Create account'}
+            </button>
+          </div>
+          {newAccountError && <p className="error" style={{ marginTop: '0.5rem', marginBottom: 0 }}>{newAccountError}</p>}
+          {newAccountResult && (
+            <p className="officer-success" style={{ marginTop: '0.5rem', marginBottom: 0 }}>
+              Created. <Link to={`/accounts/${newAccountResult}`}>View account</Link> — add characters on the Characters tab (create does not auto-attach toons), then share the link so the player can claim it.
+            </p>
+          )}
+        </details>
       </section>
 
-      {/* Raid selector */}
-      <section className="card" style={{ marginBottom: '1.5rem' }}>
-        <h2 style={{ marginTop: 0 }}>Select raid to edit</h2>
-        <p style={{ color: '#71717a', fontSize: '0.9rem' }}>Recent raids (select to add tics, loot, or delete).</p>
-        <select
-          value={selectedRaidId}
-          onChange={(e) => setSelectedRaidId(e.target.value)}
-          style={{ padding: '0.35rem 0.5rem', minWidth: '320px' }}
-        >
-          <option value="">— Select raid —</option>
-          {raids.map((r) => (
-            <option key={r.raid_id} value={r.raid_id}>
-              {r.date_iso || r.date || '—'} · {r.raid_name || r.raid_id}
-            </option>
-          ))}
-        </select>
-        {selectedRaidId && (
-          <span style={{ marginLeft: '0.5rem' }}>
-            <Link to={`/raids/${selectedRaidId}`}>View full raid</Link>
-          </span>
-        )}
-      </section>
-
-      {/* Create new DKP account (officer-only); player claims it on the account page */}
-      <section className="card" style={{ marginBottom: '1.5rem' }}>
-        <h2 style={{ marginTop: 0 }}>Create new DKP account</h2>
-        <p style={{ color: '#71717a', fontSize: '0.9rem', marginBottom: '0.75rem' }}>
-          Create an account that a player can then claim on the account page. Share the account link with them.
-          {' '}
-          <strong>Link every character</strong> that may appear on tics or receive loot (open the account → Characters → add); otherwise tics or loot may not count toward that account’s totals.
-        </p>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+      <div className="officer-raid-bar">
+        <div className="officer-raid-picker">
           <input
-            type="text"
-            placeholder="Display name (e.g. player main)"
-            value={newAccountDisplayName}
-            onChange={(e) => setNewAccountDisplayName(e.target.value)}
-            style={{ padding: '0.35rem 0.5rem', minWidth: '200px' }}
-            onKeyDown={(e) => e.key === 'Enter' && handleCreateAccount()}
+            type="search"
+            value={raidPickerQuery}
+            onChange={(e) => { setRaidPickerQuery(e.target.value); setShowRaidPicker(true) }}
+            onFocus={() => setShowRaidPicker(true)}
+            onBlur={() => setTimeout(() => setShowRaidPicker(false), 200)}
+            placeholder={selectedRaidLabel || 'Search raids by name or date'}
+            aria-label="Search raids"
+            aria-expanded={showRaidPicker}
+            aria-controls="officer-raid-picker-list"
+            autoComplete="off"
           />
-          <button type="button" className="btn" onClick={handleCreateAccount} disabled={newAccountLoading}>
-            {newAccountLoading ? 'Creating…' : 'Create account'}
-          </button>
+          {showRaidPicker && (
+            <ul id="officer-raid-picker-list" className="officer-raid-picker-list" role="listbox">
+              {filteredRaids.length === 0 ? (
+                <li className="officer-raid-picker-empty">{raids.length === 0 ? 'Loading raids…' : 'No matching raids'}</li>
+              ) : (
+                filteredRaids.map((r) => (
+                  <li
+                    key={r.raid_id}
+                    role="option"
+                    aria-selected={r.raid_id === selectedRaidId}
+                    onMouseDown={(e) => {
+                      e.preventDefault()
+                      setSelectedRaidId(r.raid_id)
+                      setRaidPickerQuery('')
+                      setShowRaidPicker(false)
+                    }}
+                  >
+                    {r.date_iso || r.date || '—'} · {r.raid_name || r.raid_id}
+                  </li>
+                ))
+              )}
+            </ul>
+          )}
         </div>
-        {newAccountError && <p className="error" style={{ marginTop: '0.5rem', marginBottom: 0 }}>{newAccountError}</p>}
-        {newAccountResult && (
-          <p style={{ color: '#22c55e', marginTop: '0.5rem', marginBottom: 0 }}>
-            Created. <Link to={`/accounts/${newAccountResult}`}>View account</Link> — add characters on the Characters tab (create does not auto-attach toons), then share the link so the player can claim it.
+        {selectedRaidId && raid && (
+          <p className="officer-raid-status">
+            {events.length} tics · {loot.length} loot · {attendeeCount} attendees
           </p>
         )}
-      </section>
+        <div className="officer-raid-bar-actions">
+          {selectedRaidId && <Link to={`/raids/${selectedRaidId}`}>View full raid</Link>}
+          <button type="button" className="btn" onClick={focusAddRaid}>+ New raid</button>
+        </div>
+      </div>
+      {error && <p className="error officer-error" role="alert">{error}</p>}
+      {addRaidResult && !showCreateRaid && (
+        <p className="officer-success">
+          Created <Link to={`/raids/${addRaidResult.raid_id}`}>{addRaidResult.raid_name}</Link>. Add tics and loot below.
+        </p>
+      )}
+
+      {showCreateRaid && (
+        <section ref={addRaidSectionRef} className="card officer-create">
+          <h2 style={{ marginTop: 0 }}>Add raid</h2>
+          <p className="officer-hint">
+            Paste a line from Discord, e.g. <code>Thursday 02/12 9pm est: Water Minis + Cursed/Emp - February 12, 2026 8:00 PM</code>
+          </p>
+          <textarea
+            ref={raidPasteRef}
+            className="officer-paste"
+            value={raidPaste}
+            onChange={(e) => setRaidPaste(e.target.value)}
+            placeholder="Thursday 02/12 9pm est: Water Minis + Cursed/Emp - February 12, 2026 8:00 PM"
+            rows={2}
+          />
+          <div className="officer-field-row" style={{ marginTop: '0.5rem' }}>
+            <button type="button" className="btn" onClick={handleAddRaid} disabled={mutating || !raidPaste.trim()}>
+              {mutating ? 'Creating…' : 'Create raid'}
+            </button>
+            <button type="button" className="btn btn-ghost" onClick={() => setShowCreateRaid(false)}>Cancel</button>
+          </div>
+        </section>
+      )}
+
+      {!selectedRaidId && !showCreateRaid && (
+        <p className="officer-empty">Select a raid above, or create one.</p>
+      )}
+      {selectedRaidId && !raid && <p>Loading raid…</p>}
 
       {selectedRaidId && raid && (
-        <>
-          {/* Add DKP tic: paste and result close together so officers see what was done */}
-          <section className="card" style={{ marginBottom: '1.5rem' }}>
+        <div className="officer-workspace">
+          <div className="officer-col">
+          <section className="card">
             <h2 style={{ marginTop: 0 }}>Add DKP tic (attendance)</h2>
-            <p style={{ color: '#a1a1aa', fontSize: '0.9rem', marginBottom: '0.5rem' }}>
-              <strong>Matching:</strong> Paste the channel member list below. Each comma-separated name is matched to the DKP list by <strong>exact character name</strong> (case-insensitive). Only names that match a character on the DKP list receive credit. One credit per <strong>account</strong> per tic—duplicate character names in the paste and other toons on the same account are skipped and listed so you can verify. DKP is credited to the character&apos;s <strong>linked account</strong> (account migration).
-            </p>
+            <p className="officer-hint">Paste the channel member list. Names are matched to the DKP list.</p>
+            <details className="officer-hint">
+              <summary>How matching works</summary>
+              <p>
+                Each comma-separated name is matched by exact character name (case-insensitive). Only names on the DKP list receive credit. One credit per account per tic — duplicates in the paste and other toons on the same account are skipped and listed. DKP is credited to the character&apos;s linked account.
+              </p>
+            </details>
             <textarea
+              className="officer-paste"
               value={ticPaste}
               onChange={(e) => setTicPaste(e.target.value)}
               placeholder="[Sun Apr 14 10:17:09 2024] Channel Nag(30) members:&#10;[Sun Apr 14 10:17:09 2024] Meldrath, Fridge, Geom, ..."
               rows={5}
-              style={{ width: '100%', maxWidth: '600px', padding: '0.5rem', marginBottom: '0.35rem', fontFamily: 'monospace' }}
             />
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.35rem' }}>
-              <label>DKP per attendee:</label>
+            <div className="officer-field-row">
+              <span className="officer-inline-label">DKP per attendee</span>
               <input
+                className="officer-dkp-input"
                 type="number"
                 min={0}
                 step={0.5}
                 value={ticDkpValue}
                 onChange={(e) => setTicDkpValue(e.target.value)}
-                style={{ width: '4rem', padding: '0.25rem' }}
               />
-              <button type="button" onClick={handleAddTic} disabled={mutating || !ticPaste.trim()}>
+              <button type="button" className="btn" onClick={handleAddTic} disabled={mutating || !ticPaste.trim()}>
                 {mutating ? 'Adding…' : 'Add tic'}
               </button>
             </div>
             {ticResult && (
-              <div style={{ marginTop: 0, padding: '0.75rem', backgroundColor: 'rgba(0,0,0,0.25)', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.08)' }}>
+              <div className="officer-result">
                 {ticResult.noTicAdded ? (
-                  <p style={{ color: '#f59e0b', marginTop: 0, marginBottom: '0.5rem' }}><strong>No tic added.</strong> No names matched the DKP list, so no attendees were credited.</p>
+                  <p className="officer-result-banner officer-result-banner--warn"><strong>No tic added.</strong> No names matched the DKP list, so no attendees were credited.</p>
                 ) : (
-                  <p style={{ color: '#22c55e', marginTop: 0, marginBottom: '0.5rem' }}><strong>Result:</strong> Tic added. Credited <strong>{ticResult.matched}</strong> attendee(s). Names shown as account (character).</p>
+                  <p className="officer-result-banner officer-result-banner--ok">Tic added. Credited <strong>{ticResult.matched}</strong> attendee(s). Names shown as account (character).</p>
                 )}
-                {ticResult.matchedDisplay?.length > 0 && (
-                  <p style={{ color: '#22c55e', marginBottom: '0.25rem', fontSize: '0.9rem' }}><strong>Credited:</strong> {ticResult.matchedDisplay.join(', ')}</p>
-                )}
-                {ticResult.unmatched?.length > 0 && (
-                  <p style={{ color: '#f59e0b', marginBottom: '0.25rem' }}><strong>Unmatched</strong> (not on DKP list—no credit): {ticResult.unmatched.join(', ')}</p>
-                )}
-                {ticResult.duplicatesDisplay?.length > 0 && (
-                  <p style={{ color: '#a78bfa', marginBottom: '0.25rem' }}><strong>Duplicates</strong> (in paste again—not double-counted): {ticResult.duplicatesDisplay.join(', ')}</p>
-                )}
-                {ticResult.sameAccountDisplay?.length > 0 && (
-                  <p style={{ color: '#a78bfa', marginBottom: '0.25rem' }}><strong>Same account</strong> (other toon already credited this tic): {ticResult.sameAccountDisplay.join(', ')}</p>
-                )}
-                {ticResult.missingFromThisTicDisplay?.length > 0 && (
-                  <p style={{ color: '#f97316', marginBottom: '0.25rem' }}><strong>Missing from this tic</strong> (were in earlier tics this raid): {ticResult.missingFromThisTicDisplay.join(', ')}</p>
-                )}
-                {ticResult.newThisTicDisplay?.length > 0 && (
-                  <p style={{ color: '#71717a', fontSize: '0.9rem', marginBottom: 0 }}><strong>New this tic</strong> (first time this raid): {ticResult.newThisTicDisplay.join(', ')}</p>
-                )}
+                <ResultNames label="Credited" names={ticResult.matchedDisplay} tone="ok" />
+                <ResultNames label="Unmatched (not on DKP list)" names={ticResult.unmatched} tone="warn" />
+                <ResultNames label="Duplicates (not double-counted)" names={ticResult.duplicatesDisplay} tone="accent" />
+                <ResultNames label="Same account (other toon already credited)" names={ticResult.sameAccountDisplay} tone="accent" />
+                <ResultNames label="Missing from this tic" names={ticResult.missingFromThisTicDisplay} tone="alert" />
+                <ResultNames label="New this tic" names={ticResult.newThisTicDisplay} tone="muted" />
               </div>
+            )}
+            {events.length > 0 && (
+              <>
+                <hr className="officer-divider" />
+                <h3 style={{ marginTop: 0 }}>Add one character</h3>
+                <p className="officer-hint">
+                  Someone missed the paste. DKP goes to that character&apos;s linked account.
+                </p>
+                <div className="officer-loot-fields">
+                  <select
+                    value={addToTicEventId}
+                    onChange={(e) => { setAddToTicEventId(e.target.value); setAddToTicResult(null) }}
+                    aria-label="Select DKP tic to add character to"
+                  >
+                    {events.map((e) => (
+                      <option key={e.event_id} value={e.event_id}>
+                        #{e.event_order} {e.event_name} ({e.dkp_value} DKP)
+                      </option>
+                    ))}
+                  </select>
+                  <div className="officer-suggest-wrap">
+                    <input
+                      type="text"
+                      value={addToTicCharQuery}
+                      onChange={(e) => { setAddToTicCharQuery(e.target.value); setAddToTicResult(null) }}
+                      onFocus={() => setShowCharDropdown(true)}
+                      onBlur={() => setTimeout(() => setShowCharDropdown(false), 200)}
+                      placeholder="Character name (type to filter)"
+                      autoComplete="off"
+                      aria-expanded={showAddToTicDropdown}
+                      aria-haspopup="listbox"
+                      aria-controls="add-to-tic-char-list"
+                    />
+                    {showAddToTicDropdown && (
+                      <ul id="add-to-tic-char-list" className="card officer-suggest" role="listbox" onMouseDown={(e) => e.preventDefault()}>
+                        {filteredCharacterNames.length === 0 ? (
+                          <li style={{ color: '#71717a', cursor: 'default' }}>
+                            {characterNamesList.length === 0 ? 'Loading characters…' : 'Type to filter'}
+                          </li>
+                        ) : (
+                          filteredCharacterNames.map((n) => (
+                            <li
+                              key={n}
+                              role="option"
+                              onMouseDown={(e) => {
+                                e.preventDefault()
+                                e.stopPropagation()
+                                setAddToTicCharQuery(n)
+                                setTimeout(() => setShowCharDropdown(false), 0)
+                              }}
+                            >
+                              {n}
+                            </li>
+                          ))
+                        )}
+                      </ul>
+                    )}
+                  </div>
+                  <button type="button" className="btn" onClick={handleAddAttendeeToTic} disabled={mutating || !addToTicCharQuery.trim()}>
+                    Add to tic
+                  </button>
+                </div>
+                {addToTicResult && (
+                  <p className="officer-success" style={{ marginBottom: 0 }}>Added {addToTicResult} to tic.</p>
+                )}
+              </>
             )}
           </section>
 
-          {/* Add single attendee to a tic */}
-          {events.length > 0 && (
-            <section className="card" style={{ marginBottom: '1.5rem' }}>
-              <h2 style={{ marginTop: 0 }}>Add attendee to tic</h2>
-              <p style={{ color: '#71717a', fontSize: '0.9rem' }}>
-                Pick a tic and a character to add them to that tic (e.g. someone missed the paste). DKP is credited to the character&apos;s <strong>linked account</strong> (account migration), so the balance shown on account pages is correct.
-              </p>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', alignItems: 'flex-start' }}>
-                <select
-                  value={addToTicEventId}
-                  onChange={(e) => { setAddToTicEventId(e.target.value); setAddToTicResult(null) }}
-                  style={{
-                    padding: '0.5rem 0.6rem',
-                    fontSize: '1rem',
-                    minWidth: '200px',
-                    minHeight: '48px',
-                    touchAction: 'manipulation',
-                    WebkitAppearance: 'menulist',
-                  }}
-                  aria-label="Select DKP tic to add character to"
-                >
-                  {events.map((e) => (
-                    <option key={e.event_id} value={e.event_id}>
-                      #{e.event_order} {e.event_name} ({e.dkp_value} DKP)
-                    </option>
-                  ))}
-                </select>
-                <div style={{ position: 'relative', minWidth: '200px' }}>
-                  <input
-                    type="text"
-                    value={addToTicCharQuery}
-                    onChange={(e) => { setAddToTicCharQuery(e.target.value); setAddToTicResult(null) }}
-                    onFocus={() => setShowCharDropdown(true)}
-                    onBlur={() => setTimeout(() => setShowCharDropdown(false), 200)}
-                    placeholder="Character name (type to filter)"
-                    style={{ padding: '0.5rem 0.6rem', fontSize: '1rem', width: '100%', minWidth: '180px', boxSizing: 'border-box' }}
-                    autoComplete="off"
-                    aria-expanded={showAddToTicDropdown}
-                    aria-haspopup="listbox"
-                    aria-controls="add-to-tic-char-list"
-                  />
-                  {showAddToTicDropdown && (
-                    <ul
-                      id="add-to-tic-char-list"
-                      className="card"
-                      role="listbox"
-                      style={{
-                        position: 'absolute',
-                        top: '100%',
-                        left: 0,
-                        right: 0,
-                        margin: 0,
-                        marginTop: '2px',
-                        padding: '0.25rem 0',
-                        maxHeight: '240px',
-                        overflowY: 'auto',
-                        listStyle: 'none',
-                        zIndex: 10,
-                      }}
-                      onMouseDown={(e) => e.preventDefault()}
-                    >
-                      {filteredCharacterNames.length === 0 ? (
-                        <li style={{ padding: '0.4rem 0.6rem', color: '#71717a' }}>
-                          {characterNamesList.length === 0 ? 'Loading characters…' : 'Type to filter'}
-                        </li>
-                      ) : (
-                        filteredCharacterNames.map((n) => (
-                          <li
-                            key={n}
-                            role="option"
-                            style={{ padding: '0.4rem 0.6rem', cursor: 'pointer' }}
-                            onMouseDown={(e) => {
-                              e.preventDefault()
-                              e.stopPropagation()
-                              setAddToTicCharQuery(n)
-                              setTimeout(() => setShowCharDropdown(false), 0)
-                            }}
-                          >
-                            {n}
-                          </li>
-                        ))
-                      )}
-                    </ul>
-                  )}
-                </div>
-                <button type="button" className="btn" onClick={handleAddAttendeeToTic} disabled={mutating || !addToTicCharQuery.trim()}>
-                  Add to tic
-                </button>
-              </div>
-              {addToTicResult && (
-                <p style={{ color: '#22c55e', marginTop: '0.5rem', marginBottom: 0 }}>Added {addToTicResult} to tic.</p>
-              )}
-            </section>
-          )}
-
           {/* Add loot */}
-          <section className="card" style={{ marginBottom: '1.5rem' }}>
+          <section className="card">
             <h2 style={{ marginTop: 0 }}>Add loot</h2>
-            <p style={{ color: '#71717a', fontSize: '0.9rem' }}>Manual: pick item (type to filter or enter a new item name), character (must be on DKP list), cost. Or paste log lines below.</p>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', alignItems: 'flex-start', marginBottom: '0.5rem' }}>
-              <div style={{ position: 'relative', flex: '1 1 320px', minWidth: '280px', maxWidth: '500px' }}>
+            <p className="officer-hint">Pick an item, a character on the DKP list, and a cost.</p>
+            <div className="officer-loot-fields">
+              <div className="officer-suggest-wrap">
                 <input
                   type="text"
                   value={lootItemQuery}
@@ -1436,7 +1465,6 @@ export default function Officer({ isOfficer }) {
                   onBlur={() => setTimeout(() => setShowLootDropdown(false), 150)}
                   placeholder="Item name (filter list or type new)"
                   list="loot-item-list"
-                  style={{ width: '100%', padding: '0.5rem 0.6rem', fontSize: '1rem', boxSizing: 'border-box' }}
                 />
                 <datalist id="loot-item-list">
                   {filteredItemNames.map((n) => (
@@ -1444,26 +1472,10 @@ export default function Officer({ isOfficer }) {
                   ))}
                 </datalist>
                 {showLootDropdown && filteredItemNames.length > 0 && (
-                  <ul
-                    className="card"
-                    style={{
-                      position: 'absolute',
-                      top: '100%',
-                      left: 0,
-                      right: 0,
-                      margin: 0,
-                      marginTop: '2px',
-                      padding: '0.25rem 0',
-                      maxHeight: '280px',
-                      overflowY: 'auto',
-                      listStyle: 'none',
-                      zIndex: 10,
-                    }}
-                  >
+                  <ul className="card officer-suggest" style={{ maxHeight: '280px' }}>
                     {filteredItemNames.map((n) => (
                       <li
                         key={n}
-                        style={{ padding: '0.4rem 0.6rem', cursor: 'pointer' }}
                         onMouseDown={(e) => { e.preventDefault(); setLootItemQuery(n); setShowLootDropdown(false) }}
                       >
                         {n}
@@ -1472,7 +1484,7 @@ export default function Officer({ isOfficer }) {
                   </ul>
                 )}
               </div>
-              <div style={{ position: 'relative', minWidth: '200px' }}>
+              <div className="officer-suggest-wrap">
                 <input
                   type="text"
                   value={lootCharName}
@@ -1480,32 +1492,14 @@ export default function Officer({ isOfficer }) {
                   onFocus={() => setShowLootCharDropdown(true)}
                   onBlur={() => setTimeout(() => setShowLootCharDropdown(false), 200)}
                   placeholder="Character name (type to filter)"
-                  style={{ padding: '0.5rem 0.6rem', fontSize: '1rem', width: '100%', minWidth: '180px', boxSizing: 'border-box' }}
                   autoComplete="off"
                   aria-expanded={showLootCharDropdownList}
                   aria-haspopup="listbox"
                 />
                 {showLootCharDropdownList && (
-                  <ul
-                    className="card"
-                    role="listbox"
-                    style={{
-                      position: 'absolute',
-                      top: '100%',
-                      left: 0,
-                      right: 0,
-                      margin: 0,
-                      marginTop: '2px',
-                      padding: '0.25rem 0',
-                      maxHeight: '240px',
-                      overflowY: 'auto',
-                      listStyle: 'none',
-                      zIndex: 10,
-                    }}
-                    onMouseDown={(e) => e.preventDefault()}
-                  >
+                  <ul className="card officer-suggest" role="listbox" onMouseDown={(e) => e.preventDefault()}>
                     {filteredLootCharacterNames.length === 0 ? (
-                      <li style={{ padding: '0.4rem 0.6rem', color: '#71717a' }}>
+                      <li style={{ color: '#71717a', cursor: 'default' }}>
                         {characterNamesList.length === 0 ? 'Loading characters…' : 'Type to filter'}
                       </li>
                     ) : (
@@ -1513,7 +1507,6 @@ export default function Officer({ isOfficer }) {
                         <li
                           key={n}
                           role="option"
-                          style={{ padding: '0.4rem 0.6rem', cursor: 'pointer' }}
                           onMouseDown={(e) => {
                             e.preventDefault()
                             e.stopPropagation()
@@ -1528,57 +1521,59 @@ export default function Officer({ isOfficer }) {
                   </ul>
                 )}
               </div>
-              <input
-                type="number"
-                min={0}
-                value={lootCost}
-                onChange={(e) => setLootCost(e.target.value)}
-                placeholder="Cost"
-                style={{ width: '5rem', padding: '0.5rem 0.6rem', fontSize: '1rem' }}
-              />
-              <button type="button" className="btn" onClick={handleAddLootManual} disabled={mutating || !lootItemQuery.trim()}>
-                Add
-              </button>
+              <div className="officer-loot-actions">
+                <input
+                  className="officer-cost"
+                  type="number"
+                  min={0}
+                  value={lootCost}
+                  onChange={(e) => setLootCost(e.target.value)}
+                  placeholder="Cost"
+                  aria-label="Loot cost"
+                />
+                <button type="button" className="btn" onClick={handleAddLootManual} disabled={mutating || !lootItemQuery.trim()}>
+                  Add
+                </button>
+              </div>
             </div>
-            <p style={{ color: '#71717a', fontSize: '0.85rem', marginTop: '0.25rem' }}>Or paste loot log lines. Lines are matched by: character name (on DKP list), item name (in DKP loot or dkp_mob_loot.json), and optional &apos;N DKP&apos;. All 3 matched → added; 1 or 2 matched → shows what&apos;s missing.</p>
+            <hr className="officer-divider" />
+            <p className="officer-hint">Or paste loot log lines. A line is added when the character, item, and optional &quot;N DKP&quot; all match.</p>
             <textarea
+              className="officer-paste"
               value={lootLogPaste}
               onChange={(e) => setLootLogPaste(e.target.value)}
               placeholder="[Mon Feb 09 21:35:20 2026] Icbm says out of character, 'Earring of Eradication grats Barndog, 4 DKP!!!'"
               rows={3}
-              style={{ width: '100%', maxWidth: '600px', padding: '0.5rem', marginTop: '0.25rem', fontFamily: 'monospace' }}
             />
-            <button type="button" onClick={handleAddLootFromLog} disabled={mutating || !lootLogPaste.trim()} style={{ marginTop: '0.25rem' }}>
+            <button type="button" className="btn" onClick={handleAddLootFromLog} disabled={mutating || !lootLogPaste.trim()} style={{ marginTop: '0.5rem' }}>
               Add from log
             </button>
             {lootResult && (
-              <div style={{ marginTop: '0.5rem' }}>
-                <p style={{ color: '#22c55e', marginBottom: lootResult.insertedItems?.length ? '0.25rem' : 0 }}>
+              <div className="officer-result">
+                <p className="officer-result-banner officer-result-banner--ok">
                   {lootResult.fromLog
                     ? `Added ${lootResult.inserted}/${lootResult.total} loot entries.`
                     : `Added: ${lootResult.itemName} → ${lootResult.characterName} (${lootResult.cost} DKP).`}
                 </p>
                 {lootResult.insertedItems?.length > 0 && (
-                  <p style={{ color: '#22c55e', fontSize: '0.9rem', marginTop: 0 }}>
-                    {lootResult.insertedItems.map((entry, i) => `${entry.i} → ${entry.c} (${entry.cost} DKP)`).join('; ')}
-                  </p>
+                  <div className="officer-result-names">
+                    {lootResult.insertedItems.map((entry, i) => (
+                      <span key={`${i}-${entry.i}`} className="officer-result-name">{entry.i} → {entry.c} ({entry.cost} DKP)</span>
+                    ))}
+                  </div>
                 )}
                 {lootResult.unlinkedAccountWarning && (
-                  <p style={{ color: '#fbbf24', fontSize: '0.9rem', marginTop: '0.35rem', marginBottom: 0 }} role="status">
+                  <p className="officer-warn" style={{ marginTop: '0.35rem', marginBottom: 0 }} role="status">
                     {lootResult.unlinkedAccountWarning}
                   </p>
                 )}
               </div>
             )}
-            {error && (
-              <div className="error" role="alert" style={{ marginTop: '0.5rem', padding: '0.5rem 0.75rem', backgroundColor: 'rgba(248,113,113,0.15)', borderRadius: '4px', border: '1px solid #f87171' }}>
-                <strong>What went wrong:</strong> {error}
-              </div>
-            )}
           </section>
+          </div>
 
-          {/* Raid edit view (like RaidDetail with inline edit) */}
-          <section ref={raidEditSectionRef} className="card" style={{ marginBottom: '1.5rem' }}>
+          <div className="officer-col">
+          <section ref={raidEditSectionRef} className="card">
             <h2 style={{ marginTop: 0 }}>Raid: {raid.raid_name}</h2>
             <p style={{ color: '#a1a1aa', marginBottom: '1rem' }}>
               {raid.date_iso || raid.date}
@@ -1588,9 +1583,10 @@ export default function Officer({ isOfficer }) {
             </p>
 
             <h3 style={{ marginTop: '1rem' }}>DKP by event</h3>
-            <p style={{ color: '#71717a', fontSize: '0.9rem', marginTop: '-0.25rem 0 0.5rem 0' }}>
+            <p className="officer-hint">
               Total: <strong>{events.reduce((sum, e) => sum + parseFloat(e.dkp_value || 0), 0).toFixed(1)}</strong> DKP
             </p>
+            <div className="officer-table-scroll">
             <table>
               <thead>
                 <tr><th style={{ width: '2rem' }}></th><th>#</th><th>Event</th><th>DKP</th><th>Time</th><th>Attendees</th><th style={{ width: '5rem' }}></th></tr>
@@ -1678,8 +1674,10 @@ export default function Officer({ isOfficer }) {
                 })}
               </tbody>
             </table>
+            </div>
 
             <h3 style={{ marginTop: '1.25rem' }}>Loot</h3>
+            <div className="officer-table-scroll">
             <table>
               <thead>
                 <tr>
@@ -1780,6 +1778,7 @@ export default function Officer({ isOfficer }) {
                 ))}
               </tbody>
             </table>
+            </div>
 
             <h3 style={{ marginTop: '1.25rem' }}>Attendees</h3>
             <div className="attendee-list">
@@ -1793,27 +1792,29 @@ export default function Officer({ isOfficer }) {
                 <span style={{ color: '#71717a' }}>None (add a DKP tic to record attendance)</span>
               )}
             </div>
-          </section>
 
-          {/* Delete raid */}
-          <section className="card" style={{ marginBottom: '1.5rem', borderColor: '#7f1d1d' }}>
-            <h2 style={{ marginTop: 0, color: '#f87171' }}>Delete this raid</h2>
-            <p style={{ color: '#71717a', fontSize: '0.9rem' }}>
-              Permanently deletes this raid and all its attendance, events, and loot. Type <strong>DELETE</strong> to confirm.
-            </p>
-            <input
-              type="text"
-              value={deleteConfirm}
-              onChange={(e) => setDeleteConfirm(e.target.value)}
-              placeholder="Type DELETE"
-              style={{ padding: '0.35rem', width: '12rem', marginRight: '0.5rem' }}
-            />
-            <button type="button" onClick={handleDeleteRaid} disabled={mutating || deleteConfirm !== 'DELETE'} style={{ background: '#7f1d1d', color: '#fff' }}>
-              Delete raid
-            </button>
-            {deleteError && <p className="error" style={{ marginTop: '0.5rem' }}>{deleteError}</p>}
+            <details className="officer-delete">
+              <summary>Delete this raid</summary>
+              <p className="officer-hint">
+                Permanently deletes this raid and all its attendance, events, and loot. Type <strong>DELETE</strong> to confirm.
+              </p>
+              <div className="officer-field-row">
+                <input
+                  type="text"
+                  value={deleteConfirm}
+                  onChange={(e) => setDeleteConfirm(e.target.value)}
+                  placeholder="Type DELETE"
+                  style={{ maxWidth: '12rem' }}
+                />
+                <button type="button" className="btn officer-btn-danger" onClick={handleDeleteRaid} disabled={mutating || deleteConfirm !== 'DELETE'}>
+                  Delete raid
+                </button>
+              </div>
+              {deleteError && <p className="error" style={{ marginTop: '0.5rem' }}>{deleteError}</p>}
+            </details>
           </section>
-        </>
+          </div>
+        </div>
       )}
 
       {loading && raids.length === 0 && <p>Loading…</p>}
