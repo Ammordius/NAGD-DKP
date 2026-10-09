@@ -250,12 +250,11 @@ BEGIN
       SELECT
         (CASE WHEN COALESCE(trim(rea.char_id::text), '') = '' THEN COALESCE(trim(rea.character_name), 'unknown') ELSE trim(rea.char_id::text) END) AS character_key,
         MAX(COALESCE(trim(rea.character_name), rea.char_id::text, 'unknown')) AS character_name,
-        SUM(COALESCE((re.dkp_value::numeric), 0)) AS earned,
-        (SUM(CASE WHEN raid_date_parsed(r.date_iso) >= (current_date - 30) THEN COALESCE((re.dkp_value::numeric), 0) ELSE 0 END))::INTEGER AS earned_30d,
-        (SUM(CASE WHEN raid_date_parsed(r.date_iso) >= (current_date - 60) THEN COALESCE((re.dkp_value::numeric), 0) ELSE 0 END))::INTEGER AS earned_60d,
+        SUM(public.dkp_one_tic_value(rea.raid_id, rea.event_id)) AS earned,
+        (SUM(CASE WHEN raid_date_parsed(r.date_iso) >= (current_date - 30) THEN public.dkp_one_tic_value(rea.raid_id, rea.event_id) ELSE 0 END))::INTEGER AS earned_30d,
+        (SUM(CASE WHEN raid_date_parsed(r.date_iso) >= (current_date - 60) THEN public.dkp_one_tic_value(rea.raid_id, rea.event_id) ELSE 0 END))::INTEGER AS earned_60d,
         MAX(raid_date_parsed(r.date_iso)) AS last_activity_date
       FROM raid_event_attendance rea
-      LEFT JOIN raid_events re ON re.raid_id = rea.raid_id AND re.event_id = rea.event_id
       LEFT JOIN raids r ON r.raid_id = rea.raid_id
       GROUP BY (CASE WHEN COALESCE(trim(rea.char_id::text), '') = '' THEN COALESCE(trim(rea.character_name), 'unknown') ELSE trim(rea.char_id::text) END)
     ) e;
@@ -627,6 +626,25 @@ BEGIN
 END;
 $$;
 
+-- Attendance is stored once per (raid_id, event_id). Each raid_events row under that
+-- event_id is its own tic (On-time and DKP tic both count). Identical rows, same
+-- order and name, still count once. An account receives the sum once.
+CREATE OR REPLACE FUNCTION public.dkp_one_tic_value(p_raid_id text, p_event_id text)
+RETURNS numeric
+LANGUAGE sql
+STABLE
+SET search_path = public
+AS $$
+  SELECT COALESCE(SUM(tic.dkp), 0)
+  FROM (
+    SELECT DISTINCT ON (re.event_order, lower(trim(re.event_name)))
+      COALESCE(NULLIF(trim(re.dkp_value), '')::numeric, 0) AS dkp
+    FROM raid_events re
+    WHERE re.raid_id = p_raid_id AND re.event_id = p_event_id
+    ORDER BY re.event_order, lower(trim(re.event_name)), re.id
+  ) tic
+$$;
+
 -- Refresh raid_dkp_totals, raid_attendance_dkp, and raid_attendance_dkp_by_account for one raid (used by triggers and by backfill).
 CREATE OR REPLACE FUNCTION public.refresh_raid_attendance_totals(p_raid_id TEXT)
 RETURNS void
@@ -652,26 +670,28 @@ BEGIN
     SELECT rea.raid_id,
            (CASE WHEN COALESCE(trim(rea.char_id::text), '') = '' THEN COALESCE(trim(rea.character_name), 'unknown') ELSE trim(rea.char_id::text) END),
            MAX(COALESCE(trim(rea.character_name), rea.char_id::text, 'unknown')),
-           SUM(COALESCE((re.dkp_value::numeric), 0))
+           SUM(public.dkp_one_tic_value(rea.raid_id, rea.event_id))
     FROM raid_event_attendance rea
-    LEFT JOIN raid_events re ON re.raid_id = rea.raid_id AND re.event_id = rea.event_id
     WHERE rea.raid_id = p_raid_id
     GROUP BY rea.raid_id, (CASE WHEN COALESCE(trim(rea.char_id::text), '') = '' THEN COALESCE(trim(rea.character_name), 'unknown') ELSE trim(rea.char_id::text) END);
 
+    -- One credit per account per tic, even when several characters on the account have the row.
     INSERT INTO raid_attendance_dkp_by_account (raid_id, account_id, dkp_earned)
-    SELECT rea.raid_id, COALESCE(rea.account_id, x.aid), SUM(COALESCE((re.dkp_value::numeric), 0))
-    FROM raid_event_attendance rea
-    LEFT JOIN raid_events re ON re.raid_id = rea.raid_id AND re.event_id = rea.event_id
-    LEFT JOIN LATERAL (
-      SELECT ca.account_id FROM character_account ca
-      WHERE (rea.char_id IS NOT NULL AND trim(rea.char_id::text) <> '' AND ca.char_id = trim(rea.char_id::text))
-         OR (rea.character_name IS NOT NULL AND trim(rea.character_name) <> '' AND EXISTS (
-           SELECT 1 FROM characters c WHERE c.char_id = ca.char_id AND trim(c.name) = trim(rea.character_name)
-         ))
-      LIMIT 1
-    ) x(aid) ON true
-    WHERE rea.raid_id = p_raid_id AND (rea.account_id IS NOT NULL OR x.aid IS NOT NULL)
-    GROUP BY rea.raid_id, COALESCE(rea.account_id, x.aid);
+    SELECT t.raid_id, t.account_id, SUM(public.dkp_one_tic_value(t.raid_id, t.event_id))
+    FROM (
+      SELECT DISTINCT rea.raid_id, rea.event_id, COALESCE(rea.account_id, x.aid) AS account_id
+      FROM raid_event_attendance rea
+      LEFT JOIN LATERAL (
+        SELECT ca.account_id FROM character_account ca
+        WHERE (rea.char_id IS NOT NULL AND trim(rea.char_id::text) <> '' AND ca.char_id = trim(rea.char_id::text))
+           OR (rea.character_name IS NOT NULL AND trim(rea.character_name) <> '' AND EXISTS (
+             SELECT 1 FROM characters c WHERE c.char_id = ca.char_id AND trim(c.name) = trim(rea.character_name)
+           ))
+        LIMIT 1
+      ) x(aid) ON true
+      WHERE rea.raid_id = p_raid_id AND (rea.account_id IS NOT NULL OR x.aid IS NOT NULL)
+    ) t
+    GROUP BY t.raid_id, t.account_id;
   ELSE
     INSERT INTO raid_attendance_dkp (raid_id, character_key, character_name, dkp_earned)
     SELECT ra.raid_id,
@@ -714,26 +734,27 @@ BEGIN
     SELECT rea.raid_id,
            (CASE WHEN COALESCE(trim(rea.char_id::text), '') = '' THEN COALESCE(trim(rea.character_name), 'unknown') ELSE trim(rea.char_id::text) END),
            MAX(COALESCE(trim(rea.character_name), rea.char_id::text, 'unknown')),
-           SUM(COALESCE((re.dkp_value::numeric), 0))
+           SUM(public.dkp_one_tic_value(rea.raid_id, rea.event_id))
     FROM raid_event_attendance rea
-    LEFT JOIN raid_events re ON re.raid_id = rea.raid_id AND re.event_id = rea.event_id
     GROUP BY rea.raid_id, (CASE WHEN COALESCE(trim(rea.char_id::text), '') = '' THEN COALESCE(trim(rea.character_name), 'unknown') ELSE trim(rea.char_id::text) END);
 
-    -- 4a) raid_attendance_dkp_by_account (all raids in one statement)
+    -- 4a) raid_attendance_dkp_by_account: one credit per account per tic.
     INSERT INTO raid_attendance_dkp_by_account (raid_id, account_id, dkp_earned)
-    SELECT rea.raid_id, COALESCE(rea.account_id, x.aid), SUM(COALESCE((re.dkp_value::numeric), 0))
-    FROM raid_event_attendance rea
-    LEFT JOIN raid_events re ON re.raid_id = rea.raid_id AND re.event_id = rea.event_id
-    LEFT JOIN LATERAL (
-      SELECT ca.account_id FROM character_account ca
-      WHERE (rea.char_id IS NOT NULL AND trim(rea.char_id::text) <> '' AND ca.char_id = trim(rea.char_id::text))
-         OR (rea.character_name IS NOT NULL AND trim(rea.character_name) <> '' AND EXISTS (
-           SELECT 1 FROM characters c WHERE c.char_id = ca.char_id AND trim(c.name) = trim(rea.character_name)
-         ))
-      LIMIT 1
-    ) x(aid) ON true
-    WHERE rea.account_id IS NOT NULL OR x.aid IS NOT NULL
-    GROUP BY rea.raid_id, COALESCE(rea.account_id, x.aid);
+    SELECT t.raid_id, t.account_id, SUM(public.dkp_one_tic_value(t.raid_id, t.event_id))
+    FROM (
+      SELECT DISTINCT rea.raid_id, rea.event_id, COALESCE(rea.account_id, x.aid) AS account_id
+      FROM raid_event_attendance rea
+      LEFT JOIN LATERAL (
+        SELECT ca.account_id FROM character_account ca
+        WHERE (rea.char_id IS NOT NULL AND trim(rea.char_id::text) <> '' AND ca.char_id = trim(rea.char_id::text))
+           OR (rea.character_name IS NOT NULL AND trim(rea.character_name) <> '' AND EXISTS (
+             SELECT 1 FROM characters c WHERE c.char_id = ca.char_id AND trim(c.name) = trim(rea.character_name)
+           ))
+        LIMIT 1
+      ) x(aid) ON true
+      WHERE rea.account_id IS NOT NULL OR x.aid IS NOT NULL
+    ) t
+    GROUP BY t.raid_id, t.account_id;
   ELSE
     -- 3b) raid_attendance_dkp from raid-level attendance (all raids in one statement)
     INSERT INTO raid_attendance_dkp (raid_id, character_key, character_name, dkp_earned)
@@ -1018,19 +1039,23 @@ BEGIN
     character_name = COALESCE(EXCLUDED.character_name, dkp_summary.character_name),
     updated_at = now();
 
+  -- account_earned is the once-per-tic share. When callers omit it, earned is the account credit.
   INSERT INTO account_dkp_summary (account_id, display_name, earned, spent, earned_30d, earned_60d, updated_at)
   SELECT d.account_id,
          MAX(a.display_name),
-         SUM(d.earned),
+         SUM(COALESCE(d.account_earned, d.earned)),
          0,
-         SUM(d.earned_30d)::integer,
-         SUM(d.earned_60d)::integer,
+         SUM(COALESCE(d.account_earned_30d, d.earned_30d))::integer,
+         SUM(COALESCE(d.account_earned_60d, d.earned_60d))::integer,
          now()
   FROM (
     SELECT NULLIF(trim(x->>'account_id'), '') AS account_id,
            COALESCE((x->>'earned')::numeric, 0) AS earned,
            COALESCE((x->>'earned_30d')::numeric, 0) AS earned_30d,
-           COALESCE((x->>'earned_60d')::numeric, 0) AS earned_60d
+           COALESCE((x->>'earned_60d')::numeric, 0) AS earned_60d,
+           CASE WHEN x ? 'account_earned' THEN COALESCE((x->>'account_earned')::numeric, 0) END AS account_earned,
+           CASE WHEN x ? 'account_earned_30d' THEN COALESCE((x->>'account_earned_30d')::numeric, 0) END AS account_earned_30d,
+           CASE WHEN x ? 'account_earned_60d' THEN COALESCE((x->>'account_earned_60d')::numeric, 0) END AS account_earned_60d
     FROM jsonb_array_elements(p_rows) AS x
   ) d
   JOIN accounts a ON a.account_id = d.account_id
@@ -1391,7 +1416,8 @@ BEGIN
 END;
 $$;
 
--- Attendance rows credited by these events. p_sign is 1 when the event value is added, -1 when it is removed.
+-- Attendance rows credited by these events. Character earned is per character.
+-- Account earned counts each tic once, on one character row for that account.
 CREATE OR REPLACE FUNCTION public.dkp_earned_rows_for_events(p_events jsonb)
 RETURNS jsonb
 LANGUAGE sql
@@ -1405,24 +1431,49 @@ AS $$
     'account_id', g.account_id,
     'earned', g.earned,
     'earned_30d', g.earned_30d,
-    'earned_60d', g.earned_60d
+    'earned_60d', g.earned_60d,
+    'account_earned', g.account_earned,
+    'account_earned_30d', g.account_earned_30d,
+    'account_earned_60d', g.account_earned_60d
   )), '[]'::jsonb)
   FROM (
-    SELECT public.dkp_character_key(rea.char_id::text, rea.character_name) AS character_key,
-           MAX(COALESCE(NULLIF(trim(rea.character_name), ''), rea.char_id::text, 'unknown')) AS character_name,
-           public.resolve_dkp_account_id(rea.account_id, rea.char_id::text, rea.character_name) AS account_id,
-           SUM(ev.dkp) AS earned,
-           SUM(CASE WHEN ev.raid_date >= (current_date - 30) THEN ev.dkp ELSE 0 END)::integer AS earned_30d,
-           SUM(CASE WHEN ev.raid_date >= (current_date - 60) THEN ev.dkp ELSE 0 END)::integer AS earned_60d
+    SELECT rows.character_key,
+           MAX(rows.character_name) AS character_name,
+           rows.account_id,
+           SUM(rows.dkp) AS earned,
+           SUM(CASE WHEN rows.raid_date >= (current_date - 30) THEN rows.dkp ELSE 0 END)::integer AS earned_30d,
+           SUM(CASE WHEN rows.raid_date >= (current_date - 60) THEN rows.dkp ELSE 0 END)::integer AS earned_60d,
+           SUM(CASE WHEN rows.is_account_credit THEN rows.dkp ELSE 0 END) AS account_earned,
+           SUM(CASE WHEN rows.is_account_credit AND rows.raid_date >= (current_date - 30) THEN rows.dkp ELSE 0 END)::integer AS account_earned_30d,
+           SUM(CASE WHEN rows.is_account_credit AND rows.raid_date >= (current_date - 60) THEN rows.dkp ELSE 0 END)::integer AS account_earned_60d
     FROM (
-      SELECT x->>'raid_id' AS raid_id,
-             x->>'event_id' AS event_id,
-             COALESCE((x->>'dkp')::numeric, 0) AS dkp,
-             NULLIF(x->>'raid_date', '')::date AS raid_date
-      FROM jsonb_array_elements(COALESCE(p_events, '[]'::jsonb)) AS x
-    ) ev
-    JOIN raid_event_attendance rea ON rea.raid_id = ev.raid_id AND rea.event_id = ev.event_id
-    GROUP BY 1, 3
+      SELECT tic.character_key,
+             tic.character_name,
+             tic.account_id,
+             tic.dkp,
+             tic.raid_date,
+             (tic.account_id IS NOT NULL AND tic.rn = 1) AS is_account_credit
+      FROM (
+        SELECT public.dkp_character_key(rea.char_id::text, rea.character_name) AS character_key,
+               COALESCE(NULLIF(trim(rea.character_name), ''), rea.char_id::text, 'unknown') AS character_name,
+               public.resolve_dkp_account_id(rea.account_id, rea.char_id::text, rea.character_name) AS account_id,
+               ev.dkp,
+               ev.raid_date,
+               row_number() OVER (
+                 PARTITION BY public.resolve_dkp_account_id(rea.account_id, rea.char_id::text, rea.character_name), ev.raid_id, ev.event_id
+                 ORDER BY public.dkp_character_key(rea.char_id::text, rea.character_name), rea.id
+               ) AS rn
+        FROM (
+          SELECT x->>'raid_id' AS raid_id,
+                 x->>'event_id' AS event_id,
+                 COALESCE((x->>'dkp')::numeric, 0) AS dkp,
+                 NULLIF(x->>'raid_date', '')::date AS raid_date
+          FROM jsonb_array_elements(COALESCE(p_events, '[]'::jsonb)) AS x
+        ) ev
+        JOIN raid_event_attendance rea ON rea.raid_id = ev.raid_id AND rea.event_id = ev.event_id
+      ) tic
+    ) rows
+    GROUP BY rows.character_key, rows.account_id
   ) g
 $$;
 
@@ -1588,6 +1639,8 @@ SET search_path = public
 AS $$
 BEGIN
   IF restore_load_in_progress() THEN RETURN NULL; END IF;
+  -- Character earned is per character. Account earned is added only when this insert
+  -- is the account's first row on that tic.
   PERFORM apply_earned_deltas((
     SELECT COALESCE(jsonb_agg(jsonb_build_object(
       'character_key', g.character_key,
@@ -1595,19 +1648,56 @@ BEGIN
       'account_id', g.account_id,
       'earned', g.earned,
       'earned_30d', g.earned_30d,
-      'earned_60d', g.earned_60d
+      'earned_60d', g.earned_60d,
+      'account_earned', g.account_earned,
+      'account_earned_30d', g.account_earned_30d,
+      'account_earned_60d', g.account_earned_60d
     )), '[]'::jsonb)
     FROM (
-      SELECT public.dkp_character_key(nr.char_id::text, nr.character_name) AS character_key,
-             MAX(COALESCE(NULLIF(trim(nr.character_name), ''), nr.char_id::text, 'unknown')) AS character_name,
-             public.resolve_dkp_account_id(nr.account_id, nr.char_id::text, nr.character_name) AS account_id,
-             SUM(public.dkp_event_value(re.dkp_value)) AS earned,
-             SUM(CASE WHEN public.raid_date_parsed(r.date_iso) >= (current_date - 30) THEN public.dkp_event_value(re.dkp_value) ELSE 0 END)::integer AS earned_30d,
-             SUM(CASE WHEN public.raid_date_parsed(r.date_iso) >= (current_date - 60) THEN public.dkp_event_value(re.dkp_value) ELSE 0 END)::integer AS earned_60d
-      FROM new_rows nr
-      LEFT JOIN raid_events re ON re.raid_id = nr.raid_id AND re.event_id = nr.event_id
-      LEFT JOIN raids r ON r.raid_id = nr.raid_id
-      GROUP BY 1, 3
+      SELECT rows.character_key,
+             MAX(rows.character_name) AS character_name,
+             rows.account_id,
+             SUM(rows.dkp) AS earned,
+             SUM(CASE WHEN rows.raid_date >= (current_date - 30) THEN rows.dkp ELSE 0 END)::integer AS earned_30d,
+             SUM(CASE WHEN rows.raid_date >= (current_date - 60) THEN rows.dkp ELSE 0 END)::integer AS earned_60d,
+             SUM(CASE WHEN rows.is_account_credit THEN rows.dkp ELSE 0 END) AS account_earned,
+             SUM(CASE WHEN rows.is_account_credit AND rows.raid_date >= (current_date - 30) THEN rows.dkp ELSE 0 END)::integer AS account_earned_30d,
+             SUM(CASE WHEN rows.is_account_credit AND rows.raid_date >= (current_date - 60) THEN rows.dkp ELSE 0 END)::integer AS account_earned_60d
+      FROM (
+        SELECT tic.character_key,
+               tic.character_name,
+               tic.account_id,
+               tic.dkp,
+               tic.raid_date,
+               (
+                 tic.account_id IS NOT NULL
+                 AND tic.rn = 1
+                 AND NOT EXISTS (
+                   SELECT 1
+                   FROM raid_event_attendance existing
+                   WHERE existing.raid_id = tic.raid_id
+                     AND existing.event_id = tic.event_id
+                     AND public.resolve_dkp_account_id(existing.account_id, existing.char_id::text, existing.character_name) = tic.account_id
+                     AND existing.id NOT IN (SELECT id FROM new_rows)
+                 )
+               ) AS is_account_credit
+        FROM (
+          SELECT public.dkp_character_key(nr.char_id::text, nr.character_name) AS character_key,
+                 COALESCE(NULLIF(trim(nr.character_name), ''), nr.char_id::text, 'unknown') AS character_name,
+                 public.resolve_dkp_account_id(nr.account_id, nr.char_id::text, nr.character_name) AS account_id,
+                 nr.raid_id,
+                 nr.event_id,
+                 public.dkp_one_tic_value(nr.raid_id, nr.event_id) AS dkp,
+                 public.raid_date_parsed(r.date_iso) AS raid_date,
+                 row_number() OVER (
+                   PARTITION BY public.resolve_dkp_account_id(nr.account_id, nr.char_id::text, nr.character_name), nr.raid_id, nr.event_id
+                   ORDER BY nr.id
+                 ) AS rn
+          FROM new_rows nr
+          LEFT JOIN raids r ON r.raid_id = nr.raid_id
+        ) tic
+      ) rows
+      GROUP BY rows.character_key, rows.account_id
     ) g
   ));
   RETURN NULL;
@@ -1622,6 +1712,7 @@ SET search_path = public
 AS $$
 BEGIN
   IF restore_load_in_progress() THEN RETURN NULL; END IF;
+  -- Remove the account credit only when no character on the account still has the tic.
   PERFORM apply_earned_deltas((
     SELECT COALESCE(jsonb_agg(jsonb_build_object(
       'character_key', g.character_key,
@@ -1629,19 +1720,55 @@ BEGIN
       'account_id', g.account_id,
       'earned', g.earned,
       'earned_30d', g.earned_30d,
-      'earned_60d', g.earned_60d
+      'earned_60d', g.earned_60d,
+      'account_earned', g.account_earned,
+      'account_earned_30d', g.account_earned_30d,
+      'account_earned_60d', g.account_earned_60d
     )), '[]'::jsonb)
     FROM (
-      SELECT public.dkp_character_key(o.char_id::text, o.character_name) AS character_key,
-             MAX(COALESCE(NULLIF(trim(o.character_name), ''), o.char_id::text, 'unknown')) AS character_name,
-             public.resolve_dkp_account_id(o.account_id, o.char_id::text, o.character_name) AS account_id,
-             SUM(-public.dkp_event_value(re.dkp_value)) AS earned,
-             SUM(CASE WHEN public.raid_date_parsed(r.date_iso) >= (current_date - 30) THEN -public.dkp_event_value(re.dkp_value) ELSE 0 END)::integer AS earned_30d,
-             SUM(CASE WHEN public.raid_date_parsed(r.date_iso) >= (current_date - 60) THEN -public.dkp_event_value(re.dkp_value) ELSE 0 END)::integer AS earned_60d
-      FROM old_rows o
-      LEFT JOIN raid_events re ON re.raid_id = o.raid_id AND re.event_id = o.event_id
-      LEFT JOIN raids r ON r.raid_id = o.raid_id
-      GROUP BY 1, 3
+      SELECT rows.character_key,
+             MAX(rows.character_name) AS character_name,
+             rows.account_id,
+             SUM(-rows.dkp) AS earned,
+             SUM(CASE WHEN rows.raid_date >= (current_date - 30) THEN -rows.dkp ELSE 0 END)::integer AS earned_30d,
+             SUM(CASE WHEN rows.raid_date >= (current_date - 60) THEN -rows.dkp ELSE 0 END)::integer AS earned_60d,
+             SUM(CASE WHEN rows.is_account_credit THEN -rows.dkp ELSE 0 END) AS account_earned,
+             SUM(CASE WHEN rows.is_account_credit AND rows.raid_date >= (current_date - 30) THEN -rows.dkp ELSE 0 END)::integer AS account_earned_30d,
+             SUM(CASE WHEN rows.is_account_credit AND rows.raid_date >= (current_date - 60) THEN -rows.dkp ELSE 0 END)::integer AS account_earned_60d
+      FROM (
+        SELECT tic.character_key,
+               tic.character_name,
+               tic.account_id,
+               tic.dkp,
+               tic.raid_date,
+               (
+                 tic.account_id IS NOT NULL
+                 AND tic.rn = 1
+                 AND NOT EXISTS (
+                   SELECT 1
+                   FROM raid_event_attendance existing
+                   WHERE existing.raid_id = tic.raid_id
+                     AND existing.event_id = tic.event_id
+                     AND public.resolve_dkp_account_id(existing.account_id, existing.char_id::text, existing.character_name) = tic.account_id
+                 )
+               ) AS is_account_credit
+        FROM (
+          SELECT public.dkp_character_key(o.char_id::text, o.character_name) AS character_key,
+                 COALESCE(NULLIF(trim(o.character_name), ''), o.char_id::text, 'unknown') AS character_name,
+                 public.resolve_dkp_account_id(o.account_id, o.char_id::text, o.character_name) AS account_id,
+                 o.raid_id,
+                 o.event_id,
+                 public.dkp_one_tic_value(o.raid_id, o.event_id) AS dkp,
+                 public.raid_date_parsed(r.date_iso) AS raid_date,
+                 row_number() OVER (
+                   PARTITION BY public.resolve_dkp_account_id(o.account_id, o.char_id::text, o.character_name), o.raid_id, o.event_id
+                   ORDER BY o.id
+                 ) AS rn
+          FROM old_rows o
+          LEFT JOIN raids r ON r.raid_id = o.raid_id
+        ) tic
+      ) rows
+      GROUP BY rows.character_key, rows.account_id
     ) g
   ));
   RETURN NULL;
@@ -1656,6 +1783,7 @@ SET search_path = public
 AS $$
 BEGIN
   IF restore_load_in_progress() THEN RETURN NULL; END IF;
+  -- Old account loses the tic only when this update leaves it with no row.
   PERFORM apply_earned_deltas((
     SELECT COALESCE(jsonb_agg(jsonb_build_object(
       'character_key', g.character_key,
@@ -1663,21 +1791,58 @@ BEGIN
       'account_id', g.account_id,
       'earned', g.earned,
       'earned_30d', g.earned_30d,
-      'earned_60d', g.earned_60d
+      'earned_60d', g.earned_60d,
+      'account_earned', g.account_earned,
+      'account_earned_30d', g.account_earned_30d,
+      'account_earned_60d', g.account_earned_60d
     )), '[]'::jsonb)
     FROM (
-      SELECT public.dkp_character_key(o.char_id::text, o.character_name) AS character_key,
-             MAX(COALESCE(NULLIF(trim(o.character_name), ''), o.char_id::text, 'unknown')) AS character_name,
-             public.resolve_dkp_account_id(o.account_id, o.char_id::text, o.character_name) AS account_id,
-             SUM(-public.dkp_event_value(re.dkp_value)) AS earned,
-             SUM(CASE WHEN public.raid_date_parsed(r.date_iso) >= (current_date - 30) THEN -public.dkp_event_value(re.dkp_value) ELSE 0 END)::integer AS earned_30d,
-             SUM(CASE WHEN public.raid_date_parsed(r.date_iso) >= (current_date - 60) THEN -public.dkp_event_value(re.dkp_value) ELSE 0 END)::integer AS earned_60d
-      FROM old_rows o
-      LEFT JOIN raid_events re ON re.raid_id = o.raid_id AND re.event_id = o.event_id
-      LEFT JOIN raids r ON r.raid_id = o.raid_id
-      GROUP BY 1, 3
+      SELECT rows.character_key,
+             MAX(rows.character_name) AS character_name,
+             rows.account_id,
+             SUM(-rows.dkp) AS earned,
+             SUM(CASE WHEN rows.raid_date >= (current_date - 30) THEN -rows.dkp ELSE 0 END)::integer AS earned_30d,
+             SUM(CASE WHEN rows.raid_date >= (current_date - 60) THEN -rows.dkp ELSE 0 END)::integer AS earned_60d,
+             SUM(CASE WHEN rows.is_account_credit THEN -rows.dkp ELSE 0 END) AS account_earned,
+             SUM(CASE WHEN rows.is_account_credit AND rows.raid_date >= (current_date - 30) THEN -rows.dkp ELSE 0 END)::integer AS account_earned_30d,
+             SUM(CASE WHEN rows.is_account_credit AND rows.raid_date >= (current_date - 60) THEN -rows.dkp ELSE 0 END)::integer AS account_earned_60d
+      FROM (
+        SELECT tic.character_key,
+               tic.character_name,
+               tic.account_id,
+               tic.dkp,
+               tic.raid_date,
+               (
+                 tic.account_id IS NOT NULL
+                 AND tic.rn = 1
+                 AND NOT EXISTS (
+                   SELECT 1
+                   FROM raid_event_attendance existing
+                   WHERE existing.raid_id = tic.raid_id
+                     AND existing.event_id = tic.event_id
+                     AND public.resolve_dkp_account_id(existing.account_id, existing.char_id::text, existing.character_name) = tic.account_id
+                 )
+               ) AS is_account_credit
+        FROM (
+          SELECT public.dkp_character_key(o.char_id::text, o.character_name) AS character_key,
+                 COALESCE(NULLIF(trim(o.character_name), ''), o.char_id::text, 'unknown') AS character_name,
+                 public.resolve_dkp_account_id(o.account_id, o.char_id::text, o.character_name) AS account_id,
+                 o.raid_id,
+                 o.event_id,
+                 public.dkp_one_tic_value(o.raid_id, o.event_id) AS dkp,
+                 public.raid_date_parsed(r.date_iso) AS raid_date,
+                 row_number() OVER (
+                   PARTITION BY public.resolve_dkp_account_id(o.account_id, o.char_id::text, o.character_name), o.raid_id, o.event_id
+                   ORDER BY o.id
+                 ) AS rn
+          FROM old_rows o
+          LEFT JOIN raids r ON r.raid_id = o.raid_id
+        ) tic
+      ) rows
+      GROUP BY rows.character_key, rows.account_id
     ) g
   ));
+  -- New account gains the tic only when it did not already have a row, including the pre-update row.
   PERFORM apply_earned_deltas((
     SELECT COALESCE(jsonb_agg(jsonb_build_object(
       'character_key', g.character_key,
@@ -1685,19 +1850,65 @@ BEGIN
       'account_id', g.account_id,
       'earned', g.earned,
       'earned_30d', g.earned_30d,
-      'earned_60d', g.earned_60d
+      'earned_60d', g.earned_60d,
+      'account_earned', g.account_earned,
+      'account_earned_30d', g.account_earned_30d,
+      'account_earned_60d', g.account_earned_60d
     )), '[]'::jsonb)
     FROM (
-      SELECT public.dkp_character_key(n.char_id::text, n.character_name) AS character_key,
-             MAX(COALESCE(NULLIF(trim(n.character_name), ''), n.char_id::text, 'unknown')) AS character_name,
-             public.resolve_dkp_account_id(n.account_id, n.char_id::text, n.character_name) AS account_id,
-             SUM(public.dkp_event_value(re.dkp_value)) AS earned,
-             SUM(CASE WHEN public.raid_date_parsed(r.date_iso) >= (current_date - 30) THEN public.dkp_event_value(re.dkp_value) ELSE 0 END)::integer AS earned_30d,
-             SUM(CASE WHEN public.raid_date_parsed(r.date_iso) >= (current_date - 60) THEN public.dkp_event_value(re.dkp_value) ELSE 0 END)::integer AS earned_60d
-      FROM new_rows n
-      LEFT JOIN raid_events re ON re.raid_id = n.raid_id AND re.event_id = n.event_id
-      LEFT JOIN raids r ON r.raid_id = n.raid_id
-      GROUP BY 1, 3
+      SELECT rows.character_key,
+             MAX(rows.character_name) AS character_name,
+             rows.account_id,
+             SUM(rows.dkp) AS earned,
+             SUM(CASE WHEN rows.raid_date >= (current_date - 30) THEN rows.dkp ELSE 0 END)::integer AS earned_30d,
+             SUM(CASE WHEN rows.raid_date >= (current_date - 60) THEN rows.dkp ELSE 0 END)::integer AS earned_60d,
+             SUM(CASE WHEN rows.is_account_credit THEN rows.dkp ELSE 0 END) AS account_earned,
+             SUM(CASE WHEN rows.is_account_credit AND rows.raid_date >= (current_date - 30) THEN rows.dkp ELSE 0 END)::integer AS account_earned_30d,
+             SUM(CASE WHEN rows.is_account_credit AND rows.raid_date >= (current_date - 60) THEN rows.dkp ELSE 0 END)::integer AS account_earned_60d
+      FROM (
+        SELECT tic.character_key,
+               tic.character_name,
+               tic.account_id,
+               tic.dkp,
+               tic.raid_date,
+               (
+                 tic.account_id IS NOT NULL
+                 AND tic.rn = 1
+                 AND NOT EXISTS (
+                   SELECT 1
+                   FROM raid_event_attendance existing
+                   WHERE existing.raid_id = tic.raid_id
+                     AND existing.event_id = tic.event_id
+                     AND public.resolve_dkp_account_id(existing.account_id, existing.char_id::text, existing.character_name) = tic.account_id
+                     AND existing.id NOT IN (SELECT id FROM new_rows)
+                 )
+                 AND NOT EXISTS (
+                   SELECT 1
+                   FROM old_rows o
+                   WHERE o.id = tic.id
+                     AND o.raid_id IS NOT DISTINCT FROM tic.raid_id
+                     AND o.event_id IS NOT DISTINCT FROM tic.event_id
+                     AND public.resolve_dkp_account_id(o.account_id, o.char_id::text, o.character_name) IS NOT DISTINCT FROM tic.account_id
+                 )
+               ) AS is_account_credit
+        FROM (
+          SELECT n.id,
+                 public.dkp_character_key(n.char_id::text, n.character_name) AS character_key,
+                 COALESCE(NULLIF(trim(n.character_name), ''), n.char_id::text, 'unknown') AS character_name,
+                 public.resolve_dkp_account_id(n.account_id, n.char_id::text, n.character_name) AS account_id,
+                 n.raid_id,
+                 n.event_id,
+                 public.dkp_one_tic_value(n.raid_id, n.event_id) AS dkp,
+                 public.raid_date_parsed(r.date_iso) AS raid_date,
+                 row_number() OVER (
+                   PARTITION BY public.resolve_dkp_account_id(n.account_id, n.char_id::text, n.character_name), n.raid_id, n.event_id
+                   ORDER BY n.id
+                 ) AS rn
+          FROM new_rows n
+          LEFT JOIN raids r ON r.raid_id = n.raid_id
+        ) tic
+      ) rows
+      GROUP BY rows.character_key, rows.account_id
     ) g
   ));
   RETURN NULL;
@@ -2259,10 +2470,10 @@ BEGIN
 
   TRUNCATE account_dkp_summary;
 
-  -- Earned: one account per attendance row (use rea.account_id or first character_account match), then sum dkp by account
+  -- Earned: one credit per account per tic (raid_id, event_id), then sum dkp by account.
   INSERT INTO account_dkp_summary (account_id, display_name, earned, earned_30d, earned_60d, last_activity_date, updated_at)
   WITH rea_one_account AS (
-    SELECT rea.raid_id, rea.event_id,
+    SELECT DISTINCT rea.raid_id, rea.event_id,
       COALESCE(rea.account_id, (
         SELECT ca.account_id FROM character_account ca
         WHERE (rea.char_id IS NOT NULL AND trim(rea.char_id::text) <> '' AND ca.char_id = trim(rea.char_id::text))
@@ -2274,13 +2485,12 @@ BEGIN
   SELECT
     roa.account_id,
     MAX(a.display_name),
-    SUM(COALESCE((re.dkp_value::numeric), 0)),
-    (SUM(CASE WHEN raid_date_parsed(r.date_iso) >= (current_date - 30) THEN COALESCE((re.dkp_value::numeric), 0) ELSE 0 END))::INTEGER,
-    (SUM(CASE WHEN raid_date_parsed(r.date_iso) >= (current_date - 60) THEN COALESCE((re.dkp_value::numeric), 0) ELSE 0 END))::INTEGER,
+    SUM(public.dkp_one_tic_value(roa.raid_id, roa.event_id)),
+    (SUM(CASE WHEN raid_date_parsed(r.date_iso) >= (current_date - 30) THEN public.dkp_one_tic_value(roa.raid_id, roa.event_id) ELSE 0 END))::INTEGER,
+    (SUM(CASE WHEN raid_date_parsed(r.date_iso) >= (current_date - 60) THEN public.dkp_one_tic_value(roa.raid_id, roa.event_id) ELSE 0 END))::INTEGER,
     MAX(raid_date_parsed(r.date_iso)),
     now()
   FROM rea_one_account roa
-  LEFT JOIN raid_events re ON re.raid_id = roa.raid_id AND re.event_id = roa.event_id
   LEFT JOIN raids r ON r.raid_id = roa.raid_id
   LEFT JOIN accounts a ON a.account_id = roa.account_id
   WHERE roa.account_id IS NOT NULL
@@ -2494,7 +2704,7 @@ BEGIN
       )
   ),
   rea_one_account AS (
-    SELECT rea.raid_id, rea.event_id,
+    SELECT DISTINCT rea.raid_id, rea.event_id,
       COALESCE(rea.account_id, (
         SELECT ca.account_id FROM character_account ca
         WHERE (rea.char_id IS NOT NULL AND trim(rea.char_id::text) <> '' AND ca.char_id = trim(rea.char_id::text))
@@ -2506,14 +2716,13 @@ BEGIN
   SELECT
     roa.account_id,
     MAX(a.display_name),
-    SUM(COALESCE((re.dkp_value::numeric), 0)),
+    SUM(public.dkp_one_tic_value(roa.raid_id, roa.event_id)),
     0::numeric,
-    (SUM(CASE WHEN raid_date_parsed(r.date_iso) >= (current_date - 30) THEN COALESCE((re.dkp_value::numeric), 0) ELSE 0 END))::INTEGER,
-    (SUM(CASE WHEN raid_date_parsed(r.date_iso) >= (current_date - 60) THEN COALESCE((re.dkp_value::numeric), 0) ELSE 0 END))::INTEGER,
+    (SUM(CASE WHEN raid_date_parsed(r.date_iso) >= (current_date - 30) THEN public.dkp_one_tic_value(roa.raid_id, roa.event_id) ELSE 0 END))::INTEGER,
+    (SUM(CASE WHEN raid_date_parsed(r.date_iso) >= (current_date - 60) THEN public.dkp_one_tic_value(roa.raid_id, roa.event_id) ELSE 0 END))::INTEGER,
     MAX(raid_date_parsed(r.date_iso)),
     now()
   FROM rea_one_account roa
-  LEFT JOIN raid_events re ON re.raid_id = roa.raid_id AND re.event_id = roa.event_id
   LEFT JOIN raids r ON r.raid_id = roa.raid_id
   LEFT JOIN accounts a ON a.account_id = roa.account_id
   WHERE roa.account_id IS NOT NULL AND roa.account_id = ANY(target_accounts)
