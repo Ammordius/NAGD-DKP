@@ -21,11 +21,13 @@ This guide covers **full restore** of DKP data from a backup (e.g. after a bad m
 4. **Refresh** – After load, `end_restore_load()` (or manual `refresh_dkp_summary()` + `refresh_all_raid_attendance_totals()`) brings cache tables up to date.
 
 **Tables cleared and loaded (order matters for FKs):**  
-characters, accounts, character_account, raids, raid_events, raid_loot, raid_attendance, raid_event_attendance, raid_dkp_totals, raid_attendance_dkp, raid_attendance_dkp_by_account, raid_classifications, dkp_adjustments, dkp_summary, account_dkp_summary, dkp_period_totals, active_raiders, active_accounts, officer_audit_log.
+characters, accounts, account_class_coverage, character_account, raids, raid_events, raid_loot, loot_assignment, bid_portfolio_auction_fact, raid_attendance, raid_event_attendance, raid_dkp_totals, raid_attendance_dkp, raid_attendance_dkp_by_account, raid_classifications, dkp_adjustments, dkp_summary, account_dkp_summary, dkp_period_totals, active_raiders, active_accounts, character_loot_assignment_counts, officer_audit_log.
 
 **Notes:**
 - `accounts` is **not** truncated (profiles references it). Restore **upserts** accounts from CSV to avoid breaking profiles.
-- `raid_dkp_totals`, `raid_attendance_dkp`, `raid_attendance_dkp_by_account`, and `account_dkp_summary` are **not** loaded from CSV; they are repopulated by triggers / `end_restore_load()`.
+- `account_class_coverage` is **not** truncated. Restore upserts it when `account_class_coverage.csv` is present. An older artifact with no such file leaves the live rows in place.
+- `raid_dkp_totals`, `raid_attendance_dkp`, `raid_attendance_dkp_by_account`, `account_dkp_summary`, and `character_dkp_spent` are **not** loaded from CSV. `end_restore_load()` rebuilds them, including `refresh_character_dkp_spent()`.
+- `loot_assignment`, `bid_portfolio_auction_fact`, and `character_loot_assignment_counts` are in the backup only after the next forced **DB backup (on change)** run (Actions → force checked). Older artifacts omit those CSVs. Truncate still clears `loot_assignment` and `bid_portfolio_auction_fact`, so those rows stay empty until you restore a backup that includes them or run **Loot-to-character assignment**.
 
 ---
 
@@ -97,6 +99,7 @@ python scripts/restore_supabase_from_backup.py --backup-dir backup --load-only
   SELECT refresh_dkp_summary();
   SELECT refresh_all_raid_attendance_totals();
   SELECT refresh_account_dkp_summary();
+  SELECT refresh_character_dkp_spent();
   ```
 
   You can run each statement separately if one of them is slow.

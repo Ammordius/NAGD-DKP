@@ -103,6 +103,9 @@ SELECT refresh_all_raid_attendance_totals();
 ```sql
 SELECT refresh_account_dkp_summary_internal();
 ```
+```sql
+SELECT refresh_character_dkp_spent();
+```
 
 You can import **characters**, **accounts**, **character_account**, **raids**, and **raid_classifications** normally (no restore mode needed).
 

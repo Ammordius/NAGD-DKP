@@ -9,8 +9,9 @@ Use this when you need to **restore DKP data** from a previous backup (e.g. afte
 
 ## Prerequisites
 
-1. **Backup artifact** – At least one successful run of [DB backup (on change)](../.github/workflows/db-backup.yml) so an artifact exists (e.g. `supabase-backup-2025-02-19` or a weekly/monthly one).
-2. **Supabase API secrets** – Same as the backup workflow (see below).
+1. **Backup artifact** – At least one successful run of [DB backup (on change)](../.github/workflows/db-backup.yml) so an artifact exists (e.g. `supabase-backup-2025-02-19` or a weekly/monthly one). Assignments and bid facts are in the artifact only after a backup that ran with the current exporter. Check **force** on that workflow if the loot count has not changed.
+2. **Restore functions applied** – Run [`docs/supabase-restore-truncate-rpc.sql`](supabase-restore-truncate-rpc.sql) once in the SQL Editor so `truncate_dkp_for_restore`, `end_restore_load`, and the character-spent triggers match this repo. Re-running the whole schema file is not required.
+3. **Supabase API secrets** – Same as the backup workflow (see below).
 
 ## GitHub secrets (same as DB backup)
 
@@ -105,10 +106,12 @@ python scripts/restore_supabase_from_backup.py --backup-dir backup
 
 ## What gets restored
 
-Only **DKP data tables** are cleared and reloaded: characters, accounts, character_account, raids, raid_events, raid_loot, raid_attendance, raid_event_attendance, raid_dkp_totals, raid_attendance_dkp, raid_classifications, dkp_adjustments, dkp_summary, dkp_period_totals, active_raiders, officer_audit_log. **Profiles and auth are never touched.**
+Only **DKP data tables** are cleared and reloaded: characters, accounts, account_class_coverage, character_account, raids, raid_events, raid_loot, loot_assignment, bid_portfolio_auction_fact, raid_attendance, raid_event_attendance, raid_dkp_totals, raid_attendance_dkp, raid_classifications, dkp_adjustments, dkp_summary, account_dkp_summary, dkp_period_totals, active_raiders, active_accounts, character_loot_assignment_counts, officer_audit_log. **Profiles and auth are never touched.** `accounts` and `account_class_coverage` are upserted, not truncated.
+
+`loot_assignment`, `bid_portfolio_auction_fact`, `character_loot_assignment_counts`, and `account_class_coverage` are in the artifact only after the next forced **DB backup (on change)** run (check **force**). Older artifacts omit those CSVs. Truncate still clears loot assignments and bid facts, so they stay empty until a backup that includes them is restored.
 
 **Loot-to-character after restore**
 
-- **`character_loot_assignment_counts`** is not in the backup; repopulate it by running the **Loot-to-character assignment** workflow (Actions → Loot-to-character assignment → Run workflow) or by importing `data/character_loot_assignment_counts.csv` if you have it.
-- **`raid_loot` assignment columns** (`assigned_char_id`, `assigned_character_name`, `assigned_via_magelo`) are included in the backup when the table has them. If you restored from an older backup that had only core columns, those columns will be NULL after restore. In that case (or if many items show as Unassigned), run **Loot-to-character assignment** so the assign script recomputes from Magelo and the update script pushes by `id`.
+- When the artifact includes `loot_assignment.csv`, restore loads it after `raid_loot`. You do not need to recompute assignments.
+- When the artifact is from before that forced backup, `loot_assignment` and `bid_portfolio_auction_fact` are empty after truncate. Run **Loot-to-character assignment** (Actions → Loot-to-character assignment → Run workflow) to rebuild assignments from Magelo. `character_loot_assignment_counts` is reloaded from the backup when that CSV is present; otherwise the same workflow fills it.
 - If many items still don’t get assigned (e.g. “Serpent of vindication” for Ammordius should be Iaminae), run the assign script locally with **`--clear-assignments --verbose`** after fetching from Supabase (`fetch_raid_loot_from_supabase.py --out data/raid_loot.csv --all-tables`). Verbose output shows sample rows where “no toon has item on Magelo.” Common causes: (1) **character_account** must link the buyer and the toon that has the item to the same account; (2) Magelo inventory must list that item on that toon (name matching is normalized). Ensure `data/character_account.csv` and `data/characters.csv` from the fetch include both buyer and wielder on the same account.

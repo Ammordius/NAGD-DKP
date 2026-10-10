@@ -174,7 +174,7 @@ See [LOOT-TO-CHARACTER.md](LOOT-TO-CHARACTER.md) and [DEBUG-loot-to-character-su
 
 | Workflow | Schedule | What it does | Needs |
 |----------|----------|--------------|--------|
-| **DB backup (on change)** | Daily (e.g. 07:00 UTC) | If `raid_loot` count changed: exports public tables to CSV, uploads artifact `supabase-backup-YYYY-MM-DD` (and weekly/monthly when applicable). | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` |
+| **DB backup (on change)** | Daily (e.g. 07:00 UTC) | If `raid_loot` count changed, or a manual run checks **force**: exports public tables to CSV (including loot assignments and bid facts), uploads artifact `supabase-backup-YYYY-MM-DD` (and weekly/monthly when applicable). | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` |
 | **SQL Ledger** | Daily (e.g. 07:30 UTC) | Downloads two latest backup artifacts, diffs them (excluding `raid_loot`), publishes delta to GitHub Pages. | At least 2 backup artifacts (from DB backup workflow). No Supabase secrets. |
 | **Loot-to-character assignment** | Daily (e.g. 18:00 UTC) or manual | Fetches raid_loot (and related) from Supabase, downloads Magelo dumps, assigns loot to characters, pushes assignments and counts to Supabase. | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`; optional: `data/elemental_armor.json`, `dkp_elemental_to_magelo.json` |
 

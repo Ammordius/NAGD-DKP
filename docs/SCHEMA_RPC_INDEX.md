@@ -45,7 +45,7 @@ Where each public function the app or scripts call is defined, and what calls it
 | **refresh_all_raid_attendance_totals** | end_restore_load, restore script |
 | **truncate_dkp_for_restore** | restore_supabase_from_backup.py. Standalone copy: supabase-restore-truncate-rpc.sql |
 | **begin_restore_load** | restore script, diff_inactive_tic_loot_dry_run.py |
-| **end_restore_load** | restore script, run_end_restore_load.py |
+| **end_restore_load** | restore script, run_end_restore_load.py. Also calls `refresh_character_dkp_spent`. |
 | **restore_load_in_progress** | Triggers skip work while a restore is in progress |
 | **fix_serial_sequences_for_restore** | end_restore_load |
 | **is_officer** | RLS and officer RPCs |
@@ -71,7 +71,7 @@ Trigger functions in the same file (`trigger_delta_*`, `trigger_raid_events_*`, 
 | **get_character_dkp_spent** | supabase-loot-to-character.sql | LootRecipients.jsx |
 | **update_single_raid_loot_assignment** | loot-assignment-table.sql (final). loot-to-character.sql is the older raid_loot-column version. | AccountDetail.jsx |
 | **update_raid_loot_assignments** | loot-assignment-table.sql (final) | Loot CI / update_raid_loot_assignments_supabase.py |
-| **refresh_character_dkp_spent** | loot-assignment-table.sql (reads `loot_assignment`) | Trigger on loot and assignment |
+| **refresh_character_dkp_spent** | loot-assignment-table.sql (reads `loot_assignment`) | Trigger on loot and assignment (no-op while `restore_load_in_progress`), and `end_restore_load` |
 | **refresh_after_bulk_loot_assignment** | loot-assignment-table.sql | After bulk assignment |
 
 ## Not in supabase-schema-full.sql

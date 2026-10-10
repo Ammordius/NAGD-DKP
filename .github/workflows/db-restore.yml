@@ -52,7 +52,7 @@ jobs:
           echo "## Available backup artifacts (DB backup workflow)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           # Backup workflow only uploads when data changed; find most recent run that has an artifact
-          RUN_IDS=$(gh api "repos/${{ github.repository }}/actions/workflows/db-backup.yml/runs?per_page=20&status=completed" --jq '.workflow_runs[].id')
+          RUN_IDS=$(gh api "repos/${{ github.repository }}/actions/workflows/db-backup.yml/runs?per_page=100&status=completed" --jq '.workflow_runs[].id')
           LATEST=""
           for RUN_ID in $RUN_IDS; do
             ARTIFACTS=$(gh api "repos/${{ github.repository }}/actions/runs/$RUN_ID/artifacts" --jq '[.artifacts[] | select(.name | startswith("supabase-backup")) | .name]')
@@ -117,7 +117,7 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Restore database
-        run: python scripts/restore_supabase_from_backup.py --backup-dir backup ${{ inputs.load_only && '--load-only' || '' }}
+        run: python scripts/restore_supabase_from_backup.py --backup-dir backup ${{ inputs.load_only == 'true' && '--load-only' || '' }}
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
@@ -127,4 +127,4 @@ jobs:
         run: |
           echo "Restore completed."
           echo "- Run refresh_dkp_summary() and refresh_all_raid_attendance_totals() in Supabase SQL Editor if needed."
-          echo "- To repopulate loot assignments (assigned_char_id / assigned_character_name), run **Actions → Loot-to-character assignment** (Run workflow). See docs/CI-DB-RESTORE.md."
+          echo "- Loot assignments and bid facts reload from loot_assignment.csv and bid_portfolio_auction_fact.csv when the artifact includes them. Artifacts from before the next forced backup omit those files; truncate leaves them empty, so run **Actions → Loot-to-character assignment** for an older artifact. See docs/CI-DB-RESTORE.md."

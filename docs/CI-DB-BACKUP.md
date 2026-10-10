@@ -44,9 +44,9 @@ The script loads `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` from `web/.env
 
 - **Workflow:** [`.github/workflows/db-backup.yml`](../.github/workflows/db-backup.yml)
 - **Schedule:** Runs once per day (e.g. 07:00 UTC).
-- **When it backs up:** Compares current `raid_loot` row count (from Supabase) to the count stored at last backup (in `.ci/last_backup_trigger_count.txt`). If the count changed (or no previous backup), it runs a full backup; otherwise it skips. With ~3 raids per week, you get about **3 backups per week**, not 7.
+- **When it backs up:** Compares current `raid_loot` row count (from Supabase) to the count stored at last backup (in `.ci/last_backup_trigger_count.txt`). If the count changed (or no previous backup), it runs a full backup; otherwise it skips. With ~3 raids per week, you get about **3 backups per week**, not 7. A manual run can check **force** to upload even when the count is unchanged (use that after an exporter change).
 - **What it does when backing up:**
-  1. Runs `export_supabase_public_tables.py` (REST API: fetches all public tables to CSV), then compresses with `tar czf backup-YYYY-MM-DD.tar.gz backup/`. Same secrets as the loot-to-character workflow—no database URL or pg_dump.
+  1. Runs `export_supabase_public_tables.py` (REST API: one CSV per listed table), then compresses with `tar czf backup-YYYY-MM-DD.tar.gz backup/`. Same secrets as the loot-to-character workflow—no database URL or pg_dump. The export includes `loot_assignment`, `bid_portfolio_auction_fact`, `character_loot_assignment_counts`, and `account_class_coverage`. JSON cells are written as JSON. `character_dkp_spent` is omitted; restore rebuilds it. `profiles` is exported and is not restored.
   2. **Rolling:** Uploads `supabase-backup-YYYY-MM-DD` (a `.tar.gz`) with **retention-days: 7** → keeps roughly the last 3 backups (3 per week).
   3. **Weekly:** If this is the first backup of the calendar week, uploads `supabase-backup-weekly-YYYY-Www` with **retention-days: 90**.
   4. **Monthly:** If this is the first backup of the month, uploads `supabase-backup-monthly-YYYY-MM` with **retention-days: 90**.
@@ -105,5 +105,5 @@ With the tiered strategy above, you use a small fraction of that.
 ## Summary
 
 - **Estimate size:** Run `estimate_backup_size.py` (or Option B/C) for per-backup size (~5 MB typical).
-- **Conditional backup:** CI runs daily but only backs up when `raid_loot` count has changed (~3 runs per week with 3 raids).
+- **Conditional backup:** CI runs daily but only backs up when `raid_loot` count has changed (~3 runs per week with 3 raids). Check **force** on a manual run to upload anyway.
 - **Tiered artifacts:** Rolling (~3, 7-day retention), weekly (90-day), monthly (90-day) → total **~95 MB** typical.

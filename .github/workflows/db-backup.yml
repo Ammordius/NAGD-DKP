@@ -9,6 +9,12 @@ on:
   schedule:
     - cron: '0 7 * * *'
   workflow_dispatch:
+    inputs:
+      force:
+        description: "Upload a backup even when the raid_loot count is unchanged (use after an exporter change)"
+        required: false
+        type: boolean
+        default: false
 
 concurrency:
   group: db-backup
@@ -47,7 +53,10 @@ jobs:
           if [ -f .ci/last_backup_trigger_count.txt ]; then
             LAST=$(cat .ci/last_backup_trigger_count.txt)
           fi
-          if [ -n "$CURRENT" ] && [ "$CURRENT" = "$LAST" ]; then
+          if [ "${{ inputs.force == 'true' }}" = "true" ]; then
+            echo "backup_needed=true" >> $GITHUB_OUTPUT
+            echo "Force backup requested (raid_loot count $CURRENT, last=$LAST)."
+          elif [ -n "$CURRENT" ] && [ "$CURRENT" = "$LAST" ]; then
             echo "backup_needed=false" >> $GITHUB_OUTPUT
             echo "No change (raid_loot count $CURRENT), skipping backup."
           else

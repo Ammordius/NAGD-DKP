@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import json
 import os
 import sys
 from pathlib import Path
@@ -33,6 +34,8 @@ RESTORE_TABLE_ORDER = [
     "raids",
     "raid_events",
     "raid_loot",
+    "loot_assignment",
+    "bid_portfolio_auction_fact",
     "raid_attendance",
     "raid_event_attendance",
     "raid_dkp_totals",
@@ -45,11 +48,23 @@ RESTORE_TABLE_ORDER = [
     "dkp_period_totals",
     "active_raiders",
     "active_accounts",
+    "character_loot_assignment_counts",
+    "account_class_coverage",
     "officer_audit_log",
 ]
 
-# Do not clear: profiles references accounts; clearing would FK-fail. Load accounts via upsert.
-CLEAR_SKIP = frozenset({"accounts"})
+# Upsert instead of insert. accounts stays (profiles references it). account_class_coverage
+# is not truncated, so an older artifact with no CSV cannot wipe it, and a newer one updates in place.
+UPSERT_ON = {
+    "accounts": "account_id",
+    "account_class_coverage": "account_id",
+}
+
+# Truncate clears these via CASCADE even when the CSV is absent. Say so in the log.
+CLEARED_WHEN_CSV_MISSING = frozenset({"loot_assignment", "bid_portfolio_auction_fact"})
+
+# Do not clear: profiles references accounts. account_class_coverage is upserted and kept when its CSV is absent.
+CLEAR_SKIP = frozenset({"accounts", "account_class_coverage"})
 
 # Repopulated by DB triggers/refresh when we load raid_events/raid_event_attendance; skip CSV load to avoid duplicate key.
 LOAD_SKIP_TRIGGER_POPULATED = frozenset({"raid_dkp_totals", "raid_attendance_dkp", "raid_attendance_dkp_by_account", "account_dkp_summary"})
@@ -62,6 +77,8 @@ TABLE_KEY_COLUMN: dict[str, str] = {
     "raids": "raid_id",
     "raid_events": "id",
     "raid_loot": "id",
+    "loot_assignment": "loot_id",
+    "bid_portfolio_auction_fact": "loot_id",
     "raid_attendance": "id",
     "raid_event_attendance": "id",
     "raid_dkp_totals": "raid_id",
@@ -74,6 +91,8 @@ TABLE_KEY_COLUMN: dict[str, str] = {
     "dkp_period_totals": "period",
     "active_raiders": "character_key",
     "active_accounts": "account_id",
+    "character_loot_assignment_counts": "char_id",
+    "account_class_coverage": "account_id",
     "officer_audit_log": "id",
 }
 
@@ -141,18 +160,23 @@ def clear_tables(client) -> None:
             print(f"  {table}: clear warning - {e}", file=sys.stderr)
 
 
+def _coerce_csv_value(key: str, value: str):
+    """Turn one CSV cell into a value PostgREST can insert. JSON text becomes an object."""
+    if value == "" or value is None:
+        return None
+    if key == "id" and value.isdigit():
+        return int(value)
+    if value[:1] in "{[":
+        try:
+            return json.loads(value)
+        except json.JSONDecodeError:
+            return value
+    return value
+
+
 def _row_from_csv_row(fieldnames: list[str], row: dict) -> dict:
     """Coerce CSV row to API-friendly dict."""
-    out = {}
-    for k in fieldnames:
-        v = row.get(k, "")
-        if v == "" or v is None:
-            out[k] = None
-        elif k == "id" and v.isdigit():
-            out[k] = int(v)
-        else:
-            out[k] = v
-    return out
+    return {k: _coerce_csv_value(k, row.get(k, "")) for k in fieldnames}
 
 
 def load_csv_api(client, table: str, csv_path: Path, *, upsert_on: str | None = None) -> int:
@@ -255,11 +279,17 @@ def main() -> int:
                 continue
             csv_path = backup_dir / f"{table}.csv"
             if not csv_path.is_file():
-                print(f"Skip {table} (no {csv_path})")
+                if table in CLEARED_WHEN_CSV_MISSING:
+                    print(
+                        f"Skip {table} (no {csv_path}). "
+                        "Pre-fix backups omit this file; truncate already cleared it, so those rows stay empty.",
+                        flush=True,
+                    )
+                else:
+                    print(f"Skip {table} (no {csv_path})")
                 continue
             try:
-                # accounts: we didn't clear (profiles references them); upsert to avoid duplicate key
-                upsert_col = "account_id" if table == "accounts" else None
+                upsert_col = UPSERT_ON.get(table)
                 n = load_csv_api(client, table, csv_path, upsert_on=upsert_col)
                 total += n
                 print(f"{table}: {n} rows")

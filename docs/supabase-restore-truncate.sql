@@ -8,6 +8,11 @@
 -- Do not truncate accounts (profiles references them). Restore script will upsert accounts.
 
 -- Child tables first, then parent. RESTART IDENTITY resets serials.
+-- Do not truncate account_class_coverage (no CSV in older artifacts; restore upserts it when present).
+TRUNCATE TABLE loot_assignment;
+TRUNCATE TABLE bid_portfolio_auction_fact;
+TRUNCATE TABLE character_dkp_spent;
+TRUNCATE TABLE character_loot_assignment_counts;
 TRUNCATE TABLE raid_attendance_dkp_by_account;
 TRUNCATE TABLE raid_attendance_dkp;
 TRUNCATE TABLE raid_dkp_totals;

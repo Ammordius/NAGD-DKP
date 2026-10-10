@@ -7,7 +7,7 @@ Full-stack guild DKP app: **Supabase** (Postgres, auth, RLS), **React** frontend
 A single deployable app plus the pipelines and docs to run it in production. The backend is one canonical schema ([`docs/supabase-schema-full.sql`](docs/supabase-schema-full.sql)): tables, RLS policies, triggers for derived totals, and RPCs for uploads and bulk updates. The web app is a small React SPA that talks to Supabase (REST and Realtime where it matters). CI covers backup, restore, and a separate “SQL ledger” that publishes human-readable deltas.
 
 **Backup and restore**  
-The DB backup workflow runs on a schedule and only uploads an artifact when exported data has changed (e.g. raid_loot row count), so you get versioned snapshots without churn. A separate restore workflow lets you point at any stored artifact (or “latest”) and reload the public schema, with optional validation. That gives you a clear path from “something broke” to “restore from yesterday” without ad-hoc dumps.
+The DB backup workflow runs on a schedule and uploads an artifact when the `raid_loot` row count has changed, or when a manual run checks **force**. A separate restore workflow reloads DKP data from any stored artifact (or “latest”). Profiles and auth are left in place. That gives you a path from “something broke” to “restore from yesterday” without ad-hoc dumps.
 
 **Audit and compliance**  
 Sensitive officer actions (add/delete raid, add/remove tics, loot edits, manual DKP changes) are written to an `officer_audit_log` table with actor, timestamp, action type, and a minimal JSON delta. The app exposes a changelog view; the same table is exported in backups and appears in the public ledger so changes are traceable and hard to hide.

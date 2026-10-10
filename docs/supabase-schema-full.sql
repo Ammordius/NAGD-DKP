@@ -2575,9 +2575,10 @@ BEGIN
   PERFORM refresh_dkp_summary();
   PERFORM refresh_all_raid_attendance_totals();
   PERFORM refresh_account_dkp_summary_internal();
+  PERFORM refresh_character_dkp_spent();
 END;
 $$;
-COMMENT ON FUNCTION public.end_restore_load() IS 'Signal end of bulk restore load; re-enables triggers and runs full DKP/raid totals refresh.';
+COMMENT ON FUNCTION public.end_restore_load() IS 'Signal end of bulk restore load; re-enables triggers and runs full DKP, raid totals, and character spent refresh.';
 GRANT EXECUTE ON FUNCTION public.end_restore_load() TO service_role;
 GRANT EXECUTE ON FUNCTION public.end_restore_load() TO authenticated;
 GRANT EXECUTE ON FUNCTION public.fix_serial_sequences_for_restore() TO service_role;
@@ -2591,6 +2592,10 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 BEGIN
+  TRUNCATE TABLE loot_assignment;
+  TRUNCATE TABLE bid_portfolio_auction_fact;
+  TRUNCATE TABLE character_dkp_spent;
+  TRUNCATE TABLE character_loot_assignment_counts;
   TRUNCATE TABLE raid_attendance_dkp_by_account;
   TRUNCATE TABLE raid_attendance_dkp;
   TRUNCATE TABLE raid_dkp_totals;
@@ -2611,7 +2616,7 @@ BEGIN
   TRUNCATE TABLE officer_audit_log;
 END;
 $$;
-COMMENT ON FUNCTION public.truncate_dkp_for_restore() IS 'Truncate DKP data tables for restore; used by restore script via API. Does not truncate accounts.';
+COMMENT ON FUNCTION public.truncate_dkp_for_restore() IS 'Truncate DKP data tables for restore; used by restore script via API. Does not truncate accounts or account_class_coverage.';
 GRANT EXECUTE ON FUNCTION public.truncate_dkp_for_restore() TO service_role;
 GRANT EXECUTE ON FUNCTION public.truncate_dkp_for_restore() TO authenticated;
 
@@ -4464,6 +4469,7 @@ $$;
 CREATE OR REPLACE FUNCTION public.trigger_refresh_character_dkp_spent()
 RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 BEGIN
+  IF restore_load_in_progress() THEN RETURN NULL; END IF;
   PERFORM refresh_character_dkp_spent();
   RETURN NULL;
 END;
@@ -4477,6 +4483,7 @@ CREATE TRIGGER refresh_character_dkp_spent_after_loot
 CREATE OR REPLACE FUNCTION public.trigger_refresh_character_dkp_spent_after_assignment()
 RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 BEGIN
+  IF restore_load_in_progress() THEN RETURN NULL; END IF;
   PERFORM refresh_character_dkp_spent();
   RETURN NULL;
 END;
@@ -4547,10 +4554,13 @@ RETURNS bigint
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
+SET statement_timeout = '60s'
 AS $$
 DECLARE
   updated_count bigint;
 BEGIN
+  SET LOCAL statement_timeout = '60s';
+
   ALTER TABLE loot_assignment DISABLE TRIGGER refresh_character_dkp_spent_after_assignment;
 
   INSERT INTO loot_assignment (loot_id, assigned_char_id, assigned_character_name, assigned_via_magelo)
@@ -4563,32 +4573,35 @@ BEGIN
   ON CONFLICT (loot_id) DO UPDATE SET
     assigned_char_id = EXCLUDED.assigned_char_id,
     assigned_character_name = EXCLUDED.assigned_character_name,
-    assigned_via_magelo = EXCLUDED.assigned_via_magelo;
+    assigned_via_magelo = EXCLUDED.assigned_via_magelo
+  WHERE loot_assignment.assigned_char_id IS DISTINCT FROM EXCLUDED.assigned_char_id
+     OR loot_assignment.assigned_character_name IS DISTINCT FROM EXCLUDED.assigned_character_name
+     OR loot_assignment.assigned_via_magelo IS DISTINCT FROM EXCLUDED.assigned_via_magelo;
   GET DIAGNOSTICS updated_count = ROW_COUNT;
 
   ALTER TABLE loot_assignment ENABLE TRIGGER refresh_character_dkp_spent_after_assignment;
 
-  PERFORM refresh_character_dkp_spent();
-  PERFORM refresh_dkp_summary_internal();
   RETURN updated_count;
 END;
 $$;
 
-COMMENT ON FUNCTION public.update_raid_loot_assignments(jsonb) IS 'Bulk upsert loot_assignment by loot id. Call once per batch; refreshes caches at end.';
+COMMENT ON FUNCTION public.update_raid_loot_assignments(jsonb) IS 'Bulk upsert loot_assignment by loot id. Skips unchanged rows. Does not refresh caches; call refresh_after_bulk_loot_assignment() once after all batches.';
 
 CREATE OR REPLACE FUNCTION public.refresh_after_bulk_loot_assignment()
 RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
+SET statement_timeout = '180s'
 AS $$
 BEGIN
+  SET LOCAL statement_timeout = '180s';
   PERFORM refresh_character_dkp_spent();
   PERFORM refresh_dkp_summary_internal();
 END;
 $$;
 
-COMMENT ON FUNCTION public.refresh_after_bulk_loot_assignment() IS 'Refreshes character_dkp_spent and dkp_summary after bulk loot assignment updates.';
+COMMENT ON FUNCTION public.refresh_after_bulk_loot_assignment() IS 'Refreshes character_dkp_spent and dkp_summary after bulk loot assignment updates. Call once after all update_raid_loot_assignments batches.';
 
 CREATE OR REPLACE FUNCTION public.update_single_raid_loot_assignment(
   p_loot_id bigint,
