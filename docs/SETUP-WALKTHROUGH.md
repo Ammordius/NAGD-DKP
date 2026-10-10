@@ -22,12 +22,20 @@ Follow these steps in order. Everything is done in the browser and in this repo.
 
 ## Part 2: Run the schema SQL
 
-**Single file.** Run **`docs/supabase-schema-full.sql`** once in the Supabase SQL Editor. It contains all tables, RLS, triggers, account DKP, officer writes, and upload script RPCs. No other SQL files are required.
+**One file.** Run **`docs/supabase-schema-full.sql`** once in the Supabase SQL Editor. It creates tables, RLS, triggers, account DKP, officer raid writes, upload RPCs, the bidding portfolio, loot assignment (`loot_assignment`, `update_single_raid_loot_assignment`, `get_character_dkp_spent`), raider activity, and class coverage.
 
 1. In the left sidebar, click **“SQL Editor”**.
-2. Click **“New query”** (or the + button).
-3. Open **`docs/supabase-schema-full.sql`** from the repo, select all (Ctrl+A), copy, paste into the SQL Editor, and click **Run**.
-4. You should see “Success.” If you see any red errors, copy the message so we can fix the schema.
+2. Click **“New query”**.
+3. Open **`docs/supabase-schema-full.sql`**, select all, paste, and click **Run**.
+4. You should see “Success.” If you see a red error, copy the message before continuing.
+
+Do **not** also run `docs/supabase-loot-to-character.sql`, `docs/supabase-loot-assignment-table.sql`, `docs/supabase-officer-raider-activity.sql`, or `docs/supabase-account-class-coverage.sql`. Those are older copies of sections already in the full file. Running `supabase-loot-to-character.sql` after the full file puts assignment columns back on `raid_loot` and replaces the assignment RPCs.
+
+Do **not** run `docs/supabase-account-dkp-migration.sql` on a new project. Do **not** run `docs/supabase-schema.sql`; that file is not in the repo.
+
+`docs/supabase-update-event-times-rpc.sql` is only for the event-time backfill script. The web app does not call it.
+
+Re-running `supabase-schema-full.sql` replaces functions and is safe on a database that already used this file.
 
 ---
 
@@ -175,7 +183,7 @@ In the Supabase **Table Editor**, for each table that gets new data, either:
 | raid_event_attendance | `raid_event_attendance.csv` (if you use per-event DKP) |
 | raid_classifications | `raid_classifications.csv` (if you ran `build_raid_classifications.py`) |
 
-If the **raid_event_attendance** table doesn’t exist yet, run the full schema again (Part 2: `docs/supabase-schema-full.sql`); it includes that table. Then import `data/raid_event_attendance.csv` (use `begin_restore_load()` / `end_restore_load()` if importing a large file).
+If the **raid_event_attendance** table doesn’t exist yet, run Part 2 step 1 again (`docs/supabase-schema-full.sql`); it includes that table. Then import `data/raid_event_attendance.csv` (use `begin_restore_load()` / `end_restore_load()` if importing a large file).
 
 ### 3. Redeploy the frontend (if hosted)
 
@@ -256,21 +264,21 @@ Right now there are no users, so no one can log in. After you run the web app an
 
 ---
 
-## Optional: Loot-to-character assignment (Magelo)
+## Optional: Magelo loot-assignment data
 
-To link each raid loot row to the **toon that actually has the item** (from Magelo): (1) Run **`docs/supabase-loot-to-character.sql`** in the SQL Editor. (2) Put Magelo dumps in place (`character/TAKP_character.txt`, `inventory/TAKP_character_inventory.txt`) and ensure `magelo/elemental_armor.json` exists (e.g. Magelo repo as sibling of `dkp`). (3) Export **`raid_loot`** from Supabase (with **`id`**), save as `data/raid_loot.csv`, then run **`python assign_loot_to_characters.py`** (it preserves `id`). (4) Run **`python update_raid_loot_assignments_supabase.py`** (with `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`) to update existing rows by id—do not re-import the full CSV or you will get duplicates. See **`docs/LOOT-TO-CHARACTER.md`** for full rules and CI. Per-character assignment is automated from Magelo and heuristics and may be inaccurate; treat those stats as best-effort.
+Part 2 already installs the loot-assignment tables and RPCs. This section is only the Magelo **data** pipeline. Put Magelo dumps in place (`character/TAKP_character.txt`, `inventory/TAKP_character_inventory.txt`) and ensure `magelo/elemental_armor.json` exists (e.g. Magelo repo as sibling of `dkp`). Export **`raid_loot`** from Supabase (with **`id`**), save as `data/raid_loot.csv`, then run **`python assign_loot_to_characters.py`** (it preserves `id`). Run **`python update_raid_loot_assignments_supabase.py`** (with `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`) to update existing rows by id—do not re-import the full CSV or you will get duplicates. See **`docs/LOOT-TO-CHARACTER.md`** for full rules and CI. Per-character assignment is automated from Magelo and heuristics and may be inaccurate; treat those stats as best-effort.
 
 ---
 
 ## Quick checklist
 
 - [ ] Part 1: Supabase project created, password saved
-- [ ] Part 2: **docs/supabase-schema-full.sql** run in SQL Editor, success
+- [ ] Part 2: **docs/supabase-schema-full.sql** run once in the SQL Editor, success
 - [ ] Part 3: Project URL and anon key copied
 - [ ] Part 4: All 7 CSVs imported (characters, accounts, character_account, raids, raid_events, raid_loot, raid_attendance)
 - [ ] Part 5: Signed up in the app, then ran `UPDATE profiles SET role = 'officer'` with your User UID
 - [ ] Part 6: `web/.env.local` set, `npm run dev` works, you can log in and see Officer
 - [ ] Part 7 (optional): Repo on GitHub, Vercel project with root `web` and env vars, deploy works
-- [ ] Optional: Loot-to-character – run `docs/supabase-loot-to-character.sql`, export raid_loot (with id), run `assign_loot_to_characters.py`, then `update_raid_loot_assignments_supabase.py` (do not re-import raid_loot)
+- [ ] Optional: Magelo loot data – export raid_loot (with id), run `assign_loot_to_characters.py`, then `update_raid_loot_assignments_supabase.py` (do not re-import raid_loot). Schema for this is already in Part 2.
 
 If you tell me which part you’re on and what you see (or any error message), I can give you the exact next click or fix.

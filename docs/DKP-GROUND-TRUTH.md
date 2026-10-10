@@ -99,7 +99,7 @@ After per-event attendance: Inacht, Baily, Radda, Dula Allazaward, etc. all show
 
 ### Option B: First-time or schema change
 
-1. Run **docs/supabase-schema.sql** in SQL Editor (creates tables including **dkp_adjustments**).
+1. Run the required SQL in [SCHEMA_DEPLOYMENT.md](SCHEMA_DEPLOYMENT.md), starting with **docs/supabase-schema-full.sql** (creates tables including **dkp_adjustments**). There is no `docs/supabase-schema.sql`.
 2. Import the CSVs in the same order as above. Then run the INSERT block from **docs/supabase-reset-and-import.sql** (dkp_adjustments rows), or import **data/dkp_adjustments.csv**.
 
 ### How adjustments work

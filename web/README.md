@@ -7,7 +7,7 @@ Minimal React app with Supabase auth and two roles: **officer** and **player**.
 ## Setup
 
 1. **Supabase**  
-   Create a project at [supabase.com](https://supabase.com). Run `../docs/supabase-schema.sql` in the SQL Editor, then import data (see `../docs/supabase-import.md`).
+   Create a project at [supabase.com](https://supabase.com). In the SQL Editor, run `../docs/supabase-schema-full.sql` once (see [../docs/SCHEMA_DEPLOYMENT.md](../docs/SCHEMA_DEPLOYMENT.md)). Then import data (see `../docs/supabase-import.md`). The walkthrough is [../docs/SETUP-WALKTHROUGH.md](../docs/SETUP-WALKTHROUGH.md). Do not also run the older loot, raider-activity, or class-coverage SQL files; they are already in the full schema. There is no `docs/supabase-schema.sql`.
 
 2. **Env**  
    Copy `.env.example` to `.env.local` and set:
@@ -36,4 +36,4 @@ Minimal React app with Supabase auth and two roles: **officer** and **player**.
 - **Player**: Can sign in, view Raids list and detail, view DKP leaderboard.
 - **Officer**: Same as player; nav shows an “Officer” label. Future: edit raids, manage users, etc.
 
-New sign-ups get `role = 'player'` by default (see trigger in `supabase-schema.sql`).
+New sign-ups get `role = 'player'` by default (see `handle_new_user` in `docs/supabase-schema-full.sql`).

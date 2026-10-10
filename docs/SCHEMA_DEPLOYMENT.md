@@ -2,42 +2,45 @@
 
 This document is the **canonical reference** for standing up or mirroring the DKP Supabase database.
 
-**Deploy: run one file.** **[docs/supabase-schema-full.sql](supabase-schema-full.sql)** — single SQL file. Run it once in the Supabase SQL Editor after creating a project. It contains all tables, RLS, triggers, account DKP, officer writes, and upload script RPCs. No other SQL files are required for a working deploy.
+**Deploy: run one file.** **[docs/supabase-schema-full.sql](supabase-schema-full.sql)** in the Supabase SQL Editor after creating a project. It is the whole schema: tables, RLS, triggers, account DKP, officer raid writes, upload RPCs, bidding portfolio, loot assignment, `character_dkp_spent`, raider activity, and class coverage.
 
-**See also:** [SCHEMA_RPC_INDEX.md](SCHEMA_RPC_INDEX.md) — index of every RPC and where it’s defined. [DKP_TRIGGERS_AND_STORAGE_AUDIT.md](DKP_TRIGGERS_AND_STORAGE_AUDIT.md) — how triggers and cache tables work.
+**See also:** [SCHEMA_RPC_INDEX.md](SCHEMA_RPC_INDEX.md) — where app and script RPCs are defined. [SCHEMA_AUDIT.md](SCHEMA_AUDIT.md) — live database vs these files. [DKP_TRIGGERS_AND_STORAGE_AUDIT.md](DKP_TRIGGERS_AND_STORAGE_AUDIT.md) — how triggers and cache tables work.
 
 ---
 
-## 1. Required: single schema file
+## 1. Required SQL
 
 | File | Purpose |
 |------|---------|
-| **docs/supabase-schema-full.sql** | **Run this once.** Creates everything: tables, RLS, triggers, `refresh_dkp_summary`, `refresh_account_dkp_summary`, `refresh_account_dkp_summary_for_raid`, `end_restore_load`, `truncate_dkp_for_restore`, officer RLS and `delete_raid` / `delete_tic` / `remove_attendee_from_tic`, `delete_raid_for_reupload`, `insert_raid_event_attendance_for_upload`. |
+| **docs/supabase-schema-full.sql** | **Run this once.** Tables, RLS, triggers, `refresh_dkp_summary`, `refresh_account_dkp_summary`, officer raid RPCs, upload RPCs, bidding portfolio, `loot_assignment` plus `update_single_raid_loot_assignment` / `update_raid_loot_assignments` / `get_character_dkp_spent`, `officer_raider_activity`, and `account_class_coverage`. |
 
-After running it you have:
+After that file you have:
 
-- All tables and triggers
-- Leaderboard (account DKP) and character DKP
-- Officer UI (add raid/tic/loot, delete raid/tic)
+- Core tables, triggers, and the DKP leaderboard
+- Officer raid UI (add raid/tic/loot, delete raid/tic)
 - Restore/backup flow (`begin_restore_load` / `end_restore_load` / `truncate_dkp_for_restore`)
 - Upload script support (`delete_raid_for_reupload`, `insert_raid_event_attendance_for_upload`)
+- Loot assignment, Character History spent, raider activity, and class coverage
 
-*The single file is generated from the split files in `docs/` (supabase-schema.sql, supabase-account-dkp-schema.sql, supabase-officer-raids.sql, upload_script_rpcs.sql) for maintenance; you do not need to run those separately.*
+Edit `docs/supabase-schema-full.sql` when the schema changes. These files are historical sources and must not be applied on top of the full file: `supabase-loot-to-character.sql`, `supabase-loot-assignment-table.sql`, `supabase-officer-raider-activity.sql`, `supabase-account-class-coverage.sql`, `supabase-account-dkp-schema.sql`, `supabase-officer-raids.sql`, `upload_script_rpcs.sql`. **`docs/supabase-schema.sql` is not in the repo.**
+
+Re-running `supabase-schema-full.sql` replaces functions (`CREATE OR REPLACE`) and adds columns that use `ADD COLUMN IF NOT EXISTS`. If `raid_loot` still has old `assigned_*` columns, the file copies them into `loot_assignment` and drops them.
 
 ---
 
-## 2. Optional SQL (only if you use those features)
+## 2. Optional SQL (not required for the web app)
 
 | File | When to run |
 |------|-------------|
-| **docs/supabase-loot-to-character.sql** | Loot-to-character assignment (Magelo), `update_raid_loot_assignments`, columns on `raid_loot` for assignment |
-| **docs/supabase-loot-assignment-table.sql** | Split: `loot_assignment` table + views + RPCs. Run **after** supabase-loot-to-character if you had assignment columns on `raid_loot`; otherwise account-dkp-schema already created a stub `loot_assignment` and this file adds views and migration from `raid_loot`. |
-| **docs/supabase-github-worker-role.sql** | Custom role for CI/direct DB (optional; CI usually uses service_role key) |
-| **docs/supabase-officer-audit-log.sql** | Audit log table/policies (often already in main schema) |
-| **docs/supabase-create-my-account-rpc.sql** | Standalone add-on for `create_my_account` (already in supabase-schema.sql) |
-| **docs/supabase-anon-read-policies.sql** | Only if you need to re-apply anon read; main schema uses authenticated-only by default |
+| **docs/supabase-update-event-times-rpc.sql** | Only if you run `scripts/pull_parse_dkp_site/update_supabase_event_times.py` (`update_raid_event_times`). |
+| **docs/supabase-github-worker-role.sql** | Custom role for CI/direct DB (optional; CI usually uses the service_role key). |
+| **docs/supabase-officer-audit-log.sql** | Only if `officer_audit_log` or its policies are missing. The table is already created by `supabase-schema-full.sql`. |
+| **docs/supabase-create-my-account-rpc.sql** | Standalone copy of `create_my_account`. Already in `supabase-schema-full.sql`. Do not run it on a fresh deploy. |
+| **docs/supabase-anon-read-policies.sql** | Re-opens anon read. Do not run this for a normal deploy. Core tables are authenticated-only. `supabase-schema-full.sql` still creates anon SELECT on `loot_assignment` and `character_dkp_spent`; see section 4 if you want those dropped. |
 
 Do **not** run `docs/supabase-reset-and-import.sql` during initial setup; it truncates data and is for re-imports.
+
+Magelo assignment **data** (dumps, `assign_loot_to_characters.py`, CI) is separate from `supabase-schema-full.sql`. The assignment RPCs are already in that file.
 
 ---
 
@@ -89,7 +92,7 @@ For **schema only** (no data), add `--schema-only`. For **triggers and functions
 pg_dump "..." --schema=public --no-owner --no-privileges --schema-only -f schema_only.sql
 ```
 
-Then diff `docs/dumped_schema_public.sql` (or `schema_only.sql`) against the repo’s `docs/supabase-schema.sql` and related files to see drift.
+Then diff `docs/dumped_schema_public.sql` (or `schema_only.sql`) against `docs/supabase-schema-full.sql`.
 
 ### Option C: List triggers and functions in SQL Editor
 
@@ -167,9 +170,11 @@ These are not part of the standard deploy; run only for the stated situation.
 
 | File | When to run |
 |------|-------------|
-| **docs/fix_event_attendance_delete_trigger_statement_level.sql** | Existing DB that had the old per-row DELETE trigger on `raid_event_attendance` (causing timeouts). New deploys from supabase-schema.sql already have the statement-level trigger. |
-| **docs/fix_refresh_dkp_summary_includes_account_summary.sql** | DB has `account_dkp_summary` but not `refresh_account_dkp_summary_for_raid`. Superseded if you run full supabase-account-dkp-schema.sql. |
-| **docs/supabase-account-dkp-migration.sql** | One-time migration to backfill `account_id` and populate `account_dkp_summary` (already-migrated DBs don’t need this). |
+| **docs/fix_event_attendance_delete_trigger_statement_level.sql** | Existing DB that had the old per-row DELETE trigger on `raid_event_attendance` (causing timeouts). New deploys from `supabase-schema-full.sql` already have the statement-level trigger. |
+| **docs/fix_refresh_dkp_summary_includes_account_summary.sql** | DB has `account_dkp_summary` but not `refresh_account_dkp_summary_for_raid`. Superseded by `supabase-schema-full.sql`. |
+| **docs/supabase-account-dkp-migration.sql** | One-time migration to backfill `account_id` and populate `account_dkp_summary`. Do not run on a fresh deploy. Leftover functions (`run_account_dkp_migration*`, `clear_restore_load`, `refresh_raid_attendance_totals_batch`) may still exist on an already-migrated database; leave them. |
+| **docs/supabase-require-auth-remove-anon-read.sql** | Drops anon SELECT, including on `loot_assignment` and `character_dkp_spent`. `supabase-schema-full.sql` recreates those two policies. Run this after the full file if you want authenticated-only reads on those tables. Not applied automatically. |
+| **docs/drop-officer-bid-forecast.sql** | Drops retired `officer_global_bid_forecast` and `officer_loot_bid_forecast_v2`. Those functions are not in `supabase-schema-full.sql` and are not routed in the app. |
 
 **Superseded:** **docs/delete_raid_for_reupload_rpc.sql** — use **docs/upload_script_rpcs.sql** or run **docs/supabase-schema-full.sql** (which includes it).
 
@@ -177,8 +182,7 @@ These are not part of the standard deploy; run only for the stated situation.
 
 ## 5. Checklist: mirror or new deploy
 
-- [ ] Run **docs/supabase-schema-full.sql** in SQL Editor → Success
-- [ ] Optional: loot-to-character and/or loot-assignment-table if you use those features
+- [ ] Run **docs/supabase-schema-full.sql** once in the SQL Editor
 - [ ] After loading data: run `SELECT refresh_dkp_summary();` and `SELECT refresh_all_raid_attendance_totals();` and `SELECT refresh_account_dkp_summary();`
 - [ ] Promote one user to officer: `UPDATE profiles SET role = 'officer' WHERE id = 'USER_UUID';`
 

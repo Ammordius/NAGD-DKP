@@ -1,6 +1,6 @@
+-- HISTORICAL SOURCE. Included in docs/supabase-schema-full.sql. Do not run this file on a fresh deploy.
 -- Loot assignment split: move assigned_char_id, assigned_character_name, assigned_via_magelo
 -- from raid_loot into a one-to-one table loot_assignment so permissions can be scoped for CI.
--- Run AFTER supabase-schema.sql and supabase-loot-to-character.sql (so raid_loot has the columns).
 -- Officers keep full write on raid_loot and on loot_assignment from the website; CI calls
 -- update_raid_loot_assignments (writes only loot_assignment). Later: scoped API key for CI.
 

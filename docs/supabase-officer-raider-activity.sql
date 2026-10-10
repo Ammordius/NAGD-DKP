@@ -1,5 +1,5 @@
+-- HISTORICAL SOURCE. Included in docs/supabase-schema-full.sql. Do not run this file separately.
 -- Officer-only raider activity snapshot for /officer/raider-activity.
--- Run in Supabase SQL Editor after supabase-schema-full.sql (requires is_officer, raid tables, account DKP).
 -- Returns JSON: raids, roster_account_ids, accounts, attendance (raid_id + account_id pairs).
 
 CREATE OR REPLACE FUNCTION public.officer_raider_activity(

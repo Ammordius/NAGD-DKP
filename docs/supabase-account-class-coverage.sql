@@ -1,5 +1,5 @@
+-- HISTORICAL SOURCE. Included in docs/supabase-schema-full.sql. Do not run this file separately.
 -- Account-level class coverage from Magelo class_rankings.json (CI / officer refresh).
--- Run in Supabase SQL Editor after supabase-schema-full.sql.
 -- Populated by scripts/build_account_class_coverage.mjs (service role) or officer_upsert_account_class_coverage.
 
 CREATE TABLE IF NOT EXISTS public.account_class_coverage (

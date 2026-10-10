@@ -25,7 +25,7 @@ This feature links each raid loot row to the **character that actually has the i
 
 ## Schema (Supabase)
 
-Run **`docs/supabase-loot-to-character.sql`** after the main schema (adds assignment columns to `raid_loot` and RPCs). Then run **`docs/supabase-loot-assignment-table.sql`** to move assignment into a separate table for permission scoping:
+`docs/supabase-schema-full.sql` already creates this. Do not run `docs/supabase-loot-to-character.sql` or `docs/supabase-loot-assignment-table.sql` on top of it.
 
 - **`loot_assignment`** (one-to-one with `raid_loot`): `loot_id` (FK → `raid_loot.id`), `assigned_char_id`, `assigned_character_name`, `assigned_via_magelo`. Enables scoped API keys for CI (no service role required).
 - **`raid_loot`** after migration: only DKP columns (id, raid_id, event_id, item_name, char_id, character_name, cost). Officers still have full write on `raid_loot` and `loot_assignment` from the website.
@@ -38,7 +38,7 @@ Run **`docs/supabase-loot-to-character.sql`** after the main schema (adds assign
 
 To ship loot-to-character on the live site:
 
-1. **Database**: Run **`docs/supabase-loot-to-character.sql`**, then **`docs/supabase-loot-assignment-table.sql`** (moves assignment into `loot_assignment`, adds view `raid_loot_with_assignment`).
+1. **Database**: Run **`docs/supabase-schema-full.sql`** once. It creates `loot_assignment`, the view `raid_loot_with_assignment`, and the assignment RPCs. Do not run `supabase-loot-to-character.sql` afterward.
 2. **Data (no duplicates)**: Do **not** re-import the full `raid_loot` CSV—that would insert duplicate rows. Instead: export from the view (Table Editor → **raid_loot_with_assignment** → Export as CSV, or `SELECT * FROM raid_loot_with_assignment`) so the CSV includes **`id`** and assignment columns. Save as **`data/raid_loot.csv`**. Run **`python assign_loot_to_characters.py`** (preserves `id`). Then run **`python update_raid_loot_assignments_supabase.py`** to upsert **`loot_assignment`** by `id` (no `raid_loot` rows inserted).
 3. **Frontend**: Deploy the web app. The app shows `assigned_character_name` (or “Unassigned”) on Item History, Item page, Raid detail, Account activity, Profile, and Character page. On the **Account** page, the **Loot** tab lets claimed-account owners and officers edit assignments per row. No env vars needed.
 4. **CI**: The workflow (`.github/workflows/loot-to-character.yml`) keeps `data/raid_loot.csv` updated in the repo. To sync assignments into Supabase without duplicates, periodically: export `raid_loot` (with `id`) → run the assign script → run `update_raid_loot_assignments_supabase.py`, or add that flow to CI with Supabase credentials in secrets.

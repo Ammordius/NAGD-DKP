@@ -1,6 +1,10 @@
 -- =============================================================================
--- Single canonical schema. Run this once in Supabase SQL Editor after creating a project.
--- Tables, RLS, triggers, account DKP, officer writes, upload script RPCs.
+-- Single canonical schema. Run this once in the Supabase SQL Editor after creating a project.
+-- Tables, RLS, triggers, account DKP, officer writes, upload RPCs, bidding portfolio,
+-- loot assignment, character_dkp_spent, raider activity, and class coverage.
+-- Do not also run supabase-loot-to-character.sql, supabase-loot-assignment-table.sql,
+-- supabase-officer-raider-activity.sql, or supabase-account-class-coverage.sql.
+-- Those files are the historical sources for the section at the end of this file.
 -- =============================================================================
 
 -- 1) Profiles: one per auth user, holds role (officer | player)
@@ -2241,8 +2245,8 @@ DROP POLICY IF EXISTS "Anon read raid_attendance_dkp" ON raid_attendance_dkp;
 
 
 
--- Stub so refresh_account_dkp_summary_internal can reference loot_assignment (LEFT JOIN LATERAL).
--- If you later run supabase-loot-assignment-table.sql, it uses CREATE TABLE IF NOT EXISTS and adds views/RPCs.
+-- Stub so earlier functions can reference loot_assignment. RLS, assignment RPCs, and
+-- character_dkp_spent are created in the final section of this file.
 CREATE TABLE IF NOT EXISTS loot_assignment (
   loot_id BIGINT PRIMARY KEY REFERENCES raid_loot(id) ON DELETE CASCADE,
   assigned_char_id TEXT,
@@ -4404,3 +4408,527 @@ END;
 $dba_grant$;
 
 REVOKE ALL ON FUNCTION public.normalize_item_name_for_lookup(text) FROM PUBLIC;
+
+-- =============================================================================
+-- Loot assignment, character spent, raider activity, class coverage.
+-- Final definitions (assignment lives on loot_assignment, not raid_loot).
+-- Historical copies: supabase-loot-to-character.sql, supabase-loot-assignment-table.sql,
+-- supabase-officer-raider-activity.sql, supabase-account-class-coverage.sql.
+-- =============================================================================
+
+CREATE TABLE IF NOT EXISTS character_dkp_spent (
+  character_key TEXT PRIMARY KEY,
+  char_id TEXT,
+  character_name TEXT,
+  total_spent NUMERIC NOT NULL DEFAULT 0,
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+COMMENT ON TABLE character_dkp_spent IS 'Total DKP spent per character (from raid_loot cost, assignment on loot_assignment when set). After first deploy run: SELECT refresh_character_dkp_spent();';
+
+CREATE OR REPLACE FUNCTION public.refresh_character_dkp_spent()
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  TRUNCATE character_dkp_spent;
+  INSERT INTO character_dkp_spent (character_key, char_id, character_name, total_spent, updated_at)
+  SELECT
+    character_key,
+    MAX(char_id) AS char_id,
+    MAX(character_name) AS character_name,
+    SUM(COALESCE((cost::numeric), 0)) AS total_spent,
+    now()
+  FROM (
+    SELECT
+      (CASE WHEN COALESCE(trim(la.assigned_char_id), '') <> '' THEN trim(la.assigned_char_id)
+            WHEN COALESCE(trim(la.assigned_character_name), '') <> '' THEN trim(la.assigned_character_name)
+            WHEN COALESCE(trim(rl.char_id::text), '') <> '' THEN trim(rl.char_id::text)
+            ELSE COALESCE(trim(rl.character_name), 'unknown') END) AS character_key,
+      nullif(trim(COALESCE(la.assigned_char_id::text, rl.char_id::text)), '') AS char_id,
+      nullif(trim(COALESCE(la.assigned_character_name, rl.character_name)), '') AS character_name,
+      rl.cost
+    FROM raid_loot rl
+    LEFT JOIN loot_assignment la ON la.loot_id = rl.id
+    WHERE COALESCE(trim(la.assigned_char_id), '') <> ''
+       OR COALESCE(trim(la.assigned_character_name), '') <> ''
+       OR COALESCE(trim(rl.char_id::text), '') <> ''
+       OR COALESCE(trim(rl.character_name), '') <> ''
+  ) t
+  GROUP BY character_key;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.trigger_refresh_character_dkp_spent()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  PERFORM refresh_character_dkp_spent();
+  RETURN NULL;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS refresh_character_dkp_spent_after_loot ON raid_loot;
+CREATE TRIGGER refresh_character_dkp_spent_after_loot
+  AFTER INSERT OR UPDATE OR DELETE ON raid_loot
+  FOR EACH STATEMENT EXECUTE FUNCTION public.trigger_refresh_character_dkp_spent();
+
+CREATE OR REPLACE FUNCTION public.trigger_refresh_character_dkp_spent_after_assignment()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  PERFORM refresh_character_dkp_spent();
+  RETURN NULL;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS refresh_character_dkp_spent_after_assignment ON loot_assignment;
+CREATE TRIGGER refresh_character_dkp_spent_after_assignment
+  AFTER INSERT OR UPDATE OR DELETE ON loot_assignment
+  FOR EACH STATEMENT EXECUTE FUNCTION public.trigger_refresh_character_dkp_spent_after_assignment();
+
+CREATE OR REPLACE FUNCTION public.get_character_dkp_spent(p_keys text[])
+RETURNS TABLE(character_key text, char_id text, character_name text, total_spent numeric)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT c.character_key, c.char_id, c.character_name, c.total_spent
+  FROM character_dkp_spent c
+  WHERE c.character_key = ANY(p_keys)
+     OR c.char_id = ANY(p_keys)
+     OR c.character_name = ANY(p_keys);
+$$;
+
+COMMENT ON FUNCTION public.get_character_dkp_spent(text[]) IS 'Returns character_dkp_spent rows where character_key, char_id, or character_name is in the given array.';
+
+GRANT EXECUTE ON FUNCTION public.get_character_dkp_spent(text[]) TO authenticated;
+
+ALTER TABLE character_dkp_spent ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Authenticated read character_dkp_spent" ON character_dkp_spent;
+CREATE POLICY "Authenticated read character_dkp_spent" ON character_dkp_spent FOR SELECT TO authenticated USING (true);
+DROP POLICY IF EXISTS "Anon read character_dkp_spent" ON character_dkp_spent;
+CREATE POLICY "Anon read character_dkp_spent" ON character_dkp_spent FOR SELECT TO anon USING (true);
+
+-- If an older database still has assignment columns on raid_loot, copy them once, then drop them.
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'raid_loot' AND column_name = 'assigned_char_id'
+  ) THEN
+    INSERT INTO loot_assignment (loot_id, assigned_char_id, assigned_character_name, assigned_via_magelo)
+    SELECT id, assigned_char_id, assigned_character_name, assigned_via_magelo
+    FROM raid_loot
+    ON CONFLICT (loot_id) DO NOTHING;
+  END IF;
+END;
+$$;
+
+DROP VIEW IF EXISTS character_loot_assignment_count;
+DROP INDEX IF EXISTS idx_raid_loot_assigned_char;
+ALTER TABLE raid_loot DROP COLUMN IF EXISTS assigned_char_id;
+ALTER TABLE raid_loot DROP COLUMN IF EXISTS assigned_character_name;
+ALTER TABLE raid_loot DROP COLUMN IF EXISTS assigned_via_magelo;
+
+CREATE OR REPLACE VIEW character_loot_assignment_count WITH (security_invoker = true) AS
+SELECT
+  la.assigned_char_id AS char_id,
+  la.assigned_character_name AS character_name,
+  COUNT(*)::bigint AS items_assigned
+FROM loot_assignment la
+WHERE la.assigned_char_id IS NOT NULL AND trim(la.assigned_char_id) <> ''
+GROUP BY la.assigned_char_id, la.assigned_character_name;
+GRANT SELECT ON character_loot_assignment_count TO authenticated;
+
+CREATE OR REPLACE FUNCTION public.update_raid_loot_assignments(data jsonb)
+RETURNS bigint
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  updated_count bigint;
+BEGIN
+  ALTER TABLE loot_assignment DISABLE TRIGGER refresh_character_dkp_spent_after_assignment;
+
+  INSERT INTO loot_assignment (loot_id, assigned_char_id, assigned_character_name, assigned_via_magelo)
+  SELECT
+    (e->>'id')::bigint,
+    nullif(trim(e->>'assigned_char_id'), ''),
+    nullif(trim(e->>'assigned_character_name'), ''),
+    (CASE WHEN trim(e->>'assigned_via_magelo') IN ('1', 'true') THEN 1 ELSE 0 END)::smallint
+  FROM jsonb_array_elements(data) AS e
+  ON CONFLICT (loot_id) DO UPDATE SET
+    assigned_char_id = EXCLUDED.assigned_char_id,
+    assigned_character_name = EXCLUDED.assigned_character_name,
+    assigned_via_magelo = EXCLUDED.assigned_via_magelo;
+  GET DIAGNOSTICS updated_count = ROW_COUNT;
+
+  ALTER TABLE loot_assignment ENABLE TRIGGER refresh_character_dkp_spent_after_assignment;
+
+  PERFORM refresh_character_dkp_spent();
+  PERFORM refresh_dkp_summary_internal();
+  RETURN updated_count;
+END;
+$$;
+
+COMMENT ON FUNCTION public.update_raid_loot_assignments(jsonb) IS 'Bulk upsert loot_assignment by loot id. Call once per batch; refreshes caches at end.';
+
+CREATE OR REPLACE FUNCTION public.refresh_after_bulk_loot_assignment()
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  PERFORM refresh_character_dkp_spent();
+  PERFORM refresh_dkp_summary_internal();
+END;
+$$;
+
+COMMENT ON FUNCTION public.refresh_after_bulk_loot_assignment() IS 'Refreshes character_dkp_spent and dkp_summary after bulk loot assignment updates.';
+
+CREATE OR REPLACE FUNCTION public.update_single_raid_loot_assignment(
+  p_loot_id bigint,
+  p_assigned_char_id text DEFAULT NULL,
+  p_assigned_character_name text DEFAULT NULL
+)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_char_id text;
+  v_my_account_id text;
+  v_allowed boolean := false;
+BEGIN
+  SELECT rl.char_id INTO v_char_id FROM raid_loot rl WHERE rl.id = p_loot_id;
+  IF v_char_id IS NULL THEN
+    RAISE EXCEPTION 'Loot row not found';
+  END IF;
+
+  IF public.is_officer() THEN
+    v_allowed := true;
+  ELSE
+    SELECT account_id INTO v_my_account_id FROM public.profiles WHERE id = auth.uid();
+    IF v_my_account_id IS NOT NULL THEN
+      SELECT EXISTS (
+        SELECT 1 FROM character_account ca
+        WHERE ca.char_id = v_char_id AND ca.account_id = v_my_account_id
+      ) INTO v_allowed;
+    END IF;
+  END IF;
+
+  IF NOT v_allowed THEN
+    RAISE EXCEPTION 'Not allowed to update this loot assignment';
+  END IF;
+
+  INSERT INTO loot_assignment (loot_id, assigned_char_id, assigned_character_name, assigned_via_magelo)
+  VALUES (p_loot_id, nullif(trim(p_assigned_char_id), ''), nullif(trim(p_assigned_character_name), ''), 0)
+  ON CONFLICT (loot_id) DO UPDATE SET
+    assigned_char_id = EXCLUDED.assigned_char_id,
+    assigned_character_name = EXCLUDED.assigned_character_name,
+    assigned_via_magelo = 0;
+END;
+$$;
+
+COMMENT ON FUNCTION public.update_single_raid_loot_assignment(bigint, text, text) IS 'Update one loot assignment. Allowed: officer, or user whose claimed account owns the loot row. Writes to loot_assignment.';
+
+ALTER TABLE loot_assignment ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Authenticated read loot_assignment" ON loot_assignment;
+CREATE POLICY "Authenticated read loot_assignment" ON loot_assignment FOR SELECT TO authenticated USING (true);
+DROP POLICY IF EXISTS "Anon read loot_assignment" ON loot_assignment;
+CREATE POLICY "Anon read loot_assignment" ON loot_assignment FOR SELECT TO anon USING (true);
+DROP POLICY IF EXISTS "Officers manage loot_assignment" ON loot_assignment;
+CREATE POLICY "Officers manage loot_assignment" ON loot_assignment FOR ALL TO authenticated
+  USING (public.is_officer())
+  WITH CHECK (public.is_officer());
+
+GRANT EXECUTE ON FUNCTION public.update_raid_loot_assignments(jsonb) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.update_raid_loot_assignments(jsonb) TO anon;
+GRANT EXECUTE ON FUNCTION public.update_single_raid_loot_assignment(bigint, text, text) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.update_single_raid_loot_assignment(bigint, text, text) TO anon;
+
+-- Officer-only raider activity snapshot for /officer/raider-activity.
+CREATE OR REPLACE FUNCTION public.officer_raider_activity(
+  p_lookback_days integer DEFAULT 120,
+  p_absent_raid_count integer DEFAULT 5
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_lookback int := GREATEST(COALESCE(p_lookback_days, 120), 90);
+  v_cutoff date := (CURRENT_DATE - v_lookback);
+  v_result jsonb;
+BEGIN
+  IF NOT public.is_officer() THEN
+    RAISE EXCEPTION 'Only officers can view raider activity';
+  END IF;
+
+  IF v_lookback < 1 OR v_lookback > 730 THEN
+    RAISE EXCEPTION 'p_lookback_days must be between 1 and 730';
+  END IF;
+
+  SET LOCAL statement_timeout = '120s';
+
+  WITH raids_in_range AS (
+    SELECT
+      r.raid_id,
+      public.raid_date_parsed(r.date_iso) AS raid_date,
+      r.date_iso
+    FROM raids r
+    WHERE public.raid_date_parsed(r.date_iso) >= v_cutoff
+      AND public.raid_date_parsed(r.date_iso) <= CURRENT_DATE
+  ),
+  raids_with_event_att AS (
+    SELECT DISTINCT rea.raid_id
+    FROM raid_event_attendance rea
+    JOIN raids_in_range rir ON rir.raid_id = rea.raid_id
+  ),
+  event_attendance_resolved AS (
+    SELECT DISTINCT
+      rea.raid_id,
+      COALESCE(
+        NULLIF(trim(rea.account_id::text), ''),
+        ca_by_char.account_id,
+        ca_by_name.account_id
+      ) AS account_id
+    FROM raid_event_attendance rea
+    JOIN raids_with_event_att rwe ON rwe.raid_id = rea.raid_id
+    JOIN raid_events re
+      ON re.raid_id = rea.raid_id
+     AND re.event_id = rea.event_id
+    LEFT JOIN character_account ca_by_char
+      ON rea.char_id IS NOT NULL
+     AND trim(rea.char_id::text) <> ''
+     AND ca_by_char.char_id = trim(rea.char_id::text)
+    LEFT JOIN characters c_match
+      ON rea.character_name IS NOT NULL
+     AND trim(rea.character_name) <> ''
+     AND trim(c_match.name) = trim(rea.character_name)
+    LEFT JOIN character_account ca_by_name
+      ON ca_by_name.char_id = c_match.char_id
+    WHERE COALESCE(
+      NULLIF(trim(rea.account_id::text), ''),
+      ca_by_char.account_id,
+      ca_by_name.account_id
+    ) IS NOT NULL
+  ),
+  raid_level_attendance_resolved AS (
+    SELECT DISTINCT
+      ra.raid_id,
+      COALESCE(
+        ca_by_char.account_id,
+        ca_by_name.account_id
+      ) AS account_id
+    FROM raid_attendance ra
+    JOIN raids_in_range rir ON rir.raid_id = ra.raid_id
+    LEFT JOIN raids_with_event_att rwe ON rwe.raid_id = ra.raid_id
+    LEFT JOIN character_account ca_by_char
+      ON ra.char_id IS NOT NULL
+     AND trim(ra.char_id::text) <> ''
+     AND ca_by_char.char_id = trim(ra.char_id::text)
+    LEFT JOIN characters c_match
+      ON ra.character_name IS NOT NULL
+     AND trim(ra.character_name) <> ''
+     AND trim(c_match.name) = trim(ra.character_name)
+    LEFT JOIN character_account ca_by_name
+      ON ca_by_name.char_id = c_match.char_id
+    WHERE rwe.raid_id IS NULL
+      AND COALESCE(ca_by_char.account_id, ca_by_name.account_id) IS NOT NULL
+  ),
+  attendance_union AS (
+    SELECT raid_id, account_id FROM event_attendance_resolved
+    UNION
+    SELECT raid_id, account_id FROM raid_level_attendance_resolved
+  ),
+  attendee_counts AS (
+    SELECT raid_id, COUNT(DISTINCT account_id)::int AS attendee_count
+    FROM attendance_union
+    GROUP BY raid_id
+  ),
+  raids_json AS (
+    SELECT COALESCE(
+      jsonb_agg(
+        jsonb_build_object(
+          'raid_id', rir.raid_id,
+          'date_iso', rir.date_iso,
+          'raid_date', to_char(rir.raid_date, 'YYYY-MM-DD'),
+          'attendee_count', COALESCE(ec.attendee_count, 0)
+        )
+        ORDER BY rir.raid_date ASC, rir.raid_id ASC
+      ),
+      '[]'::jsonb
+    ) AS j
+    FROM raids_in_range rir
+    LEFT JOIN attendee_counts ec ON ec.raid_id = rir.raid_id
+  ),
+  active_by_date AS (
+    SELECT DISTINCT s.account_id
+    FROM account_dkp_summary s
+    JOIN accounts a ON a.account_id = s.account_id
+    WHERE NOT COALESCE(a.inactive, false)
+      AND s.last_activity_date IS NOT NULL
+      AND s.last_activity_date >= (CURRENT_DATE - v_lookback)
+  ),
+  pinned AS (
+    SELECT DISTINCT aa.account_id
+    FROM active_accounts aa
+    JOIN accounts a ON a.account_id = aa.account_id
+    WHERE NOT COALESCE(a.inactive, false)
+  ),
+  roster AS (
+    SELECT account_id FROM active_by_date
+    UNION
+    SELECT account_id FROM pinned
+  ),
+  accounts_with_att AS (
+    SELECT DISTINCT au.account_id
+    FROM attendance_union au
+  ),
+  all_account_ids AS (
+    SELECT account_id FROM roster
+    UNION
+    SELECT account_id FROM accounts_with_att
+  ),
+  accounts_json AS (
+    SELECT COALESCE(
+      jsonb_agg(
+        jsonb_build_object(
+          'account_id', a.account_id,
+          'display_name', COALESCE(NULLIF(trim(a.display_name), ''), ''),
+          'toon_names', COALESCE(NULLIF(trim(a.toon_names), ''), ''),
+          'inactive', COALESCE(a.inactive, false)
+        )
+        ORDER BY lower(COALESCE(NULLIF(trim(a.display_name), ''), a.account_id))
+      ),
+      '[]'::jsonb
+    ) AS j
+    FROM accounts a
+    JOIN all_account_ids ids ON ids.account_id = a.account_id
+  ),
+  roster_json AS (
+    SELECT COALESCE(jsonb_agg(account_id ORDER BY account_id), '[]'::jsonb) AS j
+    FROM roster
+  ),
+  attendance_json AS (
+    SELECT COALESCE(
+      jsonb_agg(
+        jsonb_build_object('raid_id', au.raid_id, 'account_id', au.account_id)
+        ORDER BY au.raid_id, au.account_id
+      ),
+      '[]'::jsonb
+    ) AS j
+    FROM attendance_union au
+  )
+  SELECT jsonb_build_object(
+    'generated_at', to_jsonb(now() AT TIME ZONE 'utc'),
+    'lookback_days', to_jsonb(v_lookback),
+    'absent_raid_count', to_jsonb(GREATEST(COALESCE(p_absent_raid_count, 5), 1)),
+    'raids', (SELECT j FROM raids_json),
+    'roster_account_ids', (SELECT j FROM roster_json),
+    'accounts', (SELECT j FROM accounts_json),
+    'attendance', (SELECT j FROM attendance_json)
+  )
+  INTO v_result;
+
+  RETURN v_result;
+END;
+$$;
+
+COMMENT ON FUNCTION public.officer_raider_activity(integer, integer) IS
+  'Officer-only: raid attendance snapshot by account for Raider Activity page.';
+
+GRANT EXECUTE ON FUNCTION public.officer_raider_activity(integer, integer) TO authenticated;
+
+CREATE TABLE IF NOT EXISTS public.account_class_coverage (
+  account_id TEXT PRIMARY KEY REFERENCES public.accounts(account_id) ON DELETE CASCADE,
+  main_char_id TEXT,
+  classes JSONB NOT NULL DEFAULT '[]'::jsonb,
+  refreshed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  rankings_hash TEXT,
+  meta JSONB
+);
+
+COMMENT ON TABLE public.account_class_coverage IS
+  'Per-account viable raid classes from Magelo gear rankings. gear_pct is class-normalized (>75% general, >85% tanks). Refreshed by CI, not on page load.';
+
+COMMENT ON COLUMN public.account_class_coverage.classes IS
+  'JSON array: { abbrev, class_name, gear_pct, is_main, char_id, char_name }. gear_pct = 100 * raw / best-in-class raw in class_rankings export (Magelo rankings table parity).';
+
+CREATE INDEX IF NOT EXISTS idx_account_class_coverage_refreshed
+  ON public.account_class_coverage(refreshed_at DESC);
+
+ALTER TABLE public.account_class_coverage ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Officers read account_class_coverage" ON public.account_class_coverage;
+CREATE POLICY "Officers read account_class_coverage"
+  ON public.account_class_coverage
+  FOR SELECT
+  TO authenticated
+  USING (public.is_officer());
+
+CREATE OR REPLACE FUNCTION public.officer_upsert_account_class_coverage(p_payload jsonb)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_rows jsonb;
+  v_hash text;
+  v_refreshed timestamptz := now();
+  v_inserted int := 0;
+BEGIN
+  IF NOT public.is_officer() THEN
+    RAISE EXCEPTION 'Only officers can refresh class coverage';
+  END IF;
+
+  v_rows := COALESCE(p_payload->'rows', '[]'::jsonb);
+  v_hash := nullif(trim(p_payload->>'rankings_hash'), '');
+
+  IF jsonb_typeof(v_rows) <> 'array' THEN
+    RAISE EXCEPTION 'p_payload.rows must be a JSON array';
+  END IF;
+
+  DELETE FROM public.account_class_coverage;
+
+  INSERT INTO public.account_class_coverage (
+    account_id,
+    main_char_id,
+    classes,
+    refreshed_at,
+    rankings_hash,
+    meta
+  )
+  SELECT
+    nullif(trim(e->>'account_id'), ''),
+    nullif(trim(e->>'main_char_id'), ''),
+    COALESCE(e->'classes', '[]'::jsonb),
+    v_refreshed,
+    v_hash,
+    e->'meta'
+  FROM jsonb_array_elements(v_rows) AS e
+  WHERE nullif(trim(e->>'account_id'), '') IS NOT NULL;
+
+  GET DIAGNOSTICS v_inserted = ROW_COUNT;
+
+  RETURN jsonb_build_object(
+    'inserted', v_inserted,
+    'refreshed_at', v_refreshed,
+    'rankings_hash', v_hash
+  );
+END;
+$$;
+
+COMMENT ON FUNCTION public.officer_upsert_account_class_coverage(jsonb) IS
+  'Officer-only: replace account_class_coverage from browser manual refresh (Magelo rankings computed client-side).';
+
+GRANT EXECUTE ON FUNCTION public.officer_upsert_account_class_coverage(jsonb) TO authenticated;

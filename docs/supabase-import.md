@@ -1,6 +1,6 @@
 # Importing data into Supabase
 
-After running `docs/supabase-schema.sql` in the SQL Editor:
+After the required SQL in [SCHEMA_DEPLOYMENT.md](SCHEMA_DEPLOYMENT.md) (start with `docs/supabase-schema-full.sql`; there is no `docs/supabase-schema.sql`):
 
 1. **Import CSVs**  
    In Supabase: Table Editor → select table → click "Import data from CSV".  

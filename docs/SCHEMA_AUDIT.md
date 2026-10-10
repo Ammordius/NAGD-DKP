@@ -1,134 +1,101 @@
-# Schema audit: DB vs repo
+# Schema audit: live DKP database vs repo
 
-Audit from exported Supabase inventory (tables, functions, triggers, RLS policies) vs the repo’s SQL files. Use this to keep the canonical schema and docs in sync.
+Audit of the live Supabase project **DKP** (`ynvwtvphqsevhpytcugj`, us-west-2) against the repo, checked 2026-10-09. Deploy order is [SCHEMA_DEPLOYMENT.md](SCHEMA_DEPLOYMENT.md). RPC locations are [SCHEMA_RPC_INDEX.md](SCHEMA_RPC_INDEX.md).
 
-**Redundancy cleanup (supabase-schema-full.sql):** The single-file schema was audited and duplicate definitions removed: only one definition each of `is_officer`, `refresh_raid_attendance_totals` (account version, including `raid_attendance_dkp_by_account`), `end_restore_load`, and `truncate_dkp_for_restore`; one Profiles RLS block (select/update). `delete_raid` now deletes from `raid_attendance_dkp_by_account` for the raid so that table does not retain stale rows.
+**`docs/supabase-schema.sql` is not in the repo.** The applyable schema is [supabase-schema-full.sql](supabase-schema-full.sql). It includes loot assignment, `character_dkp_spent`, raider activity, and class coverage. The older split files are historical sources. Do not run them after the full file.
 
----
-
-## 1. Tables (DB vs repo)
-
-| Table | In DB | In repo (file) | Notes |
-|-------|-------|----------------|-------|
-| account_dkp_summary | ✓ | supabase-account-dkp-schema.sql | |
-| accounts | ✓ | supabase-schema.sql | |
-| active_accounts | ✓ | supabase-account-dkp-schema.sql | |
-| active_raiders | ✓ | supabase-schema.sql | |
-| character_account | ✓ | supabase-schema.sql | |
-| character_dkp_spent | ✓ | supabase-loot-to-character.sql / loot-assignment-table | Optional (loot flow). |
-| character_loot_assignment_counts | ✓ | supabase-loot-to-character.sql (table); loot-assignment-table (view `character_loot_assignment_count`) | Optional. Loot-to-character uses table; loot-assignment-table uses view. |
-| characters | ✓ | supabase-schema.sql | |
-| dkp_adjustments | ✓ | supabase-schema.sql | |
-| dkp_period_totals | ✓ | supabase-schema.sql | |
-| dkp_summary | ✓ | supabase-schema.sql | |
-| loot_assignment | ✓ | account-dkp (stub); loot-assignment-table (full) | |
-| officer_audit_log | ✓ | supabase-schema.sql | |
-| profiles | ✓ | supabase-schema.sql | |
-| raid_attendance | ✓ | supabase-schema.sql | |
-| raid_attendance_dkp | ✓ | supabase-schema.sql | |
-| raid_attendance_dkp_by_account | ✓ | supabase-account-dkp-schema.sql | |
-| raid_classifications | ✓ | supabase-schema.sql | |
-| raid_dkp_totals | ✓ | supabase-schema.sql | |
-| raid_event_attendance | ✓ | supabase-schema.sql | |
-| raid_events | ✓ | supabase-schema.sql | |
-| raid_loot | ✓ | supabase-schema.sql | |
-| raids | ✓ | supabase-schema.sql | |
-| restore_in_progress | ✓ | supabase-schema.sql | |
-
-All DB tables are accounted for in the repo. Optional tables (character_dkp_spent, character_loot_assignment_counts) come from loot-to-character / loot-assignment optional SQL.
+A fresh database that runs `supabase-schema-full.sql` once matches the routed app. Re-run that file on an existing project to install anything it newly includes (`CREATE OR REPLACE` for functions, `CREATE TABLE IF NOT EXISTS` for `character_dkp_spent` and `account_class_coverage`).
 
 ---
 
-## 2. Functions (DB vs repo)
+## 1. Required deploy
 
-### Required for deploy (canonical)
-
-| Function | In DB | In repo (file) | Notes |
-|----------|-------|----------------|-------|
-| add_character_to_my_account | ✓ | supabase-schema.sql | |
-| begin_restore_load | ✓ | supabase-schema.sql | |
-| claim_account | ✓ | supabase-schema.sql | |
-| create_account | ✓ | supabase-schema.sql | |
-| create_my_account | ✓ | supabase-schema.sql | |
-| delete_raid | ✓ | supabase-officer-raids.sql | |
-| delete_raid_for_reupload | ✓ | delete_raid_for_reupload_rpc.sql → **upload_script_rpcs.sql** | Consolidated in upload_script_rpcs.sql. |
-| delete_tic | ✓ | supabase-officer-raids.sql | |
-| end_restore_load | ✓ | supabase-schema.sql; overridden in account-dkp-schema | |
-| fix_serial_sequences_for_restore | ✓ | supabase-schema.sql | |
-| handle_new_user | ✓ | supabase-schema.sql | |
-| is_officer | ✓ | supabase-schema.sql; overridden in officer-raids | |
-| raid_date_parsed | ✓ | supabase-schema.sql | |
-| refresh_account_dkp_summary | ✓ | supabase-account-dkp-schema.sql | |
-| refresh_account_dkp_summary_for_raid | ✓ | supabase-account-dkp-schema.sql | |
-| refresh_account_dkp_summary_internal | ✓ | supabase-account-dkp-schema.sql | |
-| refresh_all_raid_attendance_totals | ✓ | supabase-schema.sql | |
-| refresh_dkp_summary | ✓ | supabase-schema.sql | |
-| refresh_dkp_summary_internal | ✓ | supabase-schema.sql | |
-| refresh_raid_attendance_totals | ✓ | supabase-schema.sql; overridden in account-dkp-schema | |
-| reset_claim_cooldown | ✓ | supabase-schema.sql | |
-| restore_load_in_progress | ✓ | supabase-schema.sql | |
-| truncate_dkp_for_restore | ✓ | supabase-schema.sql; overridden in account-dkp-schema | |
-| unclaim_account | ✓ | supabase-schema.sql | |
-| trigger_* (delta, refresh_dkp_summary, refresh_raid_totals_*) | ✓ | supabase-schema.sql | |
-
-### Upload script (canonical – in upload_script_rpcs.sql)
-
-| Function | In DB | In repo | Notes |
-|----------|-------|---------|-------|
-| insert_raid_event_attendance_for_upload | ✓ | **Was missing** → added in **upload_script_rpcs.sql** | Used by upload_raid_detail_to_supabase.py; had no definition in repo. |
-
-### Optional (loot / backfill / migration)
-
-| Function | In DB | In repo (file) | Notes |
-|----------|-------|----------------|-------|
-| get_character_dkp_spent | ✓ | supabase-loot-to-character.sql | Optional. |
-| refresh_after_bulk_loot_assignment | ✓ | supabase-loot-to-character.sql; loot-assignment-table.sql | Optional. |
-| refresh_character_dkp_spent | ✓ | supabase-loot-assignment-table.sql | Optional. |
-| update_raid_event_times | ✓ | supabase-update-event-times-rpc.sql | Optional (backfill script). |
-| update_raid_loot_assignments | ✓ | supabase-loot-to-character.sql; loot-assignment-table | Optional. |
-| update_single_raid_loot_assignment | ✓ | supabase-loot-assignment-table.sql; supabase-loot-to-character.sql | Optional. |
-| trigger_refresh_character_dkp_spent* | ✓ | loot-to-character; loot-assignment-table | Optional. |
-| parse_raid_date_to_iso | ✓ | supabase-backfill-raid-dates.sql | One-off backfill only. |
-
-### Migration-only (do not run on fresh deploy)
-
-| Function | In DB | In repo (file) | Notes |
-|----------|-------|----------------|-------|
-| clear_restore_load | ✓ | supabase-account-dkp-migration.sql | Only for migration. |
-| refresh_raid_attendance_totals_batch (2 overloads) | ✓ | supabase-account-dkp-migration.sql | (int, text) and (int, bigint); both intentional. |
-| run_account_dkp_migration | ✓ | supabase-account-dkp-migration.sql | One-shot. |
-| run_account_dkp_migration_step1, step1_batch, step2a, step3, step4 | ✓ | supabase-account-dkp-migration.sql | One-shot. |
+| File | Run? |
+|------|------|
+| supabase-schema-full.sql | Yes. Once. |
+| supabase-loot-to-character.sql | No. Older copy. Re-adds `raid_loot` assignment columns and replaces the assignment RPCs. |
+| supabase-loot-assignment-table.sql | No. Folded into the full file. |
+| supabase-officer-raider-activity.sql | No. Folded into the full file. |
+| supabase-account-class-coverage.sql | No. Folded into the full file. |
 
 ---
 
-## 3. Redundant / incorrect
+## 2. Tables
 
-- **refresh_raid_attendance_totals_batch** — Two overloads in DB; both defined in migration file. Not redundant: (int, bigint) wrapper calls (int, text). Keep both; migration-only.
-- **Anon read policies** — Canonical is *no* anon read. DB had "Anon read character_dkp_spent" and "Anon read loot_assignment" (likely added for a feature). Repo now drops these when reapplying schema/require-auth so deploy is consistent.
-- **insert_raid_event_attendance_for_upload** — Was in DB and used by upload script but **had no definition in repo**. Added to **docs/upload_script_rpcs.sql** so deploy includes it.
+| Table | Live DKP | Where it is created |
+|-------|----------|---------------------|
+| profiles, characters, accounts, character_account | yes | supabase-schema-full.sql |
+| raids, raid_events, raid_loot, raid_attendance, raid_event_attendance | yes | supabase-schema-full.sql |
+| raid_dkp_totals, raid_attendance_dkp, raid_classifications | yes | supabase-schema-full.sql |
+| dkp_adjustments, dkp_summary, dkp_period_totals, active_raiders | yes | supabase-schema-full.sql |
+| officer_audit_log, restore_in_progress | yes | supabase-schema-full.sql |
+| loot_assignment | yes | supabase-schema-full.sql (table early; RLS and assignment RPCs at the end) |
+| character_loot_assignment_counts | yes | supabase-schema-full.sql |
+| account_dkp_summary, raid_attendance_dkp_by_account, active_accounts | yes | supabase-schema-full.sql |
+| bid_portfolio_auction_fact (includes `runner_up_char_guess`) | yes | supabase-schema-full.sql |
+| character_dkp_spent | yes | supabase-schema-full.sql |
+| account_class_coverage | yes | supabase-schema-full.sql |
 
----
+Live `raid_loot` columns are `id`, `raid_id`, `event_id`, `item_name`, `char_id`, `character_name`, `cost`. Assignment columns are not on `raid_loot`. They live on `loot_assignment`.
 
-## 4. RLS policies
-
-- **Canonical:** Authenticated read for data; officer-only write where applicable; no anon read on DKP/loot tables.
-- **DB had:** Anon read on `character_dkp_spent` and `loot_assignment`. These are now dropped in main schema and in require-auth script so a full re-apply matches canonical (auth-only).
-
----
-
-## 5. Triggers
-
-All DB triggers match repo:
-
-- DKP: delta_dkp_after_*, full_refresh_dkp_after_*, refresh_raid_totals_after_events_*, refresh_raid_totals_after_event_attendance_* (including statement-level del).
-- Loot (optional): refresh_character_dkp_spent_after_assignment (loot_assignment), refresh_character_dkp_spent_after_loot (raid_loot).
-
-No redundant or missing triggers.
+Views on the live database that `schema-full` creates: `raid_events_ordered`, `officer_audit_loot`, `raid_loot_with_assignment`, `character_loot_assignment_count`, `guild_loot_sale_enriched`.
 
 ---
 
-## 6. Single canonical deploy
+## 3. Functions the app or scripts call
 
-**Run once:** **docs/supabase-schema-full.sql** in the Supabase SQL Editor. No other SQL files are required for a working deploy. Optional (loot-to-character, etc.) only if you use those features.
+Present on live DKP and defined in `supabase-schema-full.sql`:
 
-Do **not** run account-dkp-migration.sql on a fresh deploy; only for one-time migration of existing DBs.
+- Account claim: `add_character_to_my_account`, `claim_account`, `unclaim_account`, `create_account`, `create_my_account`, `reset_claim_cooldown`
+- DKP refresh: `refresh_dkp_summary`, `refresh_account_dkp_summary`, `refresh_account_dkp_summary_for_raid`, `refresh_all_raid_attendance_totals`
+- Officer raids: `delete_raid`, `delete_tic`, `remove_attendee_from_tic`, `add_officer_tic`, `add_attendee_to_tic`
+- Restore and upload: `begin_restore_load`, `end_restore_load`, `truncate_dkp_for_restore`, `delete_raid_for_reupload`, `insert_raid_event_attendance_for_upload`
+- Bidding portfolio: `normalize_item_name_for_lookup`, `officer_bid_portfolio_for_loot`, `officer_account_bidding_portfolio`, `officer_backfill_bid_portfolio_batch`, procedure `dba_backfill_bid_portfolio_range`
+- Loot assignment and spent: `update_single_raid_loot_assignment`, `update_raid_loot_assignments`, `get_character_dkp_spent`, `refresh_character_dkp_spent`, `refresh_after_bulk_loot_assignment`
+- Raider activity and class coverage: `officer_raider_activity`, `officer_upsert_account_class_coverage`
+
+Not in `supabase-schema-full.sql`:
+
+| Function | Defined in |
+|----------|------------|
+| update_raid_event_times | supabase-update-event-times-rpc.sql (script only; not a web route) |
+
+---
+
+## 4. Retired bid-forecast RPCs
+
+Not in `supabase-schema-full.sql`. Not on the live database (checked 2026-10-09):
+
+- `officer_global_bid_forecast`
+- `officer_loot_bid_forecast`
+- `officer_loot_bid_forecast_v2`
+
+[drop-officer-bid-forecast.sql](drop-officer-bid-forecast.sql) drops them. `web/src/pages/OfficerLootBidForecast.jsx` and `OfficerGlobalLootBidForecast.jsx` still call the retired RPCs, and those pages are **not** routed in `web/src/App.jsx`. Do not add the functions back into the canonical schema.
+
+`normalize_item_name_for_lookup` is still in `supabase-schema-full.sql` and is still on the live database. It is not the retired forecast RPC.
+
+---
+
+## 5. RLS
+
+Core DKP tables are authenticated-only in `supabase-schema-full.sql`.
+
+The same file creates anon SELECT on:
+
+- `loot_assignment` (“Anon read loot_assignment”)
+- `character_dkp_spent` (“Anon read character_dkp_spent”)
+
+That matches the live database as of 2026-10-09. [supabase-require-auth-remove-anon-read.sql](supabase-require-auth-remove-anon-read.sql) drops those policies. Re-running `supabase-schema-full.sql` creates them again. `supabase-schema-full.sql` also `GRANT SELECT ON raid_loot_with_assignment TO anon`. The view has RLS off; row access still depends on the underlying tables.
+
+---
+
+## 6. Leftovers on the live database
+
+These are from one-time migration or backfill. They are not part of a fresh standup. Leave them on an already-migrated database.
+
+- `run_account_dkp_migration`, `run_account_dkp_migration_step1`, `run_account_dkp_migration_step1_batch`, `run_account_dkp_migration_step2a`, `run_account_dkp_migration_step3`, `run_account_dkp_migration_step4`
+- `clear_restore_load`
+- `refresh_raid_attendance_totals_batch` (two overloads)
+- `parse_raid_date_to_iso`
+
+Defined in `supabase-account-dkp-migration.sql` and `supabase-backfill-raid-dates.sql`.

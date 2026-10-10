@@ -27,7 +27,7 @@ Add both in **Settings → Secrets and variables → Actions**. The backup workf
 
 ### How restore clears tables
 
-The restore script **always uses the `truncate_dkp_for_restore()` RPC** (defined in **`docs/supabase-schema.sql`**) to clear DKP data tables. Truncate is one fast call; then the job loads from CSV. No manual SQL step.
+The restore script **always uses the `truncate_dkp_for_restore()` RPC** (defined in **`docs/supabase-schema-full.sql`**) to clear DKP data tables. Truncate is one fast call; then the job loads from CSV. No manual SQL step.
 
 **Load-only:** To skip the clear phase (e.g. you already truncated in Supabase), run the workflow with **Truncate already run in Supabase (load only)** set to **true**.
 

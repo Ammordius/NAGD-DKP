@@ -1,5 +1,7 @@
+-- HISTORICAL SOURCE. Included in docs/supabase-schema-full.sql. Do not run this file:
+-- it writes assignment columns on raid_loot and replaces the loot_assignment RPCs.
 -- Loot-to-character assignment: link raid_loot to the toon that actually has the item (from Magelo).
--- Run after supabase-schema.sql. Used by assign_loot_to_characters.py and eventual CI from Magelo pulls.
+-- Used by assign_loot_to_characters.py and eventual CI from Magelo pulls.
 --
 -- Data: assign_loot_to_characters.py writes data/raid_loot.csv (with assigned_char_id, assigned_character_name)
 -- and data/character_loot_assignment_counts.csv (char_id, character_name, items_assigned).
