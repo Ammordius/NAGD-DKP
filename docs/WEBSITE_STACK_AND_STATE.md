@@ -24,7 +24,7 @@ Set in `.env.local` (local) and Vercel project settings (production):
 |----------|---------|
 | `VITE_SUPABASE_URL` | Supabase project URL |
 | `VITE_SUPABASE_ANON_KEY` | Supabase anon (public) key |
-| `VITE_CLASS_RANKINGS_URL` | Optional; bid forecast / class coverage default to `/class_rankings.json`. Guild export: `https://ammordius.github.io/NAGD-spell-inventory/class_rankings.json` (set GitHub secret `CLASS_RANKINGS_URL` to the same for CI). |
+| `VITE_CLASS_RANKINGS_URL` | Optional; Raider Activity “Reload coverage” falls back to `/class_rankings.json`. Guild export: `https://ammordius.github.io/NAGD-spell-inventory/class_rankings.json` (set GitHub secret `CLASS_RANKINGS_URL` to the same for CI). |
 
 Access in code: `import.meta.env.VITE_*` (Vite convention).
 
@@ -56,8 +56,6 @@ Defined in `web/src/App.jsx`.
 | `/dkp` | `DKP` | Signed in |
 | `/officer` | `Officer` | Signed in (redirect if not officer) |
 | `/officer/dkp-changelog` | `DkpChangelog` | Signed in (officer gate in page) |
-| `/officer/loot-bid-forecast` | `OfficerLootBidForecast` | Signed in (officer) |
-| `/officer/global-loot-bid-forecast` | `OfficerGlobalLootBidForecast` | Signed in (officer) |
 | `/officer/claim-cooldowns` | `OfficerClaimCooldowns` | Signed in (officer) |
 | `/officer/raider-activity` | `OfficerRaiderActivity` | Signed in (officer); class coverage from `account_class_coverage` (CI/Magelo) |
 | `/loot` | `LootSearch` | Signed in |
@@ -88,10 +86,9 @@ Typical tables/RPCs (non-exhaustive; see `docs/supabase-schema-full.sql` for tru
 
 Fetched with `fetch('/…')` from `public/` or CDN:
 
-- Item stats, prices, mob loot, raid item sources: see `getDkpMobLoot`, `getRaidItemSources` in `web/src/lib/staticData.js` and usages in item/raid/officer flows.
-- Bid forecast precompute: `/bid_forecast_meta.json`, shards under `/bid_forecast_items/` (see `web/src/lib/bidForecastPrecomputeFetch.js`).
-- Optional `VITE_CLASS_RANKINGS_URL` or `/class_rankings.json` for bid forecast rankings and officer **Reload coverage** on Raider Activity.
-- **Class coverage cache:** table `account_class_coverage` (deploy `docs/supabase-account-class-coverage.sql`). Refreshed by CI job `build_account_class_coverage.mjs` in `.github/workflows/loot-to-character.yml` (`bid_forecast_index`), not on each page load.
+- Item stats, mob loot, raid item sources: see `getDkpMobLoot`, `getRaidItemSources` in `web/src/lib/staticData.js` and usages in item/raid/officer flows.
+- Optional `VITE_CLASS_RANKINGS_URL` or `/class_rankings.json` for officer **Reload coverage** on Raider Activity.
+- **Class coverage cache:** table `account_class_coverage` (deploy `docs/supabase-account-class-coverage.sql`). Refreshed by CI job `class_coverage` (`scripts/build_account_class_coverage.mjs`) in `.github/workflows/loot-to-character.yml`, not on each page load.
 
 `web/vercel.json` sets long cache headers for some JSON paths.
 
@@ -100,7 +97,7 @@ Fetched with `fetch('/…')` from `public/` or CDN:
 | Mechanism | Key pattern | Purpose |
 |-----------|------------|---------|
 | `sessionStorage` | `dkp-last-path` | Last visited path (see below) |
-| `sessionStorage` | `pageState:…` | `usePersistedState` UI persistence (filters, Raids calendar month, bid-forecast fields, raid detail expanded tics, account activity page index, etc.) |
+| `sessionStorage` | `pageState:…` | `usePersistedState` UI persistence (filters, Raids calendar month, raid detail expanded tics, account activity page index, etc.) |
 | `sessionStorage` | `account-detail-cache-${accountId}` | SWR fallback for account page |
 | `sessionStorage` | Loot search cache | See `LootSearch.jsx` |
 | TTL cache | `raids_month_*` | Raids calendar month blobs (`web/src/lib/cache.js`) |
@@ -135,7 +132,6 @@ If a bookmark to `/` unexpectedly jumps elsewhere, this behavior is why.
 | Screen | Query | Meaning |
 |--------|--------|---------|
 | `/officer` | `raid` | Selected raid for officer editing (synced with dropdown) |
-| `/officer/loot-bid-forecast` | `raid` | Raid scope for bid hints |
 | `/accounts/:accountId` | `tab` | `activity` \| `characters` \| `loot` \| `history` (default: activity; default tab may omit query) |
 | `/profile` | `tab` | `activity` \| `characters` |
 

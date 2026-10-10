@@ -32,7 +32,7 @@ _KNOWN_ABBREVS = frozenset(_CLASS_FULL_TO_ABBREV.values())
 
 
 def normalize_item_name_for_lookup(name: str) -> str:
-    """Match web/src/lib/itemNameNormalize.js and SQL normalize_item_name_for_lookup."""
+    """Match SQL public.normalize_item_name_for_lookup and scripts/bid_portfolio_local/normalize.py."""
     if not name or not isinstance(name, str):
         return ""
     s = name.strip()

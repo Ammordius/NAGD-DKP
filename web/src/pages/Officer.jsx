@@ -998,28 +998,12 @@ export default function Officer({ isOfficer }) {
     <div className="container container--officer">
       <h1>Officer – Raid management</h1>
       <p style={{ color: '#a1a1aa' }}>
-        Add raids from Discord, paste DKP tics (channel lists), add loot manually or from logs. All edits require officer permissions.{' '}
-        <Link
-          to={
-            selectedRaidId
-              ? `/officer/loot-bid-forecast?raid=${encodeURIComponent(selectedRaidId)}`
-              : '/officer/loot-bid-forecast'
-          }
-        >
-          Loot bid interest (by raid)
-        </Link>
-        {' · '}
-        <Link to="/officer/global-loot-bid-forecast">Global item bid (active roster)</Link>
-        {' '}(heuristic, officer-only).
+        Add raids from Discord, paste DKP tics (channel lists), add loot manually or from logs. All edits require officer permissions.
       </p>
       <section className="card officer-tools">
         <h2 style={{ marginTop: 0 }}>Officer tools</h2>
         <p style={{ marginBottom: 0 }}>
           <Link to="/officer/dkp-changelog">DKP changelog</Link>
-          {' · '}
-          <Link to="/officer/loot-bid-forecast">Bid hints</Link>
-          {' · '}
-          <Link to="/officer/global-loot-bid-forecast">Global bid</Link>
           {' · '}
           <Link to="/officer/who-parser">Who parser</Link>
           {' · '}

@@ -113,7 +113,7 @@ Implementation: [`scripts/second_bidder_model/item_stats_eligibility.py`](../scr
 
 ## Eligibility map (`eligible_by_loot_id`)
 
-Optional filter for “could use this item” from **external** data (Magelo, `bid_forecast_items`, etc.). Passed through `prepare_second_bidder_events` / `run_from_backup`.
+Optional filter for “could use this item” from **external** data (for example a Magelo export). Passed through `prepare_second_bidder_events` / `run_from_backup`.
 
 **Batch CLI:** pass `--eligibility-json path.json` to [`scripts/run_second_bidder_batch.py`](../scripts/run_second_bidder_batch.py) (or `--eligibility-json` on [`scripts/run_second_bidder_sample.py`](../scripts/run_second_bidder_sample.py)). The file is parsed by [`scripts/second_bidder_model/eligibility_io.py`](../scripts/second_bidder_model/eligibility_io.py). Character pairs from this file are **intersected** with derived CSV+`item_stats` pairs when both are in use.
 

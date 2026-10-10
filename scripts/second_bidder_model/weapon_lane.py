@@ -1,4 +1,4 @@
-"""Weapon sub-lanes for PRIMARY/SECONDARY (parity with web/src/lib/bidForecastModel.js)."""
+"""Weapon sub-lanes for PRIMARY/SECONDARY (local copy of the old web heuristic)."""
 from __future__ import annotations
 
 import re

@@ -6,7 +6,6 @@
 |------|-----------|
 | Canonical schema (loot, attendance, accounts, portfolio RPCs) | [`docs/supabase-schema-full.sql`](supabase-schema-full.sql) |
 | Officer UI: inferred second place (cached + RPC) | [`web/src/pages/ItemPage.jsx`](../web/src/pages/ItemPage.jsx) |
-| Client bid simulation / heuristics | [`web/src/lib/bidForecastModel.js`](../web/src/lib/bidForecastModel.js) |
 | CSV backup → enriched guild sales + `balance_before` (parity with SQL) | [`scripts/bid_portfolio_local/`](../scripts/bid_portfolio_local/) |
 | Portfolio export / backfill | [`scripts/backfill_bid_portfolio_export.py`](../scripts/backfill_bid_portfolio_export.py), [`scripts/compute_bid_portfolio_from_csv.py`](../scripts/compute_bid_portfolio_from_csv.py) |
 

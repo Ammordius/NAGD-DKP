@@ -1,4 +1,4 @@
-"""Mirror web/src/lib/itemNameNormalize.js and public.raid_date_parsed (supabase-schema-full.sql)."""
+"""Mirror public.normalize_item_name_for_lookup and public.raid_date_parsed (supabase-schema-full.sql)."""
 
 from __future__ import annotations
 

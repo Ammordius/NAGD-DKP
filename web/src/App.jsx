@@ -17,8 +17,6 @@ import LootRecipients from './pages/LootRecipients'
 import Officer from './pages/Officer'
 import DkpChangelog from './pages/DkpChangelog'
 import OfficerClaimCooldowns from './pages/OfficerClaimCooldowns'
-import OfficerLootBidForecast from './pages/OfficerLootBidForecast'
-import OfficerGlobalLootBidForecast from './pages/OfficerGlobalLootBidForecast'
 import OfficerWhoParser from './pages/OfficerWhoParser'
 import OfficerRaiderActivity from './pages/OfficerRaiderActivity'
 import DiscordSchedule from './pages/DiscordSchedule'
@@ -132,8 +130,6 @@ export default function App() {
         <Route path="/dkp" element={<RequireAuth><DKP isOfficer={isOfficer} /></RequireAuth>} />
         <Route path="/officer" element={<RequireAuth><Officer isOfficer={isOfficer} /></RequireAuth>} />
         <Route path="/officer/dkp-changelog" element={<RequireAuth><DkpChangelog isOfficer={isOfficer} /></RequireAuth>} />
-        <Route path="/officer/loot-bid-forecast" element={<RequireAuth><OfficerLootBidForecast isOfficer={isOfficer} /></RequireAuth>} />
-        <Route path="/officer/global-loot-bid-forecast" element={<RequireAuth><OfficerGlobalLootBidForecast isOfficer={isOfficer} /></RequireAuth>} />
         <Route path="/officer/who-parser" element={<RequireAuth><OfficerWhoParser isOfficer={isOfficer} /></RequireAuth>} />
         <Route path="/officer/claim-cooldowns" element={<RequireAuth><OfficerClaimCooldowns isOfficer={isOfficer} /></RequireAuth>} />
         <Route path="/officer/raider-activity" element={<RequireAuth><OfficerRaiderActivity isOfficer={isOfficer} /></RequireAuth>} />
