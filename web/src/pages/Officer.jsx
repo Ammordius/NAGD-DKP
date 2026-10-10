@@ -1192,6 +1192,7 @@ export default function Officer({ isOfficer }) {
                   <div className="officer-suggest-wrap">
                     <input
                       type="text"
+                      name="dkp-tic-character"
                       value={addToTicCharQuery}
                       onChange={(e) => { setAddToTicCharQuery(e.target.value); setAddToTicResult(null); setShowCharDropdown(true) }}
                       onFocus={() => setShowCharDropdown(true)}
@@ -1203,7 +1204,7 @@ export default function Officer({ isOfficer }) {
                       aria-controls="add-to-tic-char-list"
                     />
                     {showAddToTicDropdown && (
-                      <ul id="add-to-tic-char-list" className="card officer-suggest" role="listbox" onMouseDown={(e) => e.preventDefault()}>
+                      <ul key={addToTicCharQuery} id="add-to-tic-char-list" className="card officer-suggest" role="listbox" onMouseDown={(e) => e.preventDefault()}>
                         {filteredCharacterNames.length === 0 ? (
                           <li style={{ color: '#71717a', cursor: 'default' }}>
                             {characterNamesList.length === 0 ? 'Loading characters…' : (addToTicCharQuery.trim() ? 'No matching characters' : 'Type to filter')}
@@ -1246,20 +1247,16 @@ export default function Officer({ isOfficer }) {
               <div className="officer-suggest-wrap">
                 <input
                   type="text"
+                  name="dkp-loot-item"
                   value={lootItemQuery}
                   onChange={(e) => { setLootItemQuery(e.target.value); setShowLootDropdown(true) }}
                   onFocus={() => setShowLootDropdown(true)}
                   onBlur={() => setTimeout(() => setShowLootDropdown(false), 150)}
                   placeholder="Item name (filter list or type new)"
-                  list="loot-item-list"
+                  autoComplete="off"
                 />
-                <datalist id="loot-item-list">
-                  {filteredItemNames.map((n) => (
-                    <option key={n} value={n} />
-                  ))}
-                </datalist>
                 {showLootDropdown && filteredItemNames.length > 0 && (
-                  <ul className="card officer-suggest" style={{ maxHeight: '280px' }}>
+                  <ul key={lootItemQuery} className="card officer-suggest" style={{ maxHeight: '280px' }}>
                     {filteredItemNames.map((n) => (
                       <li
                         key={n}
@@ -1274,6 +1271,7 @@ export default function Officer({ isOfficer }) {
               <div className="officer-suggest-wrap">
                 <input
                   type="text"
+                  name="dkp-loot-character"
                   value={lootCharName}
                   onChange={(e) => { setLootCharName(e.target.value); setError(''); setShowLootCharDropdown(true) }}
                   onFocus={() => setShowLootCharDropdown(true)}
@@ -1282,9 +1280,10 @@ export default function Officer({ isOfficer }) {
                   autoComplete="off"
                   aria-expanded={showLootCharDropdownList}
                   aria-haspopup="listbox"
+                  aria-controls="loot-char-list"
                 />
                 {showLootCharDropdownList && (
-                  <ul className="card officer-suggest" role="listbox" onMouseDown={(e) => e.preventDefault()}>
+                  <ul key={lootCharName} id="loot-char-list" className="card officer-suggest" role="listbox" onMouseDown={(e) => e.preventDefault()}>
                     {filteredLootCharacterNames.length === 0 ? (
                       <li style={{ color: '#71717a', cursor: 'default' }}>
                         {characterNamesList.length === 0 ? 'Loading characters…' : (lootCharName.trim() ? 'No matching characters' : 'Type to filter')}

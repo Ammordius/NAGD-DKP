@@ -561,6 +561,7 @@ export default function RaidDetail({ isOfficer }) {
             <div className="officer-suggest-wrap" style={{ minWidth: '200px' }}>
               <input
                 type="text"
+                name="dkp-tic-character"
                 value={addToTicCharQuery}
                 onChange={(e) => { setAddToTicCharQuery(e.target.value); setAddToTicResult(null); setShowCharDropdown(true) }}
                 onFocus={() => setShowCharDropdown(true)}
@@ -569,10 +570,11 @@ export default function RaidDetail({ isOfficer }) {
                 autoComplete="off"
                 aria-expanded={showCharDropdown}
                 aria-haspopup="listbox"
+                aria-controls="raid-tic-char-list"
                 style={{ padding: '0.5rem 0.6rem', fontSize: '1rem', width: '100%', minWidth: '180px', boxSizing: 'border-box' }}
               />
               {showCharDropdown && (
-                <ul className="card officer-suggest" role="listbox" onMouseDown={(e) => e.preventDefault()}>
+                <ul key={addToTicCharQuery} id="raid-tic-char-list" className="card officer-suggest" role="listbox" onMouseDown={(e) => e.preventDefault()}>
                   {filteredCharacterNames.length === 0 ? (
                     <li style={{ color: '#71717a', cursor: 'default' }}>
                       {characterNamesList.length === 0 ? 'Loading characters…' : (addToTicCharQuery.trim() ? 'No matching characters' : 'Type to filter')}
