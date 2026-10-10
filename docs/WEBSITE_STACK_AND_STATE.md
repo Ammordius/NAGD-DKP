@@ -76,7 +76,7 @@ Defined in `web/src/App.jsx`.
 
 Typical tables/RPCs (non-exhaustive; see `docs/supabase-schema-full.sql` for truth):
 
-- **Raids / events / loot / attendance:** `raids`, `raid_events`, `raid_loot`, `raid_attendance`, views like `raid_loot_with_assignment`, RPCs such as `refresh_account_dkp_summary_for_raid`, `delete_raid`, officer audit helpers.
+- **Raids / events / loot / attendance:** `raids`, `raid_events`, `raid_loot`, `raid_attendance`, views like `raid_loot_with_assignment` and `raid_loot_history` (Item History search/sort/paging), RPCs such as `refresh_account_dkp_summary_for_raid`, `delete_raid`, officer audit helpers.
 - **Accounts / characters:** `accounts`, `characters`, `character_account`, profile claim RPCs.
 - **Leaderboard / summaries:** Used from DKP and account pages via `web/src/lib/dkpLeaderboard.js`, `accountData.js`, and direct queries in pages.
 
@@ -99,7 +99,7 @@ Fetched with `fetch('/…')` from `public/` or CDN:
 | `sessionStorage` | `dkp-last-path` | Last visited path (see below) |
 | `sessionStorage` | `pageState:…` | `usePersistedState` UI persistence (filters, Raids calendar month, raid detail expanded tics, account activity page index, etc.) |
 | `sessionStorage` | `account-detail-cache-${accountId}` | SWR fallback for account page |
-| `sessionStorage` | Loot search cache | See `LootSearch.jsx` |
+| `sessionStorage` | `pageState:/loot:*` | Item History search text and sort. Results are not cached; `/loot` queries `raid_loot_history` one page at a time (`LootSearch.jsx`). Deploy the view with `docs/supabase-raid-loot-history.sql`. |
 | TTL cache | `raids_month_*` | Raids calendar month blobs (`web/src/lib/cache.js`) |
 
 ## UI state persistence playbook

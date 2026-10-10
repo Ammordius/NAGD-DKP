@@ -2399,6 +2399,34 @@ COMMENT ON VIEW raid_loot_with_assignment IS 'raid_loot plus assignment columns.
 GRANT SELECT ON raid_loot_with_assignment TO authenticated;
 GRANT SELECT ON raid_loot_with_assignment TO anon;
 
+-- Item History (/loot): loot + assignment + raid date/name, with a numeric cost for sorting.
+-- raid_loot.raid_id has no FK, so PostgREST cannot embed raids; this view is the join.
+CREATE OR REPLACE VIEW raid_loot_history WITH (security_invoker = true) AS
+SELECT
+  rl.id,
+  rl.raid_id,
+  rl.event_id,
+  rl.item_name,
+  rl.char_id,
+  rl.character_name,
+  rl.cost,
+  la.assigned_char_id,
+  la.assigned_character_name,
+  la.assigned_via_magelo,
+  r.raid_name,
+  r.date,
+  r.date_iso,
+  CASE
+    WHEN btrim(rl.cost) ~ '^-?[0-9]+(\.[0-9]+)?$' THEN btrim(rl.cost)::numeric
+    ELSE NULL
+  END AS cost_num
+FROM raid_loot rl
+LEFT JOIN loot_assignment la ON la.loot_id = rl.id
+LEFT JOIN raids r ON r.raid_id = rl.raid_id;
+COMMENT ON VIEW raid_loot_history IS 'Item History reads. raid_loot plus assignment, raid name/date, and cost_num for numeric sort. security_invoker so RLS on the base tables applies.';
+GRANT SELECT ON raid_loot_history TO authenticated;
+GRANT SELECT ON raid_loot_history TO anon;
+
 CREATE OR REPLACE VIEW character_loot_assignment_count WITH (security_invoker = true) AS
 SELECT
   la.assigned_char_id AS char_id,
