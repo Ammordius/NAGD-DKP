@@ -115,15 +115,20 @@ CREATE TRIGGER refresh_character_dkp_spent_after_assignment
   FOR EACH STATEMENT EXECUTE FUNCTION public.trigger_refresh_character_dkp_spent_after_assignment();
 
 -- 8) Bulk update: write only loot_assignment. CI (and later scoped key) calls this.
+-- Does not refresh caches; call refresh_after_bulk_loot_assignment() once after all batches.
+-- A per-batch refresh exceeds the API statement timeout (~8s) and cancels the first batch.
 CREATE OR REPLACE FUNCTION update_raid_loot_assignments(data jsonb)
 RETURNS bigint
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
+SET statement_timeout = '60s'
 AS $$
 DECLARE
   updated_count bigint;
 BEGIN
+  SET LOCAL statement_timeout = '60s';
+
   ALTER TABLE loot_assignment DISABLE TRIGGER refresh_character_dkp_spent_after_assignment;
 
   INSERT INTO loot_assignment (loot_id, assigned_char_id, assigned_character_name, assigned_via_magelo)
@@ -136,31 +141,36 @@ BEGIN
   ON CONFLICT (loot_id) DO UPDATE SET
     assigned_char_id = EXCLUDED.assigned_char_id,
     assigned_character_name = EXCLUDED.assigned_character_name,
-    assigned_via_magelo = EXCLUDED.assigned_via_magelo;
+    assigned_via_magelo = EXCLUDED.assigned_via_magelo
+  WHERE loot_assignment.assigned_char_id IS DISTINCT FROM EXCLUDED.assigned_char_id
+     OR loot_assignment.assigned_character_name IS DISTINCT FROM EXCLUDED.assigned_character_name
+     OR loot_assignment.assigned_via_magelo IS DISTINCT FROM EXCLUDED.assigned_via_magelo;
   GET DIAGNOSTICS updated_count = ROW_COUNT;
 
   ALTER TABLE loot_assignment ENABLE TRIGGER refresh_character_dkp_spent_after_assignment;
 
-  PERFORM refresh_character_dkp_spent();
-  PERFORM refresh_dkp_summary_internal();
   RETURN updated_count;
 END;
 $$;
 
-COMMENT ON FUNCTION update_raid_loot_assignments(jsonb) IS 'Bulk upsert loot_assignment by loot id. CI/scoped key only needs EXECUTE on this + SELECT on raid_loot. Call once per batch; refreshes caches at end.';
+COMMENT ON FUNCTION update_raid_loot_assignments(jsonb) IS 'Bulk upsert loot_assignment by loot id. Skips unchanged rows. Does not refresh caches; call refresh_after_bulk_loot_assignment() once after all batches.';
 
--- refresh_after_bulk_loot_assignment: still valid (refreshes caches). Call after multiple batches if you split payload.
+-- Call once after all update_raid_loot_assignments batches.
 CREATE OR REPLACE FUNCTION refresh_after_bulk_loot_assignment()
 RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
+SET statement_timeout = '180s'
 AS $$
 BEGIN
+  SET LOCAL statement_timeout = '180s';
   PERFORM refresh_character_dkp_spent();
   PERFORM refresh_dkp_summary_internal();
 END;
 $$;
+
+COMMENT ON FUNCTION refresh_after_bulk_loot_assignment() IS 'Refreshes character_dkp_spent and dkp_summary after bulk loot assignment updates. Call once after all update_raid_loot_assignments batches.';
 
 -- 9) Single-row assignment: officers or account owner. Writes to loot_assignment.
 CREATE OR REPLACE FUNCTION update_single_raid_loot_assignment(
