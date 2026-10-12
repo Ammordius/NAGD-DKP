@@ -1,16 +1,26 @@
 import { useState } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { Navigate, useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 
-export default function Login() {
+function safeNextPath(value) {
+  if (!value || typeof value !== 'string') return '/'
+  if (!value.startsWith('/') || value.startsWith('//')) return '/'
+  return value
+}
+
+export default function Login({ session }) {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
-  const redirectTo = searchParams.get('redirect') || '/'
+  const redirectTo = safeNextPath(searchParams.get('redirect'))
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [error, setError] = useState('')
+  const [error, setError] = useState(searchParams.get('error') || '')
   const [loading, setLoading] = useState(false)
   const [isSignUp, setIsSignUp] = useState(false)
+
+  if (session) {
+    return <Navigate to={redirectTo} replace />
+  }
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -33,6 +43,24 @@ export default function Login() {
     }
   }
 
+  async function handleDiscord() {
+    setError('')
+    setLoading(true)
+    try {
+      const { error: err } = await supabase.auth.signInWithOAuth({
+        provider: 'discord',
+        options: {
+          redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(redirectTo)}`,
+          scopes: 'identify email',
+        },
+      })
+      if (err) throw err
+    } catch (err) {
+      setError(err.message || 'Something went wrong')
+      setLoading(false)
+    }
+  }
+
   return (
     <div className="container" style={{ maxWidth: 360, paddingTop: '3rem' }}>
       <div className="card">
@@ -40,6 +68,17 @@ export default function Login() {
         <p style={{ color: '#71717a', marginBottom: '1.5rem' }}>
           {isSignUp ? 'Create an account' : 'Sign in'}
         </p>
+        {error && <div className="error" style={{ marginBottom: '1rem' }}>{error}</div>}
+        <button
+          type="button"
+          className="btn btn-discord"
+          disabled={loading}
+          onClick={handleDiscord}
+          style={{ width: '100%' }}
+        >
+          {loading ? '…' : 'Continue with Discord'}
+        </button>
+        <p style={{ color: '#71717a', textAlign: 'center', margin: '1rem 0' }}>or</p>
         <form onSubmit={handleSubmit}>
           <div className="form-group">
             <label>Email</label>
@@ -62,7 +101,6 @@ export default function Login() {
               minLength={6}
             />
           </div>
-          {error && <div className="error">{error}</div>}
           <button type="submit" className="btn" disabled={loading} style={{ width: '100%', marginTop: '0.5rem' }}>
             {loading ? '…' : isSignUp ? 'Sign up' : 'Sign in'}
           </button>
