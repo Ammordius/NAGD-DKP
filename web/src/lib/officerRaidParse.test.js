@@ -6,6 +6,8 @@ import {
   parseLootLogByMatch,
   generateEventId,
   resolveTicNames,
+  indexCharactersByName,
+  classifyTicAttendance,
   raidDkpDelta,
   accountDkpAfterRaidChange,
   accountDkpAfterRaidDelete,
@@ -184,6 +186,146 @@ describe('resolveTicNames', () => {
     assert.deepEqual(result.sameAccount, ['AltEzram'])
     assert.deepEqual(result.unmatched, ['NotARealPlayerXYZ'])
     assert.equal(result.noTic, false)
+  })
+})
+
+describe('classifyTicAttendance', () => {
+  const characters = [
+    { char_id: 'c-ezram', name: 'Ezram' },
+    { char_id: 'c-hunted', name: 'Hunted' },
+    { char_id: 'c-althunted', name: 'AltHunted' },
+    { char_id: 'c-cherish', name: 'Cherish' },
+    { char_id: 'c-bob-a', name: 'Bob' },
+    { char_id: 'c-bob-b', name: 'Bob' },
+  ]
+  const nameToChars = indexCharactersByName(characters)
+  const charIdToAccountId = {
+    'c-ezram': 'acc-ezram',
+    'c-hunted': 'acc-hunted',
+    'c-althunted': 'acc-hunted',
+    'c-cherish': 'acc-cherish',
+    'c-bob-a': 'acc-bob-a',
+    'c-bob-b': 'acc-bob-b',
+  }
+  const lookup = { nameToChars, charIdToAccountId }
+
+  it('matches resolveTicNames for a new tic when every name is unique', () => {
+    const names = ['Hunted', 'hunted', 'AltHunted', 'Missing']
+    const nameToChar = {
+      hunted: { char_id: 'c-hunted', name: 'Hunted' },
+      althunted: { char_id: 'c-althunted', name: 'AltHunted' },
+    }
+    const resolved = resolveTicNames(names, { nameToChar, charIdToAccountId })
+    const classified = classifyTicAttendance(names, lookup)
+    assert.deepEqual(classified.toAdd, resolved.matched)
+    assert.deepEqual(classified.duplicates, resolved.duplicates)
+    assert.deepEqual(classified.sameAccount.map((row) => row.pasteName), resolved.sameAccount)
+    assert.deepEqual(classified.unmatched, resolved.unmatched)
+    assert.deepEqual(classified.alreadyPresent, [])
+    assert.deepEqual(classified.ambiguous, [])
+  })
+
+  it('puts every matched name on a new tic and leaves already-present empty', () => {
+    const result = classifyTicAttendance(['Ezram', 'Cherish'], lookup)
+    assert.deepEqual(result.toAdd, [
+      { char_id: 'c-ezram', character_name: 'Ezram' },
+      { char_id: 'c-cherish', character_name: 'Cherish' },
+    ])
+    assert.deepEqual(result.alreadyPresent, [])
+    assert.equal(result.resolved.every((row) => row.selected), true)
+  })
+
+  it('keeps people already on the tic out of the insert set', () => {
+    const result = classifyTicAttendance(['Ezram', 'Cherish'], {
+      ...lookup,
+      existingAttendees: [{ char_id: 'c-ezram', character_name: 'Ezram' }],
+    })
+    assert.deepEqual(result.toAdd, [{ char_id: 'c-cherish', character_name: 'Cherish' }])
+    assert.deepEqual(result.alreadyPresent, [
+      { pasteName: 'Ezram', char_id: 'c-ezram', character_name: 'Ezram' },
+    ])
+  })
+
+  it('lists a repeated paste name once and skips the other toon on that account', () => {
+    const result = classifyTicAttendance(['Hunted', 'hunted', 'AltHunted'], lookup)
+    assert.deepEqual(result.toAdd, [{ char_id: 'c-hunted', character_name: 'Hunted' }])
+    assert.deepEqual(result.duplicates, ['hunted'])
+    assert.deepEqual(result.sameAccount.map((row) => row.character_name), ['AltHunted'])
+  })
+
+  it('skips another toon when that account is already on the tic', () => {
+    const result = classifyTicAttendance(['AltHunted'], {
+      ...lookup,
+      existingAttendees: [{ char_id: 'c-hunted' }],
+    })
+    assert.deepEqual(result.toAdd, [])
+    assert.equal(result.sameAccount[0].char_id, 'c-althunted')
+    assert.deepEqual(result.alreadyPresent, [])
+  })
+
+  it('holds an ambiguous name until a character is chosen', () => {
+    const waiting = classifyTicAttendance(['Bob', 'Cherish'], lookup)
+    assert.equal(waiting.ambiguous.length, 1)
+    assert.equal(waiting.ambiguous[0].pasteName, 'Bob')
+    assert.deepEqual(waiting.ambiguous[0].candidates.map((c) => c.char_id), ['c-bob-a', 'c-bob-b'])
+    assert.deepEqual(waiting.toAdd, [{ char_id: 'c-cherish', character_name: 'Cherish' }])
+
+    const picked = classifyTicAttendance(['Bob'], {
+      ...lookup,
+      resolutions: { bob: 'c-bob-b' },
+    })
+    assert.deepEqual(picked.ambiguous, [])
+    assert.deepEqual(picked.toAdd, [{ char_id: 'c-bob-b', character_name: 'Bob' }])
+  })
+
+  it('lists invalid names and does not credit them', () => {
+    const result = classifyTicAttendance(['NotAPlayer', 'Cherish'], lookup)
+    assert.deepEqual(result.unmatched, ['NotAPlayer'])
+    assert.deepEqual(result.toAdd, [{ char_id: 'c-cherish', character_name: 'Cherish' }])
+  })
+
+  it('sends only the valid selected subset when the paste is mixed', () => {
+    const result = classifyTicAttendance(
+      ['Ezram', 'Hunted', 'hunted', 'AltHunted', 'Bob', 'NotAPlayer', 'Cherish'],
+      {
+        ...lookup,
+        existingAttendees: [{ char_id: 'c-ezram' }],
+        excludedCharIds: ['c-cherish'],
+      },
+    )
+    assert.deepEqual(result.toAdd, [{ char_id: 'c-hunted', character_name: 'Hunted' }])
+    assert.equal(result.alreadyPresent[0].char_id, 'c-ezram')
+    assert.deepEqual(result.duplicates, ['hunted'])
+    assert.equal(result.sameAccount[0].char_id, 'c-althunted')
+    assert.equal(result.ambiguous[0].pasteName, 'Bob')
+    assert.deepEqual(result.unmatched, ['NotAPlayer'])
+    assert.equal(result.resolved.find((row) => row.char_id === 'c-cherish').selected, false)
+  })
+
+  it('credits only new names at the existing tic value and adds nothing on a rerun', () => {
+    const ticValue = 2
+    const existing = [{ char_id: 'c-ezram', character_name: 'Ezram' }]
+    const first = classifyTicAttendance(['Ezram', 'Hunted'], { ...lookup, existingAttendees: existing })
+    const alreadyEarned = raidDkpDelta({ creditedCount: existing.length, ticValue }).earned
+    const appendEarned = raidDkpDelta({ creditedCount: first.toAdd.length, ticValue }).earned
+    assert.equal(alreadyEarned, 2)
+    assert.equal(appendEarned, 2)
+    assert.equal(alreadyEarned + appendEarned, raidDkpDelta({
+      creditedCount: existing.length + first.toAdd.length,
+      ticValue,
+    }).earned)
+
+    const second = classifyTicAttendance(['Ezram', 'Hunted'], {
+      ...lookup,
+      existingAttendees: [...existing, ...first.toAdd],
+    })
+    assert.deepEqual(second.toAdd, [])
+    assert.equal(second.alreadyPresent.length, 2)
+    assert.equal(raidDkpDelta({ creditedCount: second.toAdd.length, ticValue }).earned, 0)
+    assert.equal(alreadyEarned + appendEarned, raidDkpDelta({
+      creditedCount: existing.length + first.toAdd.length + second.toAdd.length,
+      ticValue,
+    }).earned)
   })
 })
 

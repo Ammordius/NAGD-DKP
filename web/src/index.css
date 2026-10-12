@@ -217,6 +217,13 @@ label { display: block; margin-bottom: 0.25rem; font-size: 0.875rem; color: #a1a
 }
 .officer-workspace .card { margin-bottom: 0; }
 .officer-workspace select { width: 100%; }
+.display-name-editor { max-width: 420px; }
+.display-name-editor input,
+.display-name-editor select {
+  width: 100%;
+  max-width: 100%;
+  color-scheme: dark;
+}
 .officer-col { display: flex; flex-direction: column; gap: 1rem; min-width: 0; }
 .officer-paste {
   width: 100%;
@@ -229,6 +236,10 @@ label { display: block; margin-bottom: 0.25rem; font-size: 0.875rem; color: #a1a
 }
 .officer-field-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
 .officer-inline-label { font-size: 0.875rem; color: #a1a1aa; }
+.tic-datetime-fields { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0.35rem; }
+.tic-datetime-fields label { display: inline; margin: 0; }
+.tic-datetime-fields input[type="date"],
+.tic-datetime-fields input[type="time"] { width: auto; max-width: none; padding: 0.2rem 0.35rem; color-scheme: dark; }
 .officer-dkp-input { width: 4.5rem; max-width: 4.5rem; }
 .officer-divider { border: 0; border-top: 1px solid #27272a; margin: 1rem 0; }
 .officer-hint { color: #71717a; font-size: 0.9rem; }
@@ -269,6 +280,10 @@ label { display: block; margin-bottom: 0.25rem; font-size: 0.875rem; color: #a1a
   border-radius: 4px;
   color: #e4e4e7;
 }
+.officer-result-name input { margin-right: 0.35rem; }
+.officer-tic-choice { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; margin: 0.5rem 0; }
+.officer-tic-choice label { display: inline-flex; align-items: center; gap: 0.35rem; }
+.officer-resolve-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; margin-bottom: 0.35rem; }
 .officer-card--menu-open { position: relative; z-index: 40; }
 .officer-col:has(.officer-card--menu-open) { position: relative; z-index: 40; }
 .officer-suggest-wrap { position: relative; width: 100%; }

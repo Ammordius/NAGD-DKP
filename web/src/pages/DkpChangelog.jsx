@@ -68,6 +68,7 @@ export default function DkpChangelog({ isOfficer }) {
                 add_raid: 'Add raid',
                 add_tic: 'Add tic',
                 add_attendee_to_tic: 'Add player to tic',
+                add_attendees_to_tic: 'Add players to tic',
                 remove_attendee_from_tic: 'Remove player from tic',
                 delete_event: 'Delete tic',
                 raid_deleted: 'Raid deleted',
@@ -77,6 +78,8 @@ export default function DkpChangelog({ isOfficer }) {
                 edit_event_dkp: 'Edit event DKP',
                 edit_event_time: 'Edit event time',
                 edit_loot_cost: 'Edit loot cost',
+                edit_loot_tic: 'Move loot to tic',
+                set_account_display_name: 'Edit display name',
               }[entry.action] || entry.action
               const raidId = entry.delta?.r || (entry.target_type === 'raid' ? entry.target_id : null)
               const target = entry.target_type && entry.target_id
@@ -90,6 +93,7 @@ export default function DkpChangelog({ isOfficer }) {
                 if (d.n != null && entry.action === 'add_raid') details = `Raid: ${d.n}`
                 else if (entry.action === 'add_tic' && d.n != null) details = `${d.n} attendee(s), ${d.v} DKP`
                 else if (entry.action === 'add_attendee_to_tic' && d.c) details = d.c
+                else if (entry.action === 'add_attendees_to_tic' && d.n != null) details = `${d.n} attendee(s)`
                 else if (entry.action === 'remove_attendee_from_tic' && d.c) details = d.c
                 else if (entry.action === 'add_loot' && d.i) details = `${d.i} → ${d.c} (${d.cost} DKP)`
                 else if (entry.action === 'add_loot_from_log' && Array.isArray(d.items) && d.items.length > 0) details = d.items.map((x) => `${x.i} (${x.c}) — ${x.cost ?? 0} DKP`).join('; ')
@@ -97,6 +101,8 @@ export default function DkpChangelog({ isOfficer }) {
                 else if (entry.action === 'delete_loot' && d.i) details = d.cost != null ? `${d.i} (${d.c}) — ${d.cost} DKP` : `${d.i} (${d.c})`
                 else if (entry.action === 'edit_event_dkp' && d.v != null) details = `DKP: ${d.v}`
                 else if (entry.action === 'edit_loot_cost' && d.c != null) details = d.i ? `${d.i}: ${d.c} DKP` : `Cost: ${d.c}`
+                else if (entry.action === 'edit_loot_tic' && d.e != null) details = d.i ? `${d.i} → ${d.e}` : `Tic: ${d.e}`
+                else if (entry.action === 'set_account_display_name') details = `${(d.previous_display_name ?? '').trim() || '—'} → ${(d.new_display_name ?? '').trim() || '—'}`
                 else if (entry.action === 'raid_deleted' && d.n != null) details = `Raid: ${d.n}`
                 else if (d.n) details = `Raid: ${d.n}`
                 else if (d.v != null) details = `DKP: ${d.v}`
