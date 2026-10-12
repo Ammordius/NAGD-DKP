@@ -21,6 +21,7 @@ import OfficerWhoParser from './pages/OfficerWhoParser'
 import OfficerRaiderActivity from './pages/OfficerRaiderActivity'
 import DiscordSchedule from './pages/DiscordSchedule'
 import Profile from './pages/Profile'
+import AuthCallback from './pages/AuthCallback'
 
 export default function App() {
   const [session, setSession] = useState(null)
@@ -33,7 +34,7 @@ export default function App() {
   // Persist current route so returning to the tab (or reopening the app) keeps you on the same page
   useEffect(() => {
     const path = location.pathname + location.search
-    if (path && path !== '/login') {
+    if (path && location.pathname !== '/login' && location.pathname !== '/auth/callback') {
       try {
         sessionStorage.setItem('dkp-last-path', path)
       } catch (_) { /* ignore */ }
@@ -48,7 +49,7 @@ export default function App() {
     hasRestoredRef.current = true
     try {
       const saved = sessionStorage.getItem('dkp-last-path')
-      if (saved && saved.startsWith('/') && saved !== '/' && !saved.startsWith('/login')) {
+      if (saved && saved.startsWith('/') && saved !== '/' && !saved.startsWith('/login') && !saved.startsWith('/auth/callback')) {
         navigate(saved, { replace: true })
       }
     } catch (_) { /* ignore */ }
@@ -85,7 +86,7 @@ export default function App() {
 
   const isOfficer = profile?.role === 'officer'
 
-  // Require sign-in for all data; only /login is public (anon = handshake only).
+  // Require sign-in for all data; only /login and /auth/callback are public (anon = handshake only).
   function RequireAuth({ children }) {
     if (!session) {
       const path = typeof window !== 'undefined' ? window.location.pathname + window.location.search : ''
@@ -123,7 +124,8 @@ export default function App() {
         )}
       </nav>
       <Routes>
-        <Route path="/login" element={<Login />} />
+        <Route path="/login" element={<Login session={session} />} />
+        <Route path="/auth/callback" element={<AuthCallback session={session} />} />
         <Route path="/" element={<RequireAuth><Dashboard isOfficer={isOfficer} /></RequireAuth>} />
         <Route path="/raids" element={<RequireAuth><Raids isOfficer={isOfficer} /></RequireAuth>} />
         <Route path="/raids/:raidId" element={<RequireAuth><RaidDetail isOfficer={isOfficer} /></RequireAuth>} />
