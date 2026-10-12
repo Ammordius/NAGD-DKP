@@ -567,6 +567,42 @@ export default function Officer({ isOfficer }) {
     setMutating(false)
   }
 
+  const handleAddEmptyTic = async () => {
+    if (!selectedRaidId) {
+      setError('Select a raid first.')
+      return
+    }
+    if (events.length > 0) return
+    setMutating(true)
+    setError('')
+    const event_id = generateEventId()
+    const dkpValue = String(parseFloat(ticDkpValue) || 1)
+    const { error: evErr } = await supabase.from('raid_events').insert({
+      raid_id: selectedRaidId,
+      event_id,
+      event_order: 1,
+      event_name: 'On-time',
+      dkp_value: dkpValue,
+      attendee_count: '0',
+      event_time: new Date().toISOString(),
+    })
+    if (evErr) {
+      setError(evErr.message)
+      setMutating(false)
+      return
+    }
+    await logOfficerAudit(supabase, {
+      action: 'add_tic',
+      target_type: 'raid_event',
+      target_id: event_id,
+      delta: { r: selectedRaidId, e: event_id, v: dkpValue, n: 0 },
+    })
+    try { sessionStorage.removeItem('dkp_leaderboard_v2') } catch (_) {}
+    await loadSelectedRaid()
+    globalMutate(DKP_DATA_KEY)
+    setMutating(false)
+  }
+
   const handleAddLootManual = async () => {
     if (!selectedRaidId) {
       setError('Select a raid first.')
@@ -1083,7 +1119,7 @@ export default function Officer({ isOfficer }) {
           </p>
         )}
         <div className="officer-raid-bar-actions">
-          {selectedRaidId && <Link to={`/raids/${selectedRaidId}`}>View full raid</Link>}
+          {selectedRaidId && <Link to={`/raids/${selectedRaidId}`}>View raid</Link>}
           <button type="button" className="btn" onClick={focusAddRaid}>+ New raid</button>
         </div>
       </div>
@@ -1365,10 +1401,24 @@ export default function Officer({ isOfficer }) {
               {raid.date_iso || raid.date}
               {` · ${attendance.length > 0 ? attendance.length : (raid.attendees != null && raid.attendees !== '' ? Math.round(Number(raid.attendees)) : '—')} attendees`}
               {' · '}
-              <Link to={`/raids/${selectedRaidId}`}>Open full raid page</Link>
+              <Link to={`/raids/${selectedRaidId}`}>View raid</Link>
             </p>
 
-            <h3 style={{ marginTop: '1rem' }}>DKP by event</h3>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', marginTop: '1rem' }}>
+              <h3 style={{ margin: 0 }}>DKP by event</h3>
+              {events.length === 0 && (
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  style={{ padding: '0.25rem 0.5rem', fontSize: '1.25rem', lineHeight: 1 }}
+                  onClick={handleAddEmptyTic}
+                  disabled={mutating}
+                  title="Add tic"
+                >
+                  +
+                </button>
+              )}
+            </div>
             <p className="officer-hint">
               Total: <strong>{events.reduce((sum, e) => sum + parseFloat(e.dkp_value || 0), 0).toFixed(1)}</strong> DKP
             </p>
@@ -1378,6 +1428,11 @@ export default function Officer({ isOfficer }) {
                 <tr><th style={{ width: '2rem' }}></th><th>#</th><th>Event</th><th>DKP</th><th>Time</th><th>Attendees</th><th style={{ width: '5rem' }}></th></tr>
               </thead>
               <tbody>
+                {events.length === 0 && (
+                  <tr>
+                    <td colSpan={7} style={{ color: '#71717a' }}>No tics. Use + to add a tic, then search for a character.</td>
+                  </tr>
+                )}
                 {events.map((e) => {
                   const eid = String(e.event_id ?? '').trim()
                   const attendees = attendeesByEvent[eid] || []
@@ -1470,17 +1525,16 @@ export default function Officer({ isOfficer }) {
                   <th>Item</th>
                   <th>Character</th>
                   <th>Cost</th>
-                  <th style={{ width: '5.5rem' }}>2nd place</th>
                   <th style={{ width: '6rem' }}></th>
                 </tr>
               </thead>
               <tbody>
-                {loot.length === 0 && <tr><td colSpan={5}>No loot recorded</td></tr>}
+                {loot.length === 0 && <tr><td colSpan={4}>No loot recorded</td></tr>}
                 {lootSectionsWithMobs.map((section) => (
                   <Fragment key={section.key}>
                     <tr>
                       <td
-                        colSpan={5}
+                        colSpan={4}
                         style={{
                           padding: '0.5rem 0.75rem',
                           backgroundColor: 'rgba(0,0,0,0.25)',
@@ -1497,7 +1551,7 @@ export default function Officer({ isOfficer }) {
                         {mobGroup.title != null && (
                           <tr>
                             <td
-                              colSpan={5}
+                              colSpan={4}
                               style={{
                                 padding: '0.35rem 0.75rem 0.35rem 1.5rem',
                                 backgroundColor: 'rgba(0,0,0,0.12)',
@@ -1536,18 +1590,6 @@ export default function Officer({ isOfficer }) {
                                     {row.cost}
                                     <button type="button" className="btn btn-ghost" style={{ marginLeft: '0.25rem', fontSize: '0.85rem' }} onClick={() => { setEditingLootId(row.id); setEditingLootCost(row.cost ?? '') }} title="Edit cost">✎</button>
                                   </>
-                                )}
-                              </td>
-                              <td>
-                                {row.id != null && row.item_name ? (
-                                  <Link
-                                    to={`/items/${encodeURIComponent(row.item_name)}?second_place=1`}
-                                    style={{ fontSize: '0.85rem' }}
-                                  >
-                                    View
-                                  </Link>
-                                ) : (
-                                  '—'
                                 )}
                               </td>
                               <td>
