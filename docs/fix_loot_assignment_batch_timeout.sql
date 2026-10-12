@@ -57,4 +57,4 @@ BEGIN
 END;
 $$;
 
-COMMENT ON FUNCTION public.refresh_after_bulk_loot_assignment() IS 'Refreshes character_dkp_spent and dkp_summary after bulk loot assignment updates. Call once after all update_raid_loot_assignments batches.';
+COMMENT ON FUNCTION public.refresh_after_bulk_loot_assignment() IS 'Refreshes character_dkp_spent and dkp_summary after bulk loot assignment updates. Does not touch account_dkp_summary; account spent follows raid_loot only.';
