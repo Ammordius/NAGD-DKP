@@ -88,8 +88,13 @@ CREATE TABLE IF NOT EXISTS raid_event_attendance (
   raid_id TEXT NOT NULL,
   event_id TEXT NOT NULL,
   char_id TEXT,
-  character_name TEXT
+  character_name TEXT,
+  account_id TEXT REFERENCES accounts(account_id)
 );
+-- Existing DBs skip CREATE TABLE IF NOT EXISTS; add the column before LANGUAGE sql functions that read it.
+ALTER TABLE raid_event_attendance ADD COLUMN IF NOT EXISTS account_id TEXT REFERENCES accounts(account_id);
+COMMENT ON COLUMN raid_event_attendance.account_id IS 'Resolved from char_id/character_name via character_account; used for DKP by account.';
+CREATE INDEX IF NOT EXISTS idx_raid_event_attendance_account ON raid_event_attendance(account_id) WHERE account_id IS NOT NULL;
 
 -- Pre-computed DKP per raid (sum of event dkp_value). Updated by trigger when raid_events change.
 -- After first deploy or import, run: SELECT refresh_all_raid_attendance_totals();
@@ -2462,10 +2467,7 @@ CREATE TABLE IF NOT EXISTS account_dkp_summary (
 );
 COMMENT ON TABLE account_dkp_summary IS 'DKP totals per account. Refreshed from raid_event_attendance (earned) and raid_loot/loot_assignment (spent) via character_account.';
 
--- 2) raid_event_attendance: add account_id (nullable, backfilled from character_account)
-ALTER TABLE raid_event_attendance ADD COLUMN IF NOT EXISTS account_id TEXT REFERENCES accounts(account_id);
-COMMENT ON COLUMN raid_event_attendance.account_id IS 'Resolved from char_id/character_name via character_account; used for DKP by account.';
-CREATE INDEX IF NOT EXISTS idx_raid_event_attendance_account ON raid_event_attendance(account_id) WHERE account_id IS NOT NULL;
+-- raid_event_attendance.account_id is created with the table (and ADD COLUMN IF NOT EXISTS) earlier so LANGUAGE sql functions can reference it.
 
 -- 3) raid_attendance_dkp_by_account: per-raid DKP earned by account (for activity page)
 CREATE TABLE IF NOT EXISTS raid_attendance_dkp_by_account (
