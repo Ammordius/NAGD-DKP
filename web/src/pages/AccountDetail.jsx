@@ -1,14 +1,20 @@
 import { useEffect, useState, useMemo, useCallback } from 'react'
 import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom'
-import useSWR from 'swr'
+import useSWR, { useSWRConfig } from 'swr'
 import { supabase } from '../lib/supabase'
+import { DKP_DATA_KEY, useDkpData } from '../lib/dkpLeaderboard'
+import {
+  linkedCharacterOptions,
+  selectLinkedCharacter,
+  displayNamePreview,
+  isDisplayNameUnchanged,
+} from '../lib/accountDisplayNameChange'
 import { useCharToAccountMap } from '../lib/useCharToAccountMap'
 import AssignedLootDisclaimer from '../components/AssignedLootDisclaimer'
 import AccountBiddingPortfolioCard from '../components/AccountBiddingPortfolioCard'
 import DkpSiteDisclaimer from '../components/DkpSiteDisclaimer'
 import ItemLink from '../components/ItemLink'
 import { getDkpMobLoot } from '../lib/staticData'
-import { useDkpData } from '../lib/dkpLeaderboard'
 import { formatAccountCharacter, formatCharacterClassSpentLine } from '../lib/formatAccountCharacter'
 import { usePersistedState } from '../lib/usePersistedState'
 import { fetchLootForAccountChars } from '../lib/accountData'
@@ -259,6 +265,7 @@ export default function AccountDetail({ isOfficer, profile, session }) {
     [setSearchParams]
   )
   const { getAccountId, getAccountDisplayName } = useCharToAccountMap()
+  const { mutate: globalMutate } = useSWRConfig()
   const cacheKey = accountId ? `account-detail-${accountId}` : null
   const fallbackData = cacheKey ? getAccountDetailFromSession(accountId) : undefined
   const { data: swrData, error: swrError, isLoading, mutate } = useSWR(
@@ -302,6 +309,11 @@ export default function AccountDetail({ isOfficer, profile, session }) {
   const canEditLoot = isOfficer || isMyAccount
   const [savingLootId, setSavingLootId] = useState(null)
   const [lootAssignError, setLootAssignError] = useState('')
+  const [displayNameEditorOpen, setDisplayNameEditorOpen] = useState(false)
+  const [displayNameQuery, setDisplayNameQuery] = useState('')
+  const [displayNameCharId, setDisplayNameCharId] = useState('')
+  const [displayNameError, setDisplayNameError] = useState('')
+  const [displayNameSaving, setDisplayNameSaving] = useState(false)
   const [mobLoot, setMobLoot] = useState(null)
   const { accountTotalsByAccountId } = useDkpData()
 
@@ -391,6 +403,39 @@ export default function AccountDetail({ isOfficer, profile, session }) {
     mutate()
   }
 
+  async function handleSetDisplayName() {
+    let chosen
+    try {
+      chosen = selectLinkedCharacter(characters, displayNameCharId)
+    } catch (err) {
+      setDisplayNameError(err.message)
+      return
+    }
+    if (isDisplayNameUnchanged(account?.display_name, chosen.name)) {
+      setDisplayNameError('')
+      return
+    }
+    setDisplayNameError('')
+    setDisplayNameSaving(true)
+    const { error: rpcErr } = await supabase.rpc('officer_set_account_display_name', {
+      p_account_id: accountId,
+      p_char_id: chosen.charId,
+    })
+    setDisplayNameSaving(false)
+    if (rpcErr) {
+      setDisplayNameError(rpcErr.message)
+      return
+    }
+    try { sessionStorage.removeItem(`${ACCOUNT_CACHE_KEY}-${accountId}`) } catch (_) {}
+    try { sessionStorage.removeItem('accounts_list_v5') } catch (_) {}
+    setDisplayNameEditorOpen(false)
+    setDisplayNameQuery('')
+    setDisplayNameCharId('')
+    await mutate()
+    await globalMutate(DKP_DATA_KEY)
+    await globalMutate('char-to-account-map')
+  }
+
   const itemIdMap = useMemo(() => buildItemIdMap(mobLoot), [mobLoot])
 
   const sortedCharacters = useMemo(() => {
@@ -440,6 +485,20 @@ export default function AccountDetail({ isOfficer, profile, session }) {
       : filteredActivityRows.filter((act) => Number(act.dkpEarned ?? 0) > 0 || Number(act.ticEarned ?? 0) > 0)
     return onlyMissingRaids ? detailScopedRows.filter((act) => act.isMissingTics) : detailScopedRows
   }, [filteredActivityRows, onlyMissingRaids, showMissingDetails])
+
+  const allDisplayNameChoices = useMemo(() => linkedCharacterOptions(characters), [characters])
+  const displayNameChoices = useMemo(
+    () => linkedCharacterOptions(characters, displayNameQuery),
+    [characters, displayNameQuery]
+  )
+  const selectedDisplayNameChoice = displayNameChoices.find((option) => option.charId === displayNameCharId) || null
+  const displayNameChangePreview = selectedDisplayNameChoice
+    ? displayNamePreview(account?.display_name, selectedDisplayNameChoice.name)
+    : null
+  const displayNameAlreadySet = displayNameChangePreview
+    ? isDisplayNameUnchanged(displayNameChangePreview.current, displayNameChangePreview.proposed)
+    : false
+  const canEditDisplayName = Boolean(isOfficer) && allDisplayNameChoices.length > 0
 
   if (loading) return <div className="container">Loading account...</div>
   if (error) return <div className="container"><span className="error">{error}</span> <Link to="/accounts">← Accounts</Link></div>
@@ -496,6 +555,96 @@ export default function AccountDetail({ isOfficer, profile, session }) {
           )
         )}
       </p>
+
+      {canEditDisplayName && (
+        <div className="display-name-editor" style={{ marginBottom: '1rem' }}>
+          {!displayNameEditorOpen ? (
+            <button
+              type="button"
+              className="btn btn-ghost"
+              onClick={() => {
+                setDisplayNameEditorOpen(true)
+                setDisplayNameError('')
+                setDisplayNameQuery('')
+                setDisplayNameCharId('')
+              }}
+            >
+              Edit display name
+            </button>
+          ) : (
+            <div className="card">
+              <h2 style={{ marginTop: 0, fontSize: '1rem' }}>Edit display name</h2>
+              <p style={{ color: '#a1a1aa', fontSize: '0.875rem' }}>
+                Choose a character linked to this account. The filter only narrows that list.
+              </p>
+              <div className="form-group">
+                <label htmlFor="display-name-filter">Find character</label>
+                <input
+                  id="display-name-filter"
+                  type="search"
+                  value={displayNameQuery}
+                  onChange={(e) => setDisplayNameQuery(e.target.value)}
+                  autoComplete="off"
+                />
+              </div>
+              <div className="form-group">
+                <label htmlFor="display-name-character">Linked character</label>
+                <select
+                  id="display-name-character"
+                  value={selectedDisplayNameChoice ? selectedDisplayNameChoice.charId : ''}
+                  onChange={(e) => {
+                    setDisplayNameCharId(e.target.value)
+                    setDisplayNameError('')
+                  }}
+                >
+                  <option value="">Select a character</option>
+                  {displayNameChoices.map((option) => {
+                    const duplicate = displayNameChoices.filter((choice) => choice.name === option.name).length > 1
+                    return (
+                      <option key={option.charId} value={option.charId}>
+                        {duplicate ? `${option.name} (${option.charId})` : option.name}
+                      </option>
+                    )
+                  })}
+                </select>
+              </div>
+              <p style={{ marginBottom: '0.5rem' }}>
+                Current display name: <strong>{(account.display_name || '').trim() || '(not set)'}</strong>
+              </p>
+              {displayNameChangePreview && (
+                <p style={{ marginTop: 0 }}>
+                  New display name: <strong>{displayNameChangePreview.proposed}</strong>
+                </p>
+              )}
+              {displayNameAlreadySet && (
+                <p style={{ color: '#a1a1aa', fontSize: '0.875rem' }}>Display name is already this character.</p>
+              )}
+              {displayNameError && <p className="error">{displayNameError}</p>}
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={handleSetDisplayName}
+                  disabled={!selectedDisplayNameChoice || displayNameAlreadySet || displayNameSaving}
+                >
+                  {displayNameSaving ? 'Saving...' : 'Confirm'}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  onClick={() => {
+                    setDisplayNameEditorOpen(false)
+                    setDisplayNameError('')
+                  }}
+                  disabled={displayNameSaving}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', borderBottom: '1px solid #27272a', paddingBottom: '0.5rem' }}>
         <button

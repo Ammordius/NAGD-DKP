@@ -215,6 +215,13 @@ label { display: block; margin-bottom: 0.25rem; font-size: 0.875rem; color: #a1a
 }
 .officer-workspace .card { margin-bottom: 0; }
 .officer-workspace select { width: 100%; }
+.display-name-editor { max-width: 420px; }
+.display-name-editor input,
+.display-name-editor select {
+  width: 100%;
+  max-width: 100%;
+  color-scheme: dark;
+}
 .officer-col { display: flex; flex-direction: column; gap: 1rem; min-width: 0; }
 .officer-paste {
   width: 100%;

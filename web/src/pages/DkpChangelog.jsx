@@ -79,6 +79,7 @@ export default function DkpChangelog({ isOfficer }) {
                 edit_event_time: 'Edit event time',
                 edit_loot_cost: 'Edit loot cost',
                 edit_loot_tic: 'Move loot to tic',
+                set_account_display_name: 'Edit display name',
               }[entry.action] || entry.action
               const raidId = entry.delta?.r || (entry.target_type === 'raid' ? entry.target_id : null)
               const target = entry.target_type && entry.target_id
@@ -101,6 +102,7 @@ export default function DkpChangelog({ isOfficer }) {
                 else if (entry.action === 'edit_event_dkp' && d.v != null) details = `DKP: ${d.v}`
                 else if (entry.action === 'edit_loot_cost' && d.c != null) details = d.i ? `${d.i}: ${d.c} DKP` : `Cost: ${d.c}`
                 else if (entry.action === 'edit_loot_tic' && d.e != null) details = d.i ? `${d.i} → ${d.e}` : `Tic: ${d.e}`
+                else if (entry.action === 'set_account_display_name') details = `${(d.previous_display_name ?? '').trim() || '—'} → ${(d.new_display_name ?? '').trim() || '—'}`
                 else if (entry.action === 'raid_deleted' && d.n != null) details = `Raid: ${d.n}`
                 else if (d.n) details = `Raid: ${d.n}`
                 else if (d.v != null) details = `DKP: ${d.v}`
