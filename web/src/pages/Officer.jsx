@@ -12,13 +12,26 @@ import {
   parseRaidString,
   parseChannelList,
   parseLootLogByMatch,
-  generateEventId,
   resolveTicNames,
 } from '../lib/officerRaidParse'
+import {
+  defaultTicFields,
+  eventTimeToStore,
+  fieldsForEdit,
+  firstEqStampInPaste,
+  newTicTimestamp,
+  raidCalendarDate,
+} from '../lib/ticDateTime'
+import TicDateTimeFields from '../components/TicDateTimeFields'
 
 /** Generate a unique raid_id for officer-created raids (string, no collision with numeric imports). */
 function generateRaidId() {
   return `manual-${Date.now()}`
+}
+
+function ticOptionLabel(event) {
+  const order = event?.event_order != null && event.event_order !== '' ? `#${event.event_order} ` : ''
+  return `${order}${event?.event_name || 'Tic'}`
 }
 
 function ResultNames({ label, names, tone }) {
@@ -84,6 +97,9 @@ export default function Officer({ isOfficer }) {
 
   // Add tic
   const [ticPaste, setTicPaste] = useState('')
+  const [ticDate, setTicDate] = useState('')
+  const [ticTime, setTicTime] = useState('')
+  const [ticDateTimeTouched, setTicDateTimeTouched] = useState(false)
   const [ticDkpValue, setTicDkpValue] = useState('1')
   const [ticResult, setTicResult] = useState(null)
 
@@ -103,9 +119,11 @@ export default function Officer({ isOfficer }) {
   const [editingEventId, setEditingEventId] = useState(null)
   const [editingEventDkp, setEditingEventDkp] = useState('')
   const [editingEventTimeId, setEditingEventTimeId] = useState(null)
-  const [editingEventTimeValue, setEditingEventTimeValue] = useState('')
+  const [editingEventDate, setEditingEventDate] = useState('')
+  const [editingEventTime, setEditingEventTime] = useState('')
   const [editingLootId, setEditingLootId] = useState(null)
   const [editingLootCost, setEditingLootCost] = useState('')
+  const [lootEventId, setLootEventId] = useState('')
   const [expandedEvents, setExpandedEvents] = useState({})
   const [showLootDropdown, setShowLootDropdown] = useState(false)
   const [showLootCharDropdown, setShowLootCharDropdown] = useState(false)
@@ -346,6 +364,14 @@ export default function Officer({ isOfficer }) {
     }
   }, [events, addToTicEventId])
 
+  useEffect(() => {
+    if (events.length > 0 && (!lootEventId || !events.some((e) => e.event_id === lootEventId))) {
+      setLootEventId(events[0].event_id)
+    } else if (events.length === 0 && lootEventId) {
+      setLootEventId('')
+    }
+  }, [events, lootEventId])
+
   const handleAddAttendeeToTic = async () => {
     if (!selectedRaidId || !addToTicEventId) return
     const name = addToTicCharQuery.trim()
@@ -467,17 +493,22 @@ export default function Officer({ isOfficer }) {
       setError('Select a raid first.')
       return
     }
+    const timestamp = newTicTimestamp(ticDate, ticTime)
+    if (!timestamp.ok) {
+      setError(timestamp.error)
+      return
+    }
     setMutating(true)
     setTicResult(null)
     setError('')
-    const { eventTime, names } = parseChannelList(ticPaste)
+    const { names } = parseChannelList(ticPaste)
     if (names.length === 0) {
       setError('No names found in the pasted list. Paste lines like "[Sun Apr 14 10:17:09 2024] Meldrath, Fridge, Geom, ..."')
       setMutating(false)
       return
     }
     const dkpValue = parseFloat(ticDkpValue) || 1
-    const event_id = generateEventId(eventTime)
+    const event_id = timestamp.eventId
     const maxOrder = Math.max(0, ...events.map((e) => e.event_order || 0))
     const isFirstTic = events.length === 0
 
@@ -501,14 +532,13 @@ export default function Officer({ isOfficer }) {
       return
     }
 
-    const addedAt = new Date().toISOString()
     const { error: evErr } = await supabase.rpc('add_officer_tic', {
       p_raid_id: selectedRaidId,
       p_event_id: event_id,
       p_event_order: maxOrder + 1,
       p_event_name: isFirstTic ? 'On-time' : 'DKP tic',
       p_dkp_value: String(dkpValue),
-      p_event_time: eventTime || addedAt,
+      p_event_time: timestamp.stored,
       p_attendees: matched,
     })
     if (evErr) {
@@ -573,9 +603,14 @@ export default function Officer({ isOfficer }) {
       return
     }
     if (events.length > 0) return
+    const timestamp = newTicTimestamp(ticDate, ticTime)
+    if (!timestamp.ok) {
+      setError(timestamp.error)
+      return
+    }
     setMutating(true)
     setError('')
-    const event_id = generateEventId()
+    const event_id = timestamp.eventId
     const dkpValue = String(parseFloat(ticDkpValue) || 1)
     const { error: evErr } = await supabase.from('raid_events').insert({
       raid_id: selectedRaidId,
@@ -584,7 +619,7 @@ export default function Officer({ isOfficer }) {
       event_name: 'On-time',
       dkp_value: dkpValue,
       attendee_count: '0',
-      event_time: new Date().toISOString(),
+      event_time: timestamp.stored,
     })
     if (evErr) {
       setError(evErr.message)
@@ -624,7 +659,7 @@ export default function Officer({ isOfficer }) {
     setMutating(true)
     setLootResult(null)
     setError('')
-    const event_id = events.length > 0 ? events[0].event_id : 'loot'
+    const event_id = lootEventId || (events.length > 0 ? events[0].event_id : 'loot')
     const { error: err } = await supabase.from('raid_loot').insert({
       raid_id: selectedRaidId,
       event_id,
@@ -683,7 +718,7 @@ export default function Officer({ isOfficer }) {
     setMutating(true)
     setLootResult(null)
     setError('')
-    const event_id = events.length > 0 ? events[0].event_id : 'loot'
+    const event_id = lootEventId || (events.length > 0 ? events[0].event_id : 'loot')
     const knownItemSet = new Set(allItemNamesForLootLog.map((n) => (n || '').trim().toLowerCase()))
     const itemNameByLower = {}
     allItemNamesForLootLog.forEach((n) => { if (n) itemNameByLower[n.trim().toLowerCase()] = n })
@@ -824,17 +859,34 @@ export default function Officer({ isOfficer }) {
 
   const handleSaveEventTime = async (eventId) => {
     if (!selectedRaidId) return
-    const val = String(editingEventTimeValue).trim()
+    const existing = events.find((e) => e.event_id === eventId)
+    const result = eventTimeToStore({
+      original: existing?.event_time ?? '',
+      date: editingEventDate,
+      time: editingEventTime,
+      raidDateIso: raid?.date_iso || raid?.date || '',
+      eventId,
+    })
+    if (!result.ok) {
+      setError(result.error)
+      return
+    }
+    if (result.unchanged) {
+      setError('')
+      setEditingEventTimeId(null)
+      return
+    }
     setMutating(true)
-    const { error: err } = await supabase.from('raid_events').update({ event_time: val || null }).eq('raid_id', selectedRaidId).eq('event_id', eventId)
+    const { error: err } = await supabase.from('raid_events').update({ event_time: result.stored }).eq('raid_id', selectedRaidId).eq('event_id', eventId)
     setMutating(false)
     if (err) setError(err.message)
     else {
+      setError('')
       await logOfficerAudit(supabase, {
         action: 'edit_event_time',
         target_type: 'raid_event',
         target_id: eventId,
-        delta: { r: selectedRaidId, e: eventId, t: val || null },
+        delta: { r: selectedRaidId, e: eventId, t: result.stored },
       })
       setEditingEventTimeId(null)
       loadSelectedRaid()
@@ -856,6 +908,26 @@ export default function Officer({ isOfficer }) {
         delta: { r: selectedRaidId, l: row.id, i: row.item_name, c: val },
       })
       setEditingLootId(null)
+      try { sessionStorage.removeItem('dkp_leaderboard_v2') } catch (_) {}
+      loadSelectedRaid()
+      globalMutate(DKP_DATA_KEY)
+    }
+  }
+
+  const handleSaveLootEvent = async (row, eventId) => {
+    if (!row?.id || !eventId || String(eventId) === String(row.event_id ?? '')) return
+    const tic = events.find((e) => String(e.event_id) === String(eventId))
+    setMutating(true)
+    const { error: err } = await supabase.from('raid_loot').update({ event_id: eventId }).eq('id', row.id)
+    setMutating(false)
+    if (err) setError(err.message)
+    else {
+      await logOfficerAudit(supabase, {
+        action: 'edit_loot_tic',
+        target_type: 'raid_loot',
+        target_id: String(row.id),
+        delta: { r: selectedRaidId, l: row.id, i: row.item_name, e: tic ? ticOptionLabel(tic) : eventId },
+      })
       try { sessionStorage.removeItem('dkp_leaderboard_v2') } catch (_) {}
       loadSelectedRaid()
       globalMutate(DKP_DATA_KEY)
@@ -1020,6 +1092,32 @@ export default function Officer({ isOfficer }) {
   const addRaidSectionRef = useRef(null)
   const raidPasteRef = useRef(null)
   const raidEditSectionRef = useRef(null)
+  const ticPasteRef = useRef(ticPaste)
+  ticPasteRef.current = ticPaste
+
+  useEffect(() => {
+    const defaults = defaultTicFields(raid?.date_iso || raid?.date || '')
+    const stamp = firstEqStampInPaste(ticPasteRef.current)
+    setTicDate(stamp?.date || defaults.date)
+    setTicTime(stamp?.time || defaults.time)
+    setTicDateTimeTouched(false)
+  }, [selectedRaidId])
+
+  useEffect(() => {
+    if (firstEqStampInPaste(ticPaste)) return
+    const date = raidCalendarDate(raid?.date_iso || raid?.date || '')
+    if (!date) return
+    setTicDate((current) => (ticDateTimeTouched && current ? current : date))
+  }, [raid?.date_iso, raid?.date, ticDateTimeTouched, ticPaste])
+
+  useEffect(() => {
+    if (ticDateTimeTouched) return
+    const stamp = firstEqStampInPaste(ticPaste)
+    if (!stamp) return
+    setTicDate(stamp.date)
+    setTicTime(stamp.time)
+  }, [ticPaste, ticDateTimeTouched])
+
   const focusAddRaid = () => {
     setShowCreateRaid(true)
     setTimeout(() => {
@@ -1177,6 +1275,16 @@ export default function Officer({ isOfficer }) {
               placeholder="[Sun Apr 14 10:17:09 2024] Channel Nag(30) members:&#10;[Sun Apr 14 10:17:09 2024] Meldrath, Fridge, Geom, ..."
               rows={5}
             />
+            <div className="officer-field-row" style={{ marginTop: '0.5rem' }}>
+              <TicDateTimeFields
+                idPrefix="new-tic"
+                date={ticDate}
+                time={ticTime}
+                onDateChange={(value) => { setTicDateTimeTouched(true); setTicDate(value) }}
+                onTimeChange={(value) => { setTicDateTimeTouched(true); setTicTime(value) }}
+              />
+            </div>
+            <p className="officer-hint">Date starts as this raid's date. Time starts as now, Eastern, to the second. A channel timestamp fills these until you edit them.</p>
             <div className="officer-field-row">
               <span className="officer-inline-label">DKP per attendee</span>
               <input
@@ -1278,7 +1386,7 @@ export default function Officer({ isOfficer }) {
           {/* Add loot */}
           <section className={`card${(showLootDropdown && filteredItemNames.length > 0) || showLootCharDropdownList ? ' officer-card--menu-open' : ''}`}>
             <h2 style={{ marginTop: 0 }}>Add loot</h2>
-            <p className="officer-hint">Pick an item, a character on the DKP list, and a cost.</p>
+            <p className="officer-hint">Pick an item, a character on the DKP list, a tic, and a cost. New loot starts on the first tic unless you pick another.</p>
             <div className="officer-loot-fields">
               <div className="officer-suggest-wrap">
                 <input
@@ -1343,6 +1451,17 @@ export default function Officer({ isOfficer }) {
                   </ul>
                 )}
               </div>
+              {events.length > 0 && (
+                <select
+                  value={lootEventId}
+                  onChange={(e) => setLootEventId(e.target.value)}
+                  aria-label="Tic for new loot"
+                >
+                  {events.map((e) => (
+                    <option key={e.event_id} value={e.event_id}>{ticOptionLabel(e)}</option>
+                  ))}
+                </select>
+              )}
               <div className="officer-loot-actions">
                 <input
                   className="officer-cost"
@@ -1359,7 +1478,7 @@ export default function Officer({ isOfficer }) {
               </div>
             </div>
             <hr className="officer-divider" />
-            <p className="officer-hint">Or paste loot log lines. A line is added when the character, item, and optional &quot;N DKP&quot; all match.</p>
+            <p className="officer-hint">Or paste loot log lines. A line is added when the character, item, and optional &quot;N DKP&quot; all match. Those rows use the tic selected above.</p>
             <textarea
               className="officer-paste"
               value={lootLogPaste}
@@ -1468,15 +1587,30 @@ export default function Officer({ isOfficer }) {
                         </td>
                         <td>
                           {isEditingTime ? (
-                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
-                              <input type="text" value={editingEventTimeValue} onChange={(ev) => setEditingEventTimeValue(ev.target.value)} style={{ width: '12rem', padding: '0.2rem' }} placeholder="e.g. Sun Apr 14 10:17:09 2024" />
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', flexWrap: 'wrap' }}>
+                              <TicDateTimeFields
+                                idPrefix={`officer-tic-${e.event_id}`}
+                                labelled={false}
+                                date={editingEventDate}
+                                time={editingEventTime}
+                                onDateChange={setEditingEventDate}
+                                onTimeChange={setEditingEventTime}
+                              />
+                              {fieldsForEdit(e.event_time, raid?.date_iso || raid?.date || '').unparsed && e.event_time ? (
+                                <span className="officer-hint">Stored: {e.event_time}</span>
+                              ) : null}
                               <button type="button" className="btn btn-ghost" onClick={() => handleSaveEventTime(e.event_id)} disabled={mutating}>Save</button>
                               <button type="button" className="btn btn-ghost" onClick={() => setEditingEventTimeId(null)}>Cancel</button>
                             </span>
                           ) : (
                             <>
                               {e.event_time || '—'}
-                              <button type="button" className="btn btn-ghost" style={{ marginLeft: '0.25rem', fontSize: '0.85rem' }} onClick={() => { setEditingEventTimeId(e.event_id); setEditingEventTimeValue(e.event_time || '') }} title="Edit tic time">✎</button>
+                              <button type="button" className="btn btn-ghost" style={{ marginLeft: '0.25rem', fontSize: '0.85rem' }} onClick={() => {
+                                const fields = fieldsForEdit(e.event_time, raid?.date_iso || raid?.date || '')
+                                setEditingEventTimeId(e.event_id)
+                                setEditingEventDate(fields.date)
+                                setEditingEventTime(fields.time)
+                              }} title="Edit tic time">✎</button>
                             </>
                           )}
                         </td>
@@ -1525,16 +1659,17 @@ export default function Officer({ isOfficer }) {
                   <th>Item</th>
                   <th>Character</th>
                   <th>Cost</th>
+                  <th>Tic</th>
                   <th style={{ width: '6rem' }}></th>
                 </tr>
               </thead>
               <tbody>
-                {loot.length === 0 && <tr><td colSpan={4}>No loot recorded</td></tr>}
+                {loot.length === 0 && <tr><td colSpan={5}>No loot recorded</td></tr>}
                 {lootSectionsWithMobs.map((section) => (
                   <Fragment key={section.key}>
                     <tr>
                       <td
-                        colSpan={4}
+                        colSpan={5}
                         style={{
                           padding: '0.5rem 0.75rem',
                           backgroundColor: 'rgba(0,0,0,0.25)',
@@ -1551,7 +1686,7 @@ export default function Officer({ isOfficer }) {
                         {mobGroup.title != null && (
                           <tr>
                             <td
-                              colSpan={4}
+                              colSpan={5}
                               style={{
                                 padding: '0.35rem 0.75rem 0.35rem 1.5rem',
                                 backgroundColor: 'rgba(0,0,0,0.12)',
@@ -1590,6 +1725,26 @@ export default function Officer({ isOfficer }) {
                                     {row.cost}
                                     <button type="button" className="btn btn-ghost" style={{ marginLeft: '0.25rem', fontSize: '0.85rem' }} onClick={() => { setEditingLootId(row.id); setEditingLootCost(row.cost ?? '') }} title="Edit cost">✎</button>
                                   </>
+                                )}
+                              </td>
+                              <td>
+                                {events.length > 0 && row.id != null ? (
+                                  <select
+                                    aria-label={`Tic for ${row.item_name || 'loot'}`}
+                                    value={events.some((e) => String(e.event_id) === String(row.event_id ?? '')) ? String(row.event_id) : ''}
+                                    disabled={mutating}
+                                    onChange={(ev) => handleSaveLootEvent(row, ev.target.value)}
+                                    style={{ maxWidth: '11rem', fontSize: '0.85rem' }}
+                                  >
+                                    {!events.some((e) => String(e.event_id) === String(row.event_id ?? '')) && (
+                                      <option value="">Misc</option>
+                                    )}
+                                    {events.map((e) => (
+                                      <option key={e.event_id} value={e.event_id}>{ticOptionLabel(e)}</option>
+                                    ))}
+                                  </select>
+                                ) : (
+                                  '—'
                                 )}
                               </td>
                               <td>

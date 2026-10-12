@@ -227,6 +227,10 @@ label { display: block; margin-bottom: 0.25rem; font-size: 0.875rem; color: #a1a
 }
 .officer-field-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
 .officer-inline-label { font-size: 0.875rem; color: #a1a1aa; }
+.tic-datetime-fields { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0.35rem; }
+.tic-datetime-fields label { display: inline; margin: 0; }
+.tic-datetime-fields input[type="date"],
+.tic-datetime-fields input[type="time"] { width: auto; max-width: none; padding: 0.2rem 0.35rem; color-scheme: dark; }
 .officer-dkp-input { width: 4.5rem; max-width: 4.5rem; }
 .officer-divider { border: 0; border-top: 1px solid #27272a; margin: 1rem 0; }
 .officer-hint { color: #71717a; font-size: 0.9rem; }

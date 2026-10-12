@@ -12,6 +12,8 @@ import { formatAccountCharacter, formatAccountCharacters } from '../lib/formatAc
 import { groupRaidLootByEvent } from '../lib/groupRaidLootByEvent'
 import { buildItemNameToIdMap, buildLootMobLookups, subgroupLootRowsByMob } from '../lib/lootMobSubgroups'
 import { usePersistedState } from '../lib/usePersistedState'
+import { eventTimeToStore, fieldsForEdit } from '../lib/ticDateTime'
+import TicDateTimeFields from '../components/TicDateTimeFields'
 
 /** SWR deduplication: 60s so revisiting the same raid or multiple components don't each hit the DB. */
 const RAID_DEDUPING_INTERVAL_MS = 60_000
@@ -65,7 +67,8 @@ export default function RaidDetail({ isOfficer }) {
   const [editingEventId, setEditingEventId] = useState(null)
   const [editingEventDkp, setEditingEventDkp] = useState('')
   const [editingEventTimeId, setEditingEventTimeId] = useState(null)
-  const [editingEventTimeValue, setEditingEventTimeValue] = useState('')
+  const [editingEventDate, setEditingEventDate] = useState('')
+  const [editingEventTime, setEditingEventTime] = useState('')
   const [editingLootId, setEditingLootId] = useState(null)
   const [editingLootCost, setEditingLootCost] = useState('')
   const [mutating, setMutating] = useState(false)
@@ -277,9 +280,25 @@ export default function RaidDetail({ isOfficer }) {
   }
 
   const handleSaveEventTime = async (eventId) => {
-    const val = String(editingEventTimeValue).trim()
+    const existing = events.find((e) => e.event_id === eventId)
+    const result = eventTimeToStore({
+      original: existing?.event_time ?? '',
+      date: editingEventDate,
+      time: editingEventTime,
+      raidDateIso: raid?.date_iso || raid?.date || '',
+      eventId,
+    })
+    if (!result.ok) {
+      setMutationError(result.error)
+      return
+    }
+    if (result.unchanged) {
+      setEditingEventTimeId(null)
+      setMutationError('')
+      return
+    }
     setMutating(true)
-    const { error: err } = await supabase.from('raid_events').update({ event_time: val || null }).eq('raid_id', raidId).eq('event_id', eventId)
+    const { error: err } = await supabase.from('raid_events').update({ event_time: result.stored }).eq('raid_id', raidId).eq('event_id', eventId)
     setMutating(false)
     if (err) setMutationError(err.message)
     else {
@@ -287,7 +306,7 @@ export default function RaidDetail({ isOfficer }) {
         action: 'edit_event_time',
         target_type: 'raid_event',
         target_id: eventId,
-        delta: { r: raidId, e: eventId, t: val || null },
+        delta: { r: raidId, e: eventId, t: result.stored },
       })
       setEditingEventTimeId(null)
       mutate()
@@ -485,8 +504,18 @@ export default function RaidDetail({ isOfficer }) {
                     </td>
                     <td>
                       {isEditingTime ? (
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
-                          <input type="text" value={editingEventTimeValue} onChange={(ev) => setEditingEventTimeValue(ev.target.value)} style={{ width: '12rem', padding: '0.2rem' }} placeholder="e.g. Sun Apr 14 10:17:09 2024" />
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', flexWrap: 'wrap' }}>
+                          <TicDateTimeFields
+                            idPrefix={`raid-tic-${e.event_id}`}
+                            labelled={false}
+                            date={editingEventDate}
+                            time={editingEventTime}
+                            onDateChange={setEditingEventDate}
+                            onTimeChange={setEditingEventTime}
+                          />
+                          {fieldsForEdit(e.event_time, raid?.date_iso || raid?.date || '').unparsed && e.event_time ? (
+                            <span style={{ color: '#71717a', fontSize: '0.85rem' }}>Stored: {e.event_time}</span>
+                          ) : null}
                           <button type="button" className="btn btn-ghost" onClick={() => handleSaveEventTime(e.event_id)} disabled={mutating}>Save</button>
                           <button type="button" className="btn btn-ghost" onClick={() => setEditingEventTimeId(null)}>Cancel</button>
                         </span>
@@ -494,7 +523,12 @@ export default function RaidDetail({ isOfficer }) {
                         <>
                           {e.event_time || '—'}
                           {isOfficer && (
-                            <button type="button" className="btn btn-ghost" style={{ marginLeft: '0.25rem', fontSize: '0.85rem' }} onClick={() => { setEditingEventTimeId(e.event_id); setEditingEventTimeValue(e.event_time || '') }} title="Edit tic time">✎</button>
+                            <button type="button" className="btn btn-ghost" style={{ marginLeft: '0.25rem', fontSize: '0.85rem' }} onClick={() => {
+                              const fields = fieldsForEdit(e.event_time, raid?.date_iso || raid?.date || '')
+                              setEditingEventTimeId(e.event_id)
+                              setEditingEventDate(fields.date)
+                              setEditingEventTime(fields.time)
+                            }} title="Edit tic time">✎</button>
                           )}
                         </>
                       )}
