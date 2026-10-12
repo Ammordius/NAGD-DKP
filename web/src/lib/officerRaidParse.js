@@ -127,6 +127,143 @@ export function resolveTicNames(names, { nameToChar, charIdToAccountId }) {
   }
 }
 
+/** Group characters by lowercase name. More than one row for a name is ambiguous. */
+export function indexCharactersByName(characters) {
+  const nameToChars = {}
+  for (const c of characters || []) {
+    const name = (c?.name || '').trim()
+    const charId = c?.char_id != null ? String(c.char_id).trim() : ''
+    if (!name || !charId) continue
+    const key = name.toLowerCase()
+    if (!nameToChars[key]) nameToChars[key] = []
+    if (!nameToChars[key].some((row) => row.char_id === charId)) {
+      nameToChars[key].push({ char_id: charId, name })
+    }
+  }
+  return nameToChars
+}
+
+function accountKeyFor(charId, charIdToAccountId) {
+  const accountId = charIdToAccountId?.[charId] ?? null
+  if (accountId != null && String(accountId) !== '') return String(accountId)
+  return String(charId)
+}
+
+/**
+ * Classify a pasted name list before creating a tic or appending to one.
+ * Unique names are selected by default. Ambiguous names stay out until
+ * `resolutions` picks a char_id. Existing attendees are never part of `toAdd`.
+ * @param {string[]} names
+ * @param {{
+ *   nameToChars: Record<string, Array<{ char_id: string, name: string }>>,
+ *   charIdToAccountId: Record<string, string>,
+ *   existingAttendees?: Array<{ char_id?: string, account_id?: string }>,
+ *   resolutions?: Record<string, string>,
+ *   excludedCharIds?: string[],
+ * }} lookup
+ */
+export function classifyTicAttendance(names, {
+  nameToChars = {},
+  charIdToAccountId = {},
+  existingAttendees = [],
+  resolutions = {},
+  excludedCharIds = [],
+} = {}) {
+  const excluded = new Set((excludedCharIds || []).map((id) => String(id)))
+  const onTicCharIds = new Set()
+  const onTicAccountKeys = new Set()
+  for (const row of existingAttendees || []) {
+    const cid = String(row?.char_id ?? '').trim()
+    if (!cid) continue
+    onTicCharIds.add(cid)
+    const accountId = charIdToAccountId[cid] ?? row.account_id ?? null
+    onTicAccountKeys.add(accountId != null && String(accountId) !== '' ? String(accountId) : cid)
+  }
+
+  const resolved = []
+  const ambiguous = []
+  const unmatched = []
+  const duplicates = []
+  const sameAccount = []
+  const alreadyPresent = []
+  const seenCharId = new Set()
+  const seenAccountKey = new Set()
+  const seenAmbiguous = new Set()
+
+  for (const n of names || []) {
+    const pasteName = String(n)
+    const key = pasteName.toLowerCase().trim()
+    if (!key) continue
+    const candidates = []
+    const seenCandidate = new Set()
+    for (const c of nameToChars[key] || []) {
+      const charId = c?.char_id != null ? String(c.char_id).trim() : ''
+      if (!charId || seenCandidate.has(charId)) continue
+      seenCandidate.add(charId)
+      candidates.push({ char_id: charId, name: (c.name || '').trim() || charId })
+    }
+    if (candidates.length === 0) {
+      unmatched.push(pasteName)
+      continue
+    }
+
+    let char = candidates.length === 1 ? candidates[0] : null
+    if (candidates.length > 1) {
+      const chosen = resolutions[key] != null ? String(resolutions[key]) : ''
+      char = candidates.find((c) => c.char_id === chosen) || null
+      if (!char) {
+        if (seenAmbiguous.has(key)) duplicates.push(pasteName)
+        else {
+          seenAmbiguous.add(key)
+          ambiguous.push({ pasteName, candidates })
+        }
+        continue
+      }
+    }
+
+    if (seenCharId.has(char.char_id)) {
+      duplicates.push(pasteName)
+      continue
+    }
+
+    const accountKey = accountKeyFor(char.char_id, charIdToAccountId)
+    if (onTicCharIds.has(char.char_id)) {
+      seenCharId.add(char.char_id)
+      seenAccountKey.add(accountKey)
+      alreadyPresent.push({ pasteName, char_id: char.char_id, character_name: char.name })
+      continue
+    }
+    if (seenAccountKey.has(accountKey) || onTicAccountKeys.has(accountKey)) {
+      seenCharId.add(char.char_id)
+      sameAccount.push({ pasteName, char_id: char.char_id, character_name: char.name })
+      continue
+    }
+
+    seenCharId.add(char.char_id)
+    seenAccountKey.add(accountKey)
+    resolved.push({
+      pasteName,
+      char_id: char.char_id,
+      character_name: char.name,
+      selected: !excluded.has(char.char_id),
+    })
+  }
+
+  const toAdd = resolved
+    .filter((row) => row.selected)
+    .map(({ char_id, character_name }) => ({ char_id, character_name }))
+
+  return {
+    toAdd,
+    resolved,
+    ambiguous,
+    unmatched,
+    duplicates,
+    sameAccount,
+    alreadyPresent,
+  }
+}
+
 /** Earned from a tic (one credit per matched attendee) and loot spent on that raid. */
 export function raidDkpDelta({ creditedCount = 0, ticValue = 0, lootCost = 0 } = {}) {
   const earned = Number(creditedCount) * Number(ticValue)

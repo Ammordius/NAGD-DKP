@@ -12,7 +12,8 @@ import {
   parseRaidString,
   parseChannelList,
   parseLootLogByMatch,
-  resolveTicNames,
+  indexCharactersByName,
+  classifyTicAttendance,
 } from '../lib/officerRaidParse'
 import {
   defaultTicFields,
@@ -102,6 +103,10 @@ export default function Officer({ isOfficer }) {
   const [ticDateTimeTouched, setTicDateTimeTouched] = useState(false)
   const [ticDkpValue, setTicDkpValue] = useState('1')
   const [ticResult, setTicResult] = useState(null)
+  const [ticDestination, setTicDestination] = useState('new')
+  const [appendEventId, setAppendEventId] = useState('')
+  const [ticResolutions, setTicResolutions] = useState({})
+  const [ticExcludedCharIds, setTicExcludedCharIds] = useState([])
 
   // Add loot manual
   const [lootItemQuery, setLootItemQuery] = useState('')
@@ -142,6 +147,21 @@ export default function Officer({ isOfficer }) {
     })
     return m
   }, [characters])
+
+  const nameToChars = useMemo(() => indexCharactersByName(characters), [characters])
+
+  const ticPreview = useMemo(() => {
+    const existingAttendees = ticDestination === 'existing'
+      ? eventAttendance.filter((row) => String(row.event_id) === String(appendEventId))
+      : []
+    return classifyTicAttendance(parseChannelList(ticPaste).names, {
+      nameToChars,
+      charIdToAccountId,
+      existingAttendees,
+      resolutions: ticResolutions,
+      excludedCharIds: ticExcludedCharIds,
+    })
+  }, [ticPaste, ticDestination, appendEventId, eventAttendance, nameToChars, charIdToAccountId, ticResolutions, ticExcludedCharIds])
 
   const getAccountId = useMemo(() => {
     const nameToAcc = {}
@@ -365,6 +385,15 @@ export default function Officer({ isOfficer }) {
   }, [events, addToTicEventId])
 
   useEffect(() => {
+    if (events.length > 0 && (!appendEventId || !events.some((e) => e.event_id === appendEventId))) {
+      setAppendEventId(events[0].event_id)
+    } else if (events.length === 0) {
+      if (appendEventId) setAppendEventId('')
+      if (ticDestination === 'existing') setTicDestination('new')
+    }
+  }, [events, appendEventId, ticDestination])
+
+  useEffect(() => {
     if (events.length > 0 && (!lootEventId || !events.some((e) => e.event_id === lootEventId))) {
       setLootEventId(events[0].event_id)
     } else if (events.length === 0 && lootEventId) {
@@ -493,10 +522,18 @@ export default function Officer({ isOfficer }) {
       setError('Select a raid first.')
       return
     }
-    const timestamp = newTicTimestamp(ticDate, ticTime)
-    if (!timestamp.ok) {
-      setError(timestamp.error)
+    const appending = ticDestination === 'existing'
+    if (appending && !appendEventId) {
+      setError('Select a tic first.')
       return
+    }
+    let timestamp = null
+    if (!appending) {
+      timestamp = newTicTimestamp(ticDate, ticTime)
+      if (!timestamp.ok) {
+        setError(timestamp.error)
+        return
+      }
     }
     setMutating(true)
     setTicResult(null)
@@ -507,30 +544,94 @@ export default function Officer({ isOfficer }) {
       setMutating(false)
       return
     }
-    const dkpValue = parseFloat(ticDkpValue) || 1
-    const event_id = timestamp.eventId
-    const maxOrder = Math.max(0, ...events.map((e) => e.event_order || 0))
-    const isFirstTic = events.length === 0
+    const preview = ticPreview
+    const duplicateDisplay = preview.duplicates.map((n) => getAccountCharacterDisplay(n))
+    const sameAccountDisplay = preview.sameAccount.map((row) => getAccountCharacterDisplay(row.char_id))
+    const alreadyDisplay = preview.alreadyPresent.map((row) => getAccountCharacterDisplay(row.char_id))
+    const bucketResult = {
+      unmatched: preview.unmatched.length > 0 ? preview.unmatched : null,
+      duplicatesDisplay: duplicateDisplay.length > 0 ? duplicateDisplay : null,
+      sameAccountDisplay: sameAccountDisplay.length > 0 ? sameAccountDisplay : null,
+      alreadyPresentDisplay: alreadyDisplay.length > 0 ? alreadyDisplay : null,
+    }
 
-    const { matched, unmatched, duplicates, sameAccount } = resolveTicNames(names, { nameToChar, charIdToAccountId })
-
-    // Only create a tic if we actually credited at least one attendee
-    if (matched.length === 0) {
+    if (preview.toAdd.length === 0) {
       setTicResult({
+        appended: appending,
+        added: 0,
+        alreadyPresentCount: preview.alreadyPresent.length,
         matched: 0,
         matchedDisplay: [],
-        unmatched: unmatched.length > 0 ? unmatched : null,
-        duplicatesDisplay: duplicates.length > 0 ? duplicates : null,
-        sameAccountDisplay: sameAccount.length > 0 ? sameAccount : null,
-        event_id: null,
+        ...bucketResult,
+        event_id: appending ? appendEventId : null,
         missingFromThisTicDisplay: null,
         newThisTicDisplay: null,
         noTicAdded: true,
       })
-      setTicPaste('')
       setMutating(false)
       return
     }
+
+    if (appending) {
+      const { data, error: attErr } = await supabase.rpc('add_attendees_to_existing_tic', {
+        p_raid_id: selectedRaidId,
+        p_event_id: appendEventId,
+        p_attendees: preview.toAdd,
+      })
+      if (attErr) {
+        setError(attErr.message)
+        setMutating(false)
+        return
+      }
+      const added = Number(data?.added || 0)
+      const alreadyFromServer = Number(data?.already_present || 0)
+      const invalidNames = Array.isArray(data?.invalid_names) ? data.invalid_names : []
+      const sameFromServer = Array.isArray(data?.skipped_same_account_names) ? data.skipped_same_account_names : []
+      const alreadyFromServerNames = Array.isArray(data?.already_present_names) ? data.already_present_names : []
+      const matchedDisplay = added === preview.toAdd.length
+        ? preview.toAdd.map((row) => getAccountCharacterDisplay(row.char_id))
+        : (Array.isArray(data?.added_names) ? data.added_names : []).map((name) => getAccountCharacterDisplay(name))
+      if (added > 0) {
+        await logOfficerAudit(supabase, {
+          action: 'add_attendees_to_tic',
+          target_type: 'raid_event',
+          target_id: appendEventId,
+          delta: { r: selectedRaidId, e: appendEventId, n: added },
+        })
+      }
+      setTicResult({
+        appended: true,
+        added,
+        alreadyPresentCount: preview.alreadyPresent.length + alreadyFromServer,
+        matched: added,
+        matchedDisplay,
+        unmatched: [...preview.unmatched, ...invalidNames].length > 0 ? [...preview.unmatched, ...invalidNames] : null,
+        duplicatesDisplay: bucketResult.duplicatesDisplay,
+        sameAccountDisplay: [...sameAccountDisplay, ...sameFromServer].length > 0 ? [...sameAccountDisplay, ...sameFromServer] : null,
+        alreadyPresentDisplay: [...alreadyDisplay, ...alreadyFromServerNames.map((name) => getAccountCharacterDisplay(name))].length > 0
+          ? [...alreadyDisplay, ...alreadyFromServerNames.map((name) => getAccountCharacterDisplay(name))]
+          : null,
+        event_id: appendEventId,
+        missingFromThisTicDisplay: null,
+        newThisTicDisplay: null,
+        noTicAdded: added === 0,
+      })
+      setTicPaste('')
+      setTicResolutions({})
+      setTicExcludedCharIds([])
+      setExpandedEvents((prev) => ({ ...prev, [appendEventId]: true }))
+      try { sessionStorage.removeItem('dkp_leaderboard_v2') } catch (_) {}
+      await loadSelectedRaid()
+      globalMutate(DKP_DATA_KEY)
+      setMutating(false)
+      return
+    }
+
+    const dkpValue = parseFloat(ticDkpValue) || 1
+    const event_id = timestamp.eventId
+    const maxOrder = Math.max(0, ...events.map((e) => e.event_order || 0))
+    const isFirstTic = events.length === 0
+    const matched = preview.toAdd
 
     const { error: evErr } = await supabase.rpc('add_officer_tic', {
       p_raid_id: selectedRaidId,
@@ -555,35 +656,33 @@ export default function Officer({ isOfficer }) {
       const cid = String(row.char_id ?? '').trim()
       if (!cid) return
       const accountKey = String(charIdToAccountId[row.char_id] ?? row.char_id)
-      if (currentTicAccountKeys.has(accountKey)) return // account still present this tic (swapped toon) — don't show as missing
+      if (currentTicAccountKeys.has(accountKey)) return
       if (seenPrevAccount.has(accountKey)) return
       seenPrevAccount.add(accountKey)
       missingFromThisTic.push(row.character_name || row.char_id || cid)
     })
     missingFromThisTic.sort((a, b) => String(a).localeCompare(b))
     const prevTicAccountKeys = new Set(eventAttendance.map((r) => String(charIdToAccountId[r.char_id] ?? r.char_id)))
-    const newThisTic = events.length === 0 ? matched.map((m) => m.character_name) : matched.filter((m) => !prevTicAccountKeys.has(String(charIdToAccountId[m.char_id] ?? m.char_id))).map((m) => m.character_name)
+    const newThisTic = events.length === 0
+      ? matched.map((m) => m.character_name)
+      : matched.filter((m) => !prevTicAccountKeys.has(String(charIdToAccountId[m.char_id] ?? m.char_id))).map((m) => m.character_name)
 
-    const charIdToName = {}
-    characters.forEach((c) => { if (c?.char_id && c?.name) charIdToName[String(c.char_id)] = c.name })
-    const fmt = (charId, charName) => {
-      const accId = charIdToAccountId[charId]
-      const accName = accId ? (accountIdToDisplayName[accId] || accId) : null
-      return accName ? `${accName} (${charName || charId})` : (charName || charId)
-    }
-    const resolve = (s) => nameToChar[String(s).toLowerCase().trim()] || (charIdToName[String(s)] ? { char_id: s, name: charIdToName[String(s)] } : null)
+    const fmt = (charId) => getAccountCharacterDisplay(charId)
+    const resolve = (s) => nameToChar[String(s).toLowerCase().trim()] || null
 
     setTicResult({
+      appended: false,
       matched: matched.length,
-      matchedDisplay: matched.map((m) => fmt(m.char_id, m.character_name)),
-      unmatched: unmatched.length > 0 ? unmatched : null,
-      duplicatesDisplay: duplicates.length > 0 ? duplicates.map((n) => { const c = resolve(n); return c ? fmt(c.char_id, c.name) : n }) : null,
-      sameAccountDisplay: sameAccount.length > 0 ? sameAccount.map((n) => { const c = resolve(n); return c ? fmt(c.char_id, c.name) : n }) : null,
+      matchedDisplay: matched.map((m) => fmt(m.char_id)),
+      ...bucketResult,
       event_id,
-      missingFromThisTicDisplay: missingFromThisTic.length > 0 ? missingFromThisTic.map((s) => { const c = resolve(s); return c ? fmt(c.char_id, c.name) : s }) : null,
-      newThisTicDisplay: newThisTic.length > 0 ? newThisTic.map((s) => { const c = resolve(s); return c ? fmt(c.char_id, c.name) : s }) : null,
+      missingFromThisTicDisplay: missingFromThisTic.length > 0 ? missingFromThisTic.map((s) => { const c = resolve(s); return c ? fmt(c.char_id) : s }) : null,
+      newThisTicDisplay: newThisTic.length > 0 ? newThisTic.map((s) => { const c = resolve(s); return c ? fmt(c.char_id) : s }) : null,
+      noTicAdded: false,
     })
     setTicPaste('')
+    setTicResolutions({})
+    setTicExcludedCharIds([])
     setExpandedEvents((prev) => ({ ...prev, [event_id]: true }))
     await logOfficerAudit(supabase, {
       action: 'add_tic',
@@ -1128,6 +1227,19 @@ export default function Officer({ isOfficer }) {
 
   if (!isOfficer) return null
 
+  const appendEvent = events.find((e) => e.event_id === appendEventId) || null
+  const showTicPreview = ticPreview.resolved.length > 0
+    || ticPreview.ambiguous.length > 0
+    || ticPreview.unmatched.length > 0
+    || ticPreview.duplicates.length > 0
+    || ticPreview.sameAccount.length > 0
+    || ticPreview.alreadyPresent.length > 0
+  const toggleTicChar = (charId) => {
+    setTicExcludedCharIds((prev) => (
+      prev.includes(charId) ? prev.filter((id) => id !== charId) : [...prev, charId]
+    ))
+  }
+
   return (
     <div className="container container--officer">
       <h1>Officer – Raid management</h1>
@@ -1261,48 +1373,161 @@ export default function Officer({ isOfficer }) {
           <div className="officer-col">
           <section className={`card${showAddToTicDropdown ? ' officer-card--menu-open' : ''}`}>
             <h2 style={{ marginTop: 0 }}>Add DKP tic (attendance)</h2>
-            <p className="officer-hint">Paste the channel member list. Names are matched to the DKP list.</p>
+            <p className="officer-hint">Paste the channel member list. Names are matched to the DKP list before anything is saved.</p>
             <details className="officer-hint">
               <summary>How matching works</summary>
               <p>
-                Each comma-separated name is matched by exact character name (case-insensitive). Only names on the DKP list receive credit. One credit per account per tic — duplicates in the paste and other toons on the same account are skipped and listed. DKP is credited to the character&apos;s linked account.
+                Each comma-separated name is matched by exact character name (case-insensitive). Only names on the DKP list receive credit. One credit per account per tic — duplicates in the paste and other toons on the same account are skipped and listed. A name shared by more than one character stays out until you pick one. DKP is credited to the character&apos;s linked account.
               </p>
             </details>
+            <div className="officer-tic-choice" role="radiogroup" aria-label="Tic destination">
+              <label>
+                <input
+                  type="radio"
+                  name="tic-destination"
+                  checked={ticDestination === 'new'}
+                  onChange={() => { setTicDestination('new'); setTicResult(null) }}
+                />
+                New tic
+              </label>
+              <label>
+                <input
+                  type="radio"
+                  name="tic-destination"
+                  checked={ticDestination === 'existing'}
+                  disabled={events.length === 0}
+                  onChange={() => { setTicDestination('existing'); setTicResult(null) }}
+                />
+                Existing tic
+              </label>
+              {ticDestination === 'existing' && (
+                <select
+                  value={appendEventId}
+                  onChange={(e) => { setAppendEventId(e.target.value); setTicResult(null) }}
+                  aria-label="Existing tic to add attendance to"
+                >
+                  {events.map((e) => (
+                    <option key={e.event_id} value={e.event_id}>
+                      #{e.event_order} {e.event_name} ({e.dkp_value} DKP)
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
             <textarea
               className="officer-paste"
               value={ticPaste}
-              onChange={(e) => setTicPaste(e.target.value)}
+              onChange={(e) => { setTicPaste(e.target.value); setTicResult(null) }}
               placeholder="[Sun Apr 14 10:17:09 2024] Channel Nag(30) members:&#10;[Sun Apr 14 10:17:09 2024] Meldrath, Fridge, Geom, ..."
               rows={5}
             />
-            <div className="officer-field-row" style={{ marginTop: '0.5rem' }}>
-              <TicDateTimeFields
-                idPrefix="new-tic"
-                date={ticDate}
-                time={ticTime}
-                onDateChange={(value) => { setTicDateTimeTouched(true); setTicDate(value) }}
-                onTimeChange={(value) => { setTicDateTimeTouched(true); setTicTime(value) }}
-              />
-            </div>
-            <p className="officer-hint">Date starts as this raid's date. Time starts as now, Eastern, to the second. A channel timestamp fills these until you edit them.</p>
+            {ticDestination === 'new' && (
+              <>
+                <div className="officer-field-row" style={{ marginTop: '0.5rem' }}>
+                  <TicDateTimeFields
+                    idPrefix="new-tic"
+                    date={ticDate}
+                    time={ticTime}
+                    onDateChange={(value) => { setTicDateTimeTouched(true); setTicDate(value) }}
+                    onTimeChange={(value) => { setTicDateTimeTouched(true); setTicTime(value) }}
+                  />
+                </div>
+                <p className="officer-hint">Date starts as this raid&apos;s date. Time starts as now, Eastern, to the second. A channel timestamp fills these until you edit them.</p>
+              </>
+            )}
+            {ticDestination === 'existing' && appendEvent && (
+              <p className="officer-hint">
+                #{appendEvent.event_order} {appendEvent.event_name} · {appendEvent.dkp_value} DKP
+                {appendEvent.event_time ? ` · ${appendEvent.event_time}` : ''}. People already on this tic stay on it.
+              </p>
+            )}
+            {showTicPreview && (
+              <div className="officer-result">
+                {ticPreview.resolved.length > 0 && (
+                  <div className="officer-result-group officer-result-group--ok">
+                    <div className="officer-result-label">Resolved ({ticPreview.toAdd.length} selected)</div>
+                    <div className="officer-result-names">
+                      {ticPreview.resolved.map((row) => (
+                        <label key={row.char_id} className="officer-result-name">
+                          <input
+                            type="checkbox"
+                            checked={row.selected}
+                            onChange={() => toggleTicChar(row.char_id)}
+                          />
+                          {getAccountCharacterDisplay(row.char_id)}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {ticPreview.ambiguous.length > 0 && (
+                  <div className="officer-result-group officer-result-group--warn">
+                    <div className="officer-result-label">Ambiguous ({ticPreview.ambiguous.length})</div>
+                    {ticPreview.ambiguous.map((row) => {
+                      const key = row.pasteName.toLowerCase().trim()
+                      return (
+                        <div key={key} className="officer-resolve-row">
+                          <span>{row.pasteName}</span>
+                          <select
+                            aria-label={`Choose character for ${row.pasteName}`}
+                            value={ticResolutions[key] || ''}
+                            onChange={(e) => setTicResolutions((prev) => ({ ...prev, [key]: e.target.value }))}
+                          >
+                            <option value="">Choose character</option>
+                            {row.candidates.map((c) => (
+                              <option key={c.char_id} value={c.char_id}>
+                                {getAccountCharacterDisplay(c.char_id)} ({c.char_id})
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+                <ResultNames label="Unmatched (not on DKP list)" names={ticPreview.unmatched} tone="warn" />
+                <ResultNames label="Duplicates (not double-counted)" names={ticPreview.duplicates} tone="accent" />
+                <ResultNames label="Same account (other toon already credited)" names={ticPreview.sameAccount.map((row) => getAccountCharacterDisplay(row.char_id))} tone="accent" />
+                <ResultNames label="Already on this tic" names={ticPreview.alreadyPresent.map((row) => getAccountCharacterDisplay(row.char_id))} tone="muted" />
+              </div>
+            )}
             <div className="officer-field-row">
-              <span className="officer-inline-label">DKP per attendee</span>
-              <input
-                className="officer-dkp-input"
-                type="number"
-                min={0}
-                step={0.5}
-                value={ticDkpValue}
-                onChange={(e) => setTicDkpValue(e.target.value)}
-              />
-              <button type="button" className="btn" onClick={handleAddTic} disabled={mutating || !ticPaste.trim()}>
-                {mutating ? 'Adding…' : 'Add tic'}
+              {ticDestination === 'new' && (
+                <>
+                  <span className="officer-inline-label">DKP per attendee</span>
+                  <input
+                    className="officer-dkp-input"
+                    type="number"
+                    min={0}
+                    step={0.5}
+                    value={ticDkpValue}
+                    onChange={(e) => setTicDkpValue(e.target.value)}
+                  />
+                </>
+              )}
+              <button
+                type="button"
+                className="btn"
+                onClick={handleAddTic}
+                disabled={mutating || !ticPaste.trim() || (ticDestination === 'existing' && !appendEventId)}
+              >
+                {mutating ? 'Adding…' : (ticDestination === 'existing' ? 'Add to tic' : 'Add tic')}
               </button>
             </div>
             {ticResult && (
               <div className="officer-result">
-                {ticResult.noTicAdded ? (
-                  <p className="officer-result-banner officer-result-banner--warn"><strong>No tic added.</strong> No names matched the DKP list, so no attendees were credited.</p>
+                {ticResult.appended ? (
+                  ticResult.added > 0 ? (
+                    <p className="officer-result-banner officer-result-banner--ok">
+                      Added <strong>{ticResult.added}</strong>. Already on this tic: <strong>{ticResult.alreadyPresentCount || 0}</strong>.
+                    </p>
+                  ) : (
+                    <p className="officer-result-banner officer-result-banner--warn">
+                      <strong>No one new to add.</strong> Already on this tic: <strong>{ticResult.alreadyPresentCount || 0}</strong>.
+                    </p>
+                  )
+                ) : ticResult.noTicAdded ? (
+                  <p className="officer-result-banner officer-result-banner--warn"><strong>No tic added.</strong> No selected names were ready to credit.</p>
                 ) : (
                   <p className="officer-result-banner officer-result-banner--ok">Tic added. Credited <strong>{ticResult.matched}</strong> attendee(s). Names shown as account (character).</p>
                 )}
@@ -1310,6 +1535,7 @@ export default function Officer({ isOfficer }) {
                 <ResultNames label="Unmatched (not on DKP list)" names={ticResult.unmatched} tone="warn" />
                 <ResultNames label="Duplicates (not double-counted)" names={ticResult.duplicatesDisplay} tone="accent" />
                 <ResultNames label="Same account (other toon already credited)" names={ticResult.sameAccountDisplay} tone="accent" />
+                <ResultNames label="Already on this tic" names={ticResult.alreadyPresentDisplay} tone="muted" />
                 <ResultNames label="Missing from this tic" names={ticResult.missingFromThisTicDisplay} tone="alert" />
                 <ResultNames label="New this tic" names={ticResult.newThisTicDisplay} tone="muted" />
               </div>
