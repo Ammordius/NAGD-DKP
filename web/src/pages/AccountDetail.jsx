@@ -296,6 +296,7 @@ export default function AccountDetail({ isOfficer, profile, session }) {
   const [addCharError, setAddCharError] = useState('')
   const [addCharLoading, setAddCharLoading] = useState(false)
   const [claimLoading, setClaimLoading] = useState(false)
+  const [claimError, setClaimError] = useState('')
   const [myAccountId, setMyAccountId] = useState(profile?.account_id ?? null)
   const isMyAccount = myAccountId === accountId
   const canAddChar = isOfficer || isMyAccount
@@ -357,11 +358,11 @@ export default function AccountDetail({ isOfficer, profile, session }) {
       return
     }
     setClaimLoading(true)
-    setError('')
+    setClaimError('')
     const { error: rpcErr } = await supabase.rpc('claim_account', { p_account_id: accountId })
     setClaimLoading(false)
     if (rpcErr) {
-      setError(rpcErr.message)
+      setClaimError(rpcErr.message)
       return
     }
     setMyAccountId(accountId)
@@ -481,9 +482,14 @@ export default function AccountDetail({ isOfficer, profile, session }) {
                         You can claim again after {cooldownUntil.toLocaleString()}. An officer can remove this cooldown.
                       </span>
                     ) : (
-                      <button type="button" className="btn btn-ghost" style={{ fontSize: '0.875rem' }} onClick={handleClaimAccount} disabled={claimLoading}>
-                        {claimLoading ? 'Claiming...' : 'Claim this account'}
-                      </button>
+                      <>
+                        <button type="button" className="btn btn-ghost" style={{ fontSize: '0.875rem' }} onClick={handleClaimAccount} disabled={claimLoading}>
+                          {claimLoading ? 'Claiming...' : 'Claim this account'}
+                        </button>
+                        {claimError && (
+                          <span className="error" style={{ marginLeft: '0.5rem', fontSize: '0.875rem' }}>{claimError}</span>
+                        )}
+                      </>
                     )}
                   </span>
                 )
