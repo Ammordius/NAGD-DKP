@@ -89,14 +89,16 @@ RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
+SET statement_timeout = '180s'
 AS $$
 BEGIN
+  SET LOCAL statement_timeout = '180s';
   PERFORM refresh_character_dkp_spent();
   PERFORM refresh_dkp_summary_internal();
 END;
 $$;
 
-COMMENT ON FUNCTION refresh_after_bulk_loot_assignment() IS 'Refreshes character_dkp_spent and dkp_summary after bulk loot assignment updates. Call once after all update_raid_loot_assignments batches.';
+COMMENT ON FUNCTION refresh_after_bulk_loot_assignment() IS 'Refreshes character_dkp_spent and dkp_summary after bulk loot assignment updates. Does not touch account DKP; account spent follows the raid_loot buyer only.';
 
 -- Single-row assignment update: officers or the account that owns the loot row (buyer char_id on that account).
 -- p_assigned_char_id / p_assigned_character_name may be NULL or '' to set Unassigned.

@@ -170,7 +170,7 @@ BEGIN
 END;
 $$;
 
-COMMENT ON FUNCTION refresh_after_bulk_loot_assignment() IS 'Refreshes character_dkp_spent and dkp_summary after bulk loot assignment updates. Call once after all update_raid_loot_assignments batches.';
+COMMENT ON FUNCTION refresh_after_bulk_loot_assignment() IS 'Refreshes character_dkp_spent and dkp_summary after bulk loot assignment updates. Does not touch account DKP; account spent follows the raid_loot buyer only.';
 
 -- 9) Single-row assignment: officers or account owner. Writes to loot_assignment.
 CREATE OR REPLACE FUNCTION update_single_raid_loot_assignment(

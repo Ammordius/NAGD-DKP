@@ -831,7 +831,7 @@ COMMENT ON FUNCTION public.fix_serial_sequences_for_restore() IS 'Set serial seq
 
 -- DKP triggers.
 -- Earned is raid_event_attendance times raid_events.dkp_value. raid_attendance is only the roster and does not move DKP.
--- Spent is raid_loot.cost, rolled to an account through loot_assignment when that row exists, otherwise the loot character.
+-- Spent is raid_loot.cost, rolled to an account from the loot row's buyer (char_id / character_name). loot_assignment does not move account DKP.
 -- Each statement updates the touched characters and accounts once. A daily refresh_dkp_summary() still has to roll 30d/60d as dates pass.
 -- Bulk restore uses begin_restore_load(); these triggers no-op until that flag clears.
 
@@ -875,28 +875,15 @@ $$;
 
 CREATE OR REPLACE FUNCTION public.resolve_loot_account_id(p_loot_id bigint, p_char_id text, p_character_name text)
 RETURNS text
-LANGUAGE plpgsql
+LANGUAGE sql
 STABLE
 SECURITY DEFINER
 SET search_path = public
 AS $$
-DECLARE
-  v_char text;
-  v_name text;
-BEGIN
-  IF p_loot_id IS NOT NULL AND to_regclass('public.loot_assignment') IS NOT NULL THEN
-    SELECT NULLIF(trim(assigned_char_id), ''), NULLIF(trim(assigned_character_name), '')
-    INTO v_char, v_name
-    FROM loot_assignment
-    WHERE loot_id = p_loot_id;
-  END IF;
-  RETURN public.resolve_dkp_account_id(
-    NULL,
-    COALESCE(v_char, NULLIF(trim(p_char_id), '')),
-    COALESCE(v_name, NULLIF(trim(p_character_name), ''))
-  );
-END;
+  SELECT public.resolve_dkp_account_id(NULL, NULLIF(trim(p_char_id), ''), NULLIF(trim(p_character_name), ''));
 $$;
+COMMENT ON FUNCTION public.resolve_loot_account_id(bigint, text, text) IS
+  'Account charged for a raid_loot row, from that row''s buyer only. loot_assignment is character ownership and does not affect account DKP. p_loot_id is unused and kept so existing callers do not change.';
 
 CREATE OR REPLACE FUNCTION public.refresh_raid_totals_for_ids(p_raid_ids text[])
 RETURNS void
@@ -979,14 +966,7 @@ BEGIN
                public.raid_date_parsed(r.date_iso)
         FROM raid_loot rl
         JOIN raids r ON r.raid_id = rl.raid_id
-        JOIN character_account ca
-          ON ca.char_id = COALESCE(
-            (SELECT NULLIF(trim(la.assigned_char_id), '')
-             FROM loot_assignment la
-             WHERE la.loot_id = rl.id
-             LIMIT 1),
-            NULLIF(trim(rl.char_id::text), '')
-          )
+        JOIN character_account ca ON ca.char_id = NULLIF(trim(rl.char_id::text), '')
         WHERE ca.account_id = ANY (p_account_ids)
         UNION ALL
         SELECT ca.account_id,
@@ -996,10 +976,6 @@ BEGIN
         JOIN characters c ON trim(c.name) = trim(rl.character_name)
         JOIN character_account ca ON ca.char_id = c.char_id
         WHERE COALESCE(trim(rl.char_id::text), '') = ''
-          AND NOT EXISTS (
-            SELECT 1 FROM loot_assignment la
-            WHERE la.loot_id = rl.id AND COALESCE(trim(la.assigned_char_id), '') <> ''
-          )
           AND ca.account_id = ANY (p_account_ids)
       ) d ON d.account_id = k.account_id
       GROUP BY k.account_id
@@ -1256,20 +1232,6 @@ BEGIN
         JOIN raid_loot rl ON rl.char_id = ca.char_id
         JOIN raids r ON r.raid_id = rl.raid_id
         WHERE ca.account_id = ANY (v_accounts)
-          AND NOT EXISTS (
-            SELECT 1 FROM loot_assignment la
-            WHERE la.loot_id = rl.id
-              AND NULLIF(trim(la.assigned_char_id), '') IS NOT NULL
-              AND NULLIF(trim(la.assigned_char_id), '') <> ca.char_id
-          )
-        UNION ALL
-        SELECT ca.account_id, public.raid_date_parsed(r.date_iso)
-        FROM character_account ca
-        JOIN loot_assignment la ON NULLIF(trim(la.assigned_char_id), '') = ca.char_id
-        JOIN raid_loot rl ON rl.id = la.loot_id
-        JOIN raids r ON r.raid_id = rl.raid_id
-        WHERE ca.account_id = ANY (v_accounts)
-          AND NULLIF(trim(la.assigned_char_id), '') IS DISTINCT FROM NULLIF(trim(rl.char_id::text), '')
         UNION ALL
         SELECT ca.account_id, public.raid_date_parsed(r.date_iso)
         FROM raid_event_attendance rea
@@ -1286,10 +1248,6 @@ BEGIN
         JOIN characters c ON trim(c.name) = trim(rl.character_name)
         JOIN character_account ca ON ca.char_id = c.char_id
         WHERE COALESCE(trim(rl.char_id::text), '') = ''
-          AND NOT EXISTS (
-            SELECT 1 FROM loot_assignment la
-            WHERE la.loot_id = rl.id AND COALESCE(trim(la.assigned_char_id), '') <> ''
-          )
           AND ca.account_id = ANY (v_accounts)
       ) d ON d.account_id = k.account_id
       GROUP BY k.account_id
@@ -2258,139 +2216,14 @@ CREATE TABLE IF NOT EXISTS loot_assignment (
   assigned_character_name TEXT,
   assigned_via_magelo SMALLINT DEFAULT NULL
 );
-COMMENT ON TABLE loot_assignment IS 'Which character has each loot item. Stub from account-dkp-schema; full definition in supabase-loot-assignment-table.sql.';
+COMMENT ON TABLE loot_assignment IS 'Which character has each loot item. Player- and script-editable. Does not affect account DKP; account spent follows raid_loot.char_id / character_name.';
 
--- Assignment changes who spent the DKP. Character spent stays on the loot row; only the account moves.
-CREATE OR REPLACE FUNCTION public.apply_account_spent_deltas(p_rows jsonb)
-RETURNS void
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public
-AS $$
-DECLARE
-  v_accounts text[];
-BEGIN
-  IF p_rows IS NULL OR jsonb_typeof(p_rows) <> 'array' OR jsonb_array_length(p_rows) = 0 THEN
-    RETURN;
-  END IF;
-
-  INSERT INTO account_dkp_summary (account_id, display_name, earned, spent, earned_30d, earned_60d, updated_at)
-  SELECT d.account_id, MAX(a.display_name), 0, SUM(d.spent), 0, 0, now()
-  FROM (
-    SELECT NULLIF(trim(x->>'account_id'), '') AS account_id,
-           COALESCE((x->>'spent')::numeric, 0) AS spent
-    FROM jsonb_array_elements(p_rows) AS x
-  ) d
-  JOIN accounts a ON a.account_id = d.account_id
-  WHERE d.account_id IS NOT NULL
-  GROUP BY d.account_id
-  HAVING SUM(d.spent) <> 0
-  ON CONFLICT (account_id) DO UPDATE SET
-    spent = account_dkp_summary.spent + EXCLUDED.spent,
-    display_name = COALESCE(account_dkp_summary.display_name, EXCLUDED.display_name),
-    updated_at = now();
-
-  SELECT ARRAY_AGG(DISTINCT NULLIF(trim(x->>'account_id'), ''))
-  INTO v_accounts
-  FROM jsonb_array_elements(p_rows) AS x;
-
-  DELETE FROM account_dkp_summary
-  WHERE account_id = ANY (v_accounts)
-    AND earned = 0
-    AND spent = 0
-    AND COALESCE(earned_30d, 0) = 0
-    AND COALESCE(earned_60d, 0) = 0;
-END;
-$$;
-
-CREATE OR REPLACE FUNCTION public.trigger_loot_assignment_spent()
-RETURNS trigger
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public
-AS $$
-BEGIN
-  IF restore_load_in_progress() THEN RETURN NULL; END IF;
-
-  IF TG_OP = 'INSERT' THEN
-    PERFORM apply_account_spent_deltas((
-      SELECT COALESCE(jsonb_agg(piece), '[]'::jsonb)
-      FROM (
-        SELECT jsonb_build_object(
-          'account_id', public.resolve_dkp_account_id(NULL, rl.char_id::text, rl.character_name),
-          'spent', -COALESCE(NULLIF(trim(rl.cost), '')::numeric, 0)
-        ) AS piece
-        FROM new_rows n
-        JOIN raid_loot rl ON rl.id = n.loot_id
-        UNION ALL
-        SELECT jsonb_build_object(
-          'account_id', public.resolve_dkp_account_id(NULL, n.assigned_char_id, n.assigned_character_name),
-          'spent', COALESCE(NULLIF(trim(rl.cost), '')::numeric, 0)
-        )
-        FROM new_rows n
-        JOIN raid_loot rl ON rl.id = n.loot_id
-      ) s
-    ));
-  ELSIF TG_OP = 'DELETE' THEN
-    PERFORM apply_account_spent_deltas((
-      SELECT COALESCE(jsonb_agg(piece), '[]'::jsonb)
-      FROM (
-        SELECT jsonb_build_object(
-          'account_id', public.resolve_dkp_account_id(NULL, o.assigned_char_id, o.assigned_character_name),
-          'spent', -COALESCE(NULLIF(trim(rl.cost), '')::numeric, 0)
-        ) AS piece
-        FROM old_rows o
-        JOIN raid_loot rl ON rl.id = o.loot_id
-        UNION ALL
-        SELECT jsonb_build_object(
-          'account_id', public.resolve_dkp_account_id(NULL, rl.char_id::text, rl.character_name),
-          'spent', COALESCE(NULLIF(trim(rl.cost), '')::numeric, 0)
-        )
-        FROM old_rows o
-        JOIN raid_loot rl ON rl.id = o.loot_id
-      ) s
-    ));
-  ELSE
-    PERFORM apply_account_spent_deltas((
-      SELECT COALESCE(jsonb_agg(piece), '[]'::jsonb)
-      FROM (
-        SELECT jsonb_build_object(
-          'account_id', public.resolve_dkp_account_id(NULL, o.assigned_char_id, o.assigned_character_name),
-          'spent', -COALESCE(NULLIF(trim(rl.cost), '')::numeric, 0)
-        ) AS piece
-        FROM old_rows o
-        JOIN new_rows n ON n.loot_id = o.loot_id
-        JOIN raid_loot rl ON rl.id = o.loot_id
-        UNION ALL
-        SELECT jsonb_build_object(
-          'account_id', public.resolve_dkp_account_id(NULL, n.assigned_char_id, n.assigned_character_name),
-          'spent', COALESCE(NULLIF(trim(rl.cost), '')::numeric, 0)
-        )
-        FROM new_rows n
-        JOIN old_rows o ON o.loot_id = n.loot_id
-        JOIN raid_loot rl ON rl.id = n.loot_id
-      ) s
-    ));
-  END IF;
-  RETURN NULL;
-END;
-$$;
-
+-- Account spent follows the raid_loot buyer. Character assignment must not write account_dkp_summary.
 DROP TRIGGER IF EXISTS loot_assignment_spent_ins ON loot_assignment;
 DROP TRIGGER IF EXISTS loot_assignment_spent_upd ON loot_assignment;
 DROP TRIGGER IF EXISTS loot_assignment_spent_del ON loot_assignment;
-CREATE TRIGGER loot_assignment_spent_ins
-  AFTER INSERT ON loot_assignment
-  REFERENCING NEW TABLE AS new_rows
-  FOR EACH STATEMENT EXECUTE FUNCTION public.trigger_loot_assignment_spent();
-CREATE TRIGGER loot_assignment_spent_upd
-  AFTER UPDATE ON loot_assignment
-  REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows
-  FOR EACH STATEMENT EXECUTE FUNCTION public.trigger_loot_assignment_spent();
-CREATE TRIGGER loot_assignment_spent_del
-  AFTER DELETE ON loot_assignment
-  REFERENCING OLD TABLE AS old_rows
-  FOR EACH STATEMENT EXECUTE FUNCTION public.trigger_loot_assignment_spent();
+DROP FUNCTION IF EXISTS public.trigger_loot_assignment_spent();
+DROP FUNCTION IF EXISTS public.apply_account_spent_deltas(jsonb);
 
 
 -- Views for app/CI: raid_loot + assignment columns; per-character assignment count. security_invoker so they run as caller.
@@ -2465,7 +2298,7 @@ CREATE TABLE IF NOT EXISTS account_dkp_summary (
   last_activity_date DATE,
   updated_at TIMESTAMPTZ DEFAULT now()
 );
-COMMENT ON TABLE account_dkp_summary IS 'DKP totals per account. Refreshed from raid_event_attendance (earned) and raid_loot/loot_assignment (spent) via character_account.';
+COMMENT ON TABLE account_dkp_summary IS 'DKP totals per account. Earned from raid_event_attendance. Spent from raid_loot buyer (char_id / character_name) via character_account. loot_assignment does not affect these totals.';
 
 -- raid_event_attendance.account_id is created with the table (and ADD COLUMN IF NOT EXISTS) earlier so LANGUAGE sql functions can reference it.
 
@@ -2530,8 +2363,8 @@ BEGIN
   WHERE roa.account_id IS NOT NULL
   GROUP BY roa.account_id;
 
-  -- Spent: from raid_loot (and loot_assignment when present), resolve to account via character_account. from raid_loot (and loot_assignment when present), resolve to account via character_account.
-  -- One account per loot row (DISTINCT ON rl.id); if character on multiple accounts, pick one.
+  -- Spent: raid_loot buyer only (char_id / character_name). loot_assignment is character
+  -- ownership and must not move account DKP.
   INSERT INTO account_dkp_summary (account_id, display_name, spent, earned_30d, earned_60d, last_activity_date, updated_at)
   SELECT
     sub.account_id,
@@ -2548,16 +2381,15 @@ BEGIN
       COALESCE((rl.cost::numeric), 0) AS cost_num,
       rl.raid_id
     FROM raid_loot rl
-    LEFT JOIN raids r ON r.raid_id = rl.raid_id
-    LEFT JOIN LATERAL (SELECT la.assigned_char_id, la.assigned_character_name FROM loot_assignment la WHERE la.loot_id = rl.id LIMIT 1) la ON true
     LEFT JOIN character_account ca ON (
-      (COALESCE(trim(la.assigned_char_id), trim(rl.char_id::text)) <> '' AND ca.char_id = COALESCE(trim(la.assigned_char_id), trim(rl.char_id::text)))
-      OR (COALESCE(trim(la.assigned_character_name), trim(rl.character_name)) <> '' AND EXISTS (
-        SELECT 1 FROM characters c WHERE c.char_id = ca.char_id AND trim(c.name) = COALESCE(trim(la.assigned_character_name), trim(rl.character_name))
+      (COALESCE(trim(rl.char_id::text), '') <> '' AND ca.char_id = trim(rl.char_id::text))
+      OR (COALESCE(trim(rl.character_name), '') <> '' AND EXISTS (
+        SELECT 1 FROM characters c WHERE c.char_id = ca.char_id AND trim(c.name) = trim(rl.character_name)
       ))
     )
     LEFT JOIN accounts a ON a.account_id = ca.account_id
     WHERE ca.account_id IS NOT NULL
+    ORDER BY rl.id, ca.account_id
   ) sub
   LEFT JOIN raids r ON r.raid_id = sub.raid_id
   GROUP BY sub.account_id
@@ -2773,7 +2605,7 @@ BEGIN
     last_activity_date = GREATEST(COALESCE(account_dkp_summary.last_activity_date, '1970-01-01'::date), COALESCE(EXCLUDED.last_activity_date, '1970-01-01'::date)),
     updated_at = now();
 
-  -- Spent: filter raid_loot to rows touching target accounts before resolving assignment/character_account (avoids full-table scan).
+  -- Spent follows the raid_loot buyer, never loot_assignment.
   INSERT INTO account_dkp_summary (account_id, display_name, spent, earned_30d, earned_60d, last_activity_date, updated_at)
   SELECT
     sub.account_id,
@@ -2790,38 +2622,36 @@ BEGIN
       COALESCE((b.cost::numeric), 0) AS cost_num,
       b.raid_id
     FROM (
-      SELECT rl.id, rl.raid_id, rl.event_id, rl.item_name, rl.char_id, rl.character_name, rl.cost,
-        la.assigned_char_id, la.assigned_character_name
+      SELECT rl.id, rl.raid_id, rl.cost, rl.char_id, rl.character_name
       FROM raid_loot rl
-      LEFT JOIN LATERAL (SELECT la.assigned_char_id, la.assigned_character_name FROM loot_assignment la WHERE la.loot_id = rl.id LIMIT 1) la ON true
       WHERE (
-        EXISTS (
+        COALESCE(trim(rl.char_id::text), '') <> ''
+        AND EXISTS (
           SELECT 1 FROM character_account ca0
           WHERE ca0.account_id = ANY(target_accounts)
-            AND ca0.char_id = COALESCE(NULLIF(trim(la.assigned_char_id), ''), NULLIF(trim(rl.char_id::text), ''))
-            AND COALESCE(NULLIF(trim(la.assigned_char_id), ''), NULLIF(trim(rl.char_id::text), '')) <> ''
+            AND ca0.char_id = trim(rl.char_id::text)
         )
-        OR (
-          COALESCE(NULLIF(trim(la.assigned_char_id), ''), NULLIF(trim(rl.char_id::text), '')) = ''
-          AND COALESCE(trim(la.assigned_character_name), trim(rl.character_name)) <> ''
-          AND EXISTS (
-            SELECT 1 FROM character_account ca0
-            INNER JOIN characters c0 ON c0.char_id = ca0.char_id
-            WHERE ca0.account_id = ANY(target_accounts)
-              AND trim(c0.name) = COALESCE(trim(la.assigned_character_name), trim(rl.character_name))
-          )
+      )
+      OR (
+        COALESCE(trim(rl.char_id::text), '') = ''
+        AND COALESCE(trim(rl.character_name), '') <> ''
+        AND EXISTS (
+          SELECT 1 FROM character_account ca0
+          INNER JOIN characters c0 ON c0.char_id = ca0.char_id
+          WHERE ca0.account_id = ANY(target_accounts)
+            AND trim(c0.name) = trim(rl.character_name)
         )
       )
     ) b
     LEFT JOIN character_account ca ON (
-      (COALESCE(trim(b.assigned_char_id), trim(b.char_id::text)) <> '' AND ca.char_id = COALESCE(trim(b.assigned_char_id), trim(b.char_id::text)))
-      OR (COALESCE(trim(b.assigned_character_name), trim(b.character_name)) <> '' AND EXISTS (
-        SELECT 1 FROM characters c WHERE c.char_id = ca.char_id AND trim(c.name) = COALESCE(trim(b.assigned_character_name), trim(b.character_name))
+      (COALESCE(trim(b.char_id::text), '') <> '' AND ca.char_id = trim(b.char_id::text))
+      OR (COALESCE(trim(b.character_name), '') <> '' AND EXISTS (
+        SELECT 1 FROM characters c WHERE c.char_id = ca.char_id AND trim(c.name) = trim(b.character_name)
       ))
     )
     LEFT JOIN accounts a ON a.account_id = ca.account_id
     WHERE ca.account_id IS NOT NULL AND ca.account_id = ANY(target_accounts)
-    ORDER BY b.id
+    ORDER BY b.id, ca.account_id
   ) sub
   LEFT JOIN raids r ON r.raid_id = sub.raid_id
   GROUP BY sub.account_id
@@ -3292,7 +3122,7 @@ GRANT EXECUTE ON FUNCTION public.insert_raid_event_attendance_for_upload(text, j
 -- Officer bidding portfolio (SECURITY DEFINER, is_officer). GRANT EXECUTE on officer RPCs to authenticated only.
 -- normalize_item_name_for_lookup: IMMUTABLE; keep aligned with scripts/bid_portfolio_local/normalize.py.
 -- Ref-price: avg of up to 3 prior guild sales (cost > 0) per normalized name; zero-cost uses guarded subquery.
--- Loot to account matches refresh_account_dkp_summary_internal (loot_assignment + char or name resolve).
+-- Loot charged to an account follows raid_loot.char_id / character_name. loot_assignment is character ownership and is not the buyer.
 -- =============================================================================
 CREATE OR REPLACE FUNCTION public.normalize_item_name_for_lookup(p_name text)
 RETURNS text
@@ -3359,25 +3189,17 @@ buyer AS (
     rl.id AS loot_id,
     ca.account_id AS buyer_account_id
   FROM raid_loot rl
-  LEFT JOIN LATERAL (
-    SELECT la0.assigned_char_id, la0.assigned_character_name
-    FROM loot_assignment la0
-    WHERE la0.loot_id = rl.id
-    LIMIT 1
-  ) la ON true
   LEFT JOIN character_account ca ON (
-    (COALESCE(trim(la.assigned_char_id), trim(rl.char_id::text)) <> ''
-      AND ca.char_id = COALESCE(trim(la.assigned_char_id), trim(rl.char_id::text)))
-    OR (
-      COALESCE(trim(la.assigned_character_name), trim(rl.character_name)) <> ''
-      AND EXISTS (
-        SELECT 1
-        FROM characters c2
-        WHERE c2.char_id = ca.char_id
-          AND trim(c2.name) = COALESCE(trim(la.assigned_character_name), trim(rl.character_name))
-      )
+  (COALESCE(trim(rl.char_id::text), '') <> '' AND ca.char_id = trim(rl.char_id::text))
+  OR (
+    COALESCE(trim(rl.character_name), '') <> ''
+    AND EXISTS (
+      SELECT 1 FROM characters c2
+      WHERE c2.char_id = ca.char_id
+        AND trim(c2.name) = trim(rl.character_name)
     )
   )
+)
   ORDER BY rl.id, ca.account_id
 ),
 guild_positive_ref AS (
@@ -3441,7 +3263,7 @@ SELECT
 FROM guild_loot_core c;
 
 COMMENT ON VIEW public.guild_loot_sale_enriched IS
-  'All raid_loot rows with parsed cost, norm_name, ref_price_at_sale (3 prior sales), paid_to_ref_ratio, buyer_account_id, and next guild sale of same norm_name (LEAD by raid_date, loot_id).';
+  'Guild sales. buyer_account_id is the raid_loot buyer (char_id / character_name). loot_assignment does not change the buyer.';
 
 GRANT SELECT ON public.guild_loot_sale_enriched TO authenticated;
 GRANT SELECT ON public.guild_loot_sale_enriched TO anon;
@@ -3664,24 +3486,17 @@ BEGIN
   FROM (
     SELECT rl.id AS loot_id, rl.cost::text AS cost_text
     FROM raid_loot rl
-    LEFT JOIN LATERAL (
-      SELECT la0.assigned_char_id, la0.assigned_character_name
-      FROM loot_assignment la0
-      WHERE la0.loot_id = rl.id
-      LIMIT 1
-    ) la ON true
     LEFT JOIN character_account ca ON (
-      (COALESCE(trim(la.assigned_char_id), trim(rl.char_id::text)) <> ''
-        AND ca.char_id = COALESCE(trim(la.assigned_char_id), trim(rl.char_id::text)))
-      OR (
-        COALESCE(trim(la.assigned_character_name), trim(rl.character_name)) <> ''
-        AND EXISTS (
-          SELECT 1 FROM characters c2
-          WHERE c2.char_id = ca.char_id
-            AND trim(c2.name) = COALESCE(trim(la.assigned_character_name), trim(rl.character_name))
-        )
-      )
+  (COALESCE(trim(rl.char_id::text), '') <> '' AND ca.char_id = trim(rl.char_id::text))
+  OR (
+    COALESCE(trim(rl.character_name), '') <> ''
+    AND EXISTS (
+      SELECT 1 FROM characters c2
+      WHERE c2.char_id = ca.char_id
+        AND trim(c2.name) = trim(rl.character_name)
     )
+  )
+)
     WHERE rl.raid_id = v_raid AND ca.account_id = v_aid
   ) lb;
 
@@ -3703,24 +3518,17 @@ BEGIN
         COALESCE(re.event_order, 2147483647) AS event_order
       FROM raid_loot rl
       LEFT JOIN raid_events re ON re.raid_id = rl.raid_id AND re.event_id = rl.event_id
-      LEFT JOIN LATERAL (
-        SELECT la0.assigned_char_id, la0.assigned_character_name
-        FROM loot_assignment la0
-        WHERE la0.loot_id = rl.id
-        LIMIT 1
-      ) la ON true
       LEFT JOIN character_account ca ON (
-        (COALESCE(trim(la.assigned_char_id), trim(rl.char_id::text)) <> ''
-          AND ca.char_id = COALESCE(trim(la.assigned_char_id), trim(rl.char_id::text)))
-        OR (
-          COALESCE(trim(la.assigned_character_name), trim(rl.character_name)) <> ''
-          AND EXISTS (
-            SELECT 1 FROM characters c2
-            WHERE c2.char_id = ca.char_id
-              AND trim(c2.name) = COALESCE(trim(la.assigned_character_name), trim(rl.character_name))
-          )
-        )
-      )
+  (COALESCE(trim(rl.char_id::text), '') <> '' AND ca.char_id = trim(rl.char_id::text))
+  OR (
+    COALESCE(trim(rl.character_name), '') <> ''
+    AND EXISTS (
+      SELECT 1 FROM characters c2
+      WHERE c2.char_id = ca.char_id
+        AND trim(c2.name) = trim(rl.character_name)
+    )
+  )
+)
       WHERE rl.raid_id = v_raid
       ORDER BY COALESCE(re.event_order, 2147483647), rl.id
     LOOP
@@ -3780,24 +3588,17 @@ BEGIN
         END AS cost_num,
         ca.account_id AS buyer_account_id
       FROM raid_loot rl
-      LEFT JOIN LATERAL (
-        SELECT la0.assigned_char_id, la0.assigned_character_name
-        FROM loot_assignment la0
-        WHERE la0.loot_id = rl.id
-        LIMIT 1
-      ) la ON true
       LEFT JOIN character_account ca ON (
-        (COALESCE(trim(la.assigned_char_id), trim(rl.char_id::text)) <> ''
-          AND ca.char_id = COALESCE(trim(la.assigned_char_id), trim(rl.char_id::text)))
-        OR (
-          COALESCE(trim(la.assigned_character_name), trim(rl.character_name)) <> ''
-          AND EXISTS (
-            SELECT 1 FROM characters c2
-            WHERE c2.char_id = ca.char_id
-              AND trim(c2.name) = COALESCE(trim(la.assigned_character_name), trim(rl.character_name))
-          )
-        )
-      )
+  (COALESCE(trim(rl.char_id::text), '') <> '' AND ca.char_id = trim(rl.char_id::text))
+  OR (
+    COALESCE(trim(rl.character_name), '') <> ''
+    AND EXISTS (
+      SELECT 1 FROM characters c2
+      WHERE c2.char_id = ca.char_id
+        AND trim(c2.name) = trim(rl.character_name)
+    )
+  )
+)
       WHERE rl.raid_id = v_raid AND rl.event_id IS NOT DISTINCT FROM v_event_id
       ORDER BY rl.id
     LOOP
@@ -3825,24 +3626,17 @@ BEGIN
       COALESCE(re.event_order, 2147483647) AS event_order
     FROM raid_loot rl
     LEFT JOIN raid_events re ON re.raid_id = rl.raid_id AND re.event_id = rl.event_id
-    LEFT JOIN LATERAL (
-      SELECT la0.assigned_char_id, la0.assigned_character_name
-      FROM loot_assignment la0
-      WHERE la0.loot_id = rl.id
-      LIMIT 1
-    ) la ON true
     LEFT JOIN character_account ca ON (
-      (COALESCE(trim(la.assigned_char_id), trim(rl.char_id::text)) <> ''
-        AND ca.char_id = COALESCE(trim(la.assigned_char_id), trim(rl.char_id::text)))
-      OR (
-        COALESCE(trim(la.assigned_character_name), trim(rl.character_name)) <> ''
-        AND EXISTS (
-          SELECT 1 FROM characters c2
-          WHERE c2.char_id = ca.char_id
-            AND trim(c2.name) = COALESCE(trim(la.assigned_character_name), trim(rl.character_name))
-        )
-      )
+  (COALESCE(trim(rl.char_id::text), '') <> '' AND ca.char_id = trim(rl.char_id::text))
+  OR (
+    COALESCE(trim(rl.character_name), '') <> ''
+    AND EXISTS (
+      SELECT 1 FROM characters c2
+      WHERE c2.char_id = ca.char_id
+        AND trim(c2.name) = trim(rl.character_name)
     )
+  )
+)
     WHERE rl.raid_id = v_raid
       AND NOT EXISTS (
         SELECT 1 FROM raid_events re2
@@ -3863,7 +3657,7 @@ END;
 $abb$;
 
 COMMENT ON FUNCTION public.account_balance_before_loot(bigint, text) IS
-  'Internal: DKP pool for an account immediately before the given loot row, from raid earn, tic credits, and prior loot in this raid.';
+  'Internal: DKP pool for an account immediately before the given loot row. Prior loot in the raid is charged to the raid_loot buyer, not loot_assignment.';
 
 REVOKE ALL ON FUNCTION public.account_balance_before_loot(bigint, text) FROM PUBLIC;
 
@@ -4631,7 +4425,7 @@ BEGIN
 END;
 $$;
 
-COMMENT ON FUNCTION public.refresh_after_bulk_loot_assignment() IS 'Refreshes character_dkp_spent and dkp_summary after bulk loot assignment updates. Call once after all update_raid_loot_assignments batches.';
+COMMENT ON FUNCTION public.refresh_after_bulk_loot_assignment() IS 'Refreshes character_dkp_spent and dkp_summary after bulk loot assignment updates. Does not touch account_dkp_summary; account spent follows raid_loot only.';
 
 CREATE OR REPLACE FUNCTION public.update_single_raid_loot_assignment(
   p_loot_id bigint,
