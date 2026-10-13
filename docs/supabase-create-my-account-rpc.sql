@@ -48,6 +48,7 @@ AS $$
 DECLARE
   v_new_account_id text;
   v_display text;
+  v_key text;
 BEGIN
   IF auth.uid() IS NULL THEN
     RAISE EXCEPTION 'Not authenticated';
@@ -58,7 +59,32 @@ BEGIN
 
   v_display := trim(coalesce(p_display_name, ''));
   IF v_display = '' THEN
-    v_display := 'New account';
+    RAISE EXCEPTION 'Enter a display name';
+  END IF;
+
+  v_key := lower(v_display);
+
+  IF EXISTS (
+    SELECT 1 FROM public.accounts a
+    WHERE lower(trim(coalesce(a.display_name, ''))) = v_key
+  ) THEN
+    RAISE EXCEPTION 'An account named "%" already exists', v_display;
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM public.characters c
+    WHERE lower(trim(coalesce(c.name, ''))) = v_key
+  ) THEN
+    RAISE EXCEPTION 'A character named "%" already exists', v_display;
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM public.accounts a
+    CROSS JOIN LATERAL unnest(string_to_array(coalesce(a.toon_names, ''), ',')) AS t(n)
+    WHERE lower(trim(n)) = v_key
+  ) THEN
+    RAISE EXCEPTION 'A character named "%" already exists', v_display;
   END IF;
 
   v_new_account_id := gen_random_uuid()::text;

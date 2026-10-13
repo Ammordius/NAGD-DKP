@@ -150,4 +150,4 @@ REVOKE ALL ON FUNCTION public.officer_set_account_display_name(text, text) FROM 
 GRANT EXECUTE ON FUNCTION public.officer_set_account_display_name(text, text) TO authenticated;
 
 COMMENT ON TABLE public.officer_audit_log IS
-  'Audit trail for officer actions: add_raid, add_tic, delete_event, raid_deleted, add_loot, add_loot_from_log, delete_loot, add_attendee_to_tic, add_attendees_to_tic, remove_attendee_from_tic, edit_event_dkp, edit_event_time, edit_loot_cost, set_account_display_name. Delta is minimal (short keys) to limit storage and egress.';
+  'Audit trail for officer actions: add_raid, add_tic, delete_event, raid_deleted, rename_raid, add_loot, add_loot_from_log, delete_loot, add_attendee_to_tic, add_attendees_to_tic, remove_attendee_from_tic, edit_event_dkp, edit_event_time, edit_loot_cost, set_account_display_name. Delta is minimal (short keys) to limit storage and egress.';

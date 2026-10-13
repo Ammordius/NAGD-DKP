@@ -172,7 +172,7 @@ CREATE TABLE IF NOT EXISTS officer_audit_log (
   delta JSONB
 );
 ALTER TABLE officer_audit_log ADD COLUMN IF NOT EXISTS actor_display_name TEXT;
-COMMENT ON TABLE officer_audit_log IS 'Audit trail for officer actions: add_raid, add_tic, delete_event, raid_deleted, add_loot, add_loot_from_log, delete_loot, add_attendee_to_tic, add_attendees_to_tic, remove_attendee_from_tic, edit_event_dkp, edit_event_time, edit_loot_cost, set_account_display_name. Delta is minimal (short keys) to limit storage and egress.';
+COMMENT ON TABLE officer_audit_log IS 'Audit trail for officer actions: add_raid, add_tic, delete_event, raid_deleted, rename_raid, add_loot, add_loot_from_log, delete_loot, add_attendee_to_tic, add_attendees_to_tic, remove_attendee_from_tic, edit_event_dkp, edit_event_time, edit_loot_cost, set_account_display_name. Delta is minimal (short keys) to limit storage and egress.';
 
 -- Add new columns if upgrading from an older schema (no-op if already present)
 ALTER TABLE dkp_summary ADD COLUMN IF NOT EXISTS last_activity_date DATE;
@@ -517,6 +517,7 @@ AS $$
 DECLARE
   v_new_account_id text;
   v_display text;
+  v_key text;
 BEGIN
   IF auth.uid() IS NULL THEN
     RAISE EXCEPTION 'Not authenticated';
@@ -527,7 +528,32 @@ BEGIN
 
   v_display := trim(coalesce(p_display_name, ''));
   IF v_display = '' THEN
-    v_display := 'New account';
+    RAISE EXCEPTION 'Enter a display name';
+  END IF;
+
+  v_key := lower(v_display);
+
+  IF EXISTS (
+    SELECT 1 FROM public.accounts a
+    WHERE lower(trim(coalesce(a.display_name, ''))) = v_key
+  ) THEN
+    RAISE EXCEPTION 'An account named "%" already exists', v_display;
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM public.characters c
+    WHERE lower(trim(coalesce(c.name, ''))) = v_key
+  ) THEN
+    RAISE EXCEPTION 'A character named "%" already exists', v_display;
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM public.accounts a
+    CROSS JOIN LATERAL unnest(string_to_array(coalesce(a.toon_names, ''), ',')) AS t(n)
+    WHERE lower(trim(n)) = v_key
+  ) THEN
+    RAISE EXCEPTION 'A character named "%" already exists', v_display;
   END IF;
 
   v_new_account_id := gen_random_uuid()::text;

@@ -4,6 +4,7 @@ import useSWRConfig from 'swr'
 import { supabase } from '../lib/supabase'
 import { getDkpMobLoot, getRaidItemSources } from '../lib/staticData'
 import { logOfficerAudit } from '../lib/officerAudit'
+import { findDuplicateAccountName } from '../lib/accountNameTaken'
 import { formatAccountCharacter, formatAccountCharacters } from '../lib/formatAccountCharacter'
 import { DKP_DATA_KEY } from '../lib/dkpLeaderboard'
 import { groupRaidLootByEvent } from '../lib/groupRaidLootByEvent'
@@ -160,6 +161,9 @@ export default function Officer({ isOfficer }) {
   const [editingEventTime, setEditingEventTime] = useState('')
   const [editingLootId, setEditingLootId] = useState(null)
   const [editingLootCost, setEditingLootCost] = useState('')
+  const [editingRaidName, setEditingRaidName] = useState(false)
+  const [raidNameDraft, setRaidNameDraft] = useState('')
+  const [raidNameError, setRaidNameError] = useState('')
   const [lootEventId, setLootEventId] = useState('')
   const [expandedEvents, setExpandedEvents] = useState({})
   const [showLootDropdown, setShowLootDropdown] = useState(false)
@@ -435,6 +439,9 @@ export default function Officer({ isOfficer }) {
   }, [selectedRaidId])
 
   useEffect(() => {
+    setEditingRaidName(false)
+    setRaidNameDraft('')
+    setRaidNameError('')
     loadSelectedRaid()
   }, [loadSelectedRaid])
 
@@ -525,9 +532,26 @@ export default function Officer({ isOfficer }) {
   const handleCreateAccount = async () => {
     setNewAccountError('')
     setNewAccountResult(null)
+    const displayName = newAccountDisplayName.trim()
+    if (!displayName) {
+      setNewAccountError('Enter a display name.')
+      return
+    }
     setNewAccountLoading(true)
+    try {
+      const duplicate = await findDuplicateAccountName(supabase, displayName)
+      if (duplicate.taken) {
+        setNewAccountError(duplicate.message)
+        setNewAccountLoading(false)
+        return
+      }
+    } catch (err) {
+      setNewAccountError(err.message || 'Could not check existing accounts.')
+      setNewAccountLoading(false)
+      return
+    }
     const { data: accountId, error: rpcErr } = await supabase.rpc('create_account', {
-      p_display_name: newAccountDisplayName.trim() || null,
+      p_display_name: displayName,
     })
     setNewAccountLoading(false)
     if (rpcErr) {
@@ -1010,6 +1034,38 @@ export default function Officer({ isOfficer }) {
     await loadRaids()
     loadSelectedRaid()
     setMutating(false)
+  }
+
+  const handleSaveRaidName = async () => {
+    if (!selectedRaidId) return
+    const next = raidNameDraft.trim()
+    if (!next) {
+      setRaidNameError('Enter a raid name.')
+      return
+    }
+    const current = (raid?.raid_name || '').trim()
+    if (next === current) {
+      setEditingRaidName(false)
+      setRaidNameError('')
+      return
+    }
+    setMutating(true)
+    setRaidNameError('')
+    const { error: err } = await supabase.from('raids').update({ raid_name: next }).eq('raid_id', selectedRaidId)
+    setMutating(false)
+    if (err) {
+      setRaidNameError(err.message)
+      return
+    }
+    await logOfficerAudit(supabase, {
+      action: 'rename_raid',
+      target_type: 'raid',
+      target_id: selectedRaidId,
+      delta: { r: selectedRaidId, from: current, n: next },
+    })
+    setEditingRaidName(false)
+    setRaid((prev) => (prev ? { ...prev, raid_name: next } : prev))
+    setRaids((prev) => prev.map((row) => (row.raid_id === selectedRaidId ? { ...row, raid_name: next } : row)))
   }
 
   const handleSaveEventDkp = async (eventId) => {
@@ -1901,7 +1957,37 @@ export default function Officer({ isOfficer }) {
 
           <div className="officer-col">
           <section ref={raidEditSectionRef} className="card">
-            <h2 style={{ marginTop: 0 }}>Raid: {raid.raid_name}</h2>
+            <h2 style={{ marginTop: 0 }}>
+              {editingRaidName ? (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', flexWrap: 'wrap' }}>
+                  Raid:{' '}
+                  <input
+                    type="text"
+                    value={raidNameDraft}
+                    onChange={(ev) => setRaidNameDraft(ev.target.value)}
+                    onKeyDown={(ev) => { if (ev.key === 'Enter') handleSaveRaidName() }}
+                    style={{ fontSize: '1rem', padding: '0.2rem 0.4rem', minWidth: '16rem' }}
+                    aria-label="Raid name"
+                  />
+                  <button type="button" className="btn btn-ghost" onClick={handleSaveRaidName} disabled={mutating}>Save</button>
+                  <button type="button" className="btn btn-ghost" onClick={() => { setEditingRaidName(false); setRaidNameError('') }}>Cancel</button>
+                </span>
+              ) : (
+                <>
+                  Raid: {raid.raid_name}
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    style={{ marginLeft: '0.25rem', fontSize: '0.85rem' }}
+                    onClick={() => { setEditingRaidName(true); setRaidNameDraft(raid.raid_name || ''); setRaidNameError('') }}
+                    title="Rename raid"
+                  >
+                    ✎
+                  </button>
+                </>
+              )}
+            </h2>
+            {raidNameError && <p className="error" role="alert">{raidNameError}</p>}
             <p style={{ color: '#a1a1aa', marginBottom: '1rem' }}>
               {raid.date_iso || raid.date}
               {` · ${attendance.length > 0 ? attendance.length : (raid.attendees != null && raid.attendees !== '' ? Math.round(Number(raid.attendees)) : '—')} attendees`}
