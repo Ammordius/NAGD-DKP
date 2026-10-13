@@ -76,6 +76,29 @@ describe('parseChannelList', () => {
     const { names } = parseChannelList('[Fri Oct 09 09:08:00 2026] Channel Nagddru(9) members:\n\n')
     assert.deepEqual(names, [])
   })
+
+  it('reads one name per line', () => {
+    const { eventTime, names } = parseChannelList('Name1\nName2\nName3\nName4')
+    assert.equal(eventTime, '')
+    assert.deepEqual(names, ['Name1', 'Name2', 'Name3', 'Name4'])
+  })
+
+  it('reads a comma-separated list', () => {
+    const { names } = parseChannelList('Name1, Name2, Name3, Name4')
+    assert.deepEqual(names, ['Name1', 'Name2', 'Name3', 'Name4'])
+  })
+
+  it('reads a channel log and plain names together', () => {
+    const paste = `${NAGDDRU_PASTE.trim()}\nExtraOne\nExtraTwo, ExtraThree`
+    const { eventTime, names } = parseChannelList(paste)
+    assert.equal(eventTime, 'Fri Oct 09 09:08:00 2026')
+    assert.deepEqual(names, [...NAMES, 'ExtraOne', 'ExtraTwo', 'ExtraThree'])
+  })
+
+  it('skips a members header that has no timestamp', () => {
+    const { names } = parseChannelList('Channel Nag(30) members:\nMeldrath, Fridge')
+    assert.deepEqual(names, ['Meldrath', 'Fridge'])
+  })
 })
 
 describe('generateEventId', () => {
@@ -300,6 +323,39 @@ describe('classifyTicAttendance', () => {
     assert.equal(result.ambiguous[0].pasteName, 'Bob')
     assert.deepEqual(result.unmatched, ['NotAPlayer'])
     assert.equal(result.resolved.find((row) => row.char_id === 'c-cherish').selected, false)
+  })
+
+  it('credits characters picked from the member list, including one of two with the same name', () => {
+    const result = classifyTicAttendance([], {
+      ...lookup,
+      explicitChars: [
+        { char_id: 'c-ezram', name: 'Ezram' },
+        { char_id: 'c-bob-a', name: 'Bob' },
+      ],
+    })
+    assert.deepEqual(result.toAdd, [
+      { char_id: 'c-ezram', character_name: 'Ezram' },
+      { char_id: 'c-bob-a', character_name: 'Bob' },
+    ])
+    assert.deepEqual(result.ambiguous, [])
+  })
+
+  it('does not credit a picked character twice when the paste already has them', () => {
+    const result = classifyTicAttendance(['Ezram'], {
+      ...lookup,
+      explicitChars: [{ char_id: 'c-ezram', name: 'Ezram' }],
+    })
+    assert.deepEqual(result.toAdd, [{ char_id: 'c-ezram', character_name: 'Ezram' }])
+    assert.deepEqual(result.duplicates, ['Ezram'])
+  })
+
+  it('skips a picked toon when that account is already credited', () => {
+    const result = classifyTicAttendance(['Hunted'], {
+      ...lookup,
+      explicitChars: [{ char_id: 'c-althunted', name: 'AltHunted' }],
+    })
+    assert.deepEqual(result.toAdd, [{ char_id: 'c-hunted', character_name: 'Hunted' }])
+    assert.equal(result.sameAccount[0].char_id, 'c-althunted')
   })
 
   it('credits only new names at the existing tic value and adds nothing on a rerun', () => {

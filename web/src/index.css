@@ -283,6 +283,72 @@ label { display: block; margin-bottom: 0.25rem; font-size: 0.875rem; color: #a1a
 .officer-result-name input { margin-right: 0.35rem; }
 .officer-tic-choice { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; margin: 0.5rem 0; }
 .officer-tic-choice label { display: inline-flex; align-items: center; gap: 0.35rem; }
+.officer-member-picker {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  grid-template-areas:
+    "availLabel . attendLabel"
+    "availFilter . ."
+    "availList moves attendList";
+  column-gap: 0.5rem;
+  row-gap: 0.35rem;
+  align-items: center;
+  margin-top: 0.75rem;
+}
+.officer-member-avail-label { grid-area: availLabel; }
+.officer-member-attend-label { grid-area: attendLabel; }
+.officer-member-filter { grid-area: availFilter; width: 100%; max-width: none; }
+.officer-member-picker-label { margin: 0; font-size: 0.8rem; font-weight: 600; color: #e4e4e7; }
+.officer-member-list {
+  height: 220px;
+  min-width: 0;
+  overflow-y: auto;
+  margin: 0;
+  padding: 0.15rem 0;
+  background: #0f0f12;
+  border: 1px solid #3f3f46;
+  border-radius: 6px;
+}
+.officer-member-avail-list { grid-area: availList; }
+.officer-member-attend-list { grid-area: attendList; }
+.officer-member-list button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  color: #e4e4e7;
+  border: 0;
+  border-radius: 0;
+  padding: 0.2rem 0.55rem;
+  font-size: 0.8rem;
+  line-height: 1.3;
+  font-family: inherit;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  user-select: none;
+}
+.officer-member-list button:hover { background: #27272a; }
+.officer-member-list button.is-highlighted { background: #3f3f46; color: #fff; }
+.officer-member-list button.is-highlighted:hover { background: #52525b; }
+.officer-member-empty { margin: 0; color: #71717a; font-size: 0.8rem; padding: 0.4rem 0.55rem; }
+.officer-member-moves { grid-area: moves; display: flex; flex-direction: column; gap: 0.35rem; }
+.officer-member-moves .btn { min-width: 2.75rem; padding: 0.35rem 0.5rem; }
+.officer-member-moves .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+@media (max-width: 640px) {
+  .officer-member-picker {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "availLabel"
+      "availFilter"
+      "availList"
+      "moves"
+      "attendLabel"
+      "attendList";
+  }
+  .officer-member-moves { flex-direction: row; justify-content: center; }
+}
 .officer-resolve-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; margin-bottom: 0.35rem; }
 .officer-card--menu-open { position: relative; z-index: 40; }
 .officer-col:has(.officer-card--menu-open) { position: relative; z-index: 40; }

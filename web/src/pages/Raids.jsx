@@ -338,8 +338,8 @@ export default function Raids({ isOfficer }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
         <h1 style={{ margin: 0 }}>Raids</h1>
         {isOfficer && (
-          <Link to={`/officer${OFFICER_ADD_RAID_HASH}`} className="btn btn-ghost" style={{ padding: '0.25rem 0.5rem', fontSize: '1.25rem', lineHeight: 1 }} title="Add raid">
-            +
+          <Link to={`/officer${OFFICER_ADD_RAID_HASH}`} className="btn btn-ghost" style={{ padding: '0.35rem 0.75rem', fontSize: '0.875rem', lineHeight: 1.2 }} title="Add raid">
+            + Add Raid
           </Link>
         )}
       </div>

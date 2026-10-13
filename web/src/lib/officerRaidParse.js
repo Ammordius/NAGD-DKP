@@ -20,23 +20,33 @@ export function parseRaidString(str) {
   return { raidName, dateIso }
 }
 
-/** Parse channel member list lines; returns { eventTime, names[] } (trimmed, order kept, repeats kept). */
+function pushNameTokens(chunk, names) {
+  String(chunk || '').split(',').forEach((n) => {
+    const name = n.trim()
+    if (!name || /^\d+$/.test(name) || /members:\s*$/i.test(name)) return
+    names.push(name)
+  })
+}
+
+/** Parse channel member list lines; returns { eventTime, names[] } (trimmed, order kept, repeats kept).
+ *  Accepts an EverQuest channel log, one name per line, or a comma-separated list. */
 export function parseChannelList(paste) {
   const lines = (paste || '').split(/\r?\n/).map((l) => l.trim()).filter(Boolean)
   let eventTime = ''
   const names = []
   for (const line of lines) {
+    if (/members:\s*$/i.test(line)) {
+      const tsMatch = line.match(/^\[([^\]]+)\]/)
+      if (tsMatch && !eventTime) eventTime = tsMatch[1].trim()
+      continue
+    }
     const tsMatch = line.match(/^\[([^\]]+)\]/)
     if (tsMatch) {
-      const ts = tsMatch[1].trim()
-      if (!eventTime) eventTime = ts
-      if (/members:\s*$/i.test(line)) continue
-      const rest = line.replace(/^\[[^\]]+\]\s*/, '').trim()
-      rest.split(',').forEach((n) => {
-        const name = n.trim()
-        if (name && !/^\d+$/.test(name)) names.push(name)
-      })
+      if (!eventTime) eventTime = tsMatch[1].trim()
+      pushNameTokens(line.replace(/^\[[^\]]+\]\s*/, ''), names)
+      continue
     }
+    pushNameTokens(line, names)
   }
   return { eventTime, names }
 }
@@ -160,6 +170,7 @@ function accountKeyFor(charId, charIdToAccountId) {
  *   existingAttendees?: Array<{ char_id?: string, account_id?: string }>,
  *   resolutions?: Record<string, string>,
  *   excludedCharIds?: string[],
+ *   explicitChars?: Array<{ char_id: string, name?: string, character_name?: string }>,
  * }} lookup
  */
 export function classifyTicAttendance(names, {
@@ -168,6 +179,7 @@ export function classifyTicAttendance(names, {
   existingAttendees = [],
   resolutions = {},
   excludedCharIds = [],
+  explicitChars = [],
 } = {}) {
   const excluded = new Set((excludedCharIds || []).map((id) => String(id)))
   const onTicCharIds = new Set()
@@ -189,6 +201,33 @@ export function classifyTicAttendance(names, {
   const seenCharId = new Set()
   const seenAccountKey = new Set()
   const seenAmbiguous = new Set()
+
+  function placeChar(pasteName, char) {
+    if (seenCharId.has(char.char_id)) {
+      duplicates.push(pasteName)
+      return
+    }
+    const accountKey = accountKeyFor(char.char_id, charIdToAccountId)
+    if (onTicCharIds.has(char.char_id)) {
+      seenCharId.add(char.char_id)
+      seenAccountKey.add(accountKey)
+      alreadyPresent.push({ pasteName, char_id: char.char_id, character_name: char.name })
+      return
+    }
+    if (seenAccountKey.has(accountKey) || onTicAccountKeys.has(accountKey)) {
+      seenCharId.add(char.char_id)
+      sameAccount.push({ pasteName, char_id: char.char_id, character_name: char.name })
+      return
+    }
+    seenCharId.add(char.char_id)
+    seenAccountKey.add(accountKey)
+    resolved.push({
+      pasteName,
+      char_id: char.char_id,
+      character_name: char.name,
+      selected: !excluded.has(char.char_id),
+    })
+  }
 
   for (const n of names || []) {
     const pasteName = String(n)
@@ -221,32 +260,14 @@ export function classifyTicAttendance(names, {
       }
     }
 
-    if (seenCharId.has(char.char_id)) {
-      duplicates.push(pasteName)
-      continue
-    }
+    placeChar(pasteName, char)
+  }
 
-    const accountKey = accountKeyFor(char.char_id, charIdToAccountId)
-    if (onTicCharIds.has(char.char_id)) {
-      seenCharId.add(char.char_id)
-      seenAccountKey.add(accountKey)
-      alreadyPresent.push({ pasteName, char_id: char.char_id, character_name: char.name })
-      continue
-    }
-    if (seenAccountKey.has(accountKey) || onTicAccountKeys.has(accountKey)) {
-      seenCharId.add(char.char_id)
-      sameAccount.push({ pasteName, char_id: char.char_id, character_name: char.name })
-      continue
-    }
-
-    seenCharId.add(char.char_id)
-    seenAccountKey.add(accountKey)
-    resolved.push({
-      pasteName,
-      char_id: char.char_id,
-      character_name: char.name,
-      selected: !excluded.has(char.char_id),
-    })
+  for (const picked of explicitChars || []) {
+    const charId = picked?.char_id != null ? String(picked.char_id).trim() : ''
+    if (!charId) continue
+    const name = (picked.name || picked.character_name || '').trim() || charId
+    placeChar(name, { char_id: charId, name })
   }
 
   const toAdd = resolved
