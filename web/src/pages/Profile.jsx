@@ -42,6 +42,14 @@ export default function Profile({ profile, onProfileUpdate }) {
   const [addCharIdInput, setAddCharIdInput] = useState('')
   const [addCharError, setAddCharError] = useState('')
   const [addCharLoading, setAddCharLoading] = useState(false)
+  const [displayName, setDisplayName] = useState(profile?.display_name || '')
+  const [nameSaving, setNameSaving] = useState(false)
+  const [nameError, setNameError] = useState('')
+  const [nameSaved, setNameSaved] = useState(false)
+
+  useEffect(() => {
+    setDisplayName(profile?.display_name || '')
+  }, [profile?.display_name])
 
   useEffect(() => {
     if (!profile?.account_id) {
@@ -73,6 +81,25 @@ export default function Profile({ profile, onProfileUpdate }) {
       setError('Failed to load account activity')
     })
   }, [profile?.account_id, refreshKey])
+
+  async function handleSaveDisplayName() {
+    const name = displayName.trim()
+    setNameError('')
+    setNameSaved(false)
+    if (!name || name.length > 32) {
+      setNameError('Display name must be 1-32 characters')
+      return
+    }
+    setNameSaving(true)
+    const { error: rpcErr } = await supabase.rpc('set_my_display_name', { p_display_name: name })
+    setNameSaving(false)
+    if (rpcErr) {
+      setNameError(rpcErr.message)
+      return
+    }
+    setNameSaved(true)
+    onProfileUpdate?.()
+  }
 
   async function handleUnclaim() {
     setError('')
@@ -120,10 +147,31 @@ export default function Profile({ profile, onProfileUpdate }) {
   return (
     <div className="container">
       <p><Link to="/">← Home</Link></p>
-      <h1>Profile</h1>
+      <h1>My Site Profile</h1>
       <p style={{ color: '#a1a1aa', marginBottom: '1rem' }}>
-        Role: <strong>{profile?.role ?? 'player'}</strong>
+        Role: <strong>{profile?.role === 'siteadmin' ? 'Site Admin' : profile?.role === 'officer' ? 'Officer' : 'Player'}</strong>
       </p>
+
+      <div className="card" style={{ maxWidth: '28rem', marginBottom: '1.5rem' }}>
+        <h2 style={{ marginTop: 0 }}>Display Name</h2>
+        <p style={{ color: '#71717a', fontSize: '0.875rem', marginBottom: '0.75rem' }}>
+          This is your name on the site. It is shown as Claimed by on game accounts you claim.
+        </p>
+        <input
+          type="text"
+          value={displayName}
+          onChange={(e) => { setDisplayName(e.target.value); setNameSaved(false) }}
+          maxLength={32}
+          placeholder="Display name"
+          aria-label="Display Name"
+          style={{ width: '100%', marginBottom: '0.5rem' }}
+        />
+        {nameError && <p style={{ color: '#f87171', fontSize: '0.875rem', marginBottom: '0.5rem' }}>{nameError}</p>}
+        {nameSaved && <p style={{ color: '#86efac', fontSize: '0.875rem', marginBottom: '0.5rem' }}>Saved.</p>}
+        <button type="button" className="btn" onClick={handleSaveDisplayName} disabled={nameSaving}>
+          {nameSaving ? 'Saving...' : 'Save display name'}
+        </button>
+      </div>
 
       <div className="card" style={{ maxWidth: '28rem', marginBottom: '1.5rem' }}>
         <h2 style={{ marginTop: 0 }}>Claimed account</h2>

@@ -48,9 +48,17 @@ Where each public function the app or scripts call is defined, and what calls it
 | **end_restore_load** | restore script, run_end_restore_load.py. Also calls `refresh_character_dkp_spent`. |
 | **restore_load_in_progress** | Triggers skip work while a restore is in progress |
 | **fix_serial_sequences_for_restore** | end_restore_load |
-| **is_officer** | RLS and officer RPCs |
+| **is_officer** | RLS and officer RPCs. True for `officer` and `siteadmin`. |
+| **is_site_admin** | Site Profile Accounts actions on `/officer/SiteAdmin` |
+| **set_my_display_name** | Profile.jsx. Owner sets `profiles.display_name` (1-32 characters). |
+| **account_claim_labels** | Accounts.jsx. `account_id` and site display name only; no email. |
+| **siteadmin_unclaim_profile** | OfficerClaimCooldowns.jsx. Clears `profiles.account_id` without a cooldown. |
+| **siteadmin_set_role** | OfficerClaimCooldowns.jsx. Sets `player`, `officer`, or `siteadmin`. |
+| **siteadmin_delete_user** | OfficerClaimCooldowns.jsx. Deletes the `public.profiles` row only. Login, game accounts, and characters stay. |
+| **discord_username_from_meta** | Signup trigger and Discord display-name backfill. Not called from the app. |
+| **write_site_admin_audit** | Audit insert used by the siteadmin RPCs. Not granted to the client. |
 | **raid_date_parsed** | Refresh logic and views |
-| **handle_new_user** | Auth trigger; new users get role `player` |
+| **handle_new_user** | Auth trigger; new users get role `player` and `profiles.display_name` from email sign-up metadata or the Discord username |
 | **normalize_item_name_for_lookup** | Bidding portfolio |
 | **officer_bid_portfolio_for_loot** | ItemPage.jsx, backfill_bid_portfolio_export.py |
 | **officer_account_bidding_portfolio** | AccountBiddingPortfolioCard.jsx |
@@ -58,7 +66,7 @@ Where each public function the app or scripts call is defined, and what calls it
 | **dba_backfill_bid_portfolio_range** (procedure) | SQL Editor only (`postgres` / `supabase_admin`) |
 | **bid_forecast_attendees_resolved_for_scope**, **account_balance_before_loot**, **bid_portfolio_runner_up_guess**, **attendee_accounts_for_loot** | Helpers for the portfolio RPCs above |
 
-Trigger functions in the same file (`trigger_delta_*`, `trigger_raid_events_*`, `trigger_refresh_raid_totals_stmt`, `trigger_loot_assignment_spent`, `trigger_capture_loot_delete_account`, `trigger_refresh_dkp_summary`) are not called from the app. They run from table triggers.
+Trigger functions in the same file (`trigger_delta_*`, `trigger_raid_events_*`, `trigger_refresh_raid_totals_stmt`, `trigger_loot_assignment_spent`, `trigger_capture_loot_delete_account`, `trigger_refresh_dkp_summary`, `profiles_role_guard`) are not called from the app. They run from table triggers. `profiles_role_guard` blocks authenticated role changes unless `siteadmin_set_role` set `nagddkp.allow_role_change`.
 
 ---
 

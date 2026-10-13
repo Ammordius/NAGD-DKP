@@ -5,8 +5,9 @@ The site requires **sign-in to access data**. This reduces the risk of bots or s
 ## Roles
 
 - **anon** – Used by the Vercel/frontend handshake only (Supabase client init, `getSession()`, sign-in). Anon **cannot** read any DKP tables; RLS allows only `authenticated` for data.
-- **user** – Any signed-in user with a profile (default role `player`). Can read all DKP data and use account/character features.
+- **user** – Any signed-in user with a profile (default role `player`). Can read all DKP data and use account/character features. Email sign-up stores a display name on `profiles.display_name`. Discord sign-up stores the Discord username there.
 - **officer** – Manually assigned in the database. Same as user plus officer-only actions (add raids, edit DKP, audit log, etc.).
+- **siteadmin** – Higher than officer. `is_officer()` is true for both `officer` and `siteadmin`, so siteadmin keeps every officer page. Only siteadmin can open Site Profile Accounts on `/officer/SiteAdmin` (list profiles without emails, unclaim a game account, change role, or delete the `public.profiles` row). The login, game accounts, and characters are not deleted.
 
 ## Requiring sign-in (already in place)
 
@@ -39,3 +40,4 @@ Requiring sign-in for data already stops anonymous bots from reading tables. To 
 | Anon = handshake only   | Keep using anon key for client init and auth; no anon RLS on data. |
 | Limit new users (optional) | Supabase: disable email signups (existing users can still sign in); optionally set `VITE_ALLOW_SIGNUP=false`. |
 | Officers                | Manually set `profiles.role = 'officer'` in SQL. |
+| Site admins             | After re-running `docs/supabase-schema-full.sql`, set `profiles.role = 'siteadmin'` in the SQL editor. The role guard allows that when `auth.uid()` is null. |

@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { ACCOUNTS_LIST_CACHE_KEY, createCache } from '../lib/cache'
 import { fetchAll } from '../lib/accountData'
+import { supabase } from '../lib/supabase'
 import { usePersistedState } from '../lib/usePersistedState'
 import {
   formatCharacterClassSpentLine,
@@ -11,6 +12,11 @@ import {
 
 const CACHE_TTL = 10 * 60 * 1000
 const MAGELO_BASE = 'https://www.takproject.net/magelo/character.php?char='
+
+function claimedByLabel(names) {
+  if (!names?.length) return 'unclaimed'
+  return names.map((name) => (name || '').trim() || '—').join(', ')
+}
 
 export default function Accounts() {
   const [accounts, setAccounts] = useState([])
@@ -36,7 +42,8 @@ export default function Accounts() {
         undefined,
         { order: { column: 'id', ascending: true } },
       ),
-    ]).then(([a, ca, ch, lootRes]) => {
+      supabase.rpc('account_claim_labels'),
+    ]).then(([a, ca, ch, lootRes, claimsRes]) => {
       if (a.error) {
         setError(a.error.message)
         setLoading(false)
@@ -57,6 +64,18 @@ export default function Accounts() {
         setLoading(false)
         return
       }
+      if (claimsRes.error) {
+        setError(claimsRes.error.message)
+        setLoading(false)
+        return
+      }
+      const claimsByAccount = {}
+      ;(claimsRes.data || []).forEach((row) => {
+        const id = row.account_id != null ? String(row.account_id) : ''
+        if (!id) return
+        if (!claimsByAccount[id]) claimsByAccount[id] = []
+        claimsByAccount[id].push(row.display_name)
+      })
       const charMap = {}
       ;(ch.data || []).forEach((c) => { charMap[c.char_id] = c })
       const byAccount = {}
@@ -86,6 +105,7 @@ export default function Accounts() {
           account_id: acc.account_id,
           toon_count: acc.toon_count,
           display_name: acc.display_name,
+          claimed_by: claimedByLabel(claimsByAccount[String(acc.account_id)]),
           char_ids: byAccount[acc.account_id] || [],
           characters,
         }
@@ -103,6 +123,7 @@ export default function Accounts() {
     return accounts.filter((acc) => {
       if ((acc.account_id || '').toLowerCase().includes(q)) return true
       if ((acc.display_name || '').toLowerCase().includes(q)) return true
+      if ((acc.claimed_by || '').toLowerCase().includes(q)) return true
       return (acc.characters || []).some((c) => (c.name || c.char_id || '').toLowerCase().includes(q))
     })
   }, [accounts, search])
@@ -119,7 +140,7 @@ export default function Accounts() {
       <div style={{ marginBottom: '1rem' }}>
         <input
           type="search"
-          placeholder="Search by account, display name, or character name…"
+          placeholder="Search by account, display name, claimed by, or character name…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           style={{
@@ -143,11 +164,13 @@ export default function Accounts() {
       <div className="card">
         <table style={{ tableLayout: 'fixed', width: '100%' }}>
           <colgroup>
+            <col style={{ width: '10rem' }} />
             <col style={{ width: '14rem' }} />
             <col />
           </colgroup>
           <thead>
             <tr>
+              <th>Claimed by</th>
               <th>Account</th>
               <th>Characters</th>
             </tr>
@@ -157,6 +180,9 @@ export default function Accounts() {
               const chars = acc.characters || []
               return (
                 <tr key={acc.account_id}>
+                  <td style={{ verticalAlign: 'top', color: acc.claimed_by === 'unclaimed' ? '#71717a' : undefined }}>
+                    {acc.claimed_by}
+                  </td>
                   <td style={{ verticalAlign: 'top', whiteSpace: 'nowrap' }}>
                     <Link to={`/accounts/${acc.account_id}`}>
                       {acc.display_name?.trim() || acc.characters?.[0]?.name || acc.account_id}

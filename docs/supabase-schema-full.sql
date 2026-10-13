@@ -7,11 +7,12 @@
 -- Those files are the historical sources for the section at the end of this file.
 -- =============================================================================
 
--- 1) Profiles: one per auth user, holds role (officer | player)
+-- 1) Profiles: one per auth user, holds role (siteadmin | officer | player)
 CREATE TABLE IF NOT EXISTS profiles (
   id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   email TEXT,
-  role TEXT NOT NULL DEFAULT 'player' CHECK (role IN ('officer', 'player')),
+  role TEXT NOT NULL DEFAULT 'player' CHECK (role IN ('siteadmin', 'officer', 'player')),
+  display_name TEXT,
   created_at TIMESTAMPTZ DEFAULT now(),
   updated_at TIMESTAMPTZ DEFAULT now()
 );
@@ -172,7 +173,7 @@ CREATE TABLE IF NOT EXISTS officer_audit_log (
   delta JSONB
 );
 ALTER TABLE officer_audit_log ADD COLUMN IF NOT EXISTS actor_display_name TEXT;
-COMMENT ON TABLE officer_audit_log IS 'Audit trail for officer actions: add_raid, add_tic, delete_event, raid_deleted, rename_raid, add_loot, add_loot_from_log, delete_loot, add_attendee_to_tic, add_attendees_to_tic, remove_attendee_from_tic, edit_event_dkp, edit_event_time, edit_loot_cost, set_account_display_name. Delta is minimal (short keys) to limit storage and egress.';
+COMMENT ON TABLE officer_audit_log IS 'Audit trail for officer actions: add_raid, add_tic, delete_event, raid_deleted, rename_raid, add_loot, add_loot_from_log, delete_loot, add_attendee_to_tic, add_attendees_to_tic, remove_attendee_from_tic, edit_event_dkp, edit_event_time, edit_loot_cost, set_account_display_name, siteadmin_unclaim_profile, siteadmin_set_role, siteadmin_delete_user. Delta is minimal (short keys) to limit storage and egress.';
 
 -- Add new columns if upgrading from an older schema (no-op if already present)
 ALTER TABLE dkp_summary ADD COLUMN IF NOT EXISTS last_activity_date DATE;
@@ -186,6 +187,13 @@ ALTER TABLE profiles ADD COLUMN IF NOT EXISTS unclaim_cooldown_until TIMESTAMPTZ
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS unclaim_count INTEGER NOT NULL DEFAULT 0;
 COMMENT ON COLUMN profiles.unclaim_cooldown_until IS 'After unclaiming an account, user cannot claim again until this time. 1st unclaim: 10 min, 2nd: 1 day, 3rd+: 7 days. Officers can reset via reset_claim_cooldown.';
 COMMENT ON COLUMN profiles.unclaim_count IS 'Number of times this user has unclaimed an account; used to tier cooldown duration.';
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS display_name TEXT;
+COMMENT ON COLUMN profiles.display_name IS 'Site profile name (the person). Not the game account label (accounts.display_name).';
+ALTER TABLE profiles DROP CONSTRAINT IF EXISTS profiles_display_name_len;
+ALTER TABLE profiles ADD CONSTRAINT profiles_display_name_len
+  CHECK (display_name IS NULL OR (char_length(display_name) BETWEEN 1 AND 32 AND display_name = btrim(display_name)));
+ALTER TABLE profiles DROP CONSTRAINT IF EXISTS profiles_role_check;
+ALTER TABLE profiles ADD CONSTRAINT profiles_role_check CHECK (role IN ('siteadmin', 'officer', 'player'));
 
 -- Parse raids.date_iso to DATE safely (handles YYYY-MM-DD, YYYY-MM-DDThh:mm:ss, empty/null). Returns NULL if not parseable.
 CREATE OR REPLACE FUNCTION public.raid_date_parsed(iso_text TEXT)
@@ -197,7 +205,8 @@ RETURNS DATE LANGUAGE sql IMMUTABLE AS $$
   END
 $$;
 
--- Helper: current user is officer (SECURITY DEFINER so reading profiles doesn't trigger RLS). Must be defined before any RPC or policy that calls it.
+-- Helper: current user is officer or siteadmin (SECURITY DEFINER so reading profiles doesn't trigger RLS).
+-- siteadmin is a superset of officer. Must be defined before any RPC or policy that calls it.
 CREATE OR REPLACE FUNCTION public.is_officer()
 RETURNS boolean
 LANGUAGE sql
@@ -205,7 +214,23 @@ SECURITY DEFINER
 STABLE
 SET search_path = public
 AS $$
-  SELECT EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'officer');
+  SELECT EXISTS (
+    SELECT 1 FROM public.profiles
+    WHERE id = auth.uid() AND role IN ('officer', 'siteadmin')
+  );
+$$;
+
+CREATE OR REPLACE FUNCTION public.is_site_admin()
+RETURNS boolean
+LANGUAGE sql
+SECURITY DEFINER
+STABLE
+SET search_path = public
+AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM public.profiles
+    WHERE id = auth.uid() AND role = 'siteadmin'
+  );
 $$;
 
 -- Indexes for common queries
@@ -2121,20 +2146,99 @@ CREATE TRIGGER capture_loot_delete_account
   BEFORE DELETE ON raid_loot
   FOR EACH ROW EXECUTE FUNCTION public.trigger_capture_loot_delete_account();
 
+-- Discord's user.username is stored by Supabase as raw_user_meta_data.full_name.
+-- raw_user_meta_data.name is "username#discriminator" (often username#0). Do not use global_name.
+CREATE OR REPLACE FUNCTION public.discord_username_from_meta(p_meta jsonb)
+RETURNS text
+LANGUAGE sql
+IMMUTABLE
+AS $$
+  SELECT NULLIF(
+    btrim(left(
+      trim(COALESCE(
+        NULLIF(trim(p_meta->>'full_name'), ''),
+        NULLIF(regexp_replace(COALESCE(p_meta->>'name', ''), '#[0-9]+$', ''), '')
+      )),
+      32
+    )),
+    ''
+  );
+$$;
+
 -- 3) Auto-create profile on signup
 CREATE OR REPLACE FUNCTION public.handle_new_user()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_display text;
+  v_provider text;
 BEGIN
-  INSERT INTO public.profiles (id, email, role)
-  VALUES (NEW.id, NEW.email, 'player');
+  v_display := NULLIF(btrim(left(trim(COALESCE(NEW.raw_user_meta_data->>'display_name', '')), 32)), '');
+  v_provider := COALESCE(NEW.raw_app_meta_data->>'provider', '');
+  IF v_display IS NULL AND (
+    v_provider = 'discord'
+    OR COALESCE(NEW.raw_user_meta_data->>'iss', '') ILIKE '%discord%'
+  ) THEN
+    v_display := public.discord_username_from_meta(NEW.raw_user_meta_data);
+  END IF;
+  INSERT INTO public.profiles (id, email, role, display_name)
+  VALUES (NEW.id, NEW.email, 'player', v_display);
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$;
 
 DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+
+-- Fill blank site names for people who already signed up with Discord.
+UPDATE public.profiles p
+SET display_name = src.name,
+    updated_at = now()
+FROM (
+  SELECT DISTINCT ON (u.id)
+    u.id,
+    COALESCE(
+      public.discord_username_from_meta(u.raw_user_meta_data),
+      public.discord_username_from_meta(i.identity_data)
+    ) AS name
+  FROM auth.users u
+  LEFT JOIN auth.identities i ON i.user_id = u.id AND i.provider = 'discord'
+  WHERE COALESCE(u.raw_app_meta_data->>'provider', '') = 'discord'
+     OR COALESCE(u.raw_user_meta_data->>'iss', '') ILIKE '%discord%'
+     OR i.id IS NOT NULL
+  ORDER BY u.id, i.created_at NULLS LAST
+) src
+WHERE p.id = src.id
+  AND src.name IS NOT NULL
+  AND (p.display_name IS NULL OR btrim(p.display_name) = '');
+
+-- Authenticated clients cannot change role except through siteadmin_set_role.
+-- SQL with no auth.uid() (the SQL editor) can still promote the first siteadmin.
+CREATE OR REPLACE FUNCTION public.profiles_role_guard()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = public
+AS $$
+BEGIN
+  IF NEW.role IS DISTINCT FROM OLD.role
+     AND auth.uid() IS NOT NULL
+     AND current_setting('nagddkp.allow_role_change', true) IS DISTINCT FROM '1' THEN
+    RAISE EXCEPTION 'Role can only be changed by a site admin';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS profiles_role_guard ON public.profiles;
+CREATE TRIGGER profiles_role_guard
+  BEFORE UPDATE OF role ON public.profiles
+  FOR EACH ROW
+  EXECUTE FUNCTION public.profiles_role_guard();
 
 -- 4) RLS: enable on all tables
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
@@ -5100,3 +5204,279 @@ COMMENT ON FUNCTION public.officer_set_account_display_name(text, text) IS
 
 REVOKE ALL ON FUNCTION public.officer_set_account_display_name(text, text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.officer_set_account_display_name(text, text) TO authenticated;
+
+-- Site profile display name, claim labels, and siteadmin user management.
+-- Promote the first siteadmin in the SQL editor (auth.uid() is null, so the role guard allows it):
+--   UPDATE public.profiles SET role = 'siteadmin' WHERE id = '<user-uuid>';
+
+CREATE OR REPLACE FUNCTION public.write_site_admin_audit(
+  p_action text,
+  p_target_type text,
+  p_target_id text,
+  p_delta jsonb
+)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_actor uuid;
+  v_email text;
+  v_actor_name text;
+BEGIN
+  v_actor := auth.uid();
+  SELECT NULLIF(trim(p.email), ''), NULLIF(trim(p.display_name), '')
+  INTO v_email, v_actor_name
+  FROM public.profiles p
+  WHERE p.id = v_actor;
+
+  IF v_actor_name IS NULL THEN
+    SELECT NULLIF(trim(a.display_name), '')
+    INTO v_actor_name
+    FROM public.profiles p
+    JOIN public.accounts a ON a.account_id = p.account_id
+    WHERE p.id = v_actor;
+  END IF;
+
+  INSERT INTO public.officer_audit_log (
+    actor_id, actor_email, actor_display_name, action, target_type, target_id, delta
+  ) VALUES (
+    v_actor, v_email, v_actor_name, p_action, p_target_type, p_target_id, p_delta
+  );
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.write_site_admin_audit(text, text, text, jsonb) FROM PUBLIC;
+
+CREATE OR REPLACE FUNCTION public.set_my_display_name(p_display_name text)
+RETURNS text
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_uid uuid;
+  v_name text;
+BEGIN
+  v_uid := auth.uid();
+  IF v_uid IS NULL THEN
+    RAISE EXCEPTION 'Not authenticated';
+  END IF;
+  v_name := trim(coalesce(p_display_name, ''));
+  IF v_name = '' OR char_length(v_name) > 32 THEN
+    RAISE EXCEPTION 'Display name must be 1-32 characters';
+  END IF;
+  UPDATE public.profiles
+  SET display_name = v_name, updated_at = now()
+  WHERE id = v_uid;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Profile not found';
+  END IF;
+  RETURN v_name;
+END;
+$$;
+
+COMMENT ON FUNCTION public.set_my_display_name(text) IS
+  'Owner-only: set public.profiles.display_name for auth.uid(). 1–32 characters.';
+
+REVOKE ALL ON FUNCTION public.set_my_display_name(text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.set_my_display_name(text) TO authenticated;
+
+-- Claimed-by labels for the accounts list. No email and no profile id.
+CREATE OR REPLACE FUNCTION public.account_claim_labels()
+RETURNS TABLE (account_id text, display_name text)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT p.account_id, p.display_name
+  FROM public.profiles p
+  WHERE p.account_id IS NOT NULL
+    AND btrim(p.account_id) <> '';
+$$;
+
+COMMENT ON FUNCTION public.account_claim_labels() IS
+  'Signed-in users: account_id and site display_name for claimed profiles. Does not return email.';
+
+REVOKE ALL ON FUNCTION public.account_claim_labels() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.account_claim_labels() TO authenticated;
+
+CREATE OR REPLACE FUNCTION public.siteadmin_unclaim_profile(p_profile_id uuid)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_old text;
+BEGIN
+  IF auth.uid() IS NULL THEN
+    RAISE EXCEPTION 'Not authenticated';
+  END IF;
+  IF NOT public.is_site_admin() THEN
+    RAISE EXCEPTION 'Only site admins can unclaim a profile';
+  END IF;
+  IF p_profile_id IS NULL THEN
+    RAISE EXCEPTION 'Profile is required';
+  END IF;
+
+  SELECT account_id INTO v_old
+  FROM public.profiles
+  WHERE id = p_profile_id
+  FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Profile not found';
+  END IF;
+  IF v_old IS NULL THEN
+    RETURN;
+  END IF;
+
+  UPDATE public.profiles
+  SET account_id = NULL, updated_at = now()
+  WHERE id = p_profile_id;
+
+  PERFORM public.write_site_admin_audit(
+    'siteadmin_unclaim_profile',
+    'profile',
+    p_profile_id::text,
+    jsonb_build_object('previous_account_id', v_old)
+  );
+END;
+$$;
+
+COMMENT ON FUNCTION public.siteadmin_unclaim_profile(uuid) IS
+  'Siteadmin: clear profiles.account_id. Does not start the player unclaim cooldown.';
+
+REVOKE ALL ON FUNCTION public.siteadmin_unclaim_profile(uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.siteadmin_unclaim_profile(uuid) TO authenticated;
+
+CREATE OR REPLACE FUNCTION public.siteadmin_set_role(p_profile_id uuid, p_role text)
+RETURNS text
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_role text;
+  v_old text;
+BEGIN
+  IF auth.uid() IS NULL THEN
+    RAISE EXCEPTION 'Not authenticated';
+  END IF;
+  IF NOT public.is_site_admin() THEN
+    RAISE EXCEPTION 'Only site admins can change roles';
+  END IF;
+  IF p_profile_id IS NULL THEN
+    RAISE EXCEPTION 'Profile is required';
+  END IF;
+
+  v_role := lower(trim(coalesce(p_role, '')));
+  IF v_role NOT IN ('player', 'officer', 'siteadmin') THEN
+    RAISE EXCEPTION 'Role must be player, officer, or siteadmin';
+  END IF;
+
+  SELECT role INTO v_old
+  FROM public.profiles
+  WHERE id = p_profile_id
+  FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Profile not found';
+  END IF;
+
+  IF v_old = 'siteadmin' AND v_role <> 'siteadmin' THEN
+    IF (
+      SELECT count(*) FROM public.profiles
+      WHERE role = 'siteadmin' AND id <> p_profile_id
+    ) < 1 THEN
+      RAISE EXCEPTION 'Cannot remove the last site admin';
+    END IF;
+  END IF;
+
+  IF v_old IS NOT DISTINCT FROM v_role THEN
+    RETURN v_role;
+  END IF;
+
+  PERFORM set_config('nagddkp.allow_role_change', '1', true);
+  UPDATE public.profiles
+  SET role = v_role, updated_at = now()
+  WHERE id = p_profile_id;
+
+  PERFORM public.write_site_admin_audit(
+    'siteadmin_set_role',
+    'profile',
+    p_profile_id::text,
+    jsonb_build_object('previous_role', v_old, 'new_role', v_role)
+  );
+  RETURN v_role;
+END;
+$$;
+
+COMMENT ON FUNCTION public.siteadmin_set_role(uuid, text) IS
+  'Siteadmin: set profiles.role to player, officer, or siteadmin. Refuses to remove the last siteadmin.';
+
+REVOKE ALL ON FUNCTION public.siteadmin_set_role(uuid, text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.siteadmin_set_role(uuid, text) TO authenticated;
+
+CREATE OR REPLACE FUNCTION public.siteadmin_delete_user(p_profile_id uuid)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_role text;
+  v_name text;
+  v_account text;
+BEGIN
+  IF auth.uid() IS NULL THEN
+    RAISE EXCEPTION 'Not authenticated';
+  END IF;
+  IF NOT public.is_site_admin() THEN
+    RAISE EXCEPTION 'Only site admins can remove a user';
+  END IF;
+  IF p_profile_id IS NULL THEN
+    RAISE EXCEPTION 'Profile is required';
+  END IF;
+  IF p_profile_id = auth.uid() THEN
+    RAISE EXCEPTION 'You cannot remove your own site profile';
+  END IF;
+
+  SELECT role, display_name, account_id
+  INTO v_role, v_name, v_account
+  FROM public.profiles
+  WHERE id = p_profile_id;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Profile not found';
+  END IF;
+
+  IF v_role = 'siteadmin' AND (
+    SELECT count(*) FROM public.profiles
+    WHERE role = 'siteadmin' AND id <> p_profile_id
+  ) < 1 THEN
+    RAISE EXCEPTION 'Cannot remove the last site admin';
+  END IF;
+
+  PERFORM public.write_site_admin_audit(
+    'siteadmin_delete_user',
+    'profile',
+    p_profile_id::text,
+    jsonb_build_object(
+      'display_name', v_name,
+      'role', v_role,
+      'account_id', v_account
+    )
+  );
+
+  -- The anon key cannot delete auth.users or auth.identities. Remove the site profile only.
+  -- Login, game accounts, and characters stay.
+  DELETE FROM public.profiles WHERE id = p_profile_id;
+END;
+$$;
+
+COMMENT ON FUNCTION public.siteadmin_delete_user(uuid) IS
+  'Siteadmin: delete the public.profiles row only. Does not delete auth.users, auth.identities, game accounts, or characters.';
+
+REVOKE ALL ON FUNCTION public.siteadmin_delete_user(uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.siteadmin_delete_user(uuid) TO authenticated;

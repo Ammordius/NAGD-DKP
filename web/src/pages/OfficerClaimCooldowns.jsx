@@ -7,12 +7,37 @@ import { buildAccountColumnRows, buildCharacterRows, characterMatchesQuery } fro
 
 const SUGGEST_LIMIT = 80
 
-export default function OfficerClaimCooldowns({ isOfficer }) {
+const ROLE_OPTIONS = [
+  { value: 'player', label: 'Player' },
+  { value: 'officer', label: 'Officer' },
+  { value: 'siteadmin', label: 'Site Admin' },
+]
+
+function roleLabel(role) {
+  return ROLE_OPTIONS.find((option) => option.value === role)?.label || 'Player'
+}
+
+function gameAccountLabel(account) {
+  if (!account) return ''
+  return account.display_name?.trim() || account.toon_names?.split(',')[0]?.trim() || account.account_id
+}
+
+export default function OfficerClaimCooldowns({ isOfficer, isSiteAdmin = false }) {
   const navigate = useNavigate()
   const [profiles, setProfiles] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [resettingId, setResettingId] = useState(null)
+  const [siteUsers, setSiteUsers] = useState([])
+  const [siteAccounts, setSiteAccounts] = useState({})
+  const [usersLoading, setUsersLoading] = useState(false)
+  const [userError, setUserError] = useState('')
+  const [roleEditId, setRoleEditId] = useState(null)
+  const [roleDraft, setRoleDraft] = useState('player')
+  const [roleSavingId, setRoleSavingId] = useState(null)
+  const [unclaimingId, setUnclaimingId] = useState(null)
+  const [removeConfirm, setRemoveConfirm] = useState({})
+  const [removingId, setRemovingId] = useState(null)
 
   const { apiData, isLoading: dkpLoading, mutate } = useDkpData()
   const [charQuery, setCharQuery] = usePersistedState('/officer/SiteAdmin:charQuery', '')
@@ -79,7 +104,8 @@ export default function OfficerClaimCooldowns({ isOfficer }) {
       return
     }
     loadCooldowns()
-  }, [isOfficer, navigate])
+    if (isSiteAdmin) loadSiteUsers()
+  }, [isOfficer, isSiteAdmin, navigate])
 
   async function loadCooldowns() {
     setLoading(true)
@@ -96,6 +122,88 @@ export default function OfficerClaimCooldowns({ isOfficer }) {
       return
     }
     setProfiles(data || [])
+  }
+
+  async function loadSiteUsers() {
+    setUsersLoading(true)
+    setUserError('')
+    const { data, error: e } = await supabase
+      .from('profiles')
+      .select('id, display_name, role, account_id')
+      .order('display_name', { ascending: true, nullsFirst: false })
+    if (e) {
+      setUsersLoading(false)
+      setUserError(e.message)
+      setSiteUsers([])
+      return
+    }
+    const rows = data || []
+    const accountIds = [...new Set(rows.map((row) => row.account_id).filter(Boolean))]
+    let accountMap = {}
+    if (accountIds.length > 0) {
+      const { data: accounts, error: accountErr } = await supabase
+        .from('accounts')
+        .select('account_id, display_name, toon_names')
+        .in('account_id', accountIds)
+      if (accountErr) {
+        setUsersLoading(false)
+        setUserError(accountErr.message)
+        setSiteUsers(rows)
+        return
+      }
+      ;(accounts || []).forEach((account) => {
+        accountMap[String(account.account_id)] = account
+      })
+    }
+    setSiteAccounts(accountMap)
+    setSiteUsers(rows)
+    setUsersLoading(false)
+  }
+
+  async function handleUnclaimProfile(profileId) {
+    setUnclaimingId(profileId)
+    setUserError('')
+    const { error: rpcErr } = await supabase.rpc('siteadmin_unclaim_profile', { p_profile_id: profileId })
+    setUnclaimingId(null)
+    if (rpcErr) {
+      setUserError(rpcErr.message)
+      return
+    }
+    await loadSiteUsers()
+  }
+
+  async function handleSaveRole(profileId) {
+    setRoleSavingId(profileId)
+    setUserError('')
+    const { error: rpcErr } = await supabase.rpc('siteadmin_set_role', {
+      p_profile_id: profileId,
+      p_role: roleDraft,
+    })
+    setRoleSavingId(null)
+    if (rpcErr) {
+      setUserError(rpcErr.message)
+      return
+    }
+    setRoleEditId(null)
+    await loadSiteUsers()
+  }
+
+  async function handleRemoveUser(profileId) {
+    if (removeConfirm[profileId] !== 'REMOVE') return
+    setRemovingId(profileId)
+    setUserError('')
+    const { error: rpcErr } = await supabase.rpc('siteadmin_delete_user', { p_profile_id: profileId })
+    setRemovingId(null)
+    if (rpcErr) {
+      setUserError(rpcErr.message)
+      return
+    }
+    setRemoveConfirm((current) => {
+      const next = { ...current }
+      delete next[profileId]
+      return next
+    })
+    await loadSiteUsers()
   }
 
   async function handleResetCooldown(profileId) {
@@ -466,6 +574,137 @@ export default function OfficerClaimCooldowns({ isOfficer }) {
           </div>
         </div>
       </section>
+
+      {isSiteAdmin && (
+        <section className="card" style={{ marginBottom: '1.5rem' }}>
+          <h2 style={{ marginTop: 0 }}>Site Profile Accounts</h2>
+          <p style={{ color: '#a1a1aa', marginBottom: '0.75rem' }}>
+            Site users and the game account each one has claimed. Email addresses are not shown.
+          </p>
+          {userError && <p className="error" style={{ marginBottom: '0.75rem' }}>{userError}</p>}
+          {usersLoading ? (
+            <p style={{ color: '#71717a' }}>Loading…</p>
+          ) : siteUsers.length === 0 ? (
+            <p style={{ color: '#71717a' }}>No site profiles.</p>
+          ) : (
+            <div className="officer-table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Display name</th>
+                    <th>Claimed account</th>
+                    <th>Current role</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {siteUsers.map((user) => {
+                    const name = (user.display_name || '').trim()
+                    const account = user.account_id ? siteAccounts[String(user.account_id)] : null
+                    const accountLabel = gameAccountLabel(account) || user.account_id
+                    const confirm = removeConfirm[user.id] || ''
+                    return (
+                      <tr key={user.id}>
+                        <td style={{ verticalAlign: 'top' }}>
+                          {name || <span style={{ color: '#71717a' }}>—</span>}
+                          {!name && (
+                            <div style={{ color: '#71717a', fontSize: '0.75rem' }}><code>{user.id}</code></div>
+                          )}
+                        </td>
+                        <td style={{ verticalAlign: 'top' }}>
+                          {user.account_id ? (
+                            <>
+                              <Link to={`/accounts/${user.account_id}`}>{accountLabel}</Link>
+                              <div>
+                                <button
+                                  type="button"
+                                  className="btn btn-ghost"
+                                  style={{ fontSize: '0.875rem', marginTop: '0.35rem' }}
+                                  onClick={() => handleUnclaimProfile(user.id)}
+                                  disabled={unclaimingId === user.id}
+                                >
+                                  {unclaimingId === user.id ? 'Unclaiming...' : 'Unclaim account'}
+                                </button>
+                              </div>
+                            </>
+                          ) : (
+                            <span style={{ color: '#71717a' }}>unclaimed</span>
+                          )}
+                        </td>
+                        <td style={{ verticalAlign: 'top' }}>{roleLabel(user.role)}</td>
+                        <td style={{ verticalAlign: 'top', minWidth: '16rem' }}>
+                          {roleEditId === user.id ? (
+                            <div className="officer-field-row" style={{ marginBottom: '0.75rem' }}>
+                              <select
+                                aria-label={`Role for ${name || user.id}`}
+                                value={roleDraft}
+                                onChange={(event) => setRoleDraft(event.target.value)}
+                              >
+                                {ROLE_OPTIONS.map((option) => (
+                                  <option key={option.value} value={option.value}>{option.label}</option>
+                                ))}
+                              </select>
+                              <button
+                                type="button"
+                                className="btn"
+                                onClick={() => handleSaveRole(user.id)}
+                                disabled={roleSavingId === user.id}
+                              >
+                                {roleSavingId === user.id ? 'Saving...' : 'Save'}
+                              </button>
+                              <button
+                                type="button"
+                                className="btn btn-ghost"
+                                onClick={() => setRoleEditId(null)}
+                                disabled={roleSavingId === user.id}
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              className="btn btn-ghost"
+                              style={{ fontSize: '0.875rem', marginBottom: '0.5rem' }}
+                              onClick={() => { setRoleEditId(user.id); setRoleDraft(user.role || 'player') }}
+                            >
+                              Change Role
+                            </button>
+                          )}
+                          <details className="officer-delete" style={{ marginTop: '0.5rem' }}>
+                            <summary>REMOVE USER</summary>
+                            <p className="officer-hint">
+                              Remove user from the site. This deletes the site profile, but it does not remove game accounts or characters. Type <strong>REMOVE</strong> to confirm.
+                            </p>
+                            <div className="officer-field-row">
+                              <input
+                                type="text"
+                                value={confirm}
+                                onChange={(event) => setRemoveConfirm((current) => ({ ...current, [user.id]: event.target.value }))}
+                                placeholder="Type REMOVE"
+                                style={{ maxWidth: '12rem' }}
+                                aria-label={`Confirm removal of ${name || user.id}`}
+                              />
+                              <button
+                                type="button"
+                                className="btn officer-btn-danger"
+                                onClick={() => handleRemoveUser(user.id)}
+                                disabled={removingId === user.id || confirm !== 'REMOVE'}
+                              >
+                                {removingId === user.id ? 'Removing...' : 'Remove user'}
+                              </button>
+                            </div>
+                          </details>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      )}
     </div>
   )
 }

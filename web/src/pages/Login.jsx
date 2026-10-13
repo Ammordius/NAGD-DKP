@@ -14,6 +14,7 @@ export default function Login({ session }) {
   const redirectTo = safeNextPath(searchParams.get('redirect'))
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [displayName, setDisplayName] = useState('')
   const [error, setError] = useState(searchParams.get('error') || '')
   const [loading, setLoading] = useState(false)
   const [isSignUp, setIsSignUp] = useState(false)
@@ -28,7 +29,16 @@ export default function Login({ session }) {
     setLoading(true)
     try {
       if (isSignUp) {
-        const { error: err } = await supabase.auth.signUp({ email, password })
+        const name = displayName.trim()
+        if (!name || name.length > 32) {
+          setError('Display name must be 1-32 characters')
+          return
+        }
+        const { error: err } = await supabase.auth.signUp({
+          email,
+          password,
+          options: { data: { display_name: name } },
+        })
         if (err) throw err
         setError('Check your email to confirm sign up, then sign in.')
       } else {
@@ -80,6 +90,20 @@ export default function Login({ session }) {
         </button>
         <p style={{ color: '#71717a', textAlign: 'center', margin: '1rem 0' }}>or</p>
         <form onSubmit={handleSubmit}>
+          {isSignUp && (
+            <div className="form-group">
+              <label>Display Name</label>
+              <input
+                type="text"
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+                placeholder="How you should appear on the site"
+                required
+                maxLength={32}
+                autoComplete="nickname"
+              />
+            </div>
+          )}
           <div className="form-group">
             <label>Email</label>
             <input

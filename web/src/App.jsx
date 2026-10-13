@@ -71,7 +71,7 @@ export default function App() {
   }, [])
 
   async function fetchProfile(userId) {
-    const { data } = await supabase.from('profiles').select('role, account_id, unclaim_cooldown_until').eq('id', userId).single()
+    const { data } = await supabase.from('profiles').select('role, account_id, unclaim_cooldown_until, display_name').eq('id', userId).single()
     setProfile(data)
     setLoading(false)
   }
@@ -84,7 +84,9 @@ export default function App() {
     )
   }
 
-  const isOfficer = profile?.role === 'officer'
+  const isOfficer = profile?.role === 'officer' || profile?.role === 'siteadmin'
+  const isSiteAdmin = profile?.role === 'siteadmin'
+  const roleLabel = profile?.role === 'siteadmin' ? 'Site Admin' : profile?.role === 'officer' ? 'Officer' : 'Player'
 
   function RedirectPreserve({ to }) {
     const { search, hash } = useLocation()
@@ -106,21 +108,21 @@ export default function App() {
       <nav>
         <Link to="/">Home</Link>
         <Link to="/dkp">DKP</Link>
-        <Link to="/accounts">Accounts</Link>
+        <Link to="/accounts">Game Accounts</Link>
         <Link to="/raids">Raids</Link>
         <Link to="/mobs">Raid Items</Link>
         <Link to="/loot">Item History</Link>
         <Link to="/loot-recipients">Character History</Link>
         {session ? (
           <>
-            <Link to="/profile">Your Profile</Link>
+            <Link to="/profile">My Site Profile</Link>
             {isOfficer && (
               <span className="nav-admin-group">
                 <Link to="/officer/RaidAdmin">Raid Admin</Link>
                 <Link to="/officer/SiteAdmin">Site Admin</Link>
               </span>
             )}
-            <span className="role">{profile?.role === 'officer' ? 'Officer' : 'Player'}</span>
+            <span className="role">{roleLabel}</span>
             <button
               className="btn btn-ghost"
               onClick={() => supabase.auth.signOut()}
@@ -144,7 +146,7 @@ export default function App() {
         <Route path="/officer/dkp-changelog" element={<RequireAuth><DkpChangelog isOfficer={isOfficer} /></RequireAuth>} />
         <Route path="/officer/who-parser" element={<RequireAuth><OfficerWhoParser isOfficer={isOfficer} /></RequireAuth>} />
         <Route path="/officer/claim-cooldowns" element={<RedirectPreserve to="/officer/SiteAdmin" />} />
-        <Route path="/officer/SiteAdmin" element={<RequireAuth><OfficerClaimCooldowns isOfficer={isOfficer} /></RequireAuth>} />
+        <Route path="/officer/SiteAdmin" element={<RequireAuth><OfficerClaimCooldowns isOfficer={isOfficer} isSiteAdmin={isSiteAdmin} /></RequireAuth>} />
         <Route path="/officer/raider-activity" element={<RequireAuth><OfficerRaiderActivity isOfficer={isOfficer} /></RequireAuth>} />
         <Route path="/tools/discord-schedule" element={<RequireAuth><DiscordSchedule /></RequireAuth>} />
         <Route path="/loot" element={<RequireAuth><LootSearch /></RequireAuth>} />

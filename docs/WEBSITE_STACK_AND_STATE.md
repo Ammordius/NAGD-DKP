@@ -56,7 +56,7 @@ Defined in `web/src/App.jsx`.
 | `/dkp` | `DKP` | Signed in |
 | `/officer/RaidAdmin` | `Officer` | Signed in (redirect if not officer). Old `/officer` redirects here. |
 | `/officer/dkp-changelog` | `DkpChangelog` | Signed in (officer gate in page) |
-| `/officer/SiteAdmin` | `OfficerClaimCooldowns` | Signed in (officer). Old `/officer/claim-cooldowns` redirects here. |
+| `/officer/SiteAdmin` | `OfficerClaimCooldowns` | Signed in (officer or siteadmin). Old `/officer/claim-cooldowns` redirects here. The Site Profile Accounts section is siteadmin only. |
 | `/officer/raider-activity` | `OfficerRaiderActivity` | Signed in (officer); class coverage from `account_class_coverage` (CI/Magelo) |
 | `/loot` | `LootSearch` | Signed in |
 | `/loot-recipients` | `LootRecipients` | Signed in |
@@ -68,7 +68,7 @@ Defined in `web/src/App.jsx`.
 | `/characters/:charKey` | `CharacterPage` | Signed in |
 | `*` | Redirect to `/` | — |
 
-**Roles:** `App` loads `profiles.role` for the signed-in user. `isOfficer` toggles officer nav links; individual pages may also `navigate('/')` if not officer.
+**Roles:** `App` loads `profiles.role` for the signed-in user. `player`, `officer`, and `siteadmin` are allowed. `isOfficer` is true for `officer` and `siteadmin` and toggles officer nav links; individual pages may also `navigate('/')` if not officer. `isSiteAdmin` is true only for `siteadmin` and shows Site Profile Accounts on `/officer/SiteAdmin`. `profiles.display_name` is the site name (email sign-up field, or the Discord username). It is separate from `accounts.display_name`. Nav labels are Game Accounts (`/accounts`) and My Site Profile (`/profile`).
 
 ## Data sources (where values come from)
 
@@ -101,7 +101,7 @@ Fetched with `fetch('/…')` from `public/` or CDN:
 | `sessionStorage` | `account-detail-cache-${accountId}` | SWR fallback for account page |
 | `sessionStorage` | `pageState:/loot:*` | Item History search text and sort. Results are not cached; `/loot` queries `raid_loot_history` one page at a time (`LootSearch.jsx`). Deploy the view with `docs/supabase-raid-loot-history.sql`. |
 | TTL cache | `raids_month_*` | Raids calendar month blobs (`web/src/lib/cache.js`) |
-| TTL cache | `accounts_list_v6` | Accounts list (`web/src/pages/Accounts.jsx`, 10 minutes). The page refetches on load and overwrites this key. Character “spent” is loot for that account, same buyer fallback as the account page (assignee, else `character_name`, else `char_id`). It is not the DKP leaderboard total. |
+| TTL cache | `accounts_list_v7` | Accounts list (`web/src/pages/Accounts.jsx`, 10 minutes), including the Claimed by column from `account_claim_labels()`. The page refetches on load and overwrites this key. Character “spent” is loot for that account, same buyer fallback as the account page (assignee, else `character_name`, else `char_id`). It is not the DKP leaderboard total. |
 
 ### Refreshing DKP totals
 
