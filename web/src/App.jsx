@@ -30,6 +30,7 @@ export default function App() {
   const location = useLocation()
   const navigate = useNavigate()
   const hasRestoredRef = useRef(false)
+  const profileUserIdRef = useRef(null)
 
   // Persist current route so returning to the tab (or reopening the app) keeps you on the same page
   useEffect(() => {
@@ -56,24 +57,42 @@ export default function App() {
   }, [loading, session, location.pathname, navigate])
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    let cancelled = false
+
+    function applySession(session) {
+      if (cancelled) return
       setSession(session)
-      if (session) fetchProfile(session.user.id)
-      else setLoading(false)
-    })
+      if (session) {
+        // Hold the loading gate until this user's role is known. Officer pages
+        // redirect home when isOfficer is still false, which is what a full
+        // reload of the dashboard Raid Admin link used to do.
+        if (profileUserIdRef.current !== session.user.id) setLoading(true)
+        fetchProfile(session.user.id)
+      } else {
+        profileUserIdRef.current = null
+        setProfile(null)
+        setLoading(false)
+      }
+    }
+
+    supabase.auth.getSession().then(({ data: { session } }) => applySession(session))
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session)
-      if (session) fetchProfile(session.user.id)
-      else setProfile(null)
-      setLoading(false)
+      applySession(session)
     })
-    return () => subscription?.unsubscribe()
+    return () => {
+      cancelled = true
+      subscription?.unsubscribe()
+    }
   }, [])
 
   async function fetchProfile(userId) {
-    const { data } = await supabase.from('profiles').select('role, account_id, unclaim_cooldown_until, display_name').eq('id', userId).single()
-    setProfile(data)
-    setLoading(false)
+    try {
+      const { data } = await supabase.from('profiles').select('role, account_id, unclaim_cooldown_until, display_name').eq('id', userId).single()
+      setProfile(data)
+      profileUserIdRef.current = userId
+    } finally {
+      setLoading(false)
+    }
   }
 
   if (loading) {

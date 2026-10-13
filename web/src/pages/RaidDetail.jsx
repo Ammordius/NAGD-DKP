@@ -450,9 +450,10 @@ export default function RaidDetail({ isOfficer }) {
           <Link
             to={`/officer/RaidAdmin?raid=${encodeURIComponent(raidId)}`}
             className="btn btn-ghost"
-            style={{ padding: '0.35rem 0.75rem', fontSize: '0.875rem', fontWeight: 500, lineHeight: 1.2 }}
+            style={{ padding: '0.35rem 0.75rem', fontSize: '0.875rem', fontWeight: 500, lineHeight: 1.2, display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}
             title="Edit raid"
           >
+            <span aria-hidden="true">✎</span>
             Edit raid
           </Link>
         )}

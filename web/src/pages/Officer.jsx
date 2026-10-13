@@ -1978,11 +1978,12 @@ export default function Officer({ isOfficer }) {
                   <button
                     type="button"
                     className="btn btn-ghost"
-                    style={{ marginLeft: '0.25rem', fontSize: '0.85rem' }}
+                    style={{ marginLeft: '0.35rem', fontSize: '0.85rem', display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}
                     onClick={() => { setEditingRaidName(true); setRaidNameDraft(raid.raid_name || ''); setRaidNameError('') }}
-                    title="Rename raid"
+                    title="Edit title"
                   >
-                    ✎
+                    <span aria-hidden="true">✎</span>
+                    Edit title
                   </button>
                 </>
               )}
