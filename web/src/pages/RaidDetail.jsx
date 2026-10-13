@@ -71,9 +71,6 @@ export default function RaidDetail({ isOfficer }) {
   const [editingEventTime, setEditingEventTime] = useState('')
   const [editingLootId, setEditingLootId] = useState(null)
   const [editingLootCost, setEditingLootCost] = useState('')
-  const [editingRaidName, setEditingRaidName] = useState(false)
-  const [raidNameDraft, setRaidNameDraft] = useState('')
-  const [raidNameError, setRaidNameError] = useState('')
   const [mutating, setMutating] = useState(false)
   const [characters, setCharacters] = useState([])
   const [addToTicEventId, setAddToTicEventId] = useState('')
@@ -263,36 +260,6 @@ export default function RaidDetail({ isOfficer }) {
     return [...missedByKey.values()]
   }, [attendance, effectiveAttendance, events, attendeesByEvent, eventAttendance.length, getAccountId])
 
-  const handleSaveRaidName = async () => {
-    const next = raidNameDraft.trim()
-    if (!next) {
-      setRaidNameError('Enter a raid name.')
-      return
-    }
-    const current = (raid?.raid_name || '').trim()
-    if (next === current) {
-      setEditingRaidName(false)
-      setRaidNameError('')
-      return
-    }
-    setMutating(true)
-    setRaidNameError('')
-    const { error: err } = await supabase.from('raids').update({ raid_name: next }).eq('raid_id', raidId)
-    setMutating(false)
-    if (err) setRaidNameError(err.message)
-    else {
-      await logOfficerAudit(supabase, {
-        action: 'rename_raid',
-        target_type: 'raid',
-        target_id: raidId,
-        delta: { r: raidId, from: current, n: next },
-      })
-      setEditingRaidName(false)
-      setRaidNameError('')
-      mutate()
-    }
-  }
-
   const handleSaveEventDkp = async (eventId) => {
     const val = String(editingEventDkp).trim()
     if (val === '') return
@@ -477,38 +444,19 @@ export default function RaidDetail({ isOfficer }) {
   return (
     <div className="container">
       <p><Link to="/raids">← Raids</Link></p>
-      <h1>
-        {isOfficer && editingRaidName ? (
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', flexWrap: 'wrap' }}>
-            <input
-              type="text"
-              value={raidNameDraft}
-              onChange={(ev) => setRaidNameDraft(ev.target.value)}
-              onKeyDown={(ev) => { if (ev.key === 'Enter') handleSaveRaidName() }}
-              style={{ fontSize: '1.25rem', padding: '0.2rem 0.4rem', minWidth: '16rem' }}
-              aria-label="Raid name"
-            />
-            <button type="button" className="btn btn-ghost" onClick={handleSaveRaidName} disabled={mutating}>Save</button>
-            <button type="button" className="btn btn-ghost" onClick={() => { setEditingRaidName(false); setRaidNameError('') }}>Cancel</button>
-          </span>
-        ) : (
-          <>
-            {raid.raid_name || raidId}
-            {isOfficer && (
-              <button
-                type="button"
-                className="btn btn-ghost"
-                style={{ marginLeft: '0.25rem', fontSize: '0.85rem' }}
-                onClick={() => { setEditingRaidName(true); setRaidNameDraft(raid.raid_name || ''); setRaidNameError('') }}
-                title="Rename raid"
-              >
-                ✎
-              </button>
-            )}
-          </>
+      <h1 style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+        <span>{raid.raid_name || raidId}</span>
+        {isOfficer && (
+          <Link
+            to={`/officer/RaidAdmin?raid=${encodeURIComponent(raidId)}`}
+            className="btn btn-ghost"
+            style={{ padding: '0.35rem 0.75rem', fontSize: '0.875rem', fontWeight: 500, lineHeight: 1.2 }}
+            title="Edit raid"
+          >
+            Edit raid
+          </Link>
         )}
       </h1>
-      {raidNameError && <p className="error" role="alert">{raidNameError}</p>}
       <p style={{ color: '#a1a1aa' }}>{raid.date_iso || raid.date} · {(displayAttendeeCount > 0 ? displayAttendeeCount : (raid.attendees ?? '—'))} attendees</p>
 
       <h2>DKP by event</h2>
