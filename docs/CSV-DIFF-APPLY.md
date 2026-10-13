@@ -52,8 +52,8 @@ python scripts/pull_parse_dkp_site/diff_inactive_tic_loot_dry_run.py --data-dir 
 - Prints: tics to add, loot to add, count of unlinked characters, sample names.
 - With `--write`, writes:
   - `docs/dry_run_inactive_raiders_summary.md` – full summary and list of unlinked names.
-  - `docs/apply_inactive_raiders.sql` – SQL that would add accounts, characters, character_account, and missing tics.
-  - `docs/unapply_inactive_raiders.sql` – SQL to revert that apply.
+  - `docs/sql-archive/one-offs/apply_inactive_raiders.sql` – SQL that would add accounts, characters, character_account, and missing tics.
+  - `docs/sql-archive/one-offs/unapply_inactive_raiders.sql` – SQL to revert that apply.
   - `docs/inactive_raiders_to_add.txt` – plain list of unlinked names.
 
 Review the summary. Many “unlinked” names may already have an account under a **different** char_id (e.g. DKP site vs Magelo). To attach those CSV char_ids to existing accounts and shrink the unlinked list, do Step 2.

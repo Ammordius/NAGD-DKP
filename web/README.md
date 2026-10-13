@@ -7,7 +7,7 @@ Minimal React app with Supabase auth and two roles: **officer** and **player**.
 ## Setup
 
 1. **Supabase**  
-   Create a project at [supabase.com](https://supabase.com). In the SQL Editor, run `../docs/supabase-schema-full.sql` once (see [../docs/SCHEMA_DEPLOYMENT.md](../docs/SCHEMA_DEPLOYMENT.md)). Then import data (see `../docs/supabase-import.md`). The walkthrough is [../docs/SETUP-WALKTHROUGH.md](../docs/SETUP-WALKTHROUGH.md). Do not also run the older loot, raider-activity, or class-coverage SQL files; they are already in the full schema. There is no `docs/supabase-schema.sql`.
+   Create a project at [supabase.com](https://supabase.com). Apply `../docs/supabase-schema-full.sql` with `psql --single-transaction` (see [../docs/SCHEMA_DEPLOYMENT.md](../docs/SCHEMA_DEPLOYMENT.md)). Then import data (see `../docs/supabase-import.md`). The walkthrough is [../docs/SETUP-WALKTHROUGH.md](../docs/SETUP-WALKTHROUGH.md). There is no `docs/supabase-schema.sql`. Archived SQL under `../docs/sql-archive/` is not a setup step.
 
 2. **Env**  
    Copy `.env.example` to `.env.local` and set:

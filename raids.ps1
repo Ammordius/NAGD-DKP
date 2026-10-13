@@ -224,7 +224,7 @@ function Audit-Dkp {
     Pull-MembersDkp
     if ($LASTEXITCODE -ne 0) { return }
     $snapshot = "data/members_dkp_snapshot.json"
-    $auditSql = "docs/audit_dkp_snapshot_vs_db.sql"
+    $auditSql = "docs/sql-archive/diagnostics/audit_dkp_snapshot_vs_db.sql"
     $jsonOut = "data/audit_dkp_result.json"
     Write-Host "Parsing and emitting audit SQL..."
     python $ScriptDir/parse_members_dkp_html.py parse data/members_dkp.html -o $snapshot --emit-sql $auditSql

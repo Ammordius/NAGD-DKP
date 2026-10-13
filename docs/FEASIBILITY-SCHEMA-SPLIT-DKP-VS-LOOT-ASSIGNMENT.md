@@ -33,7 +33,7 @@
 
 ## Implementation
 
-- **Migration:** `docs/supabase-loot-assignment-table.sql` creates `loot_assignment`, backfills from `raid_loot`, drops assignment columns from `raid_loot`, adds view and updated functions/RPCs/triggers, and RLS for `loot_assignment`.
+- **Migration:** `docs/sql-archive/superseded/supabase-loot-assignment-table.sql` creates `loot_assignment`, backfills from `raid_loot`, drops assignment columns from `raid_loot`, adds view and updated functions/RPCs/triggers, and RLS for `loot_assignment`.
 - **App:** Reads that need assignment use **raid_loot_with_assignment**; writes to loot rows use **raid_loot**; assignment-only updates use existing RPCs.
 - **CI:** Keeps calling **update_raid_loot_assignments**; once a scoped key exists, CI uses that key (no service role).
 

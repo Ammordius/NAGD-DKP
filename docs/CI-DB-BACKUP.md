@@ -98,7 +98,7 @@ With the tiered strategy above, you use a small fraction of that.
 
 **Automated (GitHub Actions):** Use the **DB restore from backup** workflow to download an artifact and restore into Supabase. Uses the same **`SUPABASE_URL`** and **`SUPABASE_SERVICE_ROLE_KEY`** secrets as the backup workflow (see CI-DB-RESTORE.md). See **[docs/CI-DB-RESTORE.md](CI-DB-RESTORE.md)** for setup and steps.
 
-**Manual:** In **Actions** → select the workflow run → **Artifacts**, download the `.tar.gz` you need (rolling, weekly, or monthly). Decompress: `tar xzf backup-YYYY-MM-DD.tar.gz` → you get a `backup/` directory with one CSV per table. Re-import into Supabase via **Table Editor** → **Import data from CSV** for each file, or use `docs/supabase-reset-and-import.sql` then import CSVs in the order listed there.
+**Manual:** In **Actions** → select the workflow run → **Artifacts**, download the `.tar.gz` you need (rolling, weekly, or monthly). Decompress: `tar xzf backup-YYYY-MM-DD.tar.gz` → you get a `backup/` directory with one CSV per table. Restore with [RESTORE-BACKUP.md](RESTORE-BACKUP.md).
 
 ---
 

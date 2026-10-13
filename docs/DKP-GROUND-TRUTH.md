@@ -20,7 +20,7 @@ python verify_website_vs_ground_truth.py ground_truth.txt --csv data/expected_fo
 
 Open your DKP site and check that the leaderboard matches the printed table (or the CSV).
 
-**After account-scoped DKP migration:** The leaderboard shows one row per account (`account_dkp_summary`). To validate, run `docs/supabase-account-dkp-migration.sql` then `SELECT refresh_account_dkp_summary_internal();`. Compare `account_dkp_summary` (earned, spent per account_id) to ground truth aggregated by account (map character names to account_id via `character_account` + `characters`, sum earned/spent per account). The audit script `parse_members_dkp_html.py audit` uses `account_dkp_summary` when present.
+**After account-scoped DKP migration:** The leaderboard shows one row per account (`account_dkp_summary`). Compare `account_dkp_summary` (earned, spent per account_id) to ground truth aggregated by account. The audit script `parse_members_dkp_html.py audit` uses `account_dkp_summary` when present. The historical migration SQL is archived and is not an upgrade step.
 
 Local computed totals (`python compute_dkp.py` → `data/dkp_totals.csv`) match this ground truth when you use **per-event attendance** (see below). Run `python compare_dkp_ground_truth.py` to verify; you should see ~90+ matches with Diff +0.0 and a few small −1 to −2 differences.
 
@@ -74,13 +74,9 @@ After per-event attendance: Inacht, Baily, Radda, Dula Allazaward, etc. all show
 
 ## Redo Supabase backend (so the website matches ground truth)
 
-### Option A: Full reset (truncate all tables, then re-import)
+### Option A: Full data reset (wipes DKP tables)
 
-1. **Run the reset script in Supabase SQL Editor**
-   - Open **docs/supabase-reset-and-import.sql** and run the whole file.
-   - This truncates all DKP data tables and inserts the **one-off DKP adjustments** (so the few characters that were off by 1–2 DKP match ground truth exactly).
-
-2. **Import these CSVs** in Table Editor, in this order:
+This is a data wipe, not a schema upgrade. Schema install and upgrade are only `docs/supabase-schema-full.sql`. The archived file `docs/sql-archive/one-offs/supabase-reset-and-import.sql` truncates DKP tables. Do not use it as an upgrade. If you intentionally reload from CSV, follow [RESTORE-BACKUP.md](RESTORE-BACKUP.md). Import order:
 
    | Table | CSV |
    |-------|-----|
@@ -93,14 +89,14 @@ After per-event attendance: Inacht, Baily, Radda, Dula Allazaward, etc. all show
    | raid_attendance | data/raid_attendance.csv |
    | **raid_event_attendance** | **data/raid_event_attendance.csv** |
    | raid_classifications | data/raid_classifications_import.csv (or data/raid_classifications.csv) |
-   | dkp_adjustments | (already filled by the reset script; or import data/dkp_adjustments.csv) |
+   | dkp_adjustments | data/dkp_adjustments.csv |
 
 3. **Redeploy or refresh** the frontend. The DKP page applies **dkp_adjustments** (earned_delta, spent_delta) so displayed totals match ground truth.
 
 ### Option B: First-time or schema change
 
-1. Run the required SQL in [SCHEMA_DEPLOYMENT.md](SCHEMA_DEPLOYMENT.md), starting with **docs/supabase-schema-full.sql** (creates tables including **dkp_adjustments**). There is no `docs/supabase-schema.sql`.
-2. Import the CSVs in the same order as above. Then run the INSERT block from **docs/supabase-reset-and-import.sql** (dkp_adjustments rows), or import **data/dkp_adjustments.csv**.
+1. Apply **docs/supabase-schema-full.sql** ([SCHEMA_DEPLOYMENT.md](SCHEMA_DEPLOYMENT.md)). No other schema file is part of setup.
+2. Import the CSVs in the same order as the restore guide. Load `dkp_adjustments` from **data/dkp_adjustments.csv**.
 
 ### How adjustments work
 

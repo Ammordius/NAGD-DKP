@@ -3,7 +3,7 @@
 Update existing raid_loot rows in Supabase with assigned_char_id, assigned_character_name, assigned_via_magelo.
 Reads data/raid_loot.csv (must include an 'id' column from a Supabase export). Calls update_raid_loot_assignments
 RPC so conflicts are resolved (existing rows updated), never ignored. Requires the function from
-docs/supabase-loot-to-character.sql.
+docs/supabase-schema-full.sql.
 
 Rows that were manually assigned in the Loot tab (assigned_via_magelo=0 with an assignment) are never
 included in the payload, so they are never overwritten by this script.

@@ -24,13 +24,13 @@ The **30d** and **60d** columns are **DKP earned in the last 30 and 60 days** (n
    - If `date_iso` for those two raids is wrong or null, they won’t count in 30d/60d.
 
 4. **Past fix removed char_id attendance**  
-   `docs/frinop_remove_name_only_row.sql` **deletes all `raid_event_attendance` and `raid_attendance` where `char_id = '21990375'`** to force everything onto the name key.  
+   `docs/sql-archive/one-offs/frinop_remove_name_only_row.sql` **deletes all `raid_event_attendance` and `raid_attendance` where `char_id = '21990375'`** to force everything onto the name key.  
    - If that was run and the **new** raids were later added with **char_id 21990375** (not name-only), you’d have a char_id row again.  
    - If instead the new raids were never re-imported or were only on the name key and something else removed them, you’d end up with only the old name-key DKP (e.g. 2 in 30d/60d).
 
 ## How to confirm
 
-Run **`docs/diagnose_frinop_30d_60d_attendance.sql`** in the Supabase SQL Editor. It:
+Run **`docs/sql-archive/diagnostics/diagnose_frinop_30d_60d_attendance.sql`** in the Supabase SQL Editor. It:
 
 1. Shows **dkp_summary** for Frinop (both keys) and their `earned_30d` / `earned_60d`.
 2. Lists **recent raids** (Water Minis, PoTime, etc.) and their `date_iso` and whether they fall in 30d/60d.
@@ -43,13 +43,13 @@ Interpretation:
 
 - If **step 3** has **no rows** for Water Minis and PoTime for Frinop → cause is **missing attendance** for those raids (re-import or fix parse/upload).
 - If **step 2** shows those raids with **wrong or null `date_iso`** → fix **raids.date_iso** and run `refresh_dkp_summary()`.
-- If **step 1** shows two rows and one has **0** for `earned_30d`/`earned_60d` and the other has **2/2** → recent DKP is only on one key; ensure both keys’ attendance is present and consistent, then run **`docs/fix_duplicate_tic_attendance_and_prevent.sql`** (to remove true duplicates only) and **`refresh_dkp_summary()`**.
+- If **step 1** shows two rows and one has **0** for `earned_30d`/`earned_60d` and the other has **2/2** → recent DKP is only on one key; ensure both keys’ attendance is present and consistent, then run **`docs/sql-archive/one-offs/fix_duplicate_tic_attendance_and_prevent.sql`** (to remove true duplicates only) and **`refresh_dkp_summary()`**.
 
 ## Recommended fix (after running the diagnostic)
 
 **Preferred: one Frinop in the DB.** The root cause is two `dkp_summary` rows (character_key `21990375` and `Frinop`). Consolidate to a single key so there is only one row:
 
-- Run **`docs/fix_frinop_single_key_consolidate.sql`** in Supabase SQL Editor. It:
+- Run **`docs/sql-archive/one-offs/fix_frinop_single_key_consolidate.sql`** in Supabase SQL Editor. It:
   - Deletes name-only `Frinop` attendance where the same (raid/event) already has `char_id` 21990375.
   - Sets `char_id = '21990375'` on all remaining name-only Frinop rows in `raid_event_attendance`, `raid_attendance`, and `raid_loot`.
   - Dedupes so each (raid, event) has at most one row per character, then runs `refresh_all_raid_attendance_totals()` and `refresh_dkp_summary()`.

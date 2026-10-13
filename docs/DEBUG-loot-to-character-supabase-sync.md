@@ -48,7 +48,7 @@ So the **live DB is the source of truth** for each run. Repo CSVs are not used w
 
 3. **Assign in CI didn't set the toon**  
    Assign links buyers to toons via `character_account` and `characters` (from the same Supabase fetch). If in **that** DB Ammordius and Badammo are not on the same `account_id`, assign leaves the row as namesake (buyer = Ammordius) or doesn't set Badammo.  
-   **Fix:** Do a **one-time full reset/import** from your canonical CSVs (see `docs/supabase-reset-and-import.sql`) so Supabase has correct `character_account` and `characters`. After that, CI fetch → assign → update will run against that same DB and the site will show the right assignments.
+   **Fix:** Do a **one-time full reset/import** from your canonical CSVs (see `docs/sql-archive/one-offs/supabase-reset-and-import.sql`) so Supabase has correct `character_account` and `characters`. After that, CI fetch → assign → update will run against that same DB and the site will show the right assignments.
 
 **Checklist so it works going forward:**
 

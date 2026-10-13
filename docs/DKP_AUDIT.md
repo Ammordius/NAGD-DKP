@@ -11,7 +11,7 @@ When officers add characters to a DKP tic (either via **Add attendee to tic** or
 - Adding a character to a tic gives DKP to that character's account (if linked in `character_account`).
 - The DKP leaderboard and account detail pages show account-level totals; the "Credited" and "Added to tic" messages in the Officer UI refer to the character, but the balance that updates is the account's.
 
-**Refresh:** After each tic/attendee change, the app calls `refresh_dkp_summary()` and **`refresh_account_dkp_summary_for_raid(raid_id)`**, which updates `account_dkp_summary` only for accounts that have attendance in that raid (plus the removed account when removing an attendee). No full refresh over all raids. If you deployed before this change, run **docs/fix_refresh_dkp_summary_includes_account_summary.sql** in Supabase to create `refresh_account_dkp_summary_for_raid`.
+**Refresh:** After each tic/attendee change, the app calls `refresh_dkp_summary()` and **`refresh_account_dkp_summary_for_raid(raid_id)`**, which updates `account_dkp_summary` only for accounts that have attendance in that raid (plus the removed account when removing an attendee). No full refresh over all raids. That function is in `docs/supabase-schema-full.sql`.
 
 So when we add characters to a tic, we are using account migration and the messages are still meaningful (character name for clarity; DKP applies to the account).
 
@@ -39,7 +39,7 @@ This will:
 
 1. Download the members DKP page to `data/members_dkp.html` (using `cookies.txt`).
 2. Parse it to `data/members_dkp_snapshot.json`.
-3. Emit `docs/audit_dkp_snapshot_vs_db.sql` (run in Supabase SQL Editor for an instant account-level diff).
+3. Emit `docs/sql-archive/diagnostics/audit_dkp_snapshot_vs_db.sql` (run in Supabase SQL Editor for an instant account-level diff).
 4. Run the Python audit against Supabase and write `data/audit_dkp_result.json`.
 
 **Exit code:** `0` = all accounts match; `1` = mismatches or missing accounts.
@@ -54,7 +54,7 @@ This will:
 
 ```bash
 # If you saved as the long name in repo root or data/:
-python scripts/pull_parse_dkp_site/parse_members_dkp_html.py parse data/members_dkp.html -o data/members_dkp_snapshot.json --emit-sql docs/audit_dkp_snapshot_vs_db.sql
+python scripts/pull_parse_dkp_site/parse_members_dkp_html.py parse data/members_dkp.html -o data/members_dkp_snapshot.json --emit-sql docs/sql-archive/diagnostics/audit_dkp_snapshot_vs_db.sql
 python scripts/pull_parse_dkp_site/parse_members_dkp_html.py audit data/members_dkp_snapshot.json --json-out data/audit_dkp_result.json
 ```
 

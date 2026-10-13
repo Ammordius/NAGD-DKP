@@ -5,7 +5,7 @@
 -- 1) Index: reverse lookup from account_id to characters (speeds EXISTS filters).
 --    CONCURRENTLY cannot run inside a transaction; run this statement alone if needed.
 -- 2) Deploy the CREATE OR REPLACE FUNCTION public.refresh_account_dkp_summary_for_raid
---    definition from docs/supabase-schema-full.sql (same as docs/supabase-account-dkp-schema.sql).
+--    definition from docs/supabase-schema-full.sql (same as docs/sql-archive/superseded/supabase-account-dkp-schema.sql).
 --
 -- Staging verification (optional):
 --   EXPLAIN (ANALYZE, BUFFERS) SELECT refresh_account_dkp_summary_for_raid('YOUR_RAID_ID');

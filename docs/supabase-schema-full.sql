@@ -1,10 +1,20 @@
 -- =============================================================================
--- Single canonical schema. Run this once in the Supabase SQL Editor after creating a project.
--- Tables, RLS, triggers, account DKP, officer writes, upload RPCs, bidding portfolio,
--- loot assignment, character_dkp_spent, raider activity, and class coverage.
--- Do not also run supabase-loot-to-character.sql, supabase-loot-assignment-table.sql,
--- supabase-officer-raider-activity.sql, or supabase-account-class-coverage.sql.
--- Those files are the historical sources for the section at the end of this file.
+-- Single canonical schema. This is the only SQL file used to install or upgrade
+-- the application database.
+--
+-- Safe to re-run. It uses CREATE OR REPLACE, IF NOT EXISTS, and DROP ... IF EXISTS
+-- for policies and triggers. Applying this file does not truncate tables, delete
+-- raid or DKP rows, or recalculate DKP. TRUNCATE and DELETE that appear below are
+-- inside function bodies and run only when those functions are called.
+--
+-- Apply with a real transaction:
+--   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 --single-transaction -f docs/supabase-schema-full.sql
+-- The SQL Editor does not guarantee that. COMMIT inside dba_backfill_bid_portfolio_range
+-- is procedure source and is not executed while this file is applied.
+--
+-- The only deploy-time data writes are a one-row restore_in_progress insert
+-- (ON CONFLICT DO NOTHING) and an UPDATE that fills blank Discord profile
+-- display names. Names that are already set are left alone.
 -- =============================================================================
 
 -- 1) Profiles: one per auth user, holds role (siteadmin | officer | player)
@@ -241,7 +251,31 @@ CREATE INDEX IF NOT EXISTS idx_raid_attendance_raid ON raid_attendance(raid_id);
 CREATE INDEX IF NOT EXISTS idx_raid_attendance_char ON raid_attendance(char_id);
 CREATE INDEX IF NOT EXISTS idx_raid_event_attendance_raid ON raid_event_attendance(raid_id);
 CREATE INDEX IF NOT EXISTS idx_raid_event_attendance_char ON raid_event_attendance(char_id);
--- Prevent same character being added to the same tic twice (see docs/fix_duplicate_tic_attendance_and_prevent.sql)
+-- Prevent same character being added to the same tic twice.
+-- Abort before creating the indexes if existing rows would violate them. Do not delete those rows.
+DO $attendance_dupes$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM raid_event_attendance
+    WHERE char_id IS NOT NULL AND trim(char_id::text) <> ''
+    GROUP BY raid_id, event_id, char_id
+    HAVING count(*) > 1
+  ) THEN
+    RAISE EXCEPTION 'Duplicate raid_event_attendance (raid_id, event_id, char_id). Resolve the rows before applying the schema. This file will not delete them.';
+  END IF;
+  IF EXISTS (
+    SELECT 1
+    FROM raid_event_attendance
+    WHERE character_name IS NOT NULL AND trim(character_name) <> ''
+    GROUP BY raid_id, event_id, character_name
+    HAVING count(*) > 1
+  ) THEN
+    RAISE EXCEPTION 'Duplicate raid_event_attendance (raid_id, event_id, character_name). Resolve the rows before applying the schema. This file will not delete them.';
+  END IF;
+END
+$attendance_dupes$;
+
 CREATE UNIQUE INDEX IF NOT EXISTS uq_raid_event_attendance_raid_event_char_id
   ON raid_event_attendance (raid_id, event_id, char_id)
   WHERE char_id IS NOT NULL AND trim(char_id::text) <> '';
@@ -3431,6 +3465,37 @@ COMMENT ON FUNCTION public.insert_raid_event_attendance_for_upload(text, jsonb) 
 REVOKE ALL ON FUNCTION public.insert_raid_event_attendance_for_upload(text, jsonb) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.insert_raid_event_attendance_for_upload(text, jsonb) TO service_role;
 
+-- Bulk update raid_events.event_time. Used by update_supabase_event_times.py (service role).
+-- data: jsonb array of { "raid_id", "event_id", "event_time" }. Returns rows updated.
+CREATE OR REPLACE FUNCTION public.update_raid_event_times(data jsonb)
+RETURNS bigint
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  updated_count bigint;
+BEGIN
+  WITH payload AS (
+    SELECT trim((e->>'raid_id'))::text AS raid_id,
+           trim((e->>'event_id'))::text AS event_id,
+           nullif(trim(e->>'event_time'), '') AS event_time
+    FROM jsonb_array_elements(data) AS e
+    WHERE e ? 'raid_id' AND e ? 'event_id'
+  )
+  UPDATE raid_events re
+  SET event_time = p.event_time
+  FROM payload p
+  WHERE re.raid_id = p.raid_id AND re.event_id = p.event_id;
+  GET DIAGNOSTICS updated_count = ROW_COUNT;
+  RETURN updated_count;
+END;
+$$;
+
+COMMENT ON FUNCTION public.update_raid_event_times(jsonb) IS 'Bulk update raid_events.event_time by (raid_id, event_id). No truncate; updates existing rows only. service_role only.';
+REVOKE ALL ON FUNCTION public.update_raid_event_times(jsonb) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.update_raid_event_times(jsonb) TO service_role;
+
 -- =============================================================================
 -- Officer bidding portfolio (SECURITY DEFINER, is_officer). GRANT EXECUTE on officer RPCs to authenticated only.
 -- normalize_item_name_for_lookup: IMMUTABLE; keep aligned with scripts/bid_portfolio_local/normalize.py.
@@ -5083,7 +5148,7 @@ COMMENT ON FUNCTION public.officer_upsert_account_class_coverage(jsonb) IS
 
 GRANT EXECUTE ON FUNCTION public.officer_upsert_account_class_coverage(jsonb) TO authenticated;
 
--- Officer correction of an account display name. See docs/supabase-officer-set-account-display-name.sql.
+-- Officer correction of an account display name. See docs/sql-archive/superseded/supabase-officer-set-account-display-name.sql.
 CREATE OR REPLACE FUNCTION public.accounts_display_name_guard()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -5605,6 +5670,7 @@ REVOKE ALL ON FUNCTION public.fix_serial_sequences_for_restore() FROM PUBLIC, an
 REVOKE ALL ON FUNCTION public.truncate_dkp_for_restore() FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.delete_raid_for_reupload(text) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.insert_raid_event_attendance_for_upload(text, jsonb) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.update_raid_event_times(jsonb) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.refresh_dkp_summary_internal() FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION public.refresh_account_dkp_summary_internal() FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION public.refresh_all_raid_attendance_totals() FROM PUBLIC, anon, authenticated;
@@ -5627,6 +5693,7 @@ GRANT EXECUTE ON FUNCTION public.fix_serial_sequences_for_restore() TO service_r
 GRANT EXECUTE ON FUNCTION public.truncate_dkp_for_restore() TO service_role;
 GRANT EXECUTE ON FUNCTION public.delete_raid_for_reupload(text) TO service_role;
 GRANT EXECUTE ON FUNCTION public.insert_raid_event_attendance_for_upload(text, jsonb) TO service_role;
+GRANT EXECUTE ON FUNCTION public.update_raid_event_times(jsonb) TO service_role;
 GRANT EXECUTE ON FUNCTION public.refresh_all_raid_attendance_totals() TO service_role;
 GRANT EXECUTE ON FUNCTION public.update_raid_loot_assignments(jsonb) TO service_role;
 GRANT EXECUTE ON FUNCTION public.refresh_after_bulk_loot_assignment() TO service_role;

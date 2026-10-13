@@ -121,7 +121,7 @@ def _sql_escape(s: str) -> str:
 
 
 def _parse_unapply_tic_tuples_from_sql(path: Path) -> list[tuple[str, str, str, str]]:
-    """Parse docs/unapply_inactive_raiders.sql and return list of (raid_id, event_id, char_id, character_name) from the first DELETE IN (...)."""
+    """Parse docs/sql-archive/one-offs/unapply_inactive_raiders.sql and return list of (raid_id, event_id, char_id, character_name) from the first DELETE IN (...)."""
     if not path.is_file():
         return []
     text = path.read_text(encoding="utf-8")
@@ -141,7 +141,7 @@ def main() -> int:
     ap.add_argument("--data-dir", type=Path, default=ROOT / "data", help="Directory with raid_*.csv")
     ap.add_argument("--unlinked-account", type=str, default=UNLINKED_ACCOUNT_ID, help="Account id for unlinked characters")
     ap.add_argument("--write", action="store_true", help="Write full summary .md and apply/unapply .sql to --output-dir")
-    ap.add_argument("--output-dir", type=Path, default=ROOT / "docs", help="Where to write summary and SQL (default docs/)")
+    ap.add_argument("--output-dir", type=Path, default=ROOT / "docs" / "sql-archive" / "one-offs", help="Where to write summary and SQL (default docs/sql-archive/one-offs/)")
     ap.add_argument("--apply", action="store_true", help="Apply to Supabase: insert account, characters, character_account, missing tics; then refresh_dkp_summary()")
     ap.add_argument("--one-account-per-character", action="store_true", help="With --apply: create one account per unlinked name (e.g. Aadd, Frinop) instead of one 'Inactive Raiders' account. Use after initial apply to migrate.")
     ap.add_argument("--unapply", action="store_true", help="Revert applied inactive-raiders change: delete added tics, character_account, characters, account; then refresh_dkp_summary().")
@@ -491,7 +491,7 @@ def main() -> int:
         print(f"   ... and {len(unlinked_tic_raids) - 15} more raids")
 
     if getattr(args, "unapply", False):
-        # --- Unapply: revert what apply added (same order as docs/unapply_inactive_raiders.sql) ---
+        # --- Unapply: revert what apply added (same order as docs/sql-archive/one-offs/unapply_inactive_raiders.sql) ---
         print("\n--- Unapplying from Supabase ---")
         # 1) Remove added tics (exact rows we would have added)
         for t in to_add_tics:
@@ -591,8 +591,8 @@ def main() -> int:
             "| Output | Path |",
             "|--------|------|",
             "| **This summary** (diff stats, account matches, full character list) | `docs/dry_run_inactive_raiders_summary.md` |",
-            "| **Apply SQL** (exact statements to run) | `docs/apply_inactive_raiders.sql` |",
-            "| **Unapply SQL** (revert) | `docs/unapply_inactive_raiders.sql` |",
+            "| **Apply SQL** (exact statements to run) | `docs/sql-archive/one-offs/apply_inactive_raiders.sql` |",
+            "| **Unapply SQL** (revert) | `docs/sql-archive/one-offs/unapply_inactive_raiders.sql` |",
             "| **Plain list of names** (one per line) | `docs/inactive_raiders_to_add.txt` |",
             "",
             "**What the apply does (full detail):**",
@@ -709,8 +709,8 @@ def main() -> int:
             "",
             "Run in Supabase SQL Editor:",
             "",
-            "- **Apply:** `docs/apply_inactive_raiders.sql`",
-            "- **Unapply (revert):** `docs/unapply_inactive_raiders.sql`",
+            "- **Apply:** `docs/sql-archive/one-offs/apply_inactive_raiders.sql`",
+            "- **Unapply (revert):** `docs/sql-archive/one-offs/unapply_inactive_raiders.sql`",
             "",
             "After apply, run: `SELECT refresh_dkp_summary();` to refresh DKP totals.",
             "",

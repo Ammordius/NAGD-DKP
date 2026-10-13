@@ -6,7 +6,7 @@
 --
 -- If you still see "Earned: 5 / 4 DKP" (earned > raid total): either this script
 -- was not run, refresh_* was skipped, or data was re-imported after the fix.
--- Re-run this entire script, then check with docs/diagnose_vex_thal_5_4_dkp.sql.
+-- Re-run this entire script, then check with docs/sql-archive/diagnostics/diagnose_vex_thal_5_4_dkp.sql.
 -- =============================================================================
 
 BEGIN;

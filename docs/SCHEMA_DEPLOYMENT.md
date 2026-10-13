@@ -1,140 +1,88 @@
-# Schema and triggers: single source of truth
+# Schema deployment
 
-This document is the **canonical reference** for standing up or mirroring the DKP Supabase database.
+[`docs/supabase-schema-full.sql`](supabase-schema-full.sql) is the only SQL file used to install or upgrade the application database. It creates tables, relationships, RLS, grants, role guards, officer write RPCs, DKP triggers, account and character resolution, audit, restore functions, loot assignment, and site-admin RPCs.
 
-**Deploy: run one file.** **[docs/supabase-schema-full.sql](supabase-schema-full.sql)** in the Supabase SQL Editor after creating a project. It is the whole schema: tables, RLS, triggers, account DKP, officer raid writes, upload RPCs, bidding portfolio, loot assignment, `character_dkp_spent`, raider activity, and class coverage.
+Historical SQL lives in [`docs/sql-archive/`](sql-archive/README.md). That directory starts with **DO NOT DEPLOY**. It is not a second schema step.
 
-**See also:** [SCHEMA_RPC_INDEX.md](SCHEMA_RPC_INDEX.md) — where app and script RPCs are defined. [SCHEMA_AUDIT.md](SCHEMA_AUDIT.md) — live database vs these files. [DKP_TRIGGERS_AND_STORAGE_AUDIT.md](DKP_TRIGGERS_AND_STORAGE_AUDIT.md) — how triggers and cache tables work.
+The SQL Editor does not promise one transaction or a full rollback if a later statement fails. Apply the file with `psql`:
+
+```bash
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 --single-transaction -f docs/supabase-schema-full.sql
+```
+
+`$DATABASE_URL` is the Postgres URI from Supabase (Project Settings → Database → connection string, session mode). `COMMIT` inside `dba_backfill_bid_portfolio_range` is procedure source. Deploy does not call that procedure, so `--single-transaction` still wraps the file.
+
+See [SCHEMA_RPC_INDEX.md](SCHEMA_RPC_INDEX.md) for which RPCs the app calls.
 
 ---
 
-## 1. Required SQL
+## 1. Fresh project
 
-| File | Purpose |
-|------|---------|
-| **docs/supabase-schema-full.sql** | **Run this once.** Tables, RLS, triggers, `refresh_dkp_summary`, `refresh_account_dkp_summary`, officer raid RPCs, upload RPCs, bidding portfolio, `loot_assignment` plus `update_single_raid_loot_assignment` / `update_raid_loot_assignments` / `get_character_dkp_spent`, `officer_raider_activity`, and `account_class_coverage`. |
-| **docs/supabase-siteadmin-delete-user.sql** | **Existing projects only.** Replaces `siteadmin_delete_user` so officers can remove players, site admins can remove players and officers, and nobody can remove a site admin or themselves. Same function as in the full schema. The site then deletes the auth user from `web/api/delete-site-user.js`. |
+1. Create an empty Supabase project.
+2. Take note of the database password. You need it for `psql`.
+3. Apply `docs/supabase-schema-full.sql` with the command above.
+4. Import data (see [SETUP-WALKTHROUGH.md](SETUP-WALKTHROUGH.md)). Do not import by running archived SQL.
+5. After the load, refresh derived totals: `SELECT refresh_dkp_summary();`, `SELECT refresh_all_raid_attendance_totals();`, and `SELECT refresh_account_dkp_summary();`.
+6. Promote one user in the SQL editor, which connects as `postgres`: `UPDATE profiles SET role = 'siteadmin' WHERE id = 'USER_UUID';`
 
-After that file you have:
-
-- Core tables, triggers, and the DKP leaderboard
-- Officer raid UI (add raid/tic/loot, delete raid/tic)
-- Restore/backup flow (`begin_restore_load` / `end_restore_load` / `truncate_dkp_for_restore`)
-- Upload script support (`delete_raid_for_reupload`, `insert_raid_event_attendance_for_upload`)
-- Loot assignment, Character History spent, raider activity, and class coverage
-
-Edit `docs/supabase-schema-full.sql` when the schema changes. These files are historical sources and must not be applied on top of the full file: `supabase-loot-to-character.sql`, `supabase-loot-assignment-table.sql`, `supabase-officer-raider-activity.sql`, `supabase-account-class-coverage.sql`, `supabase-account-dkp-schema.sql`, `supabase-officer-raids.sql`, `upload_script_rpcs.sql`. **`docs/supabase-schema.sql` is not in the repo.**
-
-Re-running `supabase-schema-full.sql` replaces functions (`CREATE OR REPLACE`) and adds columns that use `ADD COLUMN IF NOT EXISTS`. If `raid_loot` still has old `assigned_*` columns, the file copies them into `loot_assignment` and drops them.
+A fresh database has no raid rows, so the attendance unique indexes and the account-id preflight do not need a data migration.
 
 ---
 
-## 2. Optional SQL (not required for the web app)
+## 2. Existing database
 
-| File | When to run |
-|------|-------------|
-| **docs/supabase-update-event-times-rpc.sql** | Only if you run `scripts/pull_parse_dkp_site/update_supabase_event_times.py` (`update_raid_event_times`). |
-| **docs/supabase-github-worker-role.sql** | Custom role for CI/direct DB (optional; CI usually uses the service_role key). |
-| **docs/supabase-officer-audit-log.sql** | Only if `officer_audit_log` or its policies are missing. The table is already created by `supabase-schema-full.sql`. |
-| **docs/supabase-create-my-account-rpc.sql** | Standalone copy of `create_my_account`. Already in `supabase-schema-full.sql`. Do not run it on a fresh deploy. |
-| **docs/supabase-anon-read-policies.sql** | Re-opens anon read. Do not run this for a normal deploy. Core tables are authenticated-only. `supabase-schema-full.sql` still creates anon SELECT on `loot_assignment` and `character_dkp_spent`; see section 4 if you want those dropped. |
+Use the same file and the same `psql` command. Re-applying replaces functions, policies, and triggers. It adds missing tables and columns with `IF NOT EXISTS`. It does not truncate raid, account, character, or DKP tables, and it does not recalculate DKP.
 
-Do **not** run `docs/supabase-reset-and-import.sql` during initial setup; it truncates data and is for re-imports.
+Two writes happen while the file runs:
 
-Magelo assignment **data** (dumps, `assign_loot_to_characters.py`, CI) is separate from `supabase-schema-full.sql`. The assignment RPCs are already in that file.
+- `INSERT` of the `restore_in_progress` flag row, skipped when that row already exists.
+- `UPDATE` of `profiles.display_name` only where the name is blank and the user signed up with Discord. A name that is already set is left alone.
+
+Stop before applying if any preflight below fails. Fix the data, then apply again. Because the command uses one transaction, a failed apply leaves the previous schema in place.
 
 ---
 
-## 3. Getting the exact schema from the database
+## 3. Backup and preflight
 
-To compare the live DB to the repo (e.g. after applying fixes or to document “what’s actually there”), dump the schema from the running project.
+Take a backup before an upgrade. Use the DB backup workflow or a `pg_dump` of the public data. This file is not a down migration. Rollback means restoring that backup.
 
-### Option A: Supabase CLI (recommended)
-
-Requires [Supabase CLI](https://supabase.com/docs/guides/cli) and either a linked project or the DB URL.
-
-**Linked project:**
-
-```bash
-cd /path/to/dkp
-supabase link --project-ref YOUR_PROJECT_REF
-supabase db dump -f docs/dumped_schema.sql
-```
-
-**Direct connection string** (from Supabase Dashboard → Project Settings → Database → Connection string, “URI”; use the **session** pooler for full schema):
-
-```bash
-supabase db dump --db-url "postgresql://postgres.[ref]:[YOUR_PASSWORD]@aws-0-[region].pooler.supabase.co:5432/postgres" -f docs/dumped_schema.sql
-```
-
-To restrict to the `public` schema only:
-
-```bash
-supabase db dump --db-url "..." -f docs/dumped_schema_public.sql -s public
-```
-
-The CLI runs `pg_dump` with Supabase-specific exclusions (auth, storage, etc.) and is the supported way to get a clean schema.
-
-### Option B: Raw pg_dump
-
-If you don’t use the CLI, use the same connection string (Session mode, port 5432) and run:
-
-```bash
-pg_dump "postgresql://postgres.[ref]:[PASSWORD]@aws-0-[region].pooler.supabase.co:5432/postgres" \
-  --schema=public \
-  --no-owner \
-  --no-privileges \
-  -f docs/dumped_schema_public.sql
-```
-
-For **schema only** (no data), add `--schema-only`. For **triggers and functions** you want the default dump (includes CREATE TRIGGER and CREATE FUNCTION). To compare triggers only:
-
-```bash
-pg_dump "..." --schema=public --no-owner --no-privileges --schema-only -f schema_only.sql
-```
-
-Then diff `docs/dumped_schema_public.sql` (or `schema_only.sql`) against `docs/supabase-schema-full.sql`.
-
-### Option C: List triggers and functions in SQL Editor
-
-You **cannot** run `pg_dump` in the SQL Editor — the Editor runs only SQL, and `pg_dump` is a separate client. So you cannot produce a full schema dump file from the Dashboard alone; use Option A or B for that.
-
-You **can** run the following in the Supabase **SQL Editor** to list what’s actually in the DB. Use the result to verify that the required triggers and RPCs are present (or to compare with another environment). Export the result from the Editor (e.g. Download as CSV) if you want to keep it.
+Run these checks before `psql`. They only read.
 
 ```sql
--- Schema inventory for public schema (run in SQL Editor)
--- Tables
-SELECT 'table' AS kind, c.relname AS name, '' AS extra
-FROM pg_class c
-JOIN pg_namespace n ON n.oid = c.relnamespace
-WHERE n.nspname = 'public' AND c.relkind = 'r' AND NOT c.relname LIKE 'pg_%'
-ORDER BY c.relname;
+-- Roles outside the canonical check abort the upgrade.
+SELECT id, role FROM public.profiles
+WHERE role NOT IN ('siteadmin', 'officer', 'player');
 
--- Functions (RPCs)
-SELECT 'function' AS kind, p.proname AS name, pg_get_function_arguments(p.oid) AS extra
-FROM pg_proc p
-JOIN pg_namespace n ON n.oid = p.pronamespace
-WHERE n.nspname = 'public'
-ORDER BY p.proname;
+-- Duplicate tic attendance aborts the upgrade. This file will not delete the rows.
+SELECT raid_id, event_id, char_id, count(*)
+FROM public.raid_event_attendance
+WHERE char_id IS NOT NULL AND trim(char_id::text) <> ''
+GROUP BY raid_id, event_id, char_id
+HAVING count(*) > 1;
 
--- Triggers
-SELECT 'trigger' AS kind, t.tgname AS name, c.relname AS table_name
-FROM pg_trigger t
-JOIN pg_class c ON c.oid = t.tgrelid
-JOIN pg_namespace n ON n.oid = c.relnamespace
-WHERE n.nspname = 'public' AND NOT t.tgisinternal
-ORDER BY c.relname, t.tgname;
+SELECT raid_id, event_id, character_name, count(*)
+FROM public.raid_event_attendance
+WHERE character_name IS NOT NULL AND trim(character_name) <> ''
+GROUP BY raid_id, event_id, character_name
+HAVING count(*) > 1;
 
--- RLS policies
-SELECT 'policy' AS kind, pol.polname AS name, c.relname AS table_name
-FROM pg_policy pol
-JOIN pg_class c ON c.oid = pol.polrelid
-JOIN pg_namespace n ON n.oid = c.relnamespace
-WHERE n.nspname = 'public'
-ORDER BY c.relname, pol.polname;
+-- Linked attendance that still has no account_id is outside an ordinary upgrade.
+-- Do not run the archived account-DKP migration as part of this deploy.
+SELECT count(*) AS linked_attendance_missing_account
+FROM public.raid_event_attendance rea
+JOIN public.character_account ca ON ca.char_id = rea.char_id
+WHERE rea.account_id IS NULL
+  AND rea.char_id IS NOT NULL
+  AND trim(rea.char_id::text) <> '';
 ```
 
-To get a single result set you can export, use:
+If `linked_attendance_missing_account` is not zero, stop. The canonical file adds the column when it is missing and does not backfill it. Rewriting attendance during schema apply is not part of this upgrade.
+
+---
+
+## 4. Schema verification
+
+After a successful apply, list what landed. These queries do not change data.
 
 ```sql
 SELECT 'table' AS kind, c.relname AS name, '' AS extra
@@ -161,30 +109,68 @@ WHERE n.nspname = 'public'
 ORDER BY kind, name;
 ```
 
-Then diff the exported list against what **docs/supabase-schema-full.sql** creates (see SCHEMA_RPC_INDEX).
+Confirm `update_raid_event_times`, `siteadmin_delete_user`, `truncate_dkp_for_restore`, and `refresh_dkp_summary` are present. Compare the list with [SCHEMA_RPC_INDEX.md](SCHEMA_RPC_INDEX.md).
+
+To diff a live database against the file, dump the public schema with the Supabase CLI or `pg_dump --schema-only --schema=public` and diff that dump against `docs/supabase-schema-full.sql`. A dump is a comparison artifact. It is not a second deploy file.
 
 ---
 
-## 4. One-off / fix SQL (run only when needed)
+## 5. Triggers, RLS, and RPC permissions
 
-These are not part of the standard deploy; run only for the stated situation.
+Triggers on `raid_event_attendance` and `raid_loot` are statement-level. Re-applying drops the named triggers and creates them again. Confirm:
 
-| File | When to run |
-|------|-------------|
-| **docs/fix_event_attendance_delete_trigger_statement_level.sql** | Existing DB that had the old per-row DELETE trigger on `raid_event_attendance` (causing timeouts). New deploys from `supabase-schema-full.sql` already have the statement-level trigger. |
-| **docs/fix_refresh_dkp_summary_includes_account_summary.sql** | DB has `account_dkp_summary` but not `refresh_account_dkp_summary_for_raid`. Superseded by `supabase-schema-full.sql`. |
-| **docs/supabase-account-dkp-migration.sql** | One-time migration to backfill `account_id` and populate `account_dkp_summary`. Do not run on a fresh deploy. Leftover functions (`run_account_dkp_migration*`, `clear_restore_load`, `refresh_raid_attendance_totals_batch`) may still exist on an already-migrated database; leave them. |
-| **docs/supabase-require-auth-remove-anon-read.sql** | Drops anon SELECT, including on `loot_assignment` and `character_dkp_spent`. `supabase-schema-full.sql` recreates those two policies. Run this after the full file if you want authenticated-only reads on those tables. Not applied automatically. |
-| **docs/drop-officer-bid-forecast.sql** | Drops retired `officer_global_bid_forecast` and `officer_loot_bid_forecast_v2`. Those functions are not in `supabase-schema-full.sql` and are not routed in the app. |
+```sql
+SELECT c.relname, t.tgname
+FROM pg_trigger t
+JOIN pg_class c ON c.oid = t.tgrelid
+JOIN pg_namespace n ON n.oid = c.relnamespace
+WHERE n.nspname = 'public' AND NOT t.tgisinternal
+  AND c.relname IN ('raid_event_attendance', 'raid_loot', 'profiles')
+ORDER BY 1, 2;
+```
 
-**Superseded:** **docs/delete_raid_for_reupload_rpc.sql** — use **docs/upload_script_rpcs.sql** or run **docs/supabase-schema-full.sql** (which includes it).
+Expect `delta_dkp_after_event_attendance`, `delta_dkp_after_event_attendance_del`, `profiles_role_guard`, and `on_auth_user_created` (that last trigger is on `auth.users`).
+
+RLS is enabled on the public tables. Core DKP tables are readable by `authenticated`. `loot_assignment` and `character_dkp_spent` also have anon SELECT, matching the current file. Browser roles cannot insert, update, or delete `profiles`. Role, claim, email, and unclaim changes go through the site-admin and claim RPCs.
+
+Restore, upload, and ledger-maintenance functions are granted to `service_role` and revoked from `anon` and `authenticated`. `update_raid_event_times` is in that set. Officer and player RPCs, including `siteadmin_delete_user`, are granted to `authenticated`. The functions themselves reject callers who lack the role.
+
+```sql
+SELECT p.proname,
+       has_function_privilege('anon', p.oid, 'execute') AS anon_exec,
+       has_function_privilege('authenticated', p.oid, 'execute') AS auth_exec,
+       has_function_privilege('service_role', p.oid, 'execute') AS service_exec
+FROM pg_proc p
+JOIN pg_namespace n ON n.oid = p.pronamespace
+WHERE n.nspname = 'public'
+  AND p.proname IN (
+    'truncate_dkp_for_restore',
+    'update_raid_event_times',
+    'delete_raid',
+    'siteadmin_delete_user',
+    'refresh_dkp_summary_internal'
+  )
+ORDER BY 1;
+```
+
+`anon_exec` and `auth_exec` are false for `truncate_dkp_for_restore`, `update_raid_event_times`, and `refresh_dkp_summary_internal`. `auth_exec` is true for `delete_raid` and `siteadmin_delete_user`.
 
 ---
 
-## 5. Checklist: mirror or new deploy
+## 6. Recovery and rollback
 
-- [ ] Run **docs/supabase-schema-full.sql** once in the SQL Editor
-- [ ] After loading data: run `SELECT refresh_dkp_summary();` and `SELECT refresh_all_raid_attendance_totals();` and `SELECT refresh_account_dkp_summary();`
-- [ ] Promote one user to officer: `UPDATE profiles SET role = 'officer' WHERE id = 'USER_UUID';`
+If `psql` exits non-zero, `--single-transaction` rolls the upgrade back. Fix the reported error and run the file again.
 
-If anything fails, compare with the live schema using section 3 and fix the repo SQL or apply the missing object (trigger/RPC) from the dump.
+If an upgrade committed and the application is wrong, restore the backup from section 3. Do not try to undo the file by running archived SQL. Archived copies can replace a current function with an older body.
+
+Data restore is separate from schema upgrade. [RESTORE-BACKUP.md](RESTORE-BACKUP.md) uses `truncate_dkp_for_restore()`, `begin_restore_load()`, and `end_restore_load()` from the canonical schema. Those functions truncate only when called. Applying the schema file does not call them.
+
+---
+
+## 7. How to change the schema later
+
+Edit `docs/supabase-schema-full.sql`. Do not add another file under `docs/` and do not tell operators to run a patch from `docs/sql-archive/`.
+
+Keep new objects idempotent: `CREATE OR REPLACE`, `CREATE TABLE IF NOT EXISTS`, `ADD COLUMN IF NOT EXISTS`, and `DROP POLICY/TRIGGER IF EXISTS` before `CREATE`. Revoke and re-grant in the privilege block at the end of the file. Do not put `TRUNCATE`, `DELETE`, or `UPDATE` of production rows at the top level of the file. `TRUNCATE` inside a function body is allowed when the function is not called during apply.
+
+Update [SCHEMA_RPC_INDEX.md](SCHEMA_RPC_INDEX.md) when an app or script calls a new function. `scripts/check-canonical-schema.mjs` fails if a new `.sql` file appears outside this file, `docs/sql-archive/`, and `web/test/pg/`.

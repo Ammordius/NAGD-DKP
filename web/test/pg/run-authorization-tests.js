@@ -117,6 +117,57 @@ SELECT public.siteadmin_set_role('${admin1}'::uuid, 'officer');
   }
 }
 
+async function assertReapplyPreservesRows() {
+  const keeper = '77777777-7777-4777-8777-777777777777'
+  await psql(`
+INSERT INTO auth.users (id, email) VALUES ('${keeper}', 'upgrade-keep@example.com');
+UPDATE public.profiles SET display_name = 'Kept Player' WHERE id = '${keeper}';
+INSERT INTO public.accounts (account_id, display_name) VALUES ('acct-upgrade', 'Upgrade Account');
+INSERT INTO public.characters (char_id, name) VALUES ('char-upgrade', 'Upgrade');
+INSERT INTO public.character_account (char_id, account_id) VALUES ('char-upgrade', 'acct-upgrade');
+INSERT INTO public.raids (raid_id, raid_name, date_iso) VALUES ('raid-upgrade', 'Upgrade Raid', '2026-01-01');
+INSERT INTO public.raid_events (raid_id, event_id, event_order, event_name, dkp_value, event_time)
+VALUES ('raid-upgrade', 'evt-upgrade', 1, 'Named', '1', '9:00 pm');
+INSERT INTO public.raid_loot (raid_id, event_id, item_name, char_id, character_name, cost)
+VALUES ('raid-upgrade', 'evt-upgrade', 'Upgrade Item', 'char-upgrade', 'Upgrade', '1');
+INSERT INTO public.raid_event_attendance (raid_id, event_id, char_id, character_name, account_id)
+VALUES ('raid-upgrade', 'evt-upgrade', 'char-upgrade', 'Upgrade', 'acct-upgrade');
+`)
+  const snapshotSql = `
+SELECT json_build_object(
+  'accounts', (SELECT count(*) FROM public.accounts),
+  'characters', (SELECT count(*) FROM public.characters),
+  'links', (SELECT count(*) FROM public.character_account),
+  'raids', (SELECT count(*) FROM public.raids),
+  'events', (SELECT count(*) FROM public.raid_events),
+  'loot', (SELECT count(*) FROM public.raid_loot),
+  'attendance', (SELECT count(*) FROM public.raid_event_attendance),
+  'profiles', (SELECT count(*) FROM public.profiles),
+  'account_name', (SELECT display_name FROM public.accounts WHERE account_id = 'acct-upgrade'),
+  'profile_name', (SELECT display_name FROM public.profiles WHERE id = '${keeper}'),
+  'profile_role', (SELECT role FROM public.profiles WHERE id = '${keeper}'),
+  'item', (SELECT item_name FROM public.raid_loot WHERE raid_id = 'raid-upgrade'),
+  'event_time', (SELECT event_time FROM public.raid_events WHERE raid_id = 'raid-upgrade' AND event_id = 'evt-upgrade'),
+  'att_account', (SELECT account_id FROM public.raid_event_attendance WHERE raid_id = 'raid-upgrade'),
+  'loot_cost', (SELECT cost FROM public.raid_loot WHERE raid_id = 'raid-upgrade')
+)::text
+`
+  const before = (await psql(snapshotSql)).trim()
+  await psql(readFileSync(join(repoRoot, 'docs', 'supabase-schema-full.sql'), 'utf8'))
+  const after = (await psql(snapshotSql)).trim()
+  if (before !== after) {
+    throw new Error(`Re-applying the schema changed populated rows.\nBefore: ${before}\nAfter: ${after}`)
+  }
+  const grants = await psql(`
+SELECT to_regprocedure('public.update_raid_event_times(jsonb)') IS NOT NULL AS exists,
+       has_function_privilege('anon', 'public.update_raid_event_times(jsonb)', 'EXECUTE') AS anon_exec,
+       has_function_privilege('service_role', 'public.update_raid_event_times(jsonb)', 'EXECUTE') AS service_exec
+`)
+  if (!/t\s*\|\s*f\s*\|\s*t/.test(grants.replace(/\s+/g, ' '))) {
+    throw new Error(`update_raid_event_times grants were not service_role only:\n${grants}`)
+  }
+}
+
 async function main() {
   if (!(await dockerAvailable())) {
     const message = 'PostgreSQL authorization tests were not run (Docker is unavailable). Database grants, RLS, and RPC checks are unverified.'
@@ -143,6 +194,7 @@ async function main() {
   await psql(readFileSync(join(repoRoot, 'docs', 'supabase-schema-full.sql'), 'utf8'))
   await psql(readFileSync(join(here, 'assertions.sql'), 'utf8'))
   await concurrentDemotion()
+  await assertReapplyPreservesRows()
   console.log('PostgreSQL authorization tests passed')
 }
 

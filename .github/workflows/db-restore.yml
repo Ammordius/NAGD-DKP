@@ -12,7 +12,7 @@ on:
         required: true
         default: latest
       load_only:
-        description: "Truncate already run in Supabase (load only; much faster). Run docs/supabase-restore-truncate.sql in SQL Editor first."
+        description: "Truncate already run via truncate_dkp_for_restore() from docs/supabase-schema-full.sql (load only; much faster)."
         required: false
         type: boolean
         default: false

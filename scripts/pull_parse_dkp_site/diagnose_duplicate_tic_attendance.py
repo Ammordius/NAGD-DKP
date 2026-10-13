@@ -128,7 +128,7 @@ def main():
             print("COMMIT;")
     else:
         print("No duplicate (raid_id, event_id, char_id) or (raid_id, event_id, character_name) found in raid_event_attendance.")
-        print("If DKP still shows 6/5, check: (1) name-only vs char_id double count (run docs/fix_frinop_double_count_remove_name_only_duplicate_tics.sql), (2) raid_attendance_dkp/dkp_summary refresh.")
+        print("If DKP still shows 6/5, check name-only vs char_id double count and whether raid_attendance_dkp/dkp_summary were refreshed. Historical notes: docs/sql-archive/one-offs/fix_frinop_double_count_remove_name_only_duplicate_tics.sql.")
 
     # 4) Per-event count for this account's chars (to see 6 vs 5)
     r_events = client.table("raid_events").select("event_id, event_order, dkp_value, event_name").eq("raid_id", raid_id).order("event_order").execute()

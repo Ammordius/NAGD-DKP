@@ -5,7 +5,7 @@ Update Supabase raid_events.event_time from CSV (no truncate, no re-import).
 Reads data/raid_events_event_time_backfill.csv or data/raid_events.csv (if it has
 event_time populated) and calls the update_raid_event_times RPC in batches.
 
-Requires: run docs/supabase-update-event-times-rpc.sql once in Supabase SQL Editor.
+Requires: docs/supabase-schema-full.sql (defines update_raid_event_times).
 
 Credentials (one of):
   - Environment: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
@@ -147,7 +147,7 @@ def main() -> int:
         except Exception as e:
             print(f"error: {e}", flush=True)
             if "update_raid_event_times" in str(e) and "does not exist" in str(e).lower():
-                print("  Run docs/supabase-update-event-times-rpc.sql in Supabase SQL Editor first.", file=sys.stderr)
+                print("  Apply docs/supabase-schema-full.sql first.", file=sys.stderr)
             return 1
 
     print(f"Done. Updated {total_updated} raid_events.event_time rows.", flush=True)

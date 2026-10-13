@@ -10,7 +10,7 @@ Use this when you need to **restore DKP data** from a previous backup (e.g. afte
 ## Prerequisites
 
 1. **Backup artifact** – At least one successful run of [DB backup (on change)](../.github/workflows/db-backup.yml) so an artifact exists (e.g. `supabase-backup-2025-02-19` or a weekly/monthly one). Assignments and bid facts are in the artifact only after a backup that ran with the current exporter. Check **force** on that workflow if the loot count has not changed.
-2. **Restore functions applied** – Run [`docs/supabase-restore-truncate-rpc.sql`](supabase-restore-truncate-rpc.sql) once in the SQL Editor so `truncate_dkp_for_restore`, `end_restore_load`, and the character-spent triggers match this repo. Re-running the whole schema file is not required.
+2. **Schema** – Apply `docs/supabase-schema-full.sql` so `truncate_dkp_for_restore`, `begin_restore_load`, and `end_restore_load` exist. That file is the schema install and upgrade. See [SCHEMA_DEPLOYMENT.md](SCHEMA_DEPLOYMENT.md).
 3. **Supabase API secrets** – Same as the backup workflow (see below).
 
 ## GitHub secrets (same as DB backup)
@@ -81,16 +81,13 @@ If you see **duplicate key value violates unique constraint "..._pkey"** when ad
 **One-off fix (all four tables):** run in SQL Editor:
 
 ```sql
--- See docs/fix_all_serial_sequences.sql
 SELECT setval(pg_get_serial_sequence('raid_events', 'id'), COALESCE((SELECT max(id) FROM raid_events), 1));
 SELECT setval(pg_get_serial_sequence('raid_loot', 'id'), COALESCE((SELECT max(id) FROM raid_loot), 1));
 SELECT setval(pg_get_serial_sequence('raid_attendance', 'id'), COALESCE((SELECT max(id) FROM raid_attendance), 1));
 SELECT setval(pg_get_serial_sequence('raid_event_attendance', 'id'), COALESCE((SELECT max(id) FROM raid_event_attendance), 1));
 ```
 
-For only raid_event_attendance, use **docs/fix_raid_event_attendance_sequence.sql**.
-
-With the latest schema, `end_restore_load()` calls `fix_serial_sequences_for_restore()`, so future restores fix all these sequences automatically.
+`end_restore_load()` calls `fix_serial_sequences_for_restore()`, which does the same work.
 
 ## Running restore locally
 

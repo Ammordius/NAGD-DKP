@@ -2,15 +2,9 @@
 
 Update **raid_events.event_time** in Supabase from scraped data **without truncating or re-importing** raids/events.
 
-## 1. One-time: RPC in Supabase
+## 1. Function
 
-In **Supabase SQL Editor**, run:
-
-```sql
--- docs/supabase-update-event-times-rpc.sql
-```
-
-This creates the `update_raid_event_times(data jsonb)` function used by the CLI.
+`update_raid_event_times(jsonb)` is defined in `docs/supabase-schema-full.sql` and granted to `service_role` only. Apply that file before running the CLI. It updates existing `raid_events.event_time` rows and does not truncate.
 
 ## 2. Local credentials (optional)
 

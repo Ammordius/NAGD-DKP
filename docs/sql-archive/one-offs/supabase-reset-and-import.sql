@@ -49,7 +49,7 @@ ON CONFLICT (character_name) DO UPDATE SET
 -- After this script: Import CSVs in Table Editor in this order:
 --   1. characters       <- data/characters.csv
 --   2. accounts         <- data/accounts.csv
---   (Optional) Run docs/supabase-account-display-names.sql to set display_name from ground_truth.txt (first char per account)
+--   (Optional) Run docs/sql-archive/one-offs/supabase-account-display-names.sql to set display_name from ground_truth.txt (first char per account)
 --   3. character_account<- data/character_account.csv
 --   4. raids            <- data/raids.csv
 --   5. raid_events      <- data/raid_events.csv

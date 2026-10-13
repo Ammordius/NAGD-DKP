@@ -1,6 +1,6 @@
 # Step-by-step: Implement loot_assignment table migration
 
-Do these in order. You can do the DB migration first, then deploy the app when ready.
+This note describes an old migration. The current schema, including `loot_assignment`, is `docs/supabase-schema-full.sql`. Do not apply the archived SQL named below.
 
 ---
 
@@ -12,19 +12,13 @@ Your Supabase project should already have:
 - **supabase-officer-raids.sql** applied (officer write policies)
 - **supabase-loot-to-character.sql** applied (`raid_loot` has columns `assigned_char_id`, `assigned_character_name`, `assigned_via_magelo`)
 
-If `raid_loot` does **not** have those three columns yet, run **docs/supabase-loot-to-character.sql** first in the Supabase SQL Editor, then continue below.
+If an older database still has assignment columns on `raid_loot`, applying `docs/supabase-schema-full.sql` copies them into `loot_assignment` and drops the columns. Do not apply the archived loot SQL.
 
 ---
 
-## 2. Run the migration in Supabase
+## 2. Where the migration lives now
 
-1. Open **Supabase Dashboard** → your project → **SQL Editor**.
-2. Open **docs/supabase-loot-assignment-table.sql** from the repo.
-3. Copy the **entire** file contents and paste into a new query in the SQL Editor.
-4. Click **Run** (or press Ctrl+Enter).
-5. Check for success: no red errors. You should see messages like “Success. No rows returned.”
-
-This will:
+`loot_assignment`, the backfill from old `raid_loot` assignment columns, the view, the RPCs, and the RLS are in `docs/supabase-schema-full.sql`. Apply that file. The steps below are the historical procedure and are not a second schema step.
 
 - Create table **loot_assignment** (one-to-one with `raid_loot`).
 - Backfill from existing `raid_loot` assignment columns (if they exist).

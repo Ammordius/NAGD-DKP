@@ -61,6 +61,7 @@ DECLARE
     'public.apply_spent_deltas(jsonb,text,date[])',
     'public.refresh_character_dkp_spent()',
     'public.update_raid_loot_assignments(jsonb)',
+    'public.update_raid_event_times(jsonb)',
     'public.refresh_after_bulk_loot_assignment()',
     'public.profiles_role_guard()'
   ];
@@ -71,6 +72,7 @@ DECLARE
     'public.fix_serial_sequences_for_restore()',
     'public.delete_raid_for_reupload(text)',
     'public.insert_raid_event_attendance_for_upload(text,jsonb)',
+    'public.update_raid_event_times(jsonb)',
     'public.refresh_all_raid_attendance_totals()',
     'public.update_raid_loot_assignments(jsonb)',
     'public.refresh_after_bulk_loot_assignment()',

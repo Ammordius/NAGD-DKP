@@ -7,7 +7,7 @@ cookies.txt like pull_raids.py), parses event_time from each event (Site Time in
 and writes:
 
 - data/raid_events_event_time_backfill.csv  (raid_id, event_id, event_time)
-- docs/supabase-backfill-event-times.sql   (UPDATE statements for raid_events.event_time)
+- docs/sql-archive/one-offs/supabase-backfill-event-times.sql   (UPDATE statements for raid_events.event_time)
 
 Requires: cookies.txt with a valid Cookie header for azureguardtakp.gamerlaunch.com.
 Run with --dry-run to only parse sample_raid_details.html and print counts.
@@ -65,7 +65,7 @@ def main() -> None:
     ap.add_argument("--dry-run-limit", type=int, default=0, help="With --dry-run-local, max raid HTML files to parse (0 = all)")
     ap.add_argument("--from-local", action="store_true", help="Parse raids/*.html only; write backfill CSV and SQL (no network fetch)")
     ap.add_argument("--out-csv", type=str, default="data/raid_events_event_time_backfill.csv")
-    ap.add_argument("--out-sql", type=str, default="docs/supabase-backfill-event-times.sql")
+    ap.add_argument("--out-sql", type=str, default="docs/sql-archive/one-offs/supabase-backfill-event-times.sql")
     args = ap.parse_args()
 
     if args.dry_run:

@@ -22,20 +22,17 @@ Follow these steps in order. Everything is done in the browser and in this repo.
 
 ## Part 2: Run the schema SQL
 
-**One file.** Run **`docs/supabase-schema-full.sql`** once in the Supabase SQL Editor. It creates tables, RLS, triggers, account DKP, officer raid writes, upload RPCs, the bidding portfolio, loot assignment (`loot_assignment`, `update_single_raid_loot_assignment`, `get_character_dkp_spent`), raider activity, and class coverage.
+**One file.** Apply **`docs/supabase-schema-full.sql`**. It creates tables, RLS, triggers, account DKP, officer raid writes, upload RPCs including `update_raid_event_times`, the bidding portfolio, loot assignment, raider activity, class coverage, and site-admin RPCs. The supported command is in [SCHEMA_DEPLOYMENT.md](SCHEMA_DEPLOYMENT.md):
 
-1. In the left sidebar, click **“SQL Editor”**.
-2. Click **“New query”**.
-3. Open **`docs/supabase-schema-full.sql`**, select all, paste, and click **Run**.
-4. You should see “Success.” If you see a red error, copy the message before continuing.
+```bash
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 --single-transaction -f docs/supabase-schema-full.sql
+```
 
-Do **not** also run `docs/supabase-loot-to-character.sql`, `docs/supabase-loot-assignment-table.sql`, `docs/supabase-officer-raider-activity.sql`, or `docs/supabase-account-class-coverage.sql`. Those are older copies of sections already in the full file. Running `supabase-loot-to-character.sql` after the full file puts assignment columns back on `raid_loot` and replaces the assignment RPCs.
+Pasting the file into the SQL Editor can apply statements one by one. A failure in the middle can leave a partial schema. Prefer `psql`.
 
-Do **not** run `docs/supabase-account-dkp-migration.sql` on a new project. Do **not** run `docs/supabase-schema.sql`; that file is not in the repo.
+There is no second schema file. `docs/sql-archive/` is historical and is not part of setup. `docs/supabase-schema.sql` is not in the repo.
 
-`docs/supabase-update-event-times-rpc.sql` is only for the event-time backfill script. The web app does not call it.
-
-Re-running `supabase-schema-full.sql` replaces functions and is safe on a database that already used this file.
+The same command upgrades a database that already has raid, account, character, and DKP rows. Read the preflight in SCHEMA_DEPLOYMENT before you upgrade. Re-applying does not truncate those tables.
 
 ---
 
@@ -131,7 +128,7 @@ If the importer complains about types (e.g. empty numbers), you can:
 
 **Data notes:**
 - **Loot item names:** The `raid_loot` table has an `item_name` column and the app shows it on raid detail pages. **Item names are filled by the pipeline**: run `python scripts/pull_parse_dkp_site/extract_structured_data.py` (after `pull_raids.py`) so `data/raid_loot.csv` is built from `raids/*.html`; re-run when you refresh raid HTML. (Previously the CSVs didn’t include item names. If you have another source (e.g. scrape from raid HTML) that includes item names, you can add an `item_name` column to the CSV or update rows in the Table Editor after import.
-- **DKP:** If `raid_event_attendance` is imported, earned uses per-event attendance (matches official site); otherwise earned = sum of each raid’s event DKP for every raid that character attended. Spent = sum of loot costs for that character. Balance = earned − spent. The DKP page shows **one row per account** (all toons on the same account summed). Account labels use the account’s **display name** when set; run `docs/supabase-account-display-names.sql` in Supabase SQL Editor after importing accounts. That script is generated from `ground_truth.txt` (first character per account in file order) so names match the official DKP export.
+- **DKP:** If `raid_event_attendance` is imported, earned uses per-event attendance (matches official site); otherwise earned = sum of each raid’s event DKP for every raid that character attended. Spent = sum of loot costs for that character. Balance = earned − spent. The DKP page shows **one row per account** (all toons on the same account summed). Account labels use the account’s **display name** when set. Officers set that name in the app. A generated name list can be rebuilt with `scripts/pull_parse_dkp_site/build_account_display_names_from_ground_truth.py`; its output is archived data, not a schema step.
 
 **DKP not matching ground truth (e.g. Spent = 0 or Earned too low)?**
 - **Spent = 0 for everyone** → `raid_loot` is missing or empty in Supabase. Import `data/raid_loot.csv` into the `raid_loot` table (Table Editor → raid_loot → Import from CSV). The app needs `char_id` or `character_name` and `cost` on each row to compute spent.
@@ -276,7 +273,7 @@ Part 2 already installs the loot-assignment tables and RPCs. This section is onl
 ## Quick checklist
 
 - [ ] Part 1: Supabase project created, password saved
-- [ ] Part 2: **docs/supabase-schema-full.sql** run once in the SQL Editor, success
+- [ ] Part 2: **docs/supabase-schema-full.sql** applied with `psql --single-transaction`, success
 - [ ] Part 3: Project URL and anon key copied
 - [ ] Part 4: All 7 CSVs imported (characters, accounts, character_account, raids, raid_events, raid_loot, raid_attendance)
 - [ ] Part 5: Signed up in the app, then ran `UPDATE profiles SET role = 'officer'` with your User UID

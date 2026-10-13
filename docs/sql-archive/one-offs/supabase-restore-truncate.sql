@@ -1,6 +1,6 @@
 -- =============================================================================
 -- Supabase restore: truncate DKP data tables (run in SQL Editor before restore).
--- Optional: for truncate via API, use docs/supabase-restore-truncate-rpc.sql
+-- Optional: for truncate via API, use docs/sql-archive/superseded/supabase-restore-truncate-rpc.sql
 -- to create truncate_dkp_for_restore(); then the restore script calls it automatically.
 -- Does not touch profiles or auth.
 -- =============================================================================

@@ -39,7 +39,7 @@ characters, accounts, account_class_coverage, character_account, raids, raid_eve
 4. **Artifact name:** `latest` (most recent backup) or a specific name from the list (e.g. `supabase-backup-2026-02-20`).
 5. **Truncate already run in Supabase (load only):**  
    - **Unchecked (default)** – workflow runs truncate RPC then loads from CSVs.  
-   - **Checked** – skip truncate; only load from CSVs. Use only if you already ran the truncate SQL in Supabase (e.g. `docs/supabase-restore-truncate.sql`). Tables should be empty or you may get duplicates.
+   - **Checked** – skip truncate; only load from CSVs. Use only if `truncate_dkp_for_restore()` from `docs/supabase-schema-full.sql` has already been called. Tables should be empty or you may get duplicates.
 
 The job downloads the artifact, extracts `backup/`, then runs:
 
@@ -115,10 +115,9 @@ python scripts/restore_supabase_from_backup.py --backup-dir backup --load-only
 
 If you see **duplicate key value violates unique constraint "..._pkey"** on `raid_events`, `raid_loot`, `raid_attendance`, or `raid_event_attendance`, the table’s `id` sequence is behind the data (backup CSVs include explicit `id` values; Postgres does not advance the sequence automatically).
 
-**Fix (all four tables):** Run in SQL Editor:
+**Fix (all four tables):** `end_restore_load()` calls `fix_serial_sequences_for_restore()`. If that step was skipped, run the same `setval` statements in the SQL editor:
 
 ```sql
--- See docs/fix_all_serial_sequences.sql
 SELECT setval(pg_get_serial_sequence('raid_events', 'id'), COALESCE((SELECT max(id) FROM raid_events), 1));
 SELECT setval(pg_get_serial_sequence('raid_loot', 'id'), COALESCE((SELECT max(id) FROM raid_loot), 1));
 SELECT setval(pg_get_serial_sequence('raid_attendance', 'id'), COALESCE((SELECT max(id) FROM raid_attendance), 1));
@@ -149,6 +148,4 @@ For a one-time aggressive reclaim (brief lock): `VACUUM FULL ANALYZE;` during lo
 | `scripts/pull_parse_dkp_site/run_end_restore_load.py` | Run `end_restore_load()` only (after timeout). |
 | `.github/workflows/db-restore.yml` | GitHub Action for restore from artifact. |
 | `docs/CI-DB-RESTORE.md` | Shorter CI-focused restore notes. |
-| `docs/supabase-schema-full.sql` | Defines `truncate_dkp_for_restore`, `begin_restore_load`, `end_restore_load`, `fix_serial_sequences_for_restore`. |
-| `docs/supabase-restore-truncate.sql` | Manual truncate SQL if you want load-only. |
-| `docs/fix_all_serial_sequences.sql` | Manual sequence fix. |
+| `docs/supabase-schema-full.sql` | Defines `truncate_dkp_for_restore`, `begin_restore_load`, `end_restore_load`, `fix_serial_sequences_for_restore`. Schema install and upgrade use this file only. |

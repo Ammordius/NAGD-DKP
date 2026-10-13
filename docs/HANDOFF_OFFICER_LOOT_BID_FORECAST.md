@@ -2,7 +2,7 @@
 
 Historical **heuristics only** — there is still **no auction log**. Objects live in [`docs/supabase-schema-full.sql`](supabase-schema-full.sql). Item and account pages read `officer_bid_portfolio_for_loot` and `officer_account_bidding_portfolio`.
 
-Bid hints and global bid interest (the old officer forecast pages and `officer_*_bid_forecast` RPCs) have been removed. Drop them on a live project with [`docs/drop-officer-bid-forecast.sql`](drop-officer-bid-forecast.sql).
+Bid hints and global bid interest (the old officer forecast pages and `officer_*_bid_forecast` RPCs) have been removed. They are not in the canonical schema and are not an upgrade step.
 
 ## Handoff for next session (bid portfolio backfill — Apr 2026)
 
@@ -36,7 +36,6 @@ Watch **Messages** for `RAISE NOTICE` per chunk. If a chunk still times out, **l
 | Piece | Location |
 |--------|-----------|
 | Canonical schema | [`docs/supabase-schema-full.sql`](supabase-schema-full.sql) |
-| One-shot drop of removed forecast RPCs | [`docs/drop-officer-bid-forecast.sql`](drop-officer-bid-forecast.sql) |
 | Item page runner-up | [`web/src/pages/ItemPage.jsx`](../web/src/pages/ItemPage.jsx) |
 | Account bidding card | [`web/src/components/AccountBiddingPortfolioCard.jsx`](../web/src/components/AccountBiddingPortfolioCard.jsx) |
 | Name normalization (Python) | [`scripts/bid_portfolio_local/normalize.py`](../scripts/bid_portfolio_local/normalize.py) (keep aligned with `normalize_item_name_for_lookup` in SQL) |

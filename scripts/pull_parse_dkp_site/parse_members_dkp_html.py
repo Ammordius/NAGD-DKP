@@ -16,7 +16,7 @@ Usage:
   python parse_members_dkp_html.py audit data/members_dkp_snapshot.json --json-out audit_result.json
 
   # Emit SQL to run in Supabase SQL Editor for instant account-level audit:
-  python parse_members_dkp_html.py parse "Current Member DKP - ... .html" -o data/snapshot.json --emit-sql docs/audit_dkp_snapshot_vs_db.sql
+  python parse_members_dkp_html.py parse "Current Member DKP - ... .html" -o data/snapshot.json --emit-sql docs/sql-archive/diagnostics/audit_dkp_snapshot_vs_db.sql
 
 Requires: SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY (or SUPABASE_ANON_KEY) for audit.
 """

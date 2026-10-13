@@ -5,7 +5,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const sql = readFileSync(
-  join(dirname(fileURLToPath(import.meta.url)), '../../../docs/supabase-add-attendees-to-existing-tic.sql'),
+  join(dirname(fileURLToPath(import.meta.url)), '../../../docs/supabase-schema-full.sql'),
   'utf8',
 )
 
@@ -30,11 +30,11 @@ describe('add_attendees_to_existing_tic migration', () => {
   })
 
   it('does not disable triggers or rebuild the ledger', () => {
-    assert.equal(/DISABLE TRIGGER/i.test(sql), false)
-    assert.equal(/refresh_dkp_summary/i.test(sql), false)
-    assert.equal(/begin_restore_load/i.test(sql), false)
-    assert.equal(/\bdkp_value\b/i.test(sql), false)
-    assert.equal(/\bevent_time\b/i.test(sql), false)
+    assert.equal(/DISABLE TRIGGER/i.test(body), false)
+    assert.equal(/refresh_dkp_summary/i.test(body), false)
+    assert.equal(/begin_restore_load/i.test(body), false)
+    assert.equal(/\bdkp_value\b/i.test(body), false)
+    assert.equal(/\bevent_time\b/i.test(body), false)
     assert.equal(/DELETE\s+FROM/i.test(body), false)
     assert.equal(/raid_loot/i.test(body), false)
   })

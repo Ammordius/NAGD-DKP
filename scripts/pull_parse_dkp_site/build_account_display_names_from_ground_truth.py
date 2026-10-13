@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Build docs/supabase-account-display-names.sql from ground_truth.txt.
+Build docs/sql-archive/one-offs/supabase-account-display-names.sql from ground_truth.txt.
 Uses the first character listed per account (in ground_truth file order) as
 that account's display name. Reads data/accounts.csv for account_id -> toon_names.
 """
@@ -11,7 +11,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent.parent  # repo root
 GROUND_TRUTH = ROOT / "ground_truth.txt"
 ACCOUNTS_CSV = ROOT / "data" / "accounts.csv"
-OUT_SQL = ROOT / "docs" / "supabase-account-display-names.sql"
+OUT_SQL = ROOT / "docs" / "sql-archive" / "one-offs" / "supabase-account-display-names.sql"
 
 
 def parse_ground_truth_order(path: Path) -> list[str]:

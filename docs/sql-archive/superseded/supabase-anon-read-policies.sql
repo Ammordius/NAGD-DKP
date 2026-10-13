@@ -1,6 +1,6 @@
 -- DEPRECATED: Data now requires sign-in. Do not run this file.
 -- Previously this allowed anon read for public browsing. To restore that (not recommended if you want to protect egress), you would re-add the policies below.
--- To require auth (current design): use docs/supabase-schema.sql as-is (no anon read). For existing DBs that had anon read, run docs/supabase-require-auth-remove-anon-read.sql to drop anon policies.
+-- To require auth (current design): use docs/supabase-schema.sql as-is (no anon read). For existing DBs that had anon read, run docs/sql-archive/superseded/supabase-require-auth-remove-anon-read.sql to drop anon policies.
 --
 -- Legacy content (do not run):
 

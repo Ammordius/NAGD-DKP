@@ -89,7 +89,7 @@ Fetched with `fetch('/…')` from `public/` or CDN:
 
 - Item stats, mob loot, raid item sources: see `getDkpMobLoot`, `getRaidItemSources` in `web/src/lib/staticData.js` and usages in item/raid/officer flows.
 - Optional `VITE_CLASS_RANKINGS_URL` or `/class_rankings.json` for officer **Reload coverage** on Raider Activity.
-- **Class coverage cache:** table `account_class_coverage` (deploy `docs/supabase-account-class-coverage.sql`). Refreshed by CI job `class_coverage` (`scripts/build_account_class_coverage.mjs`) in `.github/workflows/loot-to-character.yml`, not on each page load.
+- **Class coverage cache:** table `account_class_coverage` (deploy `docs/sql-archive/superseded/supabase-account-class-coverage.sql`). Refreshed by CI job `class_coverage` (`scripts/build_account_class_coverage.mjs`) in `.github/workflows/loot-to-character.yml`, not on each page load.
 
 `web/vercel.json` sets long cache headers for some JSON paths.
 
@@ -100,7 +100,7 @@ Fetched with `fetch('/…')` from `public/` or CDN:
 | `sessionStorage` | `dkp-last-path` | Last visited path (see below) |
 | `sessionStorage` | `pageState:…` | `usePersistedState` UI persistence (filters, Raids calendar month, raid detail expanded tics, account activity page index, etc.) |
 | `sessionStorage` | `account-detail-cache-${accountId}` | SWR fallback for account page |
-| `sessionStorage` | `pageState:/loot:*` | Item History search text and sort. Results are not cached; `/loot` queries `raid_loot_history` one page at a time (`LootSearch.jsx`). Deploy the view with `docs/supabase-raid-loot-history.sql`. |
+| `sessionStorage` | `pageState:/loot:*` | Item History search text and sort. Results are not cached; `/loot` queries `raid_loot_history` one page at a time (`LootSearch.jsx`). Deploy the view with `docs/sql-archive/superseded/supabase-raid-loot-history.sql`. |
 | TTL cache | `raids_month_*` | Raids calendar month blobs (`web/src/lib/cache.js`) |
 | TTL cache | `accounts_list_v7` | Accounts list (`web/src/pages/Accounts.jsx`, 10 minutes), including the Claimed by column from `account_claim_labels()`. The page refetches on load and overwrites this key. Character “spent” is loot for that account, same buyer fallback as the account page (assignee, else `character_name`, else `char_id`). It is not the DKP leaderboard total. |
 

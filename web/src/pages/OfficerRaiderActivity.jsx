@@ -142,7 +142,7 @@ export default function OfficerRaiderActivity({ isOfficer }) {
       const msg = covErr.message || 'Failed to load class coverage'
       if (msg.includes('account_class_coverage') || msg.includes('schema cache')) {
         setCoverageError(
-          `${msg} — Deploy docs/supabase-account-class-coverage.sql, run CI build_account_class_coverage, then retry.`,
+          `${msg} — Apply docs/supabase-schema-full.sql, run CI build_account_class_coverage, then retry.`,
         )
       } else {
         setCoverageError(msg)
@@ -177,7 +177,7 @@ export default function OfficerRaiderActivity({ isOfficer }) {
       const msg = rpcErr.message || 'Failed to load raider activity'
       if (msg.includes('officer_raider_activity') || msg.includes('schema cache')) {
         setError(
-          `${msg} — Deploy docs/supabase-officer-raider-activity.sql in Supabase SQL Editor, then retry.`,
+          `${msg} — Apply docs/supabase-schema-full.sql, then retry.`,
         )
       } else {
         setError(msg)
@@ -232,7 +232,7 @@ export default function OfficerRaiderActivity({ isOfficer }) {
           upsertErr.message?.includes('schema cache')
         ) {
           throw new Error(
-            `${upsertErr.message} — Deploy docs/supabase-account-class-coverage.sql in Supabase SQL Editor.`,
+            `${upsertErr.message} — Apply docs/supabase-schema-full.sql.`,
           )
         }
         throw new Error(upsertErr.message)

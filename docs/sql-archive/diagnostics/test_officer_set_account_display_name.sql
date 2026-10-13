@@ -1,6 +1,6 @@
 -- Rollback test for officer_set_account_display_name.
 -- Run this entire script in the Supabase SQL editor after
--- docs/supabase-officer-set-account-display-name.sql.
+-- docs/sql-archive/superseded/supabase-officer-set-account-display-name.sql.
 -- It inserts fixtures, asserts, and rolls everything back.
 -- If an assertion fails, run ROLLBACK before doing anything else.
 

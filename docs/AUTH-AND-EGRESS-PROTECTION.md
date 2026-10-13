@@ -11,7 +11,7 @@ The site requires **sign-in to access data**. This reduces the risk of bots or s
 
 ## Requiring sign-in (already in place)
 
-1. **Schema** – Data tables have no `TO anon` SELECT policies. Only `TO authenticated` can read. Run `docs/supabase-require-auth-remove-anon-read.sql` on an existing project that previously had anon read.
+1. **Schema** – Apply `docs/supabase-schema-full.sql`. Core DKP tables allow `authenticated` SELECT. The same file also creates anon SELECT on `loot_assignment` and `character_dkp_spent`.
 2. **Frontend** – All data routes redirect to `/login` when there is no session. Only the login page is public.
 
 ## Protecting against bot sign-ups and egress

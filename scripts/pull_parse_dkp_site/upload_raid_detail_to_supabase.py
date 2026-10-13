@@ -437,14 +437,14 @@ def _insert_raid_event_attendance_rows(client, raid_id: str, rea_rows: list[dict
             if "function" in err and "does not exist" in err:
                 print(
                     "Missing DB function insert_raid_event_attendance_for_upload. "
-                    "Run docs/upload_script_rpcs.sql in the Supabase SQL editor, then retry.",
+                    "Run docs/supabase-schema-full.sql in the Supabase SQL editor, then retry.",
                     file=sys.stderr,
                 )
                 raise
             if "57014" in str(e) or "statement timeout" in err:
                 print(
                     "insert_raid_event_attendance_for_upload hit statement_timeout. Redeploy the function from "
-                    "docs/upload_script_rpcs.sql (it must not call end_restore_load inside one API request). "
+                    "docs/supabase-schema-full.sql (it must not call end_restore_load inside one API request). "
                     "If this persists, raise Database statement timeout in Supabase Dashboard → Database → Settings.",
                     file=sys.stderr,
                 )
@@ -805,7 +805,7 @@ def main() -> int:
         print(
             "ERROR: account summary refresh failed; upload is not considered synchronized. "
             "Rerun this upload after deploying the latest refresh_account_dkp_summary_for_raid "
-            "(see docs/fix_refresh_account_dkp_summary_for_raid_perf.sql) or fix DB load/timeouts.",
+            "(see docs/supabase-schema-full.sql) or fix DB load/timeouts.",
             file=sys.stderr,
         )
         print(f"Details: {account_refresh_mode_or_error}", file=sys.stderr)
