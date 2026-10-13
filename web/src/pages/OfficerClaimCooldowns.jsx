@@ -1,10 +1,11 @@
-import { useEffect, useState, useCallback, useMemo } from 'react'
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { useDkpData, ACTIVE_DAYS } from '../lib/dkpLeaderboard'
+import { useDkpData } from '../lib/dkpLeaderboard'
 import { usePersistedState } from '../lib/usePersistedState'
+import { buildAccountColumnRows, buildCharacterRows, characterMatchesQuery } from '../lib/siteAdminCharacters'
 
-const MAX_MARK_INACTIVE_MATCHES = 80
+const SUGGEST_LIMIT = 80
 
 export default function OfficerClaimCooldowns({ isOfficer }) {
   const navigate = useNavigate()
@@ -13,30 +14,64 @@ export default function OfficerClaimCooldowns({ isOfficer }) {
   const [error, setError] = useState('')
   const [resettingId, setResettingId] = useState(null)
 
-  const { apiData, mutate } = useDkpData()
-  const [activeRaiders, setActiveRaiders] = useState([])
-  const [activeAddKey, setActiveAddKey] = usePersistedState('/officer/SiteAdmin:activeAddKey', '')
-  const [activeMutating, setActiveMutating] = useState(false)
-  const [inactiveSearchQuery, setInactiveSearchQuery] = usePersistedState('/officer/SiteAdmin:inactiveSearchQuery', '')
+  const { apiData, isLoading: dkpLoading, mutate } = useDkpData()
+  const [charQuery, setCharQuery] = usePersistedState('/officer/SiteAdmin:charQuery', '')
+  const [selectedCharId, setSelectedCharId] = useState(null)
+  const [showSuggest, setShowSuggest] = useState(false)
+  const [suggestIndex, setSuggestIndex] = useState(0)
+  const [charError, setCharError] = useState('')
+  const [charMutating, setCharMutating] = useState(false)
+  const [selectedActiveAccountId, setSelectedActiveAccountId] = useState(null)
+  const [selectedInactiveAccountId, setSelectedInactiveAccountId] = useState(null)
+  const selectedCharRef = useRef(null)
+
+  const accountsById = useMemo(() => {
+    const map = new Map()
+    for (const account of apiData?.accounts ?? []) {
+      if (account?.account_id != null) map.set(String(account.account_id), account)
+    }
+    return map
+  }, [apiData?.accounts])
+
+  const characterRows = useMemo(
+    () => buildCharacterRows(apiData?.characters, apiData?.character_account, apiData?.accounts),
+    [apiData?.characters, apiData?.character_account, apiData?.accounts]
+  )
+
+  const filteredRows = useMemo(
+    () => characterRows.filter((row) => characterMatchesQuery(row, charQuery)),
+    [characterRows, charQuery]
+  )
+
+  const suggestRows = filteredRows.slice(0, SUGGEST_LIMIT)
+  const selectedCharacter = useMemo(
+    () => characterRows.find((row) => row.char_id === selectedCharId) || null,
+    [characterRows, selectedCharId]
+  )
+
+  const activeCharRows = useMemo(
+    () => buildAccountColumnRows(
+      (apiData?.active_accounts ?? []).map((row) => row.account_id),
+      accountsById
+    ),
+    [apiData?.active_accounts, accountsById]
+  )
+
+  const inactiveCharRows = useMemo(
+    () => buildAccountColumnRows(
+      (apiData?.accounts ?? []).filter((account) => account.inactive === true).map((account) => account.account_id),
+      accountsById
+    ),
+    [apiData?.accounts, accountsById]
+  )
 
   useEffect(() => {
-    if (apiData?.active_raiders?.length !== undefined) {
-      setActiveRaiders((apiData.active_raiders || []).map((x) => String(x.character_key)))
-    }
-  }, [apiData?.active_raiders])
+    setSuggestIndex(0)
+  }, [charQuery])
 
-  const inactiveAccounts = (apiData?.accounts ?? []).filter((a) => a.inactive === true)
-  const activeAccounts = (apiData?.accounts ?? []).filter((a) => !a.inactive)
-  const markInactiveMatches = useMemo(() => {
-    const q = (inactiveSearchQuery || '').trim().toLowerCase()
-    if (!q) return []
-    const matches = activeAccounts.filter((acc) => {
-      if ((acc.account_id || '').toLowerCase().includes(q)) return true
-      if ((acc.display_name || '').toLowerCase().includes(q)) return true
-      return (acc.toon_names || '').toLowerCase().includes(q)
-    })
-    return matches.slice(0, MAX_MARK_INACTIVE_MATCHES)
-  }, [activeAccounts, inactiveSearchQuery])
+  useEffect(() => {
+    selectedCharRef.current?.scrollIntoView({ block: 'nearest' })
+  }, [selectedCharId])
 
   useEffect(() => {
     if (!isOfficer) {
@@ -75,62 +110,137 @@ export default function OfficerClaimCooldowns({ isOfficer }) {
     await loadCooldowns()
   }
 
-  const handleAddActive = useCallback(async () => {
-    const key = activeAddKey.trim()
-    if (!key) return
-    setActiveMutating(true)
-    setError('')
-    const { error: e } = await supabase.from('active_raiders').upsert({ character_key: key }, { onConflict: 'character_key' })
-    setActiveMutating(false)
-    if (e) {
-      setError(e.message)
-      return
-    }
-    setActiveAddKey('')
-    setActiveRaiders((prev) => (prev.includes(key) ? prev : [...prev, key]))
-    await mutate()
-  }, [activeAddKey, mutate])
+  const selectCharacter = useCallback((row) => {
+    if (!row) return
+    setSelectedCharId(row.char_id)
+    setCharQuery(row.label)
+    setShowSuggest(false)
+    setCharError('')
+  }, [setCharQuery])
 
-  const handleRemoveActive = useCallback(async (key) => {
-    setActiveMutating(true)
-    setError('')
-    const { error: e } = await supabase.from('active_raiders').delete().eq('character_key', key)
-    setActiveMutating(false)
-    if (e) {
-      setError(e.message)
+  const handleSetActive = useCallback(async () => {
+    if (!selectedCharacter) return
+    if (!selectedCharacter.account_id) {
+      setCharError('That character is not linked to an account.')
       return
     }
-    setActiveRaiders((prev) => prev.filter((k) => k !== key))
+    const accountId = selectedCharacter.account_id
+    setCharMutating(true)
+    setCharError('')
+    const { error: upsertErr } = await supabase
+      .from('active_accounts')
+      .upsert({ account_id: accountId }, { onConflict: 'account_id' })
+    if (upsertErr) {
+      setCharMutating(false)
+      setCharError(upsertErr.message)
+      return
+    }
+    const { error: updateErr } = await supabase
+      .from('accounts')
+      .update({ inactive: false })
+      .eq('account_id', accountId)
+    setCharMutating(false)
+    if (updateErr) {
+      setCharError(updateErr.message)
+      return
+    }
+    setSelectedInactiveAccountId((current) => (current === accountId ? null : current))
     await mutate()
-  }, [mutate])
+  }, [selectedCharacter, mutate])
 
-  const handleMarkAccountInactive = useCallback(async (accountId) => {
-    if (!accountId) return
-    setActiveMutating(true)
-    setError('')
-    const { error: e } = await supabase.from('accounts').update({ inactive: true }).eq('account_id', accountId)
-    setActiveMutating(false)
-    if (e) {
-      setError(e.message)
+  const handleSetInactive = useCallback(async () => {
+    if (!selectedCharacter) return
+    if (!selectedCharacter.account_id) {
+      setCharError('That character is not linked to an account.')
       return
     }
-    setInactiveSearchQuery('')
+    const accountId = selectedCharacter.account_id
+    setCharMutating(true)
+    setCharError('')
+    const { error: updateErr } = await supabase
+      .from('accounts')
+      .update({ inactive: true })
+      .eq('account_id', accountId)
+    if (updateErr) {
+      setCharMutating(false)
+      setCharError(updateErr.message)
+      return
+    }
+    const { error: deleteErr } = await supabase
+      .from('active_accounts')
+      .delete()
+      .eq('account_id', accountId)
+    setCharMutating(false)
+    if (deleteErr) {
+      setCharError(deleteErr.message)
+      return
+    }
+    setSelectedActiveAccountId((current) => (current === accountId ? null : current))
     await mutate()
-  }, [mutate])
+  }, [selectedCharacter, mutate])
 
-  const handleRestoreAccount = useCallback(async (accountId) => {
-    setActiveMutating(true)
-    setError('')
-    const { error: e } = await supabase.from('accounts').update({ inactive: false }).eq('account_id', accountId)
-    setActiveMutating(false)
-    if (e) {
-      setError(e.message)
+  const handleRemoveActive = useCallback(async () => {
+    if (!selectedActiveAccountId) return
+    setCharMutating(true)
+    setCharError('')
+    const { error: deleteErr } = await supabase
+      .from('active_accounts')
+      .delete()
+      .eq('account_id', selectedActiveAccountId)
+    setCharMutating(false)
+    if (deleteErr) {
+      setCharError(deleteErr.message)
       return
     }
+    setSelectedActiveAccountId(null)
     await mutate()
-  }, [mutate])
+  }, [selectedActiveAccountId, mutate])
+
+  const handleRemoveInactive = useCallback(async () => {
+    if (!selectedInactiveAccountId) return
+    setCharMutating(true)
+    setCharError('')
+    const { error: updateErr } = await supabase
+      .from('accounts')
+      .update({ inactive: false })
+      .eq('account_id', selectedInactiveAccountId)
+    setCharMutating(false)
+    if (updateErr) {
+      setCharError(updateErr.message)
+      return
+    }
+    setSelectedInactiveAccountId(null)
+    await mutate()
+  }, [selectedInactiveAccountId, mutate])
+
+  function handleCharQueryKeyDown(event) {
+    if (event.key === 'ArrowDown') {
+      event.preventDefault()
+      setShowSuggest(true)
+      setSuggestIndex((index) => Math.min(index + 1, Math.max(suggestRows.length - 1, 0)))
+      return
+    }
+    if (event.key === 'ArrowUp') {
+      event.preventDefault()
+      setShowSuggest(true)
+      setSuggestIndex((index) => Math.max(index - 1, 0))
+      return
+    }
+    if (event.key === 'Escape') {
+      setShowSuggest(false)
+      return
+    }
+    if (event.key === 'Enter') {
+      event.preventDefault()
+      const row = (showSuggest && suggestRows[suggestIndex]) || (filteredRows.length === 1 ? filteredRows[0] : null)
+      if (row) selectCharacter(row)
+    }
+  }
 
   if (!isOfficer) return null
+
+  const query = (charQuery || '').trim()
+  const showSuggestList = showSuggest && query.length > 0
 
   return (
     <div className="container">
@@ -189,98 +299,172 @@ export default function OfficerClaimCooldowns({ isOfficer }) {
         )}
       </section>
 
-      {/* Active raiders & inactive accounts */}
       <section className="card" style={{ marginBottom: '1.5rem' }}>
-        <h2 style={{ marginTop: 0 }}>Active raiders & inactive accounts</h2>
+        <h2 style={{ marginTop: 0 }}>Set characters as Active or Inactive</h2>
         <p style={{ color: '#71717a', fontSize: '0.9rem', marginTop: 0 }}>
-          Characters in the active list are always shown on the DKP leaderboard. Others are shown only if they have attendance or loot in the last {ACTIVE_DAYS} days. Inactive accounts are hidden from the leaderboard and Accounts list.
+          Characters on DKP Leaderboard are automatically hidden if they have no attendance or loot in the last 120 days. You can set a character as Active so they always show up, or you can set a character as Inactive to always hide them.
         </p>
-        <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem', marginTop: '0.75rem' }}>
-          <input
-            type="text"
-            value={activeAddKey}
-            onChange={(e) => setActiveAddKey(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleAddActive()}
-            placeholder="Character name or char_id"
-            style={{ padding: '0.35rem 0.5rem', minWidth: '12rem' }}
-          />
-          <button type="button" onClick={handleAddActive} disabled={activeMutating || !activeAddKey.trim()}>
-            Add active
+        {charError && <p className="error" style={{ marginBottom: '0.75rem' }}>{charError}</p>}
+        <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.75rem', marginBottom: '0.5rem' }}>
+          <button type="button" onClick={handleSetActive} disabled={charMutating || !selectedCharacter}>
+            Set Active
+          </button>
+          <button type="button" onClick={handleSetInactive} disabled={charMutating || !selectedCharacter}>
+            Set Inactive
           </button>
         </div>
-        <ul style={{ listStyle: 'none', paddingLeft: 0, margin: 0 }}>
-          {activeRaiders.map((key) => (
-            <li key={key} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
-              <span>{key}</span>
-              <button type="button" onClick={() => handleRemoveActive(key)} disabled={activeMutating} style={{ fontSize: '0.85rem' }}>Remove</button>
-            </li>
-          ))}
-          {activeRaiders.length === 0 && <li style={{ color: '#71717a' }}>None added yet. Add character names or char_ids to always show them.</li>}
-        </ul>
-        <hr style={{ margin: '1rem 0', borderColor: '#3f3f46' }} />
-        <p style={{ color: '#71717a', fontSize: '0.9rem', marginTop: 0 }}>
-          <strong>Mark account inactive</strong> — Search by display name, toon names, or account ID.
-        </p>
-        <input
-          type="search"
-          value={inactiveSearchQuery}
-          onChange={(e) => setInactiveSearchQuery(e.target.value)}
-          placeholder="Search by display name, toon names, or account ID…"
-          style={{
-            width: '100%',
-            maxWidth: '28rem',
-            padding: '0.5rem 0.75rem',
-            fontSize: '1rem',
-            marginTop: '0.35rem',
-            background: '#18181b',
-            color: '#fafafa',
-            border: '1px solid #3f3f46',
-            borderRadius: '6px',
-          }}
-          aria-label="Search accounts to mark inactive"
-        />
-        {inactiveSearchQuery.trim() && (
-          <ul style={{ listStyle: 'none', paddingLeft: 0, margin: '0.5rem 0 0', maxHeight: '12rem', overflowY: 'auto' }}>
-            {markInactiveMatches.length === 0 && (
-              <li style={{ color: '#71717a', fontSize: '0.9rem' }}>No matching accounts.</li>
-            )}
-            {markInactiveMatches.map((acc) => {
-              const label = (acc.display_name || '').trim() || (acc.toon_names || '').split(',')[0]?.trim() || acc.account_id
-              return (
-                <li key={acc.account_id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem', flexWrap: 'wrap' }}>
-                  <span>{label}</span>
-                  <span style={{ color: '#71717a', fontSize: '0.85rem' }}><code>{acc.account_id}</code></span>
-                  <button type="button" onClick={() => handleMarkAccountInactive(acc.account_id)} disabled={activeMutating} style={{ fontSize: '0.85rem' }}>
-                    Mark inactive
-                  </button>
+        <div className="officer-suggest-wrap" style={{ maxWidth: '28rem' }}>
+          <input
+            type="search"
+            value={charQuery}
+            onChange={(e) => {
+              setCharQuery(e.target.value)
+              setSelectedCharId(null)
+              setShowSuggest(true)
+            }}
+            onFocus={() => setShowSuggest(true)}
+            onBlur={() => setTimeout(() => setShowSuggest(false), 200)}
+            onKeyDown={handleCharQueryKeyDown}
+            placeholder="Character name"
+            autoComplete="off"
+            aria-label="Search characters"
+            aria-autocomplete="list"
+            aria-expanded={showSuggestList}
+            aria-controls="site-admin-char-suggest"
+            style={{ width: '100%', maxWidth: 'none' }}
+          />
+          {showSuggestList && (
+            <ul
+              id="site-admin-char-suggest"
+              className="card officer-suggest"
+              role="listbox"
+              onMouseDown={(e) => e.preventDefault()}
+            >
+              {suggestRows.length === 0 ? (
+                <li style={{ color: '#71717a', cursor: 'default' }}>
+                  {dkpLoading || !apiData ? 'Loading characters…' : 'No matching characters'}
                 </li>
-              )
-            })}
-            {markInactiveMatches.length >= MAX_MARK_INACTIVE_MATCHES && (
-              <li style={{ color: '#71717a', fontSize: '0.85rem', marginTop: '0.25rem' }}>
-                Showing first {MAX_MARK_INACTIVE_MATCHES} matches. Narrow your search for more.
-              </li>
-            )}
-          </ul>
-        )}
-        {inactiveAccounts.length > 0 && (
-          <div style={{ marginTop: '1rem' }}>
-            <strong>Inactive accounts</strong>
-            <ul style={{ listStyle: 'none', paddingLeft: 0, margin: '0.35rem 0 0' }}>
-              {inactiveAccounts.map((acc) => {
-                const label = (acc.display_name || '').trim() || (acc.toon_names || '').split(',')[0]?.trim() || acc.account_id
-                return (
-                  <li key={acc.account_id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
-                    <span>{label}</span>
-                    <span style={{ color: '#71717a', fontSize: '0.85rem' }}><code>{acc.account_id}</code></span>
-                    <Link to={`/accounts/${acc.account_id}`} style={{ fontSize: '0.85rem', marginRight: '0.5rem' }}>View</Link>
-                    <button type="button" onClick={() => handleRestoreAccount(acc.account_id)} disabled={activeMutating} style={{ fontSize: '0.85rem' }}>Restore</button>
+              ) : (
+                suggestRows.map((row, index) => (
+                  <li
+                    key={row.char_id}
+                    role="option"
+                    aria-selected={index === suggestIndex || selectedCharId === row.char_id}
+                    style={index === suggestIndex ? { background: '#27272a' } : undefined}
+                    onMouseDown={(e) => {
+                      e.preventDefault()
+                      selectCharacter(row)
+                    }}
+                    onMouseEnter={() => setSuggestIndex(index)}
+                  >
+                    {row.label}
                   </li>
-                )
-              })}
+                ))
+              )}
+              {filteredRows.length > SUGGEST_LIMIT && (
+                <li style={{ color: '#71717a', cursor: 'default' }}>
+                  Showing first {SUGGEST_LIMIT} matches. Keep typing, or pick from the list below.
+                </li>
+              )}
             </ul>
+          )}
+        </div>
+        <div
+          className="officer-member-list"
+          role="listbox"
+          aria-label="Characters"
+          style={{ maxWidth: '28rem', marginTop: '0.5rem' }}
+        >
+          {filteredRows.length === 0 ? (
+            <p className="officer-member-empty">
+              {dkpLoading || !apiData ? 'Loading characters…' : (query ? 'No matching characters' : 'No characters')}
+            </p>
+          ) : (
+            filteredRows.map((row) => (
+              <button
+                key={row.char_id}
+                ref={selectedCharId === row.char_id ? selectedCharRef : null}
+                type="button"
+                role="option"
+                aria-selected={selectedCharId === row.char_id}
+                className={selectedCharId === row.char_id ? 'is-highlighted' : undefined}
+                title={row.label}
+                onClick={() => selectCharacter(row)}
+              >
+                {row.label}
+              </button>
+            ))
+          )}
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(16rem, 1fr))', gap: '1rem', marginTop: '1rem' }}>
+          <div>
+            <strong>Active Chars</strong>
+            <div className="officer-member-list" role="listbox" aria-label="Active Chars" style={{ marginTop: '0.35rem' }}>
+              {activeCharRows.length === 0 ? (
+                <p className="officer-member-empty">None</p>
+              ) : (
+                activeCharRows.map((row) => (
+                  <div key={row.account_id} style={{ display: 'flex', alignItems: 'center' }}>
+                    <button
+                      type="button"
+                      role="option"
+                      aria-selected={selectedActiveAccountId === row.account_id}
+                      className={selectedActiveAccountId === row.account_id ? 'is-highlighted' : undefined}
+                      title={row.label}
+                      onClick={() => setSelectedActiveAccountId(row.account_id)}
+                      style={{ flex: '1 1 auto', width: 'auto' }}
+                    >
+                      {row.label}
+                    </button>
+                    <Link to={`/accounts/${row.account_id}`} style={{ fontSize: '0.8rem', padding: '0 0.45rem', flex: '0 0 auto' }}>View</Link>
+                  </div>
+                ))
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={handleRemoveActive}
+              disabled={charMutating || !selectedActiveAccountId}
+              style={{ fontSize: '0.85rem', marginTop: '0.5rem' }}
+            >
+              Remove
+            </button>
           </div>
-        )}
+          <div>
+            <strong>Inactive Chars</strong>
+            <div className="officer-member-list" role="listbox" aria-label="Inactive Chars" style={{ marginTop: '0.35rem' }}>
+              {inactiveCharRows.length === 0 ? (
+                <p className="officer-member-empty">None</p>
+              ) : (
+                inactiveCharRows.map((row) => (
+                  <div key={row.account_id} style={{ display: 'flex', alignItems: 'center' }}>
+                    <button
+                      type="button"
+                      role="option"
+                      aria-selected={selectedInactiveAccountId === row.account_id}
+                      className={selectedInactiveAccountId === row.account_id ? 'is-highlighted' : undefined}
+                      title={row.label}
+                      onClick={() => setSelectedInactiveAccountId(row.account_id)}
+                      style={{ flex: '1 1 auto', width: 'auto' }}
+                    >
+                      {row.label}
+                    </button>
+                    <Link to={`/accounts/${row.account_id}`} style={{ fontSize: '0.8rem', padding: '0 0.45rem', flex: '0 0 auto' }}>View</Link>
+                  </div>
+                ))
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={handleRemoveInactive}
+              disabled={charMutating || !selectedInactiveAccountId}
+              style={{ fontSize: '0.85rem', marginTop: '0.5rem' }}
+            >
+              Remove
+            </button>
+          </div>
+        </div>
       </section>
     </div>
   )
