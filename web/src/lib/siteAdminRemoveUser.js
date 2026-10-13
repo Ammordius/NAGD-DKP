@@ -10,7 +10,7 @@ function normalizeRole(role) {
  * Nobody may remove a site admin or themselves.
  */
 export function removalBlockReason(actor, target) {
-  if (!actor?.id || !target?.id) return ''
+  if (!actor?.id || !target?.id) return 'Profile is required'
   if (String(actor.id).toLowerCase() === String(target.id).toLowerCase()) {
     return 'You cannot remove yourself'
   }

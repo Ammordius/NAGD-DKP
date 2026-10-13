@@ -68,8 +68,9 @@ async function fetchJson(fetchImpl, url, options) {
 }
 
 /**
- * Authorize the signed-in officer or site admin, delete the profile row, then
- * delete the auth user. Game accounts and characters are not touched.
+ * Authorize the signed-in officer or site admin, delete the Auth user, and let
+ * the profiles foreign key cascade. Game accounts and characters are not touched.
+ * The profile row is not deleted before Auth deletion succeeds.
  */
 export async function removeSiteAuthUser({
   accessToken,
@@ -115,32 +116,26 @@ export async function removeSiteAuthUser({
 
   const actorLoaded = await loadProfile(actorId)
   if (actorLoaded.error) return { status: actorLoaded.error.status, body: { error: actorLoaded.error.message } }
-  const actorRole = String(actorLoaded.row?.role || '').trim().toLowerCase()
+  if (!actorLoaded.row) return { status: 403, body: { error: 'Profile not found' } }
+
   const targetLoaded = await loadProfile(targetId)
   if (targetLoaded.error) return { status: targetLoaded.error.status, body: { error: targetLoaded.error.message } }
+  if (!targetLoaded.row) return { status: 404, body: { error: 'Profile not found' } }
 
-  // The profile row is removed before the auth user. If that second step failed,
-  // a site admin can run Remove user again and delete the leftover login.
-  let authUserId = targetLoaded.row?.id || targetId
-  if (!targetLoaded.row) {
-    if (actorRole !== 'siteadmin') return { status: 404, body: { error: 'Profile not found' } }
-  } else {
-    const reason = removalBlockReason(
-      { id: actorId, role: actorLoaded.row?.role },
-      { id: targetLoaded.row.id, role: targetLoaded.row.role }
-    )
-    if (reason) return { status: 403, body: { error: reason } }
+  const reason = removalBlockReason(
+    { id: actorId, role: actorLoaded.row.role },
+    { id: targetLoaded.row.id, role: targetLoaded.row.role }
+  )
+  if (reason) return { status: 403, body: { error: reason } }
 
-    const rpcRes = await fetchJson(fetchImpl, `${base}/rest/v1/rpc/siteadmin_delete_user`, {
-      method: 'POST',
-      headers: { ...userHeaders, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ p_profile_id: targetLoaded.row.id }),
-    })
-    if (!rpcRes.ok) {
-      const message = rpcRes.body?.message || 'Could not remove user'
-      return { status: rpcRes.status >= 500 ? 502 : 403, body: { error: message } }
-    }
-    authUserId = targetLoaded.row.id
+  const rpcRes = await fetchJson(fetchImpl, `${base}/rest/v1/rpc/siteadmin_delete_user`, {
+    method: 'POST',
+    headers: { ...userHeaders, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ p_profile_id: targetLoaded.row.id }),
+  })
+  if (!rpcRes.ok) {
+    const message = rpcRes.body?.message || 'Could not remove user'
+    return { status: rpcRes.status >= 500 ? 502 : 403, body: { error: message } }
   }
 
   const removeAuth = deleteAuthUser || (async (userId) => {
@@ -152,17 +147,24 @@ export async function removeSiteAuthUser({
 
   let deleted
   try {
-    deleted = await removeAuth(authUserId)
+    deleted = await removeAuth(targetLoaded.row.id)
   } catch (err) {
     return { status: 502, body: { error: err?.message || 'Could not delete the login account' } }
   }
-  const deleteErr = deleted?.error
-  if (deleteErr && deleteErr.status !== 404 && !/user not found/i.test(deleteErr.message || '')) {
-    const detail = deleteErr.message || 'Could not delete the login account'
-    return {
-      status: 502,
-      body: { error: `The site profile was removed, but the login could not be deleted (${detail}). A site admin can run Remove user again to delete the login.` },
-    }
+  if (deleted?.error) {
+    const detail = deleted.error.message || 'Could not delete the login account'
+    return { status: 502, body: { error: detail } }
+  }
+
+  // Auth deletion already succeeded. A failed audit confirmation leaves the pending row.
+  try {
+    await fetchJson(fetchImpl, `${base}/rest/v1/rpc/siteadmin_confirm_auth_deleted`, {
+      method: 'POST',
+      headers: { ...userHeaders, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ p_profile_id: targetLoaded.row.id }),
+    })
+  } catch {
+    // The login is already gone. Retrying confirmation is safe; do not report failure.
   }
   return { status: 200, body: { ok: true } }
 }

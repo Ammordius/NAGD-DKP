@@ -48,4 +48,10 @@ describe('canRemoveSiteUser', () => {
     assert.equal(canRemoveSiteUser(officer, { id: player.id, role: '' }), true)
     assert.equal(canRemoveSiteUser(officer, { id: player.id }), true)
   })
+
+  it('does not treat a missing profile id as allowed', () => {
+    assert.equal(canRemoveSiteUser(admin, { role: 'player' }), false)
+    assert.equal(removalBlockReason(admin, { role: 'player' }), 'Profile is required')
+    assert.equal(removalBlockReason({ role: 'siteadmin' }, player), 'Profile is required')
+  })
 })

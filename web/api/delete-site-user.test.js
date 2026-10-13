@@ -33,6 +33,9 @@ function mockFetch({ actorRole = 'siteadmin', targetRole = 'player', targetId = 
       if (rpcStatus >= 400) return jsonResponse(rpcStatus, { message: 'Profile not found' })
       return jsonResponse(rpcStatus, null)
     }
+    if (href.endsWith('/rest/v1/rpc/siteadmin_confirm_auth_deleted')) {
+      return jsonResponse(200, null)
+    }
     throw new Error(`unexpected url ${href}`)
   }
   return { fetchImpl, calls }
@@ -62,7 +65,7 @@ describe('removeSiteAuthUser', () => {
     assert.deepEqual(deleted, [TARGET])
   })
 
-  it('deletes the profile, then the auth user', async () => {
+  it('authorizes the profile, then deletes the auth user, then confirms the audit', async () => {
     const { fetchImpl, calls } = mockFetch({})
     const deleted = []
     const result = await removeSiteAuthUser({
@@ -77,14 +80,19 @@ describe('removeSiteAuthUser', () => {
     })
     assert.deepEqual(result, { status: 200, body: { ok: true } })
     assert.deepEqual(deleted, [TARGET])
-    const rpc = calls.find((call) => call.href.endsWith('/rest/v1/rpc/siteadmin_delete_user'))
+    const rpcAt = calls.findIndex((call) => call.href.endsWith('/rest/v1/rpc/siteadmin_delete_user'))
+    const confirmAt = calls.findIndex((call) => call.href.endsWith('/rest/v1/rpc/siteadmin_confirm_auth_deleted'))
+    assert.ok(rpcAt >= 0)
+    assert.ok(confirmAt > rpcAt)
+    const rpc = calls[rpcAt]
     assert.equal(rpc.options.headers.Authorization, 'Bearer user-jwt')
     assert.equal(rpc.options.headers.apikey, 'anon-key')
     assert.equal(JSON.parse(rpc.options.body).p_profile_id, TARGET)
+    assert.equal(JSON.parse(calls[confirmAt].options.body).p_profile_id, TARGET)
     assert.equal(calls.some((call) => String(call.options?.headers?.apikey) === 'service-role-key'), false)
   })
 
-  it('does not delete the auth user when the profile delete is refused', async () => {
+  it('does not delete the auth user when authorization is refused', async () => {
     const { fetchImpl } = mockFetch({ rpcStatus: 400 })
     let called = false
     const result = await removeSiteAuthUser({
@@ -141,22 +149,23 @@ describe('removeSiteAuthUser', () => {
     assert.equal(calls.some((call) => call.href.includes('siteadmin_delete_user')), false)
   })
 
-  it('lets a site admin delete a leftover login when the profile is already gone', async () => {
+  it('refuses a missing profile for a site admin and does not delete a login', async () => {
     const orphan = '99999999-9999-9999-9999-999999999999'
     const { fetchImpl, calls } = mockFetch({ actorRole: 'siteadmin', targetId: orphan, missingTarget: true })
-    const deleted = []
+    let called = false
     const result = await removeSiteAuthUser({
       ...baseArgs,
       accessToken: 'user-jwt',
       profileId: orphan,
       fetchImpl,
-      deleteAuthUser: async (userId) => {
-        deleted.push(userId)
+      deleteAuthUser: async () => {
+        called = true
         return { error: null }
       },
     })
-    assert.equal(result.status, 200)
-    assert.deepEqual(deleted, [orphan])
+    assert.equal(result.status, 404)
+    assert.equal(result.body.error, 'Profile not found')
+    assert.equal(called, false)
     assert.equal(calls.some((call) => call.href.includes('siteadmin_delete_user')), false)
   })
 
@@ -188,7 +197,42 @@ describe('removeSiteAuthUser', () => {
       deleteAuthUser: async () => ({ error: { message: 'delete failed', status: 500 } }),
     })
     assert.equal(result.status, 502)
+    assert.equal(result.body.error, 'delete failed')
     assert.equal(JSON.stringify(result).includes('service-role-key'), false)
+    assert.equal(JSON.stringify(result).includes('site profile was removed'), false)
+  })
+
+  it('does not treat a missing Auth user as a successful deletion', async () => {
+    const { fetchImpl, calls } = mockFetch({})
+    const result = await removeSiteAuthUser({
+      ...baseArgs,
+      accessToken: 'user-jwt',
+      profileId: TARGET,
+      fetchImpl,
+      deleteAuthUser: async () => ({ error: { message: 'User not found', status: 404 } }),
+    })
+    assert.equal(result.status, 502)
+    assert.equal(result.body.error, 'User not found')
+    assert.equal(calls.some((call) => call.href.includes('siteadmin_confirm_auth_deleted')), false)
+  })
+
+  it('still reports success when Auth deletion worked and audit confirmation failed', async () => {
+    const { fetchImpl } = mockFetch({})
+    const realFetch = fetchImpl
+    const wrapped = async (url, options) => {
+      if (String(url).endsWith('/rest/v1/rpc/siteadmin_confirm_auth_deleted')) {
+        return jsonResponse(500, { message: 'audit write failed' })
+      }
+      return realFetch(url, options)
+    }
+    const result = await removeSiteAuthUser({
+      ...baseArgs,
+      accessToken: 'user-jwt',
+      profileId: TARGET,
+      fetchImpl: wrapped,
+      deleteAuthUser: async () => ({ error: null }),
+    })
+    assert.deepEqual(result, { status: 200, body: { ok: true } })
   })
 })
 

@@ -710,7 +710,7 @@ export default function OfficerClaimCooldowns({ isOfficer, isSiteAdmin = false }
                             <details className="officer-delete" style={{ marginTop: '0.5rem' }}>
                               <summary>REMOVE USER</summary>
                               <p className="officer-hint">
-                                Remove user from the site. This deletes the site profile, but it does not remove game accounts or characters. User will need to Sign Up again. Type <strong>REMOVE</strong> to confirm.
+                                Remove user from the site. This deletes the login, which also removes the site profile. It does not remove game accounts or characters. The user will need to sign up again. Type <strong>REMOVE</strong> to confirm.
                               </p>
                               <div className="officer-field-row">
                                 <input

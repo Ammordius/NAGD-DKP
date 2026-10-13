@@ -363,7 +363,8 @@ BEGIN
 END;
 $$;
 
--- RPC: officers only when called with auth (e.g. from app). When auth.uid() is NULL (e.g. SQL Editor, pg_cron), allow so admins can run refresh.
+-- RPC: officers, service_role, or the SQL editor (postgres / supabase_admin).
+-- A null auth.uid() is not enough: anon has no user id and must not refresh.
 CREATE OR REPLACE FUNCTION public.refresh_dkp_summary()
 RETURNS void
 LANGUAGE plpgsql
@@ -371,7 +372,11 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 BEGIN
-  IF auth.uid() IS NOT NULL AND NOT public.is_officer() THEN
+  IF NOT (
+    public.is_officer()
+    OR nullif(trim(COALESCE(current_setting('request.jwt.claim.role', true), '')), '') = 'service_role'
+    OR session_user IN ('postgres', 'supabase_admin')
+  ) THEN
     RAISE EXCEPTION 'Only officers can refresh DKP summary';
   END IF;
   PERFORM refresh_dkp_summary_internal();
@@ -525,6 +530,7 @@ BEGIN
   INSERT INTO public.accounts (account_id, display_name, toon_count, char_ids, toon_names)
   VALUES (v_new_account_id, v_display, 0, NULL, NULL);
 
+  PERFORM set_config('nagddkp.allow_sensitive_profile_write', '1', true);
   UPDATE public.profiles SET account_id = v_new_account_id, updated_at = now() WHERE id = v_uid;
 
   RETURN v_new_account_id;
@@ -607,6 +613,7 @@ BEGIN
     RAISE EXCEPTION 'Not authenticated';
   END IF;
 
+  PERFORM set_config('nagddkp.allow_sensitive_profile_write', '1', true);
   IF public.is_officer() THEN
     UPDATE public.profiles SET account_id = NULL, updated_at = now() WHERE id = v_uid;
     RETURN;
@@ -648,6 +655,7 @@ BEGIN
     END IF;
   END IF;
 
+  PERFORM set_config('nagddkp.allow_sensitive_profile_write', '1', true);
   UPDATE public.profiles SET account_id = trim(p_account_id), updated_at = now() WHERE id = v_uid;
   IF NOT FOUND THEN
     RAISE EXCEPTION 'Profile not found';
@@ -670,6 +678,7 @@ BEGIN
     RAISE EXCEPTION 'Only officers can reset claim cooldown';
   END IF;
 
+  PERFORM set_config('nagddkp.allow_sensitive_profile_write', '1', true);
   UPDATE public.profiles
   SET unclaim_cooldown_until = NULL, unclaim_count = 0, updated_at = now()
   WHERE id = p_profile_id;
@@ -850,9 +859,9 @@ BEGIN
   INSERT INTO restore_in_progress (id, in_progress) VALUES (1, true) ON CONFLICT (id) DO UPDATE SET in_progress = true;
 END;
 $$;
-COMMENT ON FUNCTION public.begin_restore_load() IS 'Signal start of bulk restore load; DKP triggers skip work until end_restore_load().';
+COMMENT ON FUNCTION public.begin_restore_load() IS 'Signal start of bulk restore load; DKP triggers skip work until end_restore_load(). service_role only.';
+REVOKE ALL ON FUNCTION public.begin_restore_load() FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.begin_restore_load() TO service_role;
-GRANT EXECUTE ON FUNCTION public.begin_restore_load() TO authenticated;
 
 -- Fix serial sequences after restore: backup CSVs include explicit id values, so the sequence
 -- stays at 1 and the next insert would duplicate. Call this after loading tables with id columns.
@@ -2217,26 +2226,29 @@ WHERE p.id = src.id
   AND src.name IS NOT NULL
   AND (p.display_name IS NULL OR btrim(p.display_name) = '');
 
--- Authenticated clients cannot change role except through siteadmin_set_role.
--- SQL with no auth.uid() (the SQL editor) can still promote the first siteadmin.
+-- Direct updates cannot change role, account claim, email, or unclaim fields.
+-- Dedicated RPCs set nagddkp.allow_sensitive_profile_write for this transaction.
+-- The SQL editor (postgres / supabase_admin) can still promote the first siteadmin.
 CREATE OR REPLACE FUNCTION public.profiles_role_guard()
 RETURNS trigger
 LANGUAGE plpgsql
 SET search_path = public
 AS $$
 BEGIN
-  IF NEW.role IS DISTINCT FROM OLD.role
-     AND auth.uid() IS NOT NULL
-     AND current_setting('nagddkp.allow_role_change', true) IS DISTINCT FROM '1' THEN
-    RAISE EXCEPTION 'Role can only be changed by a site admin';
+  IF session_user IN ('postgres', 'supabase_admin') THEN
+    RETURN NEW;
   END IF;
-  RETURN NEW;
+  IF current_setting('nagddkp.allow_sensitive_profile_write', true) = '1' THEN
+    RETURN NEW;
+  END IF;
+  RAISE EXCEPTION 'Role, account claim, email, and unclaim fields can only be changed by a dedicated function';
 END;
 $$;
 
 DROP TRIGGER IF EXISTS profiles_role_guard ON public.profiles;
 CREATE TRIGGER profiles_role_guard
-  BEFORE UPDATE OF role ON public.profiles
+  BEFORE UPDATE OF role, account_id, email, unclaim_count, unclaim_cooldown_until
+  ON public.profiles
   FOR EACH ROW
   EXECUTE FUNCTION public.profiles_role_guard();
 
@@ -2534,7 +2546,11 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 BEGIN
-  IF auth.uid() IS NOT NULL AND NOT public.is_officer() THEN
+  IF NOT (
+    public.is_officer()
+    OR nullif(trim(COALESCE(current_setting('request.jwt.claim.role', true), '')), '') = 'service_role'
+    OR session_user IN ('postgres', 'supabase_admin')
+  ) THEN
     RAISE EXCEPTION 'Only officers can refresh account DKP summary';
   END IF;
   SET LOCAL statement_timeout = '600s';
@@ -2556,11 +2572,11 @@ BEGIN
   PERFORM refresh_character_dkp_spent();
 END;
 $$;
-COMMENT ON FUNCTION public.end_restore_load() IS 'Signal end of bulk restore load; re-enables triggers and runs full DKP, raid totals, and character spent refresh.';
+COMMENT ON FUNCTION public.end_restore_load() IS 'Signal end of bulk restore load; re-enables triggers and runs full DKP, raid totals, and character spent refresh. service_role only.';
+REVOKE ALL ON FUNCTION public.end_restore_load() FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.end_restore_load() TO service_role;
-GRANT EXECUTE ON FUNCTION public.end_restore_load() TO authenticated;
+REVOKE ALL ON FUNCTION public.fix_serial_sequences_for_restore() FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.fix_serial_sequences_for_restore() TO service_role;
-GRANT EXECUTE ON FUNCTION public.fix_serial_sequences_for_restore() TO authenticated;
 
 -- 10) truncate_dkp_for_restore: include new account tables
 CREATE OR REPLACE FUNCTION public.truncate_dkp_for_restore()
@@ -2594,9 +2610,9 @@ BEGIN
   TRUNCATE TABLE officer_audit_log;
 END;
 $$;
-COMMENT ON FUNCTION public.truncate_dkp_for_restore() IS 'Truncate DKP data tables for restore; used by restore script via API. Does not truncate accounts or account_class_coverage.';
+COMMENT ON FUNCTION public.truncate_dkp_for_restore() IS 'Truncate DKP data tables for restore; used by the restore script via the service role. Does not truncate accounts or account_class_coverage. Not callable by anon or authenticated.';
+REVOKE ALL ON FUNCTION public.truncate_dkp_for_restore() FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.truncate_dkp_for_restore() TO service_role;
-GRANT EXECUTE ON FUNCTION public.truncate_dkp_for_restore() TO authenticated;
 
 -- 11) RLS for new tables
 ALTER TABLE account_dkp_summary ENABLE ROW LEVEL SECURITY;
@@ -2637,7 +2653,11 @@ AS $$
 DECLARE
   target_accounts TEXT[];
 BEGIN
-  IF auth.uid() IS NOT NULL AND NOT public.is_officer() THEN
+  IF NOT (
+    public.is_officer()
+    OR nullif(trim(COALESCE(current_setting('request.jwt.claim.role', true), '')), '') = 'service_role'
+    OR session_user IN ('postgres', 'supabase_admin')
+  ) THEN
     RAISE EXCEPTION 'Only officers can refresh account DKP summary for raid';
   END IF;
 
@@ -2764,6 +2784,11 @@ DROP POLICY IF EXISTS "Profiles update" ON profiles;
 CREATE POLICY "Profiles update" ON profiles
   FOR UPDATE USING (auth.uid() = id OR public.is_officer())
   WITH CHECK (auth.uid() = id OR public.is_officer());
+
+-- Table-wide UPDATE would cover role, account_id, email, and unclaim fields.
+-- Callers change those only through SECURITY DEFINER RPCs (table owner).
+REVOKE INSERT, UPDATE, DELETE ON TABLE public.profiles FROM PUBLIC, anon, authenticated, service_role;
+GRANT SELECT ON TABLE public.profiles TO authenticated;
 
 -- Officer-only write policies (use is_officer() for consistency)
 DROP POLICY IF EXISTS "Officers manage raids" ON raids;
@@ -3361,9 +3386,9 @@ BEGIN
 END;
 $$;
 
-COMMENT ON FUNCTION public.delete_raid_for_reupload(text) IS 'Delete one raid from events/loot/attendance/event_attendance for re-upload. Used by upload_raid_detail_to_supabase.py via API.';
+COMMENT ON FUNCTION public.delete_raid_for_reupload(text) IS 'Delete one raid from events/loot/attendance/event_attendance for re-upload. Used by upload_raid_detail_to_supabase.py with the service role. Officers use delete_raid.';
+REVOKE ALL ON FUNCTION public.delete_raid_for_reupload(text) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.delete_raid_for_reupload(text) TO service_role;
-GRANT EXECUTE ON FUNCTION public.delete_raid_for_reupload(text) TO authenticated;
 
 -- 2) Bulk insert raid_event_attendance (avoids per-row triggers)
 -- No end_restore_load: Supabase API statement cap; upload script runs refresh_dkp_summary separately.
@@ -3402,9 +3427,9 @@ BEGIN
 END;
 $$;
 
-COMMENT ON FUNCTION public.insert_raid_event_attendance_for_upload(text, jsonb) IS 'Bulk insert raid_event_attendance under restore_load; clears restore flag; refresh_raid_attendance_totals for this raid only. Caller must run refresh_account_dkp_summary_for_raid / refresh_dkp_summary.';
+COMMENT ON FUNCTION public.insert_raid_event_attendance_for_upload(text, jsonb) IS 'Bulk insert raid_event_attendance under restore_load; clears restore flag; refresh_raid_attendance_totals for this raid only. service_role only. Caller must run refresh_account_dkp_summary_for_raid / refresh_dkp_summary.';
+REVOKE ALL ON FUNCTION public.insert_raid_event_attendance_for_upload(text, jsonb) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.insert_raid_event_attendance_for_upload(text, jsonb) TO service_role;
-GRANT EXECUTE ON FUNCTION public.insert_raid_event_attendance_for_upload(text, jsonb) TO authenticated;
 
 -- =============================================================================
 -- Officer bidding portfolio (SECURITY DEFINER, is_officer). GRANT EXECUTE on officer RPCs to authenticated only.
@@ -4773,10 +4798,10 @@ CREATE POLICY "Officers manage loot_assignment" ON loot_assignment FOR ALL TO au
   USING (public.is_officer())
   WITH CHECK (public.is_officer());
 
-GRANT EXECUTE ON FUNCTION public.update_raid_loot_assignments(jsonb) TO authenticated;
-GRANT EXECUTE ON FUNCTION public.update_raid_loot_assignments(jsonb) TO anon;
+REVOKE ALL ON FUNCTION public.update_raid_loot_assignments(jsonb) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.update_raid_loot_assignments(jsonb) TO service_role;
+REVOKE ALL ON FUNCTION public.update_single_raid_loot_assignment(bigint, text, text) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.update_single_raid_loot_assignment(bigint, text, text) TO authenticated;
-GRANT EXECUTE ON FUNCTION public.update_single_raid_loot_assignment(bigint, text, text) TO anon;
 
 -- Officer-only raider activity snapshot for /officer/raider-activity.
 CREATE OR REPLACE FUNCTION public.officer_raider_activity(
@@ -5286,15 +5311,21 @@ GRANT EXECUTE ON FUNCTION public.set_my_display_name(text) TO authenticated;
 -- Claimed-by labels for the accounts list. No email and no profile id.
 CREATE OR REPLACE FUNCTION public.account_claim_labels()
 RETURNS TABLE (account_id text, display_name text)
-LANGUAGE sql
+LANGUAGE plpgsql
 STABLE
 SECURITY DEFINER
 SET search_path = public
 AS $$
+BEGIN
+  IF auth.uid() IS NULL THEN
+    RAISE EXCEPTION 'Not authenticated';
+  END IF;
+  RETURN QUERY
   SELECT p.account_id, p.display_name
   FROM public.profiles p
   WHERE p.account_id IS NOT NULL
     AND btrim(p.account_id) <> '';
+END;
 $$;
 
 COMMENT ON FUNCTION public.account_claim_labels() IS
@@ -5333,6 +5364,7 @@ BEGIN
     RETURN;
   END IF;
 
+  PERFORM set_config('nagddkp.allow_sensitive_profile_write', '1', true);
   UPDATE public.profiles
   SET account_id = NULL, updated_at = now()
   WHERE id = p_profile_id;
@@ -5361,6 +5393,7 @@ AS $$
 DECLARE
   v_role text;
   v_old text;
+  v_actor text;
 BEGIN
   IF auth.uid() IS NULL THEN
     RAISE EXCEPTION 'Not authenticated';
@@ -5371,10 +5404,27 @@ BEGIN
   IF p_profile_id IS NULL THEN
     RAISE EXCEPTION 'Profile is required';
   END IF;
+  IF p_profile_id = auth.uid() THEN
+    RAISE EXCEPTION 'You cannot change your own role';
+  END IF;
 
   v_role := lower(trim(coalesce(p_role, '')));
   IF v_role NOT IN ('player', 'officer', 'siteadmin') THEN
     RAISE EXCEPTION 'Role must be player, officer, or siteadmin';
+  END IF;
+
+  -- Serialize demotions. Two site admins demoting each other must not both succeed.
+  PERFORM id
+  FROM public.profiles
+  WHERE role = 'siteadmin'
+  ORDER BY id
+  FOR UPDATE;
+
+  SELECT role INTO v_actor
+  FROM public.profiles
+  WHERE id = auth.uid();
+  IF v_actor IS DISTINCT FROM 'siteadmin' THEN
+    RAISE EXCEPTION 'Only site admins can change roles';
   END IF;
 
   SELECT role INTO v_old
@@ -5398,7 +5448,7 @@ BEGIN
     RETURN v_role;
   END IF;
 
-  PERFORM set_config('nagddkp.allow_role_change', '1', true);
+  PERFORM set_config('nagddkp.allow_sensitive_profile_write', '1', true);
   UPDATE public.profiles
   SET role = v_role, updated_at = now()
   WHERE id = p_profile_id;
@@ -5414,9 +5464,9 @@ END;
 $$;
 
 COMMENT ON FUNCTION public.siteadmin_set_role(uuid, text) IS
-  'Siteadmin: set profiles.role to player, officer, or siteadmin. Refuses to remove the last siteadmin.';
+  'Siteadmin: set profiles.role to player, officer, or siteadmin. Refuses self-changes and the last siteadmin. Locks siteadmin rows so concurrent demotions cannot remove every site admin.';
 
-REVOKE ALL ON FUNCTION public.siteadmin_set_role(uuid, text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.siteadmin_set_role(uuid, text) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.siteadmin_set_role(uuid, text) TO authenticated;
 
 CREATE OR REPLACE FUNCTION public.siteadmin_delete_user(p_profile_id uuid)
@@ -5451,7 +5501,8 @@ BEGIN
   SELECT role, display_name, account_id
   INTO v_role, v_name, v_account
   FROM public.profiles
-  WHERE id = p_profile_id;
+  WHERE id = p_profile_id
+  FOR UPDATE;
   IF NOT FOUND THEN
     RAISE EXCEPTION 'Profile not found';
   END IF;
@@ -5476,18 +5527,202 @@ BEGIN
     jsonb_build_object(
       'display_name', v_name,
       'role', v_role,
-      'account_id', v_account
+      'account_id', v_account,
+      'auth_delete', 'pending'
     )
   );
-
-  -- auth.users is removed by the server (auth.admin.deleteUser) after this returns.
-  -- Game accounts and characters stay. profiles.id cascades when the auth user is deleted.
-  DELETE FROM public.profiles WHERE id = p_profile_id;
+  -- The profile row stays until auth.users is deleted. profiles.id ON DELETE CASCADE
+  -- removes it. Game accounts, characters, loot, attendance, and audit rows stay.
 END;
 $$;
 
 COMMENT ON FUNCTION public.siteadmin_delete_user(uuid) IS
-  'Officer or siteadmin: delete public.profiles for a user they may remove. Officers may remove players only. Site admins may remove players and officers. Nobody may remove a site admin or themselves. Does not delete auth.users (web/api/delete-site-user.js calls auth.admin.deleteUser), game accounts, or characters.';
+  'Officer or siteadmin: authorize removal of an existing profile. Officers may remove players only. Site admins may remove players and officers. Nobody may remove a site admin or themselves. Does not delete the profile or auth.users. web/api/delete-site-user.js deletes the Auth user after this returns; the profile cascades. Writes officer_audit_log with auth_delete=pending.';
 
-REVOKE ALL ON FUNCTION public.siteadmin_delete_user(uuid) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.siteadmin_delete_user(uuid) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.siteadmin_delete_user(uuid) TO authenticated;
+
+-- Called only after auth.admin.deleteUser has succeeded and the profile cascade has removed the row.
+CREATE OR REPLACE FUNCTION public.siteadmin_confirm_auth_deleted(p_profile_id uuid)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_audit_id uuid;
+BEGIN
+  IF auth.uid() IS NULL THEN
+    RAISE EXCEPTION 'Not authenticated';
+  END IF;
+  IF NOT public.is_officer() THEN
+    RAISE EXCEPTION 'Only officers and site admins can remove a user';
+  END IF;
+  IF p_profile_id IS NULL THEN
+    RAISE EXCEPTION 'Profile is required';
+  END IF;
+  IF EXISTS (SELECT 1 FROM public.profiles WHERE id = p_profile_id) THEN
+    RAISE EXCEPTION 'Auth user was not deleted';
+  END IF;
+
+  SELECT id INTO v_audit_id
+  FROM public.officer_audit_log
+  WHERE action = 'siteadmin_delete_user'
+    AND target_id = p_profile_id::text
+    AND actor_id = auth.uid()
+    AND COALESCE(delta->>'auth_delete', '') = 'pending'
+  ORDER BY created_at DESC
+  LIMIT 1
+  FOR UPDATE;
+
+  IF v_audit_id IS NULL THEN
+    RAISE EXCEPTION 'No pending deletion audit for this profile';
+  END IF;
+
+  UPDATE public.officer_audit_log
+  SET delta = delta || jsonb_build_object('auth_delete', 'succeeded')
+  WHERE id = v_audit_id;
+END;
+$$;
+
+COMMENT ON FUNCTION public.siteadmin_confirm_auth_deleted(uuid) IS
+  'After Auth deletion has removed the profile, mark the matching pending siteadmin_delete_user audit as succeeded. Refuses while the profile still exists.';
+
+REVOKE ALL ON FUNCTION public.siteadmin_confirm_auth_deleted(uuid) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.siteadmin_confirm_auth_deleted(uuid) TO authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Execution privileges. Re-runnable.
+-- CREATE FUNCTION grants EXECUTE to PUBLIC, and Supabase default privileges also
+-- grant anon and authenticated. REVOKE FROM PUBLIC does not remove those grants.
+-- Browser roles must not run restore, upload, or internal ledger maintenance.
+-- Officers keep the checked UI RPCs. service_role keeps the import/restore jobs.
+-- ---------------------------------------------------------------------------
+
+REVOKE ALL ON FUNCTION public.begin_restore_load() FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.end_restore_load() FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.fix_serial_sequences_for_restore() FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.truncate_dkp_for_restore() FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.delete_raid_for_reupload(text) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.insert_raid_event_attendance_for_upload(text, jsonb) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.refresh_dkp_summary_internal() FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION public.refresh_account_dkp_summary_internal() FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION public.refresh_all_raid_attendance_totals() FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.refresh_raid_attendance_totals(text) FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION public.refresh_raid_totals_for_ids(text[]) FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION public.apply_earned_deltas(jsonb) FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION public.apply_spent_deltas(jsonb, text, date[]) FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION public.adjust_dkp_period_totals(jsonb) FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION public.refresh_dkp_last_activity(text[], text[]) FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION public.touch_dkp_last_activity(text[], text[], date) FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION public.recompute_dkp_last_activity_if_latest(text[], text[], date[]) FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION public.refresh_character_dkp_spent() FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION public.update_raid_loot_assignments(jsonb) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.refresh_after_bulk_loot_assignment() FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.write_site_admin_audit(text, text, text, jsonb) FROM PUBLIC, anon, authenticated, service_role;
+
+GRANT EXECUTE ON FUNCTION public.begin_restore_load() TO service_role;
+GRANT EXECUTE ON FUNCTION public.end_restore_load() TO service_role;
+GRANT EXECUTE ON FUNCTION public.fix_serial_sequences_for_restore() TO service_role;
+GRANT EXECUTE ON FUNCTION public.truncate_dkp_for_restore() TO service_role;
+GRANT EXECUTE ON FUNCTION public.delete_raid_for_reupload(text) TO service_role;
+GRANT EXECUTE ON FUNCTION public.insert_raid_event_attendance_for_upload(text, jsonb) TO service_role;
+GRANT EXECUTE ON FUNCTION public.refresh_all_raid_attendance_totals() TO service_role;
+GRANT EXECUTE ON FUNCTION public.update_raid_loot_assignments(jsonb) TO service_role;
+GRANT EXECUTE ON FUNCTION public.refresh_after_bulk_loot_assignment() TO service_role;
+
+DO $github_worker_execute$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'github_worker') THEN
+    GRANT EXECUTE ON FUNCTION public.update_raid_loot_assignments(jsonb) TO github_worker;
+    GRANT EXECUTE ON FUNCTION public.refresh_after_bulk_loot_assignment() TO github_worker;
+  END IF;
+END
+$github_worker_execute$;
+
+-- Trigger functions stay installed. They are not PostgREST entry points.
+DO $revoke_trigger_execute$
+DECLARE
+  r record;
+BEGIN
+  FOR r IN
+    SELECT p.oid::regprocedure AS signature
+    FROM pg_proc p
+    JOIN pg_namespace n ON n.oid = p.pronamespace
+    WHERE n.nspname = 'public'
+      AND p.prorettype = 'trigger'::regtype
+  LOOP
+    EXECUTE format('REVOKE ALL ON FUNCTION %s FROM PUBLIC, anon, authenticated', r.signature);
+  END LOOP;
+END
+$revoke_trigger_execute$;
+
+-- Checked RPCs used by the site or by service-role scripts.
+REVOKE ALL ON FUNCTION public.is_officer() FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.is_site_admin() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.is_officer() TO anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.is_site_admin() TO anon, authenticated;
+
+REVOKE ALL ON FUNCTION public.refresh_dkp_summary() FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.refresh_account_dkp_summary() FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.refresh_account_dkp_summary_for_raid(text, text[]) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.refresh_dkp_summary() TO authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.refresh_account_dkp_summary() TO authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.refresh_account_dkp_summary_for_raid(text, text[]) TO authenticated, service_role;
+
+REVOKE ALL ON FUNCTION public.add_character_to_my_account(text, text, text) FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.create_my_account(text) FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.create_account(text) FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.unclaim_account() FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.claim_account(text) FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.reset_claim_cooldown(uuid) FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.delete_raid(text) FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.delete_tic(text, text, text[]) FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.remove_attendee_from_tic(text, text, text, text[]) FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.add_officer_tic(text, text, integer, text, text, text, jsonb) FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.add_attendee_to_tic(text, text, text, text) FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.add_attendees_to_existing_tic(text, text, jsonb) FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.get_character_dkp_spent(text[]) FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.update_single_raid_loot_assignment(bigint, text, text) FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.officer_raider_activity(integer, integer) FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.officer_upsert_account_class_coverage(jsonb) FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.officer_set_account_display_name(text, text) FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.set_my_display_name(text) FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.account_claim_labels() FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.siteadmin_unclaim_profile(uuid) FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.siteadmin_set_role(uuid, text) FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.siteadmin_delete_user(uuid) FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.siteadmin_confirm_auth_deleted(uuid) FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.officer_bid_portfolio_for_loot(bigint) FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.officer_account_bidding_portfolio(text, date, date) FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.officer_backfill_bid_portfolio_batch(bigint, bigint, boolean) FROM PUBLIC, anon;
+
+GRANT EXECUTE ON FUNCTION public.add_character_to_my_account(text, text, text) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.create_my_account(text) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.create_account(text) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.unclaim_account() TO authenticated;
+GRANT EXECUTE ON FUNCTION public.claim_account(text) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.reset_claim_cooldown(uuid) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.delete_raid(text) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.delete_tic(text, text, text[]) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.remove_attendee_from_tic(text, text, text, text[]) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.add_officer_tic(text, text, integer, text, text, text, jsonb) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.add_attendee_to_tic(text, text, text, text) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.add_attendees_to_existing_tic(text, text, jsonb) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.get_character_dkp_spent(text[]) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.update_single_raid_loot_assignment(bigint, text, text) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.officer_raider_activity(integer, integer) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.officer_upsert_account_class_coverage(jsonb) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.officer_set_account_display_name(text, text) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.set_my_display_name(text) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.account_claim_labels() TO authenticated;
+GRANT EXECUTE ON FUNCTION public.siteadmin_unclaim_profile(uuid) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.siteadmin_set_role(uuid, text) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.siteadmin_delete_user(uuid) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.siteadmin_confirm_auth_deleted(uuid) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.officer_bid_portfolio_for_loot(bigint) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.officer_account_bidding_portfolio(text, date, date) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.officer_backfill_bid_portfolio_batch(bigint, bigint, boolean) TO authenticated;
+
+REVOKE INSERT, UPDATE, DELETE ON TABLE public.profiles FROM PUBLIC, anon, authenticated, service_role;
+GRANT SELECT ON TABLE public.profiles TO authenticated;
