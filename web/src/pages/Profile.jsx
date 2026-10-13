@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { loadAccountActivity } from '../lib/accountData'
@@ -39,6 +39,9 @@ export default function Profile({ profile, onProfileUpdate }) {
   const [error, setError] = useState('')
   const [refreshKey, setRefreshKey] = useState(0)
   const [addCharOpen, setAddCharOpen] = useState(false)
+  const [addCharReveal, setAddCharReveal] = useState(0)
+  const addCharSectionRef = useRef(null)
+  const addCharNameRef = useRef(null)
   const [addCharInput, setAddCharInput] = useState('')
   const [addCharIdInput, setAddCharIdInput] = useState('')
   const [addCharError, setAddCharError] = useState('')
@@ -82,6 +85,14 @@ export default function Profile({ profile, onProfileUpdate }) {
       setError('Failed to load account activity')
     })
   }, [profile?.account_id, refreshKey])
+
+  useEffect(() => {
+    if (!addCharReveal) return
+    const section = addCharSectionRef.current
+    if (!section) return
+    section.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    addCharNameRef.current?.focus({ preventScroll: true })
+  }, [addCharReveal])
 
   async function handleSaveDisplayName() {
     const name = displayName.trim()
@@ -191,7 +202,7 @@ export default function Profile({ profile, onProfileUpdate }) {
               activityReady={!accountLoading}
             />
             <p style={{ color: '#71717a', fontSize: '0.875rem', marginBottom: '0.75rem' }}>
-              View your characters and activity below. Use the + on the Characters tab to add alts. Unclaim below to release it and claim a different account.
+              View your characters and activity below. Use + Add character on the Characters tab to add alts. Unclaim below to release it and claim a different account.
             </p>
             {error && <p style={{ color: '#f87171', fontSize: '0.875rem', marginBottom: '0.5rem' }}>{error}</p>}
             <button
@@ -247,19 +258,26 @@ export default function Profile({ profile, onProfileUpdate }) {
           ) : tab === 'characters' ? (
             <div className="card">
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-                <h2 style={{ marginTop: 0 }}>Characters</h2>
+                <h2 style={{ margin: 0 }}>Characters</h2>
                 <button
                   type="button"
                   className="btn btn-ghost"
-                  style={{ padding: '0.25rem 0.5rem', fontSize: '1.25rem', lineHeight: 1 }}
-                  onClick={() => { setAddCharOpen(true); setAddCharError(''); setAddCharInput(''); setAddCharIdInput(''); }}
-                  title="Add alt to this account"
+                  style={{ padding: '0.35rem 0.65rem', fontSize: '0.95rem', lineHeight: 1.2, display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
+                  onClick={() => {
+                    setAddCharOpen(true)
+                    setAddCharError('')
+                    setAddCharInput('')
+                    setAddCharIdInput('')
+                    setAddCharReveal((n) => n + 1)
+                  }}
+                  title="Add an alt to this account"
                 >
-                  +
+                  <span aria-hidden="true" style={{ fontSize: '1.25rem', fontWeight: 600, lineHeight: 1 }}>+</span>
+                  Add character
                 </button>
               </div>
               {characters.length === 0 ? (
-                <p style={{ color: '#71717a' }}>No characters linked to this account. Use + to add a character.</p>
+                <p style={{ color: '#71717a' }}>No characters linked to this account. Use + Add character to add one.</p>
               ) : (
                 <ul style={{ listStyle: 'none', paddingLeft: 0, margin: 0 }}>
                   {characters.map((c) => {
@@ -286,10 +304,11 @@ export default function Profile({ profile, onProfileUpdate }) {
           ) : null}
 
           {tab === 'characters' && addCharOpen && (
-            <div className="card" style={{ marginTop: '1rem', maxWidth: '24rem' }}>
+            <div ref={addCharSectionRef} className="card" style={{ marginTop: '1rem', maxWidth: '24rem', scrollMarginTop: '1rem' }}>
               <h3 style={{ marginTop: 0 }}>Add character to account</h3>
               <p style={{ color: '#a1a1aa', fontSize: '0.875rem', marginBottom: '0.75rem' }}>Enter character name. If they’re not in the database, we’ll add them. Optionally provide char ID from server.</p>
               <input
+                ref={addCharNameRef}
                 type="text"
                 className="input"
                 placeholder="Character name (required)"

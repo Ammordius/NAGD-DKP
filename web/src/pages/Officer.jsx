@@ -1920,7 +1920,7 @@ export default function Officer({ isOfficer }) {
               </div>
             </div>
             <hr className="officer-divider" />
-            <p className="officer-hint">Or paste loot log lines. A line is added when the character, item, and optional &quot;N DKP&quot; all match. Those rows use the tic selected above.</p>
+            <p className="officer-hint">Paste log award line here. The line must contain exact Character name match, # value and word &quot;DKP&quot; in so it&apos;s parsed. If the format does not match it will error. Refer to below example.</p>
             <textarea
               className="officer-paste"
               value={lootLogPaste}
