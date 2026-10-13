@@ -35,6 +35,32 @@ function ticOptionLabel(event) {
   return `${order}${event?.event_name || 'Tic'}`
 }
 
+function MemberList({ label, rows, highlight, emptyText, onRowClick, onRowDoubleClick, className }) {
+  const highlighted = new Set(highlight)
+  return (
+    <div className={className ? `officer-member-list ${className}` : 'officer-member-list'} role="listbox" aria-label={label} aria-multiselectable="true">
+      {rows.length === 0 ? (
+        <p className="officer-member-empty">{emptyText}</p>
+      ) : (
+        rows.map((row, index) => (
+          <button
+            key={row.char_id}
+            type="button"
+            role="option"
+            aria-selected={highlighted.has(row.char_id)}
+            className={highlighted.has(row.char_id) ? 'is-highlighted' : undefined}
+            title={row.label}
+            onClick={(e) => onRowClick(row.char_id, index, e.shiftKey)}
+            onDoubleClick={() => onRowDoubleClick(row.char_id)}
+          >
+            {row.label}
+          </button>
+        ))
+      )}
+    </div>
+  )
+}
+
 function ResultNames({ label, names, tone }) {
   if (!names?.length) return null
   return (
@@ -107,6 +133,12 @@ export default function Officer({ isOfficer }) {
   const [appendEventId, setAppendEventId] = useState('')
   const [ticResolutions, setTicResolutions] = useState({})
   const [ticExcludedCharIds, setTicExcludedCharIds] = useState([])
+  const [ticAttendingIds, setTicAttendingIds] = useState([])
+  const [ticMemberQuery, setTicMemberQuery] = useState('')
+  const [availableHighlight, setAvailableHighlight] = useState([])
+  const [attendingHighlight, setAttendingHighlight] = useState([])
+  const availableAnchorRef = useRef(null)
+  const attendingAnchorRef = useRef(null)
 
   // Add loot manual
   const [lootItemQuery, setLootItemQuery] = useState('')
@@ -150,6 +182,43 @@ export default function Officer({ isOfficer }) {
 
   const nameToChars = useMemo(() => indexCharactersByName(characters), [characters])
 
+  const memberRows = useMemo(() => {
+    const rows = []
+    const seenCharId = new Set()
+    for (const c of characters) {
+      const charId = c?.char_id != null ? String(c.char_id).trim() : ''
+      const name = (c?.name || '').trim()
+      if (!charId || !name || seenCharId.has(charId)) continue
+      seenCharId.add(charId)
+      const accId = charIdToAccountId[charId]
+      const accName = accId ? (accountIdToDisplayName[accId] || String(accId)) : ''
+      rows.push({
+        char_id: charId,
+        name,
+        label: accName ? `${name} (${accName})` : name,
+      })
+    }
+    const counts = new Map()
+    for (const row of rows) counts.set(row.label, (counts.get(row.label) || 0) + 1)
+    return rows.map((row) => (
+      counts.get(row.label) > 1 ? { ...row, label: `${row.label} (${row.char_id})` } : row
+    ))
+  }, [characters, charIdToAccountId, accountIdToDisplayName])
+
+  const attendingMembers = useMemo(() => {
+    const byId = new Map(memberRows.map((row) => [row.char_id, row]))
+    return ticAttendingIds.map((id) => byId.get(id) || { char_id: id, name: id, label: id })
+  }, [memberRows, ticAttendingIds])
+
+  const availableMembers = useMemo(() => {
+    const attendingIds = new Set(ticAttendingIds)
+    const q = ticMemberQuery.toLowerCase().trim()
+    return memberRows
+      .filter((row) => !attendingIds.has(row.char_id))
+      .filter((row) => !q || row.label.toLowerCase().includes(q))
+      .sort((a, b) => a.label.localeCompare(b.label))
+  }, [memberRows, ticAttendingIds, ticMemberQuery])
+
   const ticPreview = useMemo(() => {
     const existingAttendees = ticDestination === 'existing'
       ? eventAttendance.filter((row) => String(row.event_id) === String(appendEventId))
@@ -160,8 +229,9 @@ export default function Officer({ isOfficer }) {
       existingAttendees,
       resolutions: ticResolutions,
       excludedCharIds: ticExcludedCharIds,
+      explicitChars: attendingMembers.map((row) => ({ char_id: row.char_id, name: row.name })),
     })
-  }, [ticPaste, ticDestination, appendEventId, eventAttendance, nameToChars, charIdToAccountId, ticResolutions, ticExcludedCharIds])
+  }, [ticPaste, ticDestination, appendEventId, eventAttendance, nameToChars, charIdToAccountId, ticResolutions, ticExcludedCharIds, attendingMembers])
 
   const getAccountId = useMemo(() => {
     const nameToAcc = {}
@@ -474,7 +544,7 @@ export default function Officer({ isOfficer }) {
     setError('')
     const { raidName, dateIso } = parseRaidString(raidPaste)
     if (!raidName.trim()) {
-      setError('Could not parse a raid name. Use format like: "Thursday 02/12 9pm est: Water Minis + Cursed/Emp - February 12, 2026 8:00 PM"')
+      setError('Enter the Raid Name.')
       setMutating(false)
       return
     }
@@ -539,8 +609,8 @@ export default function Officer({ isOfficer }) {
     setTicResult(null)
     setError('')
     const { names } = parseChannelList(ticPaste)
-    if (names.length === 0) {
-      setError('No names found in the pasted list. Paste lines like "[Sun Apr 14 10:17:09 2024] Meldrath, Fridge, Geom, ..."')
+    if (names.length === 0 && ticAttendingIds.length === 0) {
+      setError('No names found. Paste a channel log, one name per line, a comma-separated list, or move characters to Attending.')
       setMutating(false)
       return
     }
@@ -619,6 +689,9 @@ export default function Officer({ isOfficer }) {
       setTicPaste('')
       setTicResolutions({})
       setTicExcludedCharIds([])
+      setTicAttendingIds([])
+      setAvailableHighlight([])
+      setAttendingHighlight([])
       setExpandedEvents((prev) => ({ ...prev, [appendEventId]: true }))
       try { sessionStorage.removeItem('dkp_leaderboard_v2') } catch (_) {}
       await loadSelectedRaid()
@@ -683,6 +756,9 @@ export default function Officer({ isOfficer }) {
     setTicPaste('')
     setTicResolutions({})
     setTicExcludedCharIds([])
+    setTicAttendingIds([])
+    setAvailableHighlight([])
+    setAttendingHighlight([])
     setExpandedEvents((prev) => ({ ...prev, [event_id]: true }))
     await logOfficerAudit(supabase, {
       action: 'add_tic',
@@ -1200,6 +1276,12 @@ export default function Officer({ isOfficer }) {
     setTicDate(stamp?.date || defaults.date)
     setTicTime(stamp?.time || defaults.time)
     setTicDateTimeTouched(false)
+    setTicAttendingIds([])
+    setAvailableHighlight([])
+    setAttendingHighlight([])
+    setTicMemberQuery('')
+    availableAnchorRef.current = null
+    attendingAnchorRef.current = null
   }, [selectedRaidId])
 
   useEffect(() => {
@@ -1238,6 +1320,35 @@ export default function Officer({ isOfficer }) {
     setTicExcludedCharIds((prev) => (
       prev.includes(charId) ? prev.filter((id) => id !== charId) : [...prev, charId]
     ))
+  }
+
+  const highlightMember = (id, index, shiftKey, rows, setHighlight, anchorRef) => {
+    if (shiftKey && anchorRef.current != null) {
+      const start = Math.min(anchorRef.current, index)
+      const end = Math.max(anchorRef.current, index)
+      const range = rows.slice(start, end + 1).map((row) => row.char_id)
+      setHighlight((prev) => [...new Set([...prev, ...range])])
+      return
+    }
+    anchorRef.current = index
+    setHighlight((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
+  }
+
+  const moveToAttending = (ids) => {
+    const unique = [...new Set((ids || []).map((id) => String(id)).filter(Boolean))]
+    if (unique.length === 0) return
+    setTicAttendingIds((prev) => [...new Set([...prev, ...unique])])
+    setAvailableHighlight((prev) => prev.filter((id) => !unique.includes(id)))
+    setTicResult(null)
+  }
+
+  const moveToAvailable = (ids) => {
+    const drop = new Set((ids || []).map((id) => String(id)))
+    if (drop.size === 0) return
+    setTicAttendingIds((prev) => prev.filter((id) => !drop.has(id)))
+    setAttendingHighlight((prev) => prev.filter((id) => !drop.has(id)))
+    setTicExcludedCharIds((prev) => prev.filter((id) => !drop.has(String(id))))
+    setTicResult(null)
   }
 
   return (
@@ -1343,15 +1454,13 @@ export default function Officer({ isOfficer }) {
       {showCreateRaid && (
         <section ref={addRaidSectionRef} className="card officer-create">
           <h2 style={{ marginTop: 0 }}>Add raid</h2>
-          <p className="officer-hint">
-            Paste a line from Discord, e.g. <code>Thursday 02/12 9pm est: Water Minis + Cursed/Emp - February 12, 2026 8:00 PM</code>
-          </p>
+          <p className="officer-hint">Enter the Raid Name</p>
           <textarea
             ref={raidPasteRef}
             className="officer-paste"
             value={raidPaste}
             onChange={(e) => setRaidPaste(e.target.value)}
-            placeholder="Thursday 02/12 9pm est: Water Minis + Cursed/Emp - February 12, 2026 8:00 PM"
+            placeholder="Enter the Raid Name"
             rows={2}
           />
           <div className="officer-field-row" style={{ marginTop: '0.5rem' }}>
@@ -1373,7 +1482,7 @@ export default function Officer({ isOfficer }) {
           <div className="officer-col">
           <section className={`card${showAddToTicDropdown ? ' officer-card--menu-open' : ''}`}>
             <h2 style={{ marginTop: 0 }}>Add DKP tic (attendance)</h2>
-            <p className="officer-hint">Paste the channel member list. Names are matched to the DKP list before anything is saved.</p>
+            <p className="officer-hint">Paste a channel member list, one name per line, or a comma-separated list. Or move characters to Attending. Names are matched to the DKP list before anything is saved.</p>
             <details className="officer-hint">
               <summary>How matching works</summary>
               <p>
@@ -1418,9 +1527,60 @@ export default function Officer({ isOfficer }) {
               className="officer-paste"
               value={ticPaste}
               onChange={(e) => { setTicPaste(e.target.value); setTicResult(null) }}
-              placeholder="[Sun Apr 14 10:17:09 2024] Channel Nag(30) members:&#10;[Sun Apr 14 10:17:09 2024] Meldrath, Fridge, Geom, ..."
+              placeholder="Channel log, one name per line, or Name1, Name2, Name3"
               rows={5}
             />
+            <div className="officer-member-picker">
+              <p className="officer-member-picker-label officer-member-avail-label">Available Members</p>
+              <p className="officer-member-picker-label officer-member-attend-label">Attending</p>
+              <input
+                className="officer-member-filter"
+                type="search"
+                value={ticMemberQuery}
+                onChange={(e) => setTicMemberQuery(e.target.value)}
+                placeholder="Filter members"
+                aria-label="Filter available members"
+                autoComplete="off"
+              />
+              <MemberList
+                className="officer-member-avail-list"
+                label="Available Members"
+                rows={availableMembers}
+                highlight={availableHighlight}
+                emptyText={characters.length === 0 ? 'Loading characters…' : (ticMemberQuery.trim() ? 'No matching characters' : 'No characters')}
+                onRowClick={(id, index, shiftKey) => highlightMember(id, index, shiftKey, availableMembers, setAvailableHighlight, availableAnchorRef)}
+                onRowDoubleClick={(id) => moveToAttending([id])}
+              />
+              <div className="officer-member-moves">
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  onClick={() => moveToAttending(availableHighlight)}
+                  disabled={availableHighlight.length === 0}
+                  aria-label="Add selected members to attending"
+                >
+                  &gt;&gt;
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  onClick={() => moveToAvailable(attendingHighlight)}
+                  disabled={attendingHighlight.length === 0}
+                  aria-label="Remove selected members from attending"
+                >
+                  &lt;&lt;
+                </button>
+              </div>
+              <MemberList
+                className="officer-member-attend-list"
+                label="Attending"
+                rows={attendingMembers}
+                highlight={attendingHighlight}
+                emptyText="None selected"
+                onRowClick={(id, index, shiftKey) => highlightMember(id, index, shiftKey, attendingMembers, setAttendingHighlight, attendingAnchorRef)}
+                onRowDoubleClick={(id) => moveToAvailable([id])}
+              />
+            </div>
             {ticDestination === 'new' && (
               <>
                 <div className="officer-field-row" style={{ marginTop: '0.5rem' }}>
@@ -1509,7 +1669,7 @@ export default function Officer({ isOfficer }) {
                 type="button"
                 className="btn"
                 onClick={handleAddTic}
-                disabled={mutating || !ticPaste.trim() || (ticDestination === 'existing' && !appendEventId)}
+                disabled={mutating || (!ticPaste.trim() && ticAttendingIds.length === 0) || (ticDestination === 'existing' && !appendEventId)}
               >
                 {mutating ? 'Adding…' : (ticDestination === 'existing' ? 'Add to tic' : 'Add tic')}
               </button>
