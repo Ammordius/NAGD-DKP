@@ -706,7 +706,7 @@ export default function RaidDetail({ isOfficer }) {
       <h2>Loot</h2>
       <AssignedLootDisclaimer compact />
       <div className="card">
-        {isOfficer && <p style={{ color: '#71717a', fontSize: '0.875rem', marginTop: 0 }}><Link to="/officer">Officer page</Link> to add more loot or tics.</p>}
+        {isOfficer && <p style={{ color: '#71717a', fontSize: '0.875rem', marginTop: 0 }}><Link to="/officer/RaidAdmin">Raid Admin</Link> to add more loot or tics.</p>}
         <table>
           <thead>
             <tr><th>Item</th><th>Buyer</th><th>Character</th><th>Cost</th>{isOfficer && <th style={{ width: '8rem' }}></th>}</tr>

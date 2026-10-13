@@ -6,6 +6,26 @@ a:hover { text-decoration: underline; }
 .container { max-width: 960px; margin: 0 auto; padding: 1rem; }
 nav { background: #18181b; padding: 0.75rem 1rem; margin-bottom: 1.5rem; display: flex; gap: 1.5rem; align-items: center; flex-wrap: wrap; }
 nav a { color: #a78bfa; }
+nav .nav-admin-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-left: 0.15rem;
+  padding-left: 0.85rem;
+  border-left: 2px solid #3f3f46;
+}
+nav .nav-admin-group a {
+  color: #fbbf24;
+  font-weight: 700;
+  border: 2px solid #fbbf24;
+  border-radius: 4px;
+  padding: 0.2rem 0.55rem;
+  line-height: 1.2;
+}
+nav .nav-admin-group a:hover {
+  background: rgba(251, 191, 36, 0.12);
+  text-decoration: none;
+}
 nav .role { margin-left: auto; font-size: 0.875rem; color: #71717a; }
 table { width: 100%; border-collapse: collapse; }
 th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #27272a; }

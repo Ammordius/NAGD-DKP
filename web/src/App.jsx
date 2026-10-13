@@ -86,6 +86,11 @@ export default function App() {
 
   const isOfficer = profile?.role === 'officer'
 
+  function RedirectPreserve({ to }) {
+    const { search, hash } = useLocation()
+    return <Navigate to={`${to}${search}${hash}`} replace />
+  }
+
   // Require sign-in for all data; only /login and /auth/callback are public (anon = handshake only).
   function RequireAuth({ children }) {
     if (!session) {
@@ -108,9 +113,13 @@ export default function App() {
         <Link to="/loot-recipients">Character History</Link>
         {session ? (
           <>
-            <Link to="/profile">Profile</Link>
-            {isOfficer && <Link to="/officer" style={{ color: '#fbbf24' }}>Officer</Link>}
-            {isOfficer && <Link to="/officer/claim-cooldowns">Admin</Link>}
+            <Link to="/profile">Your Profile</Link>
+            {isOfficer && (
+              <span className="nav-admin-group">
+                <Link to="/officer/RaidAdmin">Raid Admin</Link>
+                <Link to="/officer/SiteAdmin">Site Admin</Link>
+              </span>
+            )}
             <span className="role">{profile?.role === 'officer' ? 'Officer' : 'Player'}</span>
             <button
               className="btn btn-ghost"
@@ -130,10 +139,12 @@ export default function App() {
         <Route path="/raids" element={<RequireAuth><Raids isOfficer={isOfficer} /></RequireAuth>} />
         <Route path="/raids/:raidId" element={<RequireAuth><RaidDetail isOfficer={isOfficer} /></RequireAuth>} />
         <Route path="/dkp" element={<RequireAuth><DKP isOfficer={isOfficer} /></RequireAuth>} />
-        <Route path="/officer" element={<RequireAuth><Officer isOfficer={isOfficer} /></RequireAuth>} />
+        <Route path="/officer" element={<RedirectPreserve to="/officer/RaidAdmin" />} />
+        <Route path="/officer/RaidAdmin" element={<RequireAuth><Officer isOfficer={isOfficer} /></RequireAuth>} />
         <Route path="/officer/dkp-changelog" element={<RequireAuth><DkpChangelog isOfficer={isOfficer} /></RequireAuth>} />
         <Route path="/officer/who-parser" element={<RequireAuth><OfficerWhoParser isOfficer={isOfficer} /></RequireAuth>} />
-        <Route path="/officer/claim-cooldowns" element={<RequireAuth><OfficerClaimCooldowns isOfficer={isOfficer} /></RequireAuth>} />
+        <Route path="/officer/claim-cooldowns" element={<RedirectPreserve to="/officer/SiteAdmin" />} />
+        <Route path="/officer/SiteAdmin" element={<RequireAuth><OfficerClaimCooldowns isOfficer={isOfficer} /></RequireAuth>} />
         <Route path="/officer/raider-activity" element={<RequireAuth><OfficerRaiderActivity isOfficer={isOfficer} /></RequireAuth>} />
         <Route path="/tools/discord-schedule" element={<RequireAuth><DiscordSchedule /></RequireAuth>} />
         <Route path="/loot" element={<RequireAuth><LootSearch /></RequireAuth>} />

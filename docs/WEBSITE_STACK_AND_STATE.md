@@ -54,9 +54,9 @@ Defined in `web/src/App.jsx`.
 | `/raids` | `Raids` | Signed in |
 | `/raids/:raidId` | `RaidDetail` | Signed in |
 | `/dkp` | `DKP` | Signed in |
-| `/officer` | `Officer` | Signed in (redirect if not officer) |
+| `/officer/RaidAdmin` | `Officer` | Signed in (redirect if not officer). Old `/officer` redirects here. |
 | `/officer/dkp-changelog` | `DkpChangelog` | Signed in (officer gate in page) |
-| `/officer/claim-cooldowns` | `OfficerClaimCooldowns` | Signed in (officer) |
+| `/officer/SiteAdmin` | `OfficerClaimCooldowns` | Signed in (officer). Old `/officer/claim-cooldowns` redirects here. |
 | `/officer/raider-activity` | `OfficerRaiderActivity` | Signed in (officer); class coverage from `account_class_coverage` (CI/Magelo) |
 | `/loot` | `LootSearch` | Signed in |
 | `/loot-recipients` | `LootRecipients` | Signed in |
@@ -149,13 +149,13 @@ If a bookmark to `/` unexpectedly jumps elsewhere, this behavior is why.
 
 | Screen | Query | Meaning |
 |--------|--------|---------|
-| `/officer` | `raid` | Selected raid for officer editing (synced with dropdown) |
+| `/officer/RaidAdmin` | `raid` | Selected raid for officer editing (synced with dropdown) |
 | `/accounts/:accountId` | `tab` | `activity` \| `characters` \| `loot` \| `history` (default: activity; default tab may omit query) |
 | `/profile` | `tab` | `activity` \| `characters` |
 
 **History tab charts:** bounded to account raids with earn/tic/loot (not guild absence rows). Default window is last 12 months, clipped to actual activity dates; window selector persisted as `pageState:/accounts/history:months` (12 / 24 / 36 / all).
 
-**Note:** Top nav `<Link to="/officer">` does not preserve `?raid=`; deep links and browser history still do. Activity tab pagination on account pages uses `pageState:/accounts/detail:{accountId}:activityPage` (not the URL).
+**Note:** Top nav `<Link to="/officer/RaidAdmin">` does not preserve `?raid=`; deep links and browser history still do. Activity tab pagination on account pages uses `pageState:/accounts/detail:{accountId}:activityPage` (not the URL).
 
 ## Local development
 

@@ -161,7 +161,7 @@ export default function DKP({ isOfficer }) {
 
       {isOfficer && (
         <p style={{ color: '#71717a', fontSize: '0.9rem', marginTop: '1rem' }}>
-          <Link to="/officer/claim-cooldowns">Admin</Link> — Manage active raiders, mark accounts inactive, and remove claim cooldowns.
+          <Link to="/officer/SiteAdmin">Site Admin</Link> — Manage active raiders, mark accounts inactive, and remove claim cooldowns.
         </p>
       )}
     </div>

@@ -15,9 +15,9 @@ export default function OfficerClaimCooldowns({ isOfficer }) {
 
   const { apiData, mutate } = useDkpData()
   const [activeRaiders, setActiveRaiders] = useState([])
-  const [activeAddKey, setActiveAddKey] = usePersistedState('/officer/claim-cooldowns:activeAddKey', '')
+  const [activeAddKey, setActiveAddKey] = usePersistedState('/officer/SiteAdmin:activeAddKey', '')
   const [activeMutating, setActiveMutating] = useState(false)
-  const [inactiveSearchQuery, setInactiveSearchQuery] = usePersistedState('/officer/claim-cooldowns:inactiveSearchQuery', '')
+  const [inactiveSearchQuery, setInactiveSearchQuery] = usePersistedState('/officer/SiteAdmin:inactiveSearchQuery', '')
 
   useEffect(() => {
     if (apiData?.active_raiders?.length !== undefined) {
@@ -40,7 +40,7 @@ export default function OfficerClaimCooldowns({ isOfficer }) {
 
   useEffect(() => {
     if (!isOfficer) {
-      navigate('/officer', { replace: true })
+      navigate('/', { replace: true })
       return
     }
     loadCooldowns()
@@ -134,8 +134,8 @@ export default function OfficerClaimCooldowns({ isOfficer }) {
 
   return (
     <div className="container">
-      <p><Link to="/officer">← Officer</Link></p>
-      <h1>Admin</h1>
+      <p><Link to="/officer/RaidAdmin">← Raid Admin</Link></p>
+      <h1>Site Admin</h1>
 
       {/* Claim cooldowns */}
       <section className="card" style={{ marginBottom: '1.5rem' }}>

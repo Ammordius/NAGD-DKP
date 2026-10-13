@@ -42,7 +42,7 @@ export default function DkpChangelog({ isOfficer }) {
     <div className="container">
       <h1>DKP changelog</h1>
       <p style={{ color: '#a1a1aa', marginBottom: '1rem' }}>
-        Who made which sensitive changes: add/delete raid, tics, loot, manual DKP edits. Officer-only. <Link to="/officer">← Officer</Link>
+        Who made which sensitive changes: add/delete raid, tics, loot, manual DKP edits. Officer-only. <Link to="/officer/RaidAdmin">← Raid Admin</Link>
       </p>
       <div style={{ overflowX: 'auto' }}>
         <table>

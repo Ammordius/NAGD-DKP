@@ -285,7 +285,7 @@ export default function OfficerRaiderActivity({ isOfficer }) {
       <p style={{ color: '#a1a1aa', marginBottom: '0.5rem' }}>
         Officer-only roster health by account (one row per raider/DKP account). Raid attendance % uses all guild raids in each window as eligible.
         {' '}
-        <Link to="/officer">← Officer</Link>
+        <Link to="/officer/RaidAdmin">← Raid Admin</Link>
       </p>
       <p style={{ color: '#71717a', fontSize: '0.85rem', marginBottom: '1rem' }}>
         Per-raid attendance is still visible on raid pages for all signed-in members; this page aggregates roster trends for officers.

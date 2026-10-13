@@ -221,7 +221,7 @@ export default function OfficerWhoParser({ isOfficer }) {
       <h1>Officer /who parser</h1>
       <p style={{ color: '#a1a1aa', marginBottom: '1rem', maxWidth: '52rem' }}>
         Paste EQ <code>/who</code> output to collapse characters into unique humans using DKP account links.
-        Human identity is based only on linked <code>account_id</code>. <Link to="/officer">← Officer</Link>
+        Human identity is based only on linked <code>account_id</code>. <Link to="/officer/RaidAdmin">← Raid Admin</Link>
       </p>
 
       <section className="card" style={{ marginBottom: '1rem' }}>

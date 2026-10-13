@@ -7,7 +7,7 @@ export default function Dashboard({ isOfficer }) {
       </p>
       {isOfficer && (
         <div className="card" style={{ borderLeft: '4px solid #fbbf24' }}>
-          <strong>Officer</strong> – You have full read access. Use the <a href="/officer">Officer</a> tab to add raids, edit tics and loot, or delete raids.
+          <strong>Officer</strong> – You have full read access. Use the <a href="/officer/RaidAdmin">Raid Admin</a> tab to add raids, edit tics and loot, or delete raids.
         </div>
       )}
     </div>
