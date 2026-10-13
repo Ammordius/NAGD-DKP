@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 import { useDkpData } from '../lib/dkpLeaderboard'
 import { usePersistedState } from '../lib/usePersistedState'
 import { buildAccountColumnRows, buildCharacterRows, characterMatchesQuery } from '../lib/siteAdminCharacters'
+import { canRemoveSiteUser, removalBlockReason } from '../lib/siteAdminRemoveUser'
 
 const SUGGEST_LIMIT = 80
 
@@ -38,6 +39,7 @@ export default function OfficerClaimCooldowns({ isOfficer, isSiteAdmin = false }
   const [unclaimingId, setUnclaimingId] = useState(null)
   const [removeConfirm, setRemoveConfirm] = useState({})
   const [removingId, setRemovingId] = useState(null)
+  const [currentUserId, setCurrentUserId] = useState(null)
 
   const { apiData, isLoading: dkpLoading, mutate } = useDkpData()
   const [charQuery, setCharQuery] = usePersistedState('/officer/SiteAdmin:charQuery', '')
@@ -103,8 +105,13 @@ export default function OfficerClaimCooldowns({ isOfficer, isSiteAdmin = false }
       navigate('/', { replace: true })
       return
     }
+    let cancelled = false
+    supabase.auth.getSession().then(({ data }) => {
+      if (!cancelled) setCurrentUserId(data.session?.user?.id ?? null)
+    })
     loadCooldowns()
-    if (isSiteAdmin) loadSiteUsers()
+    loadSiteUsers()
+    return () => { cancelled = true }
   }, [isOfficer, isSiteAdmin, navigate])
 
   async function loadCooldowns() {
@@ -192,18 +199,37 @@ export default function OfficerClaimCooldowns({ isOfficer, isSiteAdmin = false }
     if (removeConfirm[profileId] !== 'REMOVE') return
     setRemovingId(profileId)
     setUserError('')
-    const { error: rpcErr } = await supabase.rpc('siteadmin_delete_user', { p_profile_id: profileId })
-    setRemovingId(null)
-    if (rpcErr) {
-      setUserError(rpcErr.message)
-      return
+    try {
+      const { data: sessionData } = await supabase.auth.getSession()
+      const token = sessionData.session?.access_token
+      if (!token) {
+        setUserError('Not authenticated')
+        return
+      }
+      const response = await fetch('/api/delete-site-user', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ profileId }),
+      })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        setUserError(payload.error || 'Could not remove user')
+        return
+      }
+      setRemoveConfirm((current) => {
+        const next = { ...current }
+        delete next[profileId]
+        return next
+      })
+      await loadSiteUsers()
+    } catch (err) {
+      setUserError(err?.message || 'Could not remove user')
+    } finally {
+      setRemovingId(null)
     }
-    setRemoveConfirm((current) => {
-      const next = { ...current }
-      delete next[profileId]
-      return next
-    })
-    await loadSiteUsers()
   }
 
   async function handleResetCooldown(profileId) {
@@ -346,6 +372,11 @@ export default function OfficerClaimCooldowns({ isOfficer, isSiteAdmin = false }
   }
 
   if (!isOfficer) return null
+
+  const actor = {
+    id: currentUserId,
+    role: isSiteAdmin ? 'siteadmin' : 'officer',
+  }
 
   const query = (charQuery || '').trim()
   const showSuggestList = showSuggest && query.length > 0
@@ -575,8 +606,7 @@ export default function OfficerClaimCooldowns({ isOfficer, isSiteAdmin = false }
         </div>
       </section>
 
-      {isSiteAdmin && (
-        <section className="card" style={{ marginBottom: '1.5rem' }}>
+      <section className="card" style={{ marginBottom: '1.5rem' }}>
           <h2 style={{ marginTop: 0 }}>Site Profile Accounts</h2>
           <p style={{ color: '#a1a1aa', marginBottom: '0.75rem' }}>
             Site users and the game account each one has claimed. Email addresses are not shown.
@@ -603,6 +633,9 @@ export default function OfficerClaimCooldowns({ isOfficer, isSiteAdmin = false }
                     const account = user.account_id ? siteAccounts[String(user.account_id)] : null
                     const accountLabel = gameAccountLabel(account) || user.account_id
                     const confirm = removeConfirm[user.id] || ''
+                    const target = { id: user.id, role: user.role || 'player' }
+                    const removable = canRemoveSiteUser(actor, target)
+                    const blockReason = removable ? '' : removalBlockReason(actor, target)
                     return (
                       <tr key={user.id}>
                         <td style={{ verticalAlign: 'top' }}>
@@ -615,17 +648,19 @@ export default function OfficerClaimCooldowns({ isOfficer, isSiteAdmin = false }
                           {user.account_id ? (
                             <>
                               <Link to={`/accounts/${user.account_id}`}>{accountLabel}</Link>
-                              <div>
-                                <button
-                                  type="button"
-                                  className="btn btn-ghost"
-                                  style={{ fontSize: '0.875rem', marginTop: '0.35rem' }}
-                                  onClick={() => handleUnclaimProfile(user.id)}
-                                  disabled={unclaimingId === user.id}
-                                >
-                                  {unclaimingId === user.id ? 'Unclaiming...' : 'Unclaim account'}
-                                </button>
-                              </div>
+                              {isSiteAdmin && (
+                                <div>
+                                  <button
+                                    type="button"
+                                    className="btn btn-ghost"
+                                    style={{ fontSize: '0.875rem', marginTop: '0.35rem' }}
+                                    onClick={() => handleUnclaimProfile(user.id)}
+                                    disabled={unclaimingId === user.id}
+                                  >
+                                    {unclaimingId === user.id ? 'Unclaiming...' : 'Unclaim account'}
+                                  </button>
+                                </div>
+                              )}
                             </>
                           ) : (
                             <span style={{ color: '#71717a' }}>unclaimed</span>
@@ -633,7 +668,7 @@ export default function OfficerClaimCooldowns({ isOfficer, isSiteAdmin = false }
                         </td>
                         <td style={{ verticalAlign: 'top' }}>{roleLabel(user.role)}</td>
                         <td style={{ verticalAlign: 'top', minWidth: '16rem' }}>
-                          {roleEditId === user.id ? (
+                          {isSiteAdmin && (roleEditId === user.id ? (
                             <div className="officer-field-row" style={{ marginBottom: '0.75rem' }}>
                               <select
                                 aria-label={`Role for ${name || user.id}`}
@@ -670,31 +705,35 @@ export default function OfficerClaimCooldowns({ isOfficer, isSiteAdmin = false }
                             >
                               Change Role
                             </button>
-                          )}
-                          <details className="officer-delete" style={{ marginTop: '0.5rem' }}>
-                            <summary>REMOVE USER</summary>
-                            <p className="officer-hint">
-                              Remove user from the site. This deletes the site profile, but it does not remove game accounts or characters. Type <strong>REMOVE</strong> to confirm.
-                            </p>
-                            <div className="officer-field-row">
-                              <input
-                                type="text"
-                                value={confirm}
-                                onChange={(event) => setRemoveConfirm((current) => ({ ...current, [user.id]: event.target.value }))}
-                                placeholder="Type REMOVE"
-                                style={{ maxWidth: '12rem' }}
-                                aria-label={`Confirm removal of ${name || user.id}`}
-                              />
-                              <button
-                                type="button"
-                                className="btn officer-btn-danger"
-                                onClick={() => handleRemoveUser(user.id)}
-                                disabled={removingId === user.id || confirm !== 'REMOVE'}
-                              >
-                                {removingId === user.id ? 'Removing...' : 'Remove user'}
-                              </button>
-                            </div>
-                          </details>
+                          ))}
+                          {removable ? (
+                            <details className="officer-delete" style={{ marginTop: '0.5rem' }}>
+                              <summary>REMOVE USER</summary>
+                              <p className="officer-hint">
+                                Remove user from the site. This deletes the site profile, but it does not remove game accounts or characters. User will need to Sign Up again. Type <strong>REMOVE</strong> to confirm.
+                              </p>
+                              <div className="officer-field-row">
+                                <input
+                                  type="text"
+                                  value={confirm}
+                                  onChange={(event) => setRemoveConfirm((current) => ({ ...current, [user.id]: event.target.value }))}
+                                  placeholder="Type REMOVE"
+                                  style={{ maxWidth: '12rem' }}
+                                  aria-label={`Confirm removal of ${name || user.id}`}
+                                />
+                                <button
+                                  type="button"
+                                  className="btn officer-btn-danger"
+                                  onClick={() => handleRemoveUser(user.id)}
+                                  disabled={removingId === user.id || confirm !== 'REMOVE'}
+                                >
+                                  {removingId === user.id ? 'Removing...' : 'Remove user'}
+                                </button>
+                              </div>
+                            </details>
+                          ) : blockReason ? (
+                            <p className="officer-hint" style={{ marginTop: '0.5rem', marginBottom: 0 }}>{blockReason}</p>
+                          ) : null}
                         </td>
                       </tr>
                     )
@@ -704,7 +743,6 @@ export default function OfficerClaimCooldowns({ isOfficer, isSiteAdmin = false }
             </div>
           )}
         </section>
-      )}
     </div>
   )
 }

@@ -25,8 +25,9 @@ Set in `.env.local` (local) and Vercel project settings (production):
 | `VITE_SUPABASE_URL` | Supabase project URL |
 | `VITE_SUPABASE_ANON_KEY` | Supabase anon (public) key |
 | `VITE_CLASS_RANKINGS_URL` | Optional; Raider Activity “Reload coverage” falls back to `/class_rankings.json`. Guild export: `https://ammordius.github.io/NAGD-spell-inventory/class_rankings.json` (set GitHub secret `CLASS_RANKINGS_URL` to the same for CI). |
+| `SUPABASE_SERVICE_ROLE_KEY` | Server-only. Used by `POST /api/delete-site-user` to call `auth.admin.deleteUser`. Set it in Vercel and in `web/.env.local` (or the repo root `.env`) for `npm run dev`. Do not prefix it with `VITE_` — Vite would expose it to the browser. |
 
-Access in code: `import.meta.env.VITE_*` (Vite convention).
+Access in client code: `import.meta.env.VITE_*` (Vite convention). The service role key is read only in `web/api/delete-site-user.js` from `process.env`.
 
 ## Directory map (`web/`)
 
@@ -38,7 +39,7 @@ Access in code: `import.meta.env.VITE_*` (Vite convention).
 | `web/src/components/*.jsx` | Shared UI (links, disclaimers, cards) |
 | `web/src/lib/*.js` | Supabase client, DKP math, static JSON helpers, `usePersistedState`, caches |
 | `web/public/` | Static assets served at site root (`/item_stats.json`, `/dkp_mob_loot.json`, etc.) |
-| `web/api/` | Vercel serverless (e.g. `get-dkp.ts`) if used by deployment |
+| `web/api/` | Vercel serverless. `delete-site-user.js` removes an auth user (service role). `get-dkp.ts` is a legacy leaderboard proxy. |
 | `web/vercel.json` | SPA rewrites (`/*` → `/index.html`), cache headers for selected JSON |
 
 Repo-level SQL/docs (schema, imports) live under `docs/` at the **repository** root; this file is the **web app** map.
@@ -56,7 +57,7 @@ Defined in `web/src/App.jsx`.
 | `/dkp` | `DKP` | Signed in |
 | `/officer/RaidAdmin` | `Officer` | Signed in (redirect if not officer). Old `/officer` redirects here. |
 | `/officer/dkp-changelog` | `DkpChangelog` | Signed in (officer gate in page) |
-| `/officer/SiteAdmin` | `OfficerClaimCooldowns` | Signed in (officer or siteadmin). Old `/officer/claim-cooldowns` redirects here. The Site Profile Accounts section is siteadmin only. |
+| `/officer/SiteAdmin` | `OfficerClaimCooldowns` | Signed in (officer or siteadmin). Old `/officer/claim-cooldowns` redirects here. Site Profile Accounts lists users. Officers can remove players. Site admins can also unclaim, change roles, and remove officers. Nobody can remove a site admin or themselves. |
 | `/officer/raider-activity` | `OfficerRaiderActivity` | Signed in (officer); class coverage from `account_class_coverage` (CI/Magelo) |
 | `/loot` | `LootSearch` | Signed in |
 | `/loot-recipients` | `LootRecipients` | Signed in |
@@ -68,7 +69,7 @@ Defined in `web/src/App.jsx`.
 | `/characters/:charKey` | `CharacterPage` | Signed in |
 | `*` | Redirect to `/` | — |
 
-**Roles:** `App` loads `profiles.role` for the signed-in user. `player`, `officer`, and `siteadmin` are allowed. `isOfficer` is true for `officer` and `siteadmin` and toggles officer nav links; individual pages may also `navigate('/')` if not officer. `isSiteAdmin` is true only for `siteadmin` and shows Site Profile Accounts on `/officer/SiteAdmin`. `profiles.display_name` is the site name (email sign-up field, or the Discord username). It is separate from `accounts.display_name`. Nav labels are Game Accounts (`/accounts`) and My Site Profile (`/profile`).
+**Roles:** `App` loads `profiles.role` for the signed-in user. `player`, `officer`, and `siteadmin` are allowed. `isOfficer` is true for `officer` and `siteadmin` and toggles officer nav links; individual pages may also `navigate('/')` if not officer. `isSiteAdmin` is true only for `siteadmin`. On `/officer/SiteAdmin`, officers and site admins see Site Profile Accounts. Unclaim and role changes are siteadmin only. Remove user is `POST /api/delete-site-user`: it deletes the profile, then `auth.admin.deleteUser` with the server-only service role key. Officers may remove players. Site admins may remove players and officers. Nobody may remove a site admin or themselves. `profiles.display_name` is the site name (email sign-up field, or the Discord username). It is separate from `accounts.display_name`. Nav labels are Game Accounts (`/accounts`) and My Site Profile (`/profile`).
 
 ## Data sources (where values come from)
 

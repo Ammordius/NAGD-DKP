@@ -54,7 +54,7 @@ Where each public function the app or scripts call is defined, and what calls it
 | **account_claim_labels** | Accounts.jsx. `account_id` and site display name only; no email. |
 | **siteadmin_unclaim_profile** | OfficerClaimCooldowns.jsx. Clears `profiles.account_id` without a cooldown. |
 | **siteadmin_set_role** | OfficerClaimCooldowns.jsx. Sets `player`, `officer`, or `siteadmin`. |
-| **siteadmin_delete_user** | OfficerClaimCooldowns.jsx. Deletes the `public.profiles` row only. Login, game accounts, and characters stay. |
+| **siteadmin_delete_user** | OfficerClaimCooldowns.jsx via `POST /api/delete-site-user`. Deletes the `public.profiles` row. The API then calls `auth.admin.deleteUser` with `SUPABASE_SERVICE_ROLE_KEY` (server only). Game accounts and characters stay. Officers may remove players. Site admins may remove players and officers. Nobody may remove a site admin or themselves. Existing databases: run `docs/supabase-siteadmin-delete-user.sql`. |
 | **discord_username_from_meta** | Signup trigger and Discord display-name backfill. Not called from the app. |
 | **write_site_admin_audit** | Audit insert used by the siteadmin RPCs. Not granted to the client. |
 | **raid_date_parsed** | Refresh logic and views |

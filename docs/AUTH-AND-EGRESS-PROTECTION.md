@@ -7,7 +7,7 @@ The site requires **sign-in to access data**. This reduces the risk of bots or s
 - **anon** – Used by the Vercel/frontend handshake only (Supabase client init, `getSession()`, sign-in). Anon **cannot** read any DKP tables; RLS allows only `authenticated` for data.
 - **user** – Any signed-in user with a profile (default role `player`). Can read all DKP data and use account/character features. Email sign-up stores a display name on `profiles.display_name`. Discord sign-up stores the Discord username there.
 - **officer** – Manually assigned in the database. Same as user plus officer-only actions (add raids, edit DKP, audit log, etc.).
-- **siteadmin** – Higher than officer. `is_officer()` is true for both `officer` and `siteadmin`, so siteadmin keeps every officer page. Only siteadmin can open Site Profile Accounts on `/officer/SiteAdmin` (list profiles without emails, unclaim a game account, change role, or delete the `public.profiles` row). The login, game accounts, and characters are not deleted.
+- **siteadmin** – Higher than officer. `is_officer()` is true for both `officer` and `siteadmin`, so siteadmin keeps every officer page. Site Profile Accounts on `/officer/SiteAdmin` lists profiles without emails. Only a site admin can unclaim a game account or change a role. Remove user deletes the site profile and the Supabase auth user (`auth.admin.deleteUser` on the server, using `SUPABASE_SERVICE_ROLE_KEY`). The person has to sign up again. Game accounts and characters are not deleted. Officers may remove players only. Site admins may remove players and officers. Nobody may remove a site admin or themselves.
 
 ## Requiring sign-in (already in place)
 

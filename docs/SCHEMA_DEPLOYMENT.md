@@ -13,6 +13,7 @@ This document is the **canonical reference** for standing up or mirroring the DK
 | File | Purpose |
 |------|---------|
 | **docs/supabase-schema-full.sql** | **Run this once.** Tables, RLS, triggers, `refresh_dkp_summary`, `refresh_account_dkp_summary`, officer raid RPCs, upload RPCs, bidding portfolio, `loot_assignment` plus `update_single_raid_loot_assignment` / `update_raid_loot_assignments` / `get_character_dkp_spent`, `officer_raider_activity`, and `account_class_coverage`. |
+| **docs/supabase-siteadmin-delete-user.sql** | **Existing projects only.** Replaces `siteadmin_delete_user` so officers can remove players, site admins can remove players and officers, and nobody can remove a site admin or themselves. Same function as in the full schema. The site then deletes the auth user from `web/api/delete-site-user.js`. |
 
 After that file you have:
 
