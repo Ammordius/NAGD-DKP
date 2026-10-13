@@ -2356,38 +2356,24 @@ LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
 AS $$
-DECLARE
-  use_per_event BOOLEAN;
 BEGIN
-  SELECT EXISTS (SELECT 1 FROM raid_event_attendance LIMIT 1) INTO use_per_event;
-
   TRUNCATE account_dkp_summary;
 
-  -- Earned: one credit per account per tic (raid_id, event_id), then sum dkp by account.
+  -- Earned: the per-raid account totals the account page already shows.
+  -- dkp_one_tic_value(raid_id, event_id) returns 0 when attendance event ids do not match raid_events, which zeroed this table while raid_attendance_dkp_by_account stayed correct.
   INSERT INTO account_dkp_summary (account_id, display_name, earned, earned_30d, earned_60d, last_activity_date, updated_at)
-  WITH rea_one_account AS (
-    SELECT DISTINCT rea.raid_id, rea.event_id,
-      COALESCE(rea.account_id, (
-        SELECT ca.account_id FROM character_account ca
-        WHERE (rea.char_id IS NOT NULL AND trim(rea.char_id::text) <> '' AND ca.char_id = trim(rea.char_id::text))
-           OR (rea.character_name IS NOT NULL AND trim(rea.character_name) <> '' AND EXISTS (SELECT 1 FROM characters c WHERE c.char_id = ca.char_id AND trim(c.name) = trim(rea.character_name)))
-        LIMIT 1
-      )) AS account_id
-    FROM raid_event_attendance rea
-  )
   SELECT
-    roa.account_id,
-    MAX(a.display_name),
-    SUM(public.dkp_one_tic_value(roa.raid_id, roa.event_id)),
-    (SUM(CASE WHEN raid_date_parsed(r.date_iso) >= (current_date - 30) THEN public.dkp_one_tic_value(roa.raid_id, roa.event_id) ELSE 0 END))::INTEGER,
-    (SUM(CASE WHEN raid_date_parsed(r.date_iso) >= (current_date - 60) THEN public.dkp_one_tic_value(roa.raid_id, roa.event_id) ELSE 0 END))::INTEGER,
+    a.account_id,
+    MAX(acc.display_name),
+    COALESCE(SUM(a.dkp_earned), 0),
+    COALESCE(SUM(CASE WHEN raid_date_parsed(r.date_iso) >= (current_date - 30) THEN a.dkp_earned ELSE 0 END), 0)::INTEGER,
+    COALESCE(SUM(CASE WHEN raid_date_parsed(r.date_iso) >= (current_date - 60) THEN a.dkp_earned ELSE 0 END), 0)::INTEGER,
     MAX(raid_date_parsed(r.date_iso)),
     now()
-  FROM rea_one_account roa
-  LEFT JOIN raids r ON r.raid_id = roa.raid_id
-  LEFT JOIN accounts a ON a.account_id = roa.account_id
-  WHERE roa.account_id IS NOT NULL
-  GROUP BY roa.account_id;
+  FROM raid_attendance_dkp_by_account a
+  LEFT JOIN raids r ON r.raid_id = a.raid_id
+  LEFT JOIN accounts acc ON acc.account_id = a.account_id
+  GROUP BY a.account_id;
 
   -- Spent: raid_loot buyer only (char_id / character_name). loot_assignment is character
   -- ownership and must not move account DKP.
@@ -2434,7 +2420,7 @@ BEGIN
 END;
 $$;
 
-COMMENT ON FUNCTION public.refresh_account_dkp_summary_internal() IS 'Recompute account_dkp_summary from raid_event_attendance and raid_loot (resolve char to account).';
+COMMENT ON FUNCTION public.refresh_account_dkp_summary_internal() IS 'Recompute account_dkp_summary. Earned from raid_attendance_dkp_by_account. Spent from raid_loot buyer (char_id / character_name).';
 
 -- 8) RPC for officers to refresh account DKP (and keep legacy dkp_summary in sync if desired)
 CREATE OR REPLACE FUNCTION public.refresh_account_dkp_summary()
@@ -2575,55 +2561,22 @@ BEGIN
     RETURN;
   END IF;
 
-  -- Recompute earned (and periods) for these accounts from ALL their attendance; then UPSERT into account_dkp_summary.
-  -- Restrict raid_event_attendance to rows that belong to target accounts (indexed paths) before resolving account_id.
+  -- Recompute earned from raid_attendance_dkp_by_account (same rows as the account page), including targets with no rows left.
   INSERT INTO account_dkp_summary (account_id, display_name, earned, spent, earned_30d, earned_60d, last_activity_date, updated_at)
-  WITH rea_for_targets AS (
-    SELECT rea.*
-    FROM raid_event_attendance rea
-    WHERE
-      (rea.account_id IS NOT NULL AND rea.account_id = ANY(target_accounts))
-      OR (
-        rea.char_id IS NOT NULL AND trim(rea.char_id::text) <> ''
-        AND EXISTS (
-          SELECT 1 FROM character_account ca
-          WHERE ca.account_id = ANY(target_accounts) AND ca.char_id = trim(rea.char_id::text)
-        )
-      )
-      OR (
-        (rea.char_id IS NULL OR trim(rea.char_id::text) = '')
-        AND rea.character_name IS NOT NULL AND trim(rea.character_name) <> ''
-        AND EXISTS (
-          SELECT 1 FROM character_account ca
-          INNER JOIN characters c ON c.char_id = ca.char_id
-          WHERE ca.account_id = ANY(target_accounts) AND trim(c.name) = trim(rea.character_name)
-        )
-      )
-  ),
-  rea_one_account AS (
-    SELECT DISTINCT rea.raid_id, rea.event_id,
-      COALESCE(rea.account_id, (
-        SELECT ca.account_id FROM character_account ca
-        WHERE (rea.char_id IS NOT NULL AND trim(rea.char_id::text) <> '' AND ca.char_id = trim(rea.char_id::text))
-           OR (rea.character_name IS NOT NULL AND trim(rea.character_name) <> '' AND EXISTS (SELECT 1 FROM characters c WHERE c.char_id = ca.char_id AND trim(c.name) = trim(rea.character_name)))
-        LIMIT 1
-      )) AS account_id
-    FROM rea_for_targets rea
-  )
   SELECT
-    roa.account_id,
-    MAX(a.display_name),
-    SUM(public.dkp_one_tic_value(roa.raid_id, roa.event_id)),
+    t.account_id,
+    MAX(acc.display_name),
+    COALESCE(SUM(a.dkp_earned), 0),
     0::numeric,
-    (SUM(CASE WHEN raid_date_parsed(r.date_iso) >= (current_date - 30) THEN public.dkp_one_tic_value(roa.raid_id, roa.event_id) ELSE 0 END))::INTEGER,
-    (SUM(CASE WHEN raid_date_parsed(r.date_iso) >= (current_date - 60) THEN public.dkp_one_tic_value(roa.raid_id, roa.event_id) ELSE 0 END))::INTEGER,
+    COALESCE(SUM(CASE WHEN raid_date_parsed(r.date_iso) >= (current_date - 30) THEN a.dkp_earned ELSE 0 END), 0)::INTEGER,
+    COALESCE(SUM(CASE WHEN raid_date_parsed(r.date_iso) >= (current_date - 60) THEN a.dkp_earned ELSE 0 END), 0)::INTEGER,
     MAX(raid_date_parsed(r.date_iso)),
     now()
-  FROM rea_one_account roa
-  LEFT JOIN raids r ON r.raid_id = roa.raid_id
-  LEFT JOIN accounts a ON a.account_id = roa.account_id
-  WHERE roa.account_id IS NOT NULL AND roa.account_id = ANY(target_accounts)
-  GROUP BY roa.account_id
+  FROM unnest(target_accounts) AS t(account_id)
+  LEFT JOIN raid_attendance_dkp_by_account a ON a.account_id = t.account_id
+  LEFT JOIN raids r ON r.raid_id = a.raid_id
+  LEFT JOIN accounts acc ON acc.account_id = t.account_id
+  GROUP BY t.account_id
   ON CONFLICT (account_id) DO UPDATE SET
     earned = EXCLUDED.earned,
     earned_30d = EXCLUDED.earned_30d,

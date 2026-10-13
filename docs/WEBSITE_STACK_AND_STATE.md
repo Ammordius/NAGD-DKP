@@ -105,7 +105,7 @@ Fetched with `fetch('/…')` from `public/` or CDN:
 
 ### Refreshing DKP totals
 
-`/dkp` reads the database table `account_dkp_summary` (via `useDkpData` in `web/src/lib/dkpLeaderboard.js`). The “Cached …” time is that table’s `updated_at`. Reloading the page, or clearing `sessionStorage` key `dkp_leaderboard_v2`, does not rebuild it. `useDkpData` does not read that key.
+`/dkp` reads spent from `account_dkp_summary` and earned from `raid_attendance_dkp_by_account` (via `useDkpData` in `web/src/lib/dkpLeaderboard.js`). That attendance table is what the account page sums, so a summary row with earned 0 does not zero the leaderboard. The “Cached …” time is still `account_dkp_summary.updated_at` and applies to the spent column. Reloading the page, or clearing `sessionStorage` key `dkp_leaderboard_v2`, does not rebuild the summary. `useDkpData` does not read that key.
 
 An officer (`profiles.role = officer`) rebuilds it from `/dkp` with **Refresh DKP totals**. That calls `refresh_dkp_summary()`, then `refresh_account_dkp_summary()`, then refetches. The leaderboard uses `account_dkp_summary` whenever that table has any rows, so the second call is the one that changes Balance, Earned, and Spent. If the account refresh fails, the page shows the error (including a missing function) and still refetches whatever is already stored.
 
@@ -118,7 +118,7 @@ SELECT refresh_account_dkp_summary();
 
 A full rebuild can exceed the API gateway timeout even though the function sets `statement_timeout` to 600s. The SQL editor is the reliable path. Deploy `docs/supabase-schema-full.sql` if `refresh_account_dkp_summary` is not in the database.
 
-The account page header sums live attendance and loot. When that sum and `account_dkp_summary` differ by more than 1, and the summary row is non-zero, the header keeps the live numbers and shows “leaderboard cache differs; totals here match this page”. That line goes away after `refresh_account_dkp_summary()` writes the same earned and spent.
+The account page header sums live attendance and loot. The leaderboard uses that same attendance sum for earned, so a summary row with earned 0 does not change the Balance or Earned columns and does not by itself show “leaderboard cache differs”. That line remains when the loot spent on the account page and the summary spent still disagree by more than 1.
 
 ## UI state persistence playbook
 
