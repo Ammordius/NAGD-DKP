@@ -61,12 +61,13 @@ export function formatCharacterClassSpentLine(c, spent) {
 }
 
 /**
- * Spent per assignee, scoped to loot rows whose buyer (raid_loot.char_id) belongs to that account.
- * Matches AccountDetail: buyer linked by character_account char_id and/or characters.name / character_name.
+ * Spent per character, scoped to loot rows whose buyer belongs to that account.
+ * Buyer is raid_loot.char_id, or character_name when char_id is empty.
+ * The character key matches AccountDetail: assignee, else buyer character_name, else char_id.
  *
  * @param {Array<{ char_id?: string, character_name?: string, cost?: string | number, assigned_char_id?: string, assigned_character_name?: string }>} lootRows
  * @param {Record<string, string>} buyerCharIdToAccountId - char_id and display name -> account_id
- * @returns {Record<string, Record<string, number>>} account_id -> (assignee key -> spent)
+ * @returns {Record<string, Record<string, number>>} account_id -> (character key -> spent)
  */
 export function buildSpentByAccountFromLoot(lootRows, buyerCharIdToAccountId) {
   /** @type {Record<string, Record<string, number>>} */
@@ -79,7 +80,13 @@ export function buildSpentByAccountFromLoot(lootRows, buyerCharIdToAccountId) {
       (buyerName && buyerCharIdToAccountId[buyerName]) ||
       null
     if (!accountId) continue
-    const k = (row.assigned_character_name || row.assigned_char_id || '').trim()
+    const k = (
+      row.assigned_character_name ||
+      row.assigned_char_id ||
+      row.character_name ||
+      row.char_id ||
+      ''
+    ).trim()
     if (!k) continue
     const cost = parseFloat(row.cost ?? 0)
     if (!Number.isFinite(cost)) continue

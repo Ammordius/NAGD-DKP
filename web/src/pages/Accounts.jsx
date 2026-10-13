@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo } from 'react'
 import { Link } from 'react-router-dom'
-import { createCache } from '../lib/cache'
+import { ACCOUNTS_LIST_CACHE_KEY, createCache } from '../lib/cache'
 import { fetchAll } from '../lib/accountData'
 import { usePersistedState } from '../lib/usePersistedState'
 import {
@@ -9,7 +9,6 @@ import {
   spentForCharacterFromLootMap,
 } from '../lib/formatAccountCharacter'
 
-const CACHE_KEY = 'accounts_list_v5'
 const CACHE_TTL = 10 * 60 * 1000
 const MAGELO_BASE = 'https://www.takproject.net/magelo/character.php?char='
 
@@ -20,7 +19,7 @@ export default function Accounts() {
   const [search, setSearch] = usePersistedState('/accounts:search', '')
 
   useEffect(() => {
-    const cache = createCache(CACHE_KEY, CACHE_TTL)
+    const cache = createCache(ACCOUNTS_LIST_CACHE_KEY, CACHE_TTL)
     const cached = cache.get()
     if (cached?.length) {
       setAccounts(cached)
@@ -33,7 +32,7 @@ export default function Accounts() {
       fetchAll('characters', 'char_id, name, class_name, level'),
       fetchAll(
         'raid_loot_with_assignment',
-        'id, char_id, cost, assigned_char_id, assigned_character_name',
+        'id, char_id, character_name, cost, assigned_char_id, assigned_character_name',
         undefined,
         { order: { column: 'id', ascending: true } },
       ),

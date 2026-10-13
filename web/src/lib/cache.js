@@ -1,3 +1,6 @@
+/** Accounts list blob. Bump when spent attribution changes so a prior session does not keep zeros. */
+export const ACCOUNTS_LIST_CACHE_KEY = 'accounts_list_v6'
+
 /**
  * Simple sessionStorage cache with TTL. Use for loot, raids list, mob last3, etc.
  * @param {string} key

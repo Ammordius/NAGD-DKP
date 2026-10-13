@@ -16,6 +16,7 @@ import DkpSiteDisclaimer from '../components/DkpSiteDisclaimer'
 import ItemLink from '../components/ItemLink'
 import { getDkpMobLoot } from '../lib/staticData'
 import { formatAccountCharacter, formatCharacterClassSpentLine } from '../lib/formatAccountCharacter'
+import { ACCOUNTS_LIST_CACHE_KEY } from '../lib/cache'
 import { usePersistedState } from '../lib/usePersistedState'
 import { fetchLootForAccountChars } from '../lib/accountData'
 import AccountLootHistoryTab from '../components/AccountLootHistoryTab'
@@ -428,7 +429,7 @@ export default function AccountDetail({ isOfficer, profile, session }) {
       return
     }
     try { sessionStorage.removeItem(`${ACCOUNT_CACHE_KEY}-${accountId}`) } catch (_) {}
-    try { sessionStorage.removeItem('accounts_list_v5') } catch (_) {}
+    try { sessionStorage.removeItem(ACCOUNTS_LIST_CACHE_KEY) } catch (_) {}
     setDisplayNameEditorOpen(false)
     setDisplayNameQuery('')
     setDisplayNameCharId('')

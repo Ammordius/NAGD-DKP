@@ -34,8 +34,9 @@ export default function DKP({ isOfficer }) {
       return
     }
     const { error: accountError } = await supabase.rpc('refresh_account_dkp_summary')
-    if (accountError && !String(accountError.message || '').toLowerCase().includes('does not exist')) {
+    if (accountError) {
       setMutationError(accountError.message)
+      await mutate()
       setRefreshing(false)
       return
     }
