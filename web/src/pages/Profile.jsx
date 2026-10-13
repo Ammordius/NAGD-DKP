@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { loadAccountActivity } from '../lib/accountData'
+import MyDkpStandings from '../components/MyDkpStandings'
 
 const MAGELO_BASE = 'https://www.takproject.net/magelo/character.php?char='
 const MIDDLE_DOT = '\u00B7'
@@ -184,6 +185,11 @@ export default function Profile({ profile, onProfileUpdate }) {
               </Link>
               {' '}(<code>{claimedAccount.account_id}</code>).
             </p>
+            <MyDkpStandings
+              accountId={profile.account_id}
+              activityByRaid={activityByRaid}
+              activityReady={!accountLoading}
+            />
             <p style={{ color: '#71717a', fontSize: '0.875rem', marginBottom: '0.75rem' }}>
               View your characters and activity below. Use the + on the Characters tab to add alts. Unclaim below to release it and claim a different account.
             </p>

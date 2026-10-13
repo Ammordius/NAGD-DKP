@@ -19,6 +19,7 @@ import { formatAccountCharacter, formatCharacterClassSpentLine } from '../lib/fo
 import { ACCOUNTS_LIST_CACHE_KEY } from '../lib/cache'
 import { usePersistedState } from '../lib/usePersistedState'
 import { fetchLootForAccountChars } from '../lib/accountData'
+import { reconcileAccountDkp } from '../lib/accountDkpTotals'
 import AccountLootHistoryTab from '../components/AccountLootHistoryTab'
 
 const MAGELO_BASE = 'https://www.takproject.net/magelo/character.php?char='
@@ -246,7 +247,7 @@ async function fetchAccountDetail(accountId) {
   return { account: accRes.data, characters: chars, raids: rMap, activityByRaid, dkpByCharacterKey }
 }
 
-export default function AccountDetail({ isOfficer, profile, session }) {
+export default function AccountDetail({ isOfficer, profile, session, onProfileUpdate }) {
   const { accountId } = useParams()
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -337,32 +338,10 @@ export default function AccountDetail({ isOfficer, profile, session }) {
   const linkedToonCount = characters.length
 
   /** Align header with Loot/Activity tabs; account_dkp_summary can lag after backfill or miss legacy buyer char_id rows. */
-  const accountDkp = useMemo(() => {
-    const summary = accountTotalsByAccountId[accountId] || {}
-    let pageSpent = 0
-    for (const act of activityByRaid) {
-      for (const it of act.items || []) {
-        const c = parseFloat(it.cost)
-        if (Number.isFinite(c)) pageSpent += c
-      }
-    }
-    pageSpent = Math.round(pageSpent)
-    const pageEarned = Math.round(
-      activityByRaid.reduce((s, a) => s + (Number(a.dkpEarned) || 0), 0),
-    )
-    const summaryEarned = Math.round(Number(summary.earned) || 0)
-    const summarySpent = Math.round(Number(summary.spent) || 0)
-    const earned = Math.max(summaryEarned, pageEarned)
-    const spent = pageSpent > 0 ? Math.max(pageSpent, summarySpent) : summarySpent
-    const balance = earned - spent
-    const summaryBalance = summaryEarned - summarySpent
-    const staleSummary =
-      (summaryEarned > 0 || summarySpent > 0) &&
-      (Math.abs(spent - summarySpent) > 1 ||
-        Math.abs(earned - summaryEarned) > 1 ||
-        Math.abs(balance - summaryBalance) > 1)
-    return { earned, spent, balance, staleSummary }
-  }, [accountId, accountTotalsByAccountId, activityByRaid])
+  const accountDkp = useMemo(
+    () => reconcileAccountDkp(accountTotalsByAccountId[accountId], activityByRaid),
+    [accountId, accountTotalsByAccountId, activityByRaid],
+  )
 
   async function handleClaimAccount() {
     const { data: { user } } = await supabase.auth.getUser()
@@ -379,6 +358,7 @@ export default function AccountDetail({ isOfficer, profile, session }) {
       return
     }
     setMyAccountId(accountId)
+    onProfileUpdate?.()
   }
 
   async function handleAddCharacter() {

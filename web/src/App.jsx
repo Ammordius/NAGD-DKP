@@ -156,10 +156,10 @@ export default function App() {
       <Routes>
         <Route path="/login" element={<Login session={session} />} />
         <Route path="/auth/callback" element={<AuthCallback session={session} />} />
-        <Route path="/" element={<RequireAuth><Dashboard isOfficer={isOfficer} /></RequireAuth>} />
+        <Route path="/" element={<RequireAuth><Dashboard isOfficer={isOfficer} profile={profile} /></RequireAuth>} />
         <Route path="/raids" element={<RequireAuth><Raids isOfficer={isOfficer} /></RequireAuth>} />
         <Route path="/raids/:raidId" element={<RequireAuth><RaidDetail isOfficer={isOfficer} /></RequireAuth>} />
-        <Route path="/dkp" element={<RequireAuth><DKP isOfficer={isOfficer} /></RequireAuth>} />
+        <Route path="/dkp" element={<RequireAuth><DKP isOfficer={isOfficer} profile={profile} /></RequireAuth>} />
         <Route path="/officer" element={<RedirectPreserve to="/officer/RaidAdmin" />} />
         <Route path="/officer/RaidAdmin" element={<RequireAuth><Officer isOfficer={isOfficer} /></RequireAuth>} />
         <Route path="/officer/dkp-changelog" element={<RequireAuth><DkpChangelog isOfficer={isOfficer} /></RequireAuth>} />
@@ -172,7 +172,7 @@ export default function App() {
         <Route path="/loot-recipients" element={<RequireAuth><LootRecipients /></RequireAuth>} />
         <Route path="/mobs" element={<RequireAuth><MobLoot /></RequireAuth>} />
         <Route path="/accounts" element={<RequireAuth><Accounts /></RequireAuth>} />
-        <Route path="/accounts/:accountId" element={<RequireAuth><AccountDetail isOfficer={isOfficer} profile={profile} session={session} /></RequireAuth>} />
+        <Route path="/accounts/:accountId" element={<RequireAuth><AccountDetail isOfficer={isOfficer} profile={profile} session={session} onProfileUpdate={() => session?.user?.id && fetchProfile(session.user.id)} /></RequireAuth>} />
         <Route path="/profile" element={<RequireAuth><Profile profile={profile} onProfileUpdate={() => session?.user?.id && fetchProfile(session.user.id)} /></RequireAuth>} />
         <Route path="/items/:itemNameEncoded" element={<RequireAuth><ItemPage isOfficer={isOfficer} /></RequireAuth>} />
         <Route path="/characters/:charKey" element={<RequireAuth><CharacterPage /></RequireAuth>} />

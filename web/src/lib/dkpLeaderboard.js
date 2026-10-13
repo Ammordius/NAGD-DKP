@@ -383,8 +383,8 @@ export async function fetchAccountDkpBalances() {
  * Shared hook: one SWR cache for DKP payload (authenticated Supabase). Use everywhere that shows DKP totals so result and cache are identical.
  * Returns processed payload (list, accountList, etc.) and accountBalanceByAccountId for account-level balance.
  */
-export function useDkpData(fetcher = defaultDkpFetcher) {
-  const { data: apiData, error, isLoading, mutate } = useSWR(DKP_DATA_KEY, fetcher, {
+export function useDkpData(fetcher = defaultDkpFetcher, { enabled = true } = {}) {
+  const { data: apiData, error, isLoading, mutate } = useSWR(enabled ? DKP_DATA_KEY : null, fetcher, {
     dedupingInterval: DEDUPING_INTERVAL_MS,
     revalidateOnFocus: false,
   })
