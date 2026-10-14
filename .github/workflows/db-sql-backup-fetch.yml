@@ -1,0 +1,84 @@
+# Read-only fetch of a portable SQL backup artifact.
+# Does not restore a database and does not upload a new artifact.
+# See docs/CI-DB-SQL-BACKUP-FETCH.md.
+
+name: DB SQL backup fetch
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_repository:
+        description: Repository that produced the SQL backup
+        required: true
+        type: choice
+        default: Current repository
+        options:
+          - Current repository
+          - Ammordius/NAGD-DKP
+          - RimidalEQ/RimidalEQ-NAGD-DKP-backup
+      workflow_run_id:
+        description: Optional workflow run id. Leave empty for the latest eligible backup.
+        required: false
+        type: string
+        default: ""
+      artifact_id:
+        description: Optional artifact id. Leave empty to select from the run or the latest backup.
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: db-sql-backup-fetch
+  cancel-in-progress: false
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Detect age identity
+        id: age
+        env:
+          SQL_BACKUP_AGE_IDENTITY: ${{ secrets.SQL_BACKUP_AGE_IDENTITY }}
+        run: |
+          if [ -n "$SQL_BACKUP_AGE_IDENTITY" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install age
+        if: steps.age.outputs.present == 'true'
+        run: sudo apt-get update && sudo apt-get install -y age
+
+      - name: Download and verify SQL backup artifact
+        env:
+          GH_TOKEN: ${{ (inputs.source_repository == 'Current repository' || inputs.source_repository == github.repository) && github.token || secrets.BACKUP_ARTIFACT_READ_TOKEN }}
+          SQL_BACKUP_AGE_IDENTITY: ${{ secrets.SQL_BACKUP_AGE_IDENTITY }}
+          SOURCE_REPOSITORY: ${{ inputs.source_repository }}
+          CURRENT_REPOSITORY: ${{ github.repository }}
+          WORKFLOW_RUN_ID: ${{ inputs.workflow_run_id }}
+          ARTIFACT_ID: ${{ inputs.artifact_id }}
+        run: |
+          set -euo pipefail
+          SOURCE="$SOURCE_REPOSITORY"
+          if [ "$SOURCE" = "Current repository" ]; then
+            SOURCE="$CURRENT_REPOSITORY"
+          fi
+          python scripts/sql_backup_fetch.py \
+            --source "$SOURCE" \
+            --current-repository "$CURRENT_REPOSITORY" \
+            --run-id "$WORKFLOW_RUN_ID" \
+            --artifact-id "$ARTIFACT_ID" \
+            --out-dir sql-backup-fetch-out
