@@ -70,7 +70,7 @@ export default function DKP({ isOfficer }) {
       <h1>DKP Leaderboard</h1>
       <DkpSiteDisclaimer />
       <p style={{ color: '#71717a' }}>
-        One row per account (one human). Earned is that account’s attendance total, the same sum as the account page. Spent is loot from the summary cache.
+        One row per account (one human). Earned, spent, and balance are the account totals. Adjustments are included.
         {usingCache && summaryUpdatedAt && (
           <span style={{ marginLeft: '0.5rem' }}>· Cached {new Date(summaryUpdatedAt).toLocaleString()}</span>
         )}

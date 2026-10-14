@@ -106,20 +106,20 @@ Fetched with `fetch('/…')` from `public/` or CDN:
 
 ### Refreshing DKP totals
 
-`/dkp` reads spent from `account_dkp_summary` and earned from `raid_attendance_dkp_by_account` (via `useDkpData` in `web/src/lib/dkpLeaderboard.js`). That attendance table is what the account page sums, so a summary row with earned 0 does not zero the leaderboard. The “Cached …” time is still `account_dkp_summary.updated_at` and applies to the spent column. Reloading the page, or clearing `sessionStorage` key `dkp_leaderboard_v2`, does not rebuild the summary. `useDkpData` does not read that key.
+`/dkp` reads earned, spent, balance, and the 30-day and 60-day columns from `account_dkp_summary`, plus `dkp_adjustments`. It does not download `raid_attendance_dkp_by_account`. The “Cached …” time is `account_dkp_summary.updated_at`. Reloading the page, or clearing `sessionStorage` key `dkp_leaderboard_v2`, does not rebuild the summary. `useDkpData` does not read that key.
 
-An officer (`profiles.role = officer`) rebuilds it from `/dkp` with **Refresh DKP totals**. That calls `refresh_dkp_summary()`, then `refresh_account_dkp_summary()`, then refetches. The leaderboard uses `account_dkp_summary` whenever that table has any rows, so the second call is the one that changes Balance, Earned, and Spent. If the account refresh fails, the page shows the error (including a missing function) and still refetches whatever is already stored.
+An officer (`profiles.role = officer`) rebuilds totals from `/dkp` with **Refresh DKP totals**. That calls `refresh_dkp_summary()`, then `refresh_account_dkp_summary()`, then refetches. The account refresh rebuilds `raid_attendance_dkp_by_account` and then rebuilds `account_dkp_summary` from `raid_event_attendance` and the loot buyer. The summary does not copy the per-raid cache. If the account refresh fails, the page shows the error and still refetches whatever is already stored.
 
-The same rebuild from the Supabase SQL editor, where `auth.uid()` is null and the officer check is skipped:
+Those RPCs allow an officer, `service_role`, or the database roles `postgres` and `supabase_admin`. A null `auth.uid()` is not enough.
 
 ```sql
 SELECT refresh_dkp_summary();
 SELECT refresh_account_dkp_summary();
 ```
 
-A full rebuild can exceed the API gateway timeout even though the function sets `statement_timeout` to 600s. The SQL editor is the reliable path. Deploy `docs/supabase-schema-full.sql` if `refresh_account_dkp_summary` is not in the database.
+A full rebuild can exceed the API gateway timeout even though the function sets `statement_timeout` to 600s. The SQL editor is the reliable path when the caller is one of the roles above. Deploy `docs/supabase-schema-full.sql` if `refresh_account_dkp_summary` is not in the database.
 
-The account page header sums live attendance and loot. The leaderboard uses that same attendance sum for earned, so a summary row with earned 0 does not change the Balance or Earned columns and does not by itself show “leaderboard cache differs”. That line remains when the loot spent on the account page and the summary spent still disagree by more than 1.
+The account page header uses the same summary totals. If the activity tab’s per-raid cache or loot list disagrees by more than 1, the header shows a warning and does not change the numbers. 30-day and 60-day windows are inclusive (`raid date >= current_date - N`) and move only when a refresh runs; ordinary tic and loot writes update the totals without that button.
 
 ## UI state persistence playbook
 

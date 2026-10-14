@@ -195,7 +195,8 @@ async function main() {
   await psql(readFileSync(join(here, 'assertions.sql'), 'utf8'))
   await concurrentDemotion()
   await assertReapplyPreservesRows()
-  console.log('PostgreSQL authorization tests passed')
+  await psql(readFileSync(join(here, 'dkp-calculation.sql'), 'utf8'))
+  console.log('PostgreSQL authorization and DKP calculation tests passed')
 }
 
 try {

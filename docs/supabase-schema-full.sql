@@ -387,13 +387,8 @@ BEGIN
   FROM combined c
   LEFT JOIN activity_dates ad ON ad.character_key = c.character_key;
 
-  -- Update period totals (total DKP available in last 30d and 60d from all raids). Use raid dates from raids.date_iso.
-  INSERT INTO dkp_period_totals (period, total_dkp)
-  SELECT '30d', COALESCE(SUM((re.dkp_value::numeric)), 0) FROM raid_events re JOIN raids r ON r.raid_id = re.raid_id WHERE raid_date_parsed(r.date_iso) >= (current_date - 30)
-  ON CONFLICT (period) DO UPDATE SET total_dkp = EXCLUDED.total_dkp;
-  INSERT INTO dkp_period_totals (period, total_dkp)
-  SELECT '60d', COALESCE(SUM((re.dkp_value::numeric)), 0) FROM raid_events re JOIN raids r ON r.raid_id = re.raid_id WHERE raid_date_parsed(r.date_iso) >= (current_date - 60)
-  ON CONFLICT (period) DO UPDATE SET total_dkp = EXCLUDED.total_dkp;
+  -- 30d/60d pool uses the same distinct tic as dkp_one_tic_value. Passage of calendar days still needs this refresh.
+  PERFORM public.refresh_dkp_period_totals();
 END;
 $$;
 
@@ -778,23 +773,12 @@ BEGIN
     WHERE rea.raid_id = p_raid_id
     GROUP BY rea.raid_id, (CASE WHEN COALESCE(trim(rea.char_id::text), '') = '' THEN COALESCE(trim(rea.character_name), 'unknown') ELSE trim(rea.char_id::text) END);
 
-    -- One credit per account per tic, even when several characters on the account have the row.
+    -- One credit per account per tic, from account_tic_credits(), not a separate lookup.
     INSERT INTO raid_attendance_dkp_by_account (raid_id, account_id, dkp_earned)
-    SELECT t.raid_id, t.account_id, SUM(public.dkp_one_tic_value(t.raid_id, t.event_id))
-    FROM (
-      SELECT DISTINCT rea.raid_id, rea.event_id, COALESCE(rea.account_id, x.aid) AS account_id
-      FROM raid_event_attendance rea
-      LEFT JOIN LATERAL (
-        SELECT ca.account_id FROM character_account ca
-        WHERE (rea.char_id IS NOT NULL AND trim(rea.char_id::text) <> '' AND ca.char_id = trim(rea.char_id::text))
-           OR (rea.character_name IS NOT NULL AND trim(rea.character_name) <> '' AND EXISTS (
-             SELECT 1 FROM characters c WHERE c.char_id = ca.char_id AND trim(c.name) = trim(rea.character_name)
-           ))
-        LIMIT 1
-      ) x(aid) ON true
-      WHERE rea.raid_id = p_raid_id AND (rea.account_id IS NOT NULL OR x.aid IS NOT NULL)
-    ) t
-    GROUP BY t.raid_id, t.account_id;
+    SELECT c.raid_id, c.account_id, SUM(c.dkp_earned)
+    FROM public.account_tic_credits() c
+    WHERE c.raid_id = p_raid_id
+    GROUP BY c.raid_id, c.account_id;
   ELSE
     INSERT INTO raid_attendance_dkp (raid_id, character_key, character_name, dkp_earned)
     SELECT ra.raid_id,
@@ -843,21 +827,9 @@ BEGIN
 
     -- 4a) raid_attendance_dkp_by_account: one credit per account per tic.
     INSERT INTO raid_attendance_dkp_by_account (raid_id, account_id, dkp_earned)
-    SELECT t.raid_id, t.account_id, SUM(public.dkp_one_tic_value(t.raid_id, t.event_id))
-    FROM (
-      SELECT DISTINCT rea.raid_id, rea.event_id, COALESCE(rea.account_id, x.aid) AS account_id
-      FROM raid_event_attendance rea
-      LEFT JOIN LATERAL (
-        SELECT ca.account_id FROM character_account ca
-        WHERE (rea.char_id IS NOT NULL AND trim(rea.char_id::text) <> '' AND ca.char_id = trim(rea.char_id::text))
-           OR (rea.character_name IS NOT NULL AND trim(rea.character_name) <> '' AND EXISTS (
-             SELECT 1 FROM characters c WHERE c.char_id = ca.char_id AND trim(c.name) = trim(rea.character_name)
-           ))
-        LIMIT 1
-      ) x(aid) ON true
-      WHERE rea.account_id IS NOT NULL OR x.aid IS NOT NULL
-    ) t
-    GROUP BY t.raid_id, t.account_id;
+    SELECT c.raid_id, c.account_id, SUM(c.dkp_earned)
+    FROM public.account_tic_credits() c
+    GROUP BY c.raid_id, c.account_id;
   ELSE
     -- 3b) raid_attendance_dkp from raid-level attendance (all raids in one statement)
     INSERT INTO raid_attendance_dkp (raid_id, character_key, character_name, dkp_earned)
@@ -955,16 +927,25 @@ STABLE
 SECURITY DEFINER
 SET search_path = public
 AS $$
-  SELECT COALESCE(NULLIF(trim(p_account_id), ''), (
-    SELECT ca.account_id
-    FROM character_account ca
-    WHERE (p_char_id IS NOT NULL AND trim(p_char_id) <> '' AND ca.char_id = trim(p_char_id))
-       OR (p_character_name IS NOT NULL AND trim(p_character_name) <> '' AND EXISTS (
-         SELECT 1 FROM characters c
-         WHERE c.char_id = ca.char_id AND trim(c.name) = trim(p_character_name)
-       ))
-    LIMIT 1
-  ))
+  SELECT COALESCE(
+    NULLIF(trim(p_account_id), ''),
+    (
+      SELECT MIN(ca.account_id)
+      FROM character_account ca
+      WHERE NULLIF(trim(p_char_id), '') IS NOT NULL
+        AND ca.char_id = trim(p_char_id)
+      HAVING COUNT(DISTINCT ca.account_id) = 1
+    ),
+    (
+      SELECT MIN(ca.account_id)
+      FROM character_account ca
+      JOIN characters c ON c.char_id = ca.char_id
+      WHERE NULLIF(trim(p_char_id), '') IS NULL
+        AND NULLIF(trim(p_character_name), '') IS NOT NULL
+        AND trim(c.name) = trim(p_character_name)
+      HAVING COUNT(DISTINCT ca.account_id) = 1
+    )
+  )
 $$;
 
 CREATE OR REPLACE FUNCTION public.resolve_loot_account_id(p_loot_id bigint, p_char_id text, p_character_name text)
@@ -978,6 +959,206 @@ AS $$
 $$;
 COMMENT ON FUNCTION public.resolve_loot_account_id(bigint, text, text) IS
   'Account charged for a raid_loot row, from that row''s buyer only. loot_assignment is character ownership and does not affect account DKP. p_loot_id is unused and kept so existing callers do not change.';
+
+-- One credit per account per tic. Reads raid_event_attendance and raid_events, not raid_attendance_dkp_by_account.
+-- A stale per-raid cache can disagree with this. Refreshing the summary used to leave that cache untouched.
+-- An attendance event_id with no matching raid_events row contributes 0; keeping the old cache would hide that.
+CREATE OR REPLACE FUNCTION public.account_tic_credits()
+RETURNS TABLE (raid_id text, event_id text, account_id text, dkp_earned numeric)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT t.raid_id,
+         t.event_id,
+         t.account_id,
+         public.dkp_one_tic_value(t.raid_id, t.event_id) AS dkp_earned
+  FROM (
+    SELECT DISTINCT
+      rea.raid_id,
+      rea.event_id,
+      public.resolve_dkp_account_id(rea.account_id, rea.char_id::text, rea.character_name) AS account_id
+    FROM raid_event_attendance rea
+  ) t
+  WHERE t.account_id IS NOT NULL
+$$;
+
+-- Same distinct-tic sum as dkp_one_tic_value, over an explicit row set (transition snapshots).
+CREATE OR REPLACE FUNCTION public.dkp_distinct_tic_sum(p_rows jsonb)
+RETURNS numeric
+LANGUAGE sql
+IMMUTABLE
+SET search_path = public
+AS $$
+  SELECT COALESCE(SUM(tic.dkp), 0)
+  FROM (
+    SELECT DISTINCT ON (
+      (x->>'event_order')::integer,
+      lower(trim(x->>'event_name'))
+    )
+      COALESCE(NULLIF(trim(x->>'dkp_value'), '')::numeric, 0) AS dkp
+    FROM jsonb_array_elements(COALESCE(p_rows, '[]'::jsonb)) AS x
+    ORDER BY
+      (x->>'event_order')::integer,
+      lower(trim(x->>'event_name')),
+      COALESCE((x->>'id')::bigint, 0)
+  ) tic
+$$;
+
+CREATE OR REPLACE FUNCTION public.refresh_dkp_period_totals()
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  INSERT INTO dkp_period_totals (period, total_dkp)
+  SELECT '30d', COALESCE(SUM(tic.dkp), 0)
+  FROM (
+    SELECT DISTINCT ON (re.raid_id, re.event_id, re.event_order, lower(trim(re.event_name)))
+      COALESCE(NULLIF(trim(re.dkp_value), '')::numeric, 0) AS dkp
+    FROM raid_events re
+    JOIN raids r ON r.raid_id = re.raid_id
+    WHERE public.raid_date_parsed(r.date_iso) >= (current_date - 30)
+    ORDER BY re.raid_id, re.event_id, re.event_order, lower(trim(re.event_name)), re.id
+  ) tic
+  ON CONFLICT (period) DO UPDATE SET total_dkp = EXCLUDED.total_dkp;
+
+  INSERT INTO dkp_period_totals (period, total_dkp)
+  SELECT '60d', COALESCE(SUM(tic.dkp), 0)
+  FROM (
+    SELECT DISTINCT ON (re.raid_id, re.event_id, re.event_order, lower(trim(re.event_name)))
+      COALESCE(NULLIF(trim(re.dkp_value), '')::numeric, 0) AS dkp
+    FROM raid_events re
+    JOIN raids r ON r.raid_id = re.raid_id
+    WHERE public.raid_date_parsed(r.date_iso) >= (current_date - 60)
+    ORDER BY re.raid_id, re.event_id, re.event_order, lower(trim(re.event_name)), re.id
+  ) tic
+  ON CONFLICT (period) DO UPDATE SET total_dkp = EXCLUDED.total_dkp;
+END;
+$$;
+
+-- Apply the change in dkp_one_tic_value once per character and once per account.
+-- p_old and p_new are transition snapshots: id, raid_id, event_id, event_order, event_name, dkp_value.
+CREATE OR REPLACE FUNCTION public.apply_raid_event_tic_deltas(p_old jsonb, p_new jsonb)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  rec record;
+  v_rows jsonb;
+  v_delta numeric;
+  v_date date;
+BEGIN
+  FOR rec IN
+    SELECT DISTINCT k.raid_id, k.event_id
+    FROM (
+      SELECT x->>'raid_id' AS raid_id, x->>'event_id' AS event_id
+      FROM jsonb_array_elements(COALESCE(p_old, '[]'::jsonb)) AS x
+      UNION
+      SELECT x->>'raid_id', x->>'event_id'
+      FROM jsonb_array_elements(COALESCE(p_new, '[]'::jsonb)) AS x
+    ) k
+    WHERE COALESCE(k.raid_id, '') <> '' AND COALESCE(k.event_id, '') <> ''
+  LOOP
+    SELECT COALESCE(jsonb_agg(jsonb_build_object(
+             'id', re.id,
+             'event_order', re.event_order,
+             'event_name', re.event_name,
+             'dkp_value', re.dkp_value
+           )), '[]'::jsonb)
+    INTO v_rows
+    FROM raid_events re
+    WHERE re.raid_id = rec.raid_id
+      AND re.event_id = rec.event_id
+      AND NOT EXISTS (
+        SELECT 1
+        FROM jsonb_array_elements(COALESCE(p_new, '[]'::jsonb)) AS n
+        WHERE (n->>'id')::bigint = re.id
+          AND n->>'raid_id' = rec.raid_id
+          AND n->>'event_id' = rec.event_id
+      );
+
+    IF EXISTS (
+      SELECT 1
+      FROM jsonb_array_elements(COALESCE(p_old, '[]'::jsonb)) AS o
+      WHERE o->>'raid_id' = rec.raid_id
+        AND o->>'event_id' = rec.event_id
+    ) THEN
+      SELECT v_rows || jsonb_agg(jsonb_build_object(
+               'id', (o->>'id')::bigint,
+               'event_order', o->'event_order',
+               'event_name', o->>'event_name',
+               'dkp_value', o->>'dkp_value'
+             ))
+      INTO v_rows
+      FROM jsonb_array_elements(COALESCE(p_old, '[]'::jsonb)) AS o
+      WHERE o->>'raid_id' = rec.raid_id
+        AND o->>'event_id' = rec.event_id;
+    END IF;
+
+    v_delta := public.dkp_one_tic_value(rec.raid_id, rec.event_id) - public.dkp_distinct_tic_sum(v_rows);
+    IF v_delta = 0 THEN
+      CONTINUE;
+    END IF;
+
+    SELECT public.raid_date_parsed(r.date_iso) INTO v_date
+    FROM raids r
+    WHERE r.raid_id = rec.raid_id;
+
+    PERFORM public.apply_earned_deltas((
+      SELECT COALESCE(jsonb_agg(jsonb_build_object(
+        'character_key', g.character_key,
+        'character_name', g.character_name,
+        'account_id', g.account_id,
+        'earned', g.earned,
+        'earned_30d', g.earned_30d,
+        'earned_60d', g.earned_60d,
+        'account_earned', g.account_earned,
+        'account_earned_30d', g.account_earned_30d,
+        'account_earned_60d', g.account_earned_60d
+      )), '[]'::jsonb)
+      FROM (
+        SELECT rows.character_key,
+               MAX(rows.character_name) AS character_name,
+               rows.account_id,
+               SUM(rows.dkp) AS earned,
+               SUM(CASE WHEN rows.raid_date >= (current_date - 30) THEN rows.dkp ELSE 0 END)::integer AS earned_30d,
+               SUM(CASE WHEN rows.raid_date >= (current_date - 60) THEN rows.dkp ELSE 0 END)::integer AS earned_60d,
+               SUM(CASE WHEN rows.is_account_credit THEN rows.dkp ELSE 0 END) AS account_earned,
+               SUM(CASE WHEN rows.is_account_credit AND rows.raid_date >= (current_date - 30) THEN rows.dkp ELSE 0 END)::integer AS account_earned_30d,
+               SUM(CASE WHEN rows.is_account_credit AND rows.raid_date >= (current_date - 60) THEN rows.dkp ELSE 0 END)::integer AS account_earned_60d
+        FROM (
+          SELECT tic.character_key,
+                 tic.character_name,
+                 tic.account_id,
+                 tic.dkp,
+                 tic.raid_date,
+                 (tic.account_id IS NOT NULL AND tic.rn = 1) AS is_account_credit
+          FROM (
+            SELECT public.dkp_character_key(rea.char_id::text, rea.character_name) AS character_key,
+                   COALESCE(NULLIF(trim(rea.character_name), ''), rea.char_id::text, 'unknown') AS character_name,
+                   public.resolve_dkp_account_id(rea.account_id, rea.char_id::text, rea.character_name) AS account_id,
+                   v_delta AS dkp,
+                   v_date AS raid_date,
+                   row_number() OVER (
+                     PARTITION BY public.resolve_dkp_account_id(rea.account_id, rea.char_id::text, rea.character_name)
+                     ORDER BY public.dkp_character_key(rea.char_id::text, rea.character_name), rea.id
+                   ) AS rn
+            FROM raid_event_attendance rea
+            WHERE rea.raid_id = rec.raid_id
+              AND rea.event_id = rec.event_id
+          ) tic
+        ) rows
+        GROUP BY rows.character_key, rows.account_id
+      ) g
+    ));
+  END LOOP;
+END;
+$$;
 
 CREATE OR REPLACE FUNCTION public.refresh_raid_totals_for_ids(p_raid_ids text[])
 RETURNS void
@@ -1545,23 +1726,24 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 DECLARE
-  v_events jsonb;
+  v_new jsonb;
 BEGIN
   IF restore_load_in_progress() THEN RETURN NULL; END IF;
 
   SELECT COALESCE(jsonb_agg(jsonb_build_object(
+    'id', nr.id,
     'raid_id', nr.raid_id,
     'event_id', nr.event_id,
-    'dkp', public.dkp_event_value(nr.dkp_value),
-    'raid_date', public.raid_date_parsed(r.date_iso)
+    'event_order', nr.event_order,
+    'event_name', nr.event_name,
+    'dkp_value', nr.dkp_value
   )), '[]'::jsonb)
-  INTO v_events
-  FROM new_rows nr
-  LEFT JOIN raids r ON r.raid_id = nr.raid_id;
+  INTO v_new
+  FROM new_rows nr;
 
   PERFORM refresh_raid_totals_for_ids(ARRAY(SELECT DISTINCT raid_id FROM new_rows));
-  PERFORM adjust_dkp_period_totals(v_events);
-  PERFORM apply_earned_deltas(dkp_earned_rows_for_events(v_events));
+  PERFORM public.apply_raid_event_tic_deltas('[]'::jsonb, v_new);
+  PERFORM public.refresh_dkp_period_totals();
   RETURN NULL;
 END;
 $$;
@@ -1579,32 +1761,38 @@ BEGIN
   IF restore_load_in_progress() THEN RETURN NULL; END IF;
 
   SELECT COALESCE(jsonb_agg(jsonb_build_object(
+    'id', o.id,
     'raid_id', o.raid_id,
     'event_id', o.event_id,
-    'dkp', -public.dkp_event_value(o.dkp_value),
-    'raid_date', public.raid_date_parsed(r.date_iso)
+    'event_order', o.event_order,
+    'event_name', o.event_name,
+    'dkp_value', o.dkp_value
   )), '[]'::jsonb)
   INTO v_old
   FROM old_rows o
   JOIN new_rows n ON n.id = o.id
-  LEFT JOIN raids r ON r.raid_id = o.raid_id
   WHERE public.dkp_event_value(n.dkp_value) IS DISTINCT FROM public.dkp_event_value(o.dkp_value)
      OR n.raid_id IS DISTINCT FROM o.raid_id
-     OR n.event_id IS DISTINCT FROM o.event_id;
+     OR n.event_id IS DISTINCT FROM o.event_id
+     OR n.event_order IS DISTINCT FROM o.event_order
+     OR lower(trim(COALESCE(n.event_name, ''))) IS DISTINCT FROM lower(trim(COALESCE(o.event_name, '')));
 
   SELECT COALESCE(jsonb_agg(jsonb_build_object(
+    'id', n.id,
     'raid_id', n.raid_id,
     'event_id', n.event_id,
-    'dkp', public.dkp_event_value(n.dkp_value),
-    'raid_date', public.raid_date_parsed(r.date_iso)
+    'event_order', n.event_order,
+    'event_name', n.event_name,
+    'dkp_value', n.dkp_value
   )), '[]'::jsonb)
   INTO v_new
   FROM new_rows n
   JOIN old_rows o ON o.id = n.id
-  LEFT JOIN raids r ON r.raid_id = n.raid_id
   WHERE public.dkp_event_value(n.dkp_value) IS DISTINCT FROM public.dkp_event_value(o.dkp_value)
      OR n.raid_id IS DISTINCT FROM o.raid_id
-     OR n.event_id IS DISTINCT FROM o.event_id;
+     OR n.event_id IS DISTINCT FROM o.event_id
+     OR n.event_order IS DISTINCT FROM o.event_order
+     OR lower(trim(COALESCE(n.event_name, ''))) IS DISTINCT FROM lower(trim(COALESCE(o.event_name, '')));
 
   IF v_old <> '[]'::jsonb OR v_new <> '[]'::jsonb THEN
     PERFORM refresh_raid_totals_for_ids(ARRAY(
@@ -1614,10 +1802,8 @@ BEGIN
         SELECT raid_id FROM new_rows
       ) ids
     ));
-    PERFORM adjust_dkp_period_totals(v_old);
-    PERFORM adjust_dkp_period_totals(v_new);
-    PERFORM apply_earned_deltas(dkp_earned_rows_for_events(v_old));
-    PERFORM apply_earned_deltas(dkp_earned_rows_for_events(v_new));
+    PERFORM public.apply_raid_event_tic_deltas(v_old, v_new);
+    PERFORM public.refresh_dkp_period_totals();
   END IF;
   RETURN NULL;
 END;
@@ -1630,22 +1816,23 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 DECLARE
-  v_events jsonb;
+  v_old jsonb;
 BEGIN
   IF restore_load_in_progress() THEN RETURN NULL; END IF;
 
   SELECT COALESCE(jsonb_agg(jsonb_build_object(
+    'id', o.id,
     'raid_id', o.raid_id,
     'event_id', o.event_id,
-    'dkp', -public.dkp_event_value(o.dkp_value),
-    'raid_date', public.raid_date_parsed(r.date_iso)
+    'event_order', o.event_order,
+    'event_name', o.event_name,
+    'dkp_value', o.dkp_value
   )), '[]'::jsonb)
-  INTO v_events
-  FROM old_rows o
-  LEFT JOIN raids r ON r.raid_id = o.raid_id;
+  INTO v_old
+  FROM old_rows o;
 
-  PERFORM apply_earned_deltas(dkp_earned_rows_for_events(v_events));
-  PERFORM adjust_dkp_period_totals(v_events);
+  PERFORM public.apply_raid_event_tic_deltas(v_old, '[]'::jsonb);
+  PERFORM public.refresh_dkp_period_totals();
   PERFORM refresh_raid_totals_for_ids(ARRAY(SELECT DISTINCT raid_id FROM old_rows));
   RETURN NULL;
 END;
@@ -2499,78 +2686,113 @@ CREATE TABLE IF NOT EXISTS active_accounts (
 );
 COMMENT ON TABLE active_accounts IS 'Optional: accounts always shown on DKP leaderboard (exceptions). Default view shows accounts with recent activity; this is for pin-to-list only.';
 
--- 6) refresh_account_dkp_summary_internal: compute account_dkp_summary from attendance + loot (resolve char -> account)
-CREATE OR REPLACE FUNCTION public.refresh_account_dkp_summary_internal()
+-- Recompute earned and spent for the given accounts from attendance and the loot buyer.
+-- Does not read raid_attendance_dkp_by_account. Sets earned to 0 when the account has no tic credits left.
+CREATE OR REPLACE FUNCTION public.refresh_account_dkp_for_accounts(p_account_ids text[])
 RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
 AS $$
 BEGIN
-  TRUNCATE account_dkp_summary;
+  IF p_account_ids IS NULL OR cardinality(p_account_ids) IS NULL OR cardinality(p_account_ids) = 0 THEN
+    RETURN;
+  END IF;
 
-  -- Earned: the per-raid account totals the account page already shows.
-  -- dkp_one_tic_value(raid_id, event_id) returns 0 when attendance event ids do not match raid_events, which zeroed this table while raid_attendance_dkp_by_account stayed correct.
-  INSERT INTO account_dkp_summary (account_id, display_name, earned, earned_30d, earned_60d, last_activity_date, updated_at)
+  INSERT INTO account_dkp_summary (
+    account_id, display_name, earned, spent, earned_30d, earned_60d, last_activity_date, updated_at
+  )
   SELECT
-    a.account_id,
-    MAX(acc.display_name),
-    COALESCE(SUM(a.dkp_earned), 0),
-    COALESCE(SUM(CASE WHEN raid_date_parsed(r.date_iso) >= (current_date - 30) THEN a.dkp_earned ELSE 0 END), 0)::INTEGER,
-    COALESCE(SUM(CASE WHEN raid_date_parsed(r.date_iso) >= (current_date - 60) THEN a.dkp_earned ELSE 0 END), 0)::INTEGER,
-    MAX(raid_date_parsed(r.date_iso)),
-    now()
-  FROM raid_attendance_dkp_by_account a
-  LEFT JOIN raids r ON r.raid_id = a.raid_id
-  LEFT JOIN accounts acc ON acc.account_id = a.account_id
-  GROUP BY a.account_id;
-
-  -- Spent: raid_loot buyer only (char_id / character_name). loot_assignment is character
-  -- ownership and must not move account DKP.
-  INSERT INTO account_dkp_summary (account_id, display_name, spent, earned_30d, earned_60d, last_activity_date, updated_at)
-  SELECT
-    sub.account_id,
-    MAX(sub.display_name),
-    SUM(sub.cost_num),
-    0,
-    0,
-    MAX(raid_date_parsed(r.date_iso)),
+    t.account_id,
+    acc.display_name,
+    COALESCE(e.earned, 0),
+    COALESCE(s.spent, 0),
+    COALESCE(e.earned_30d, 0),
+    COALESCE(e.earned_60d, 0),
+    GREATEST(e.last_earned, s.last_spent),
     now()
   FROM (
-    SELECT DISTINCT ON (rl.id)
-      ca.account_id,
-      a.display_name,
-      COALESCE((rl.cost::numeric), 0) AS cost_num,
-      rl.raid_id
-    FROM raid_loot rl
-    LEFT JOIN character_account ca ON (
-      (COALESCE(trim(rl.char_id::text), '') <> '' AND ca.char_id = trim(rl.char_id::text))
-      OR (COALESCE(trim(rl.character_name), '') <> '' AND EXISTS (
-        SELECT 1 FROM characters c WHERE c.char_id = ca.char_id AND trim(c.name) = trim(rl.character_name)
-      ))
-    )
-    LEFT JOIN accounts a ON a.account_id = ca.account_id
-    WHERE ca.account_id IS NOT NULL
-    ORDER BY rl.id, ca.account_id
-  ) sub
-  LEFT JOIN raids r ON r.raid_id = sub.raid_id
-  GROUP BY sub.account_id
+    SELECT DISTINCT trim(u.account_id) AS account_id
+    FROM unnest(p_account_ids) AS u(account_id)
+    WHERE u.account_id IS NOT NULL AND trim(u.account_id) <> ''
+  ) t
+  JOIN accounts acc ON acc.account_id = t.account_id
+  LEFT JOIN (
+    SELECT c.account_id,
+           SUM(c.dkp_earned) AS earned,
+           SUM(CASE WHEN public.raid_date_parsed(r.date_iso) >= (current_date - 30) THEN c.dkp_earned ELSE 0 END)::integer AS earned_30d,
+           SUM(CASE WHEN public.raid_date_parsed(r.date_iso) >= (current_date - 60) THEN c.dkp_earned ELSE 0 END)::integer AS earned_60d,
+           MAX(public.raid_date_parsed(r.date_iso)) AS last_earned
+    FROM public.account_tic_credits() c
+    LEFT JOIN raids r ON r.raid_id = c.raid_id
+    GROUP BY c.account_id
+  ) e ON e.account_id = t.account_id
+  LEFT JOIN (
+    SELECT b.account_id,
+           SUM(b.cost_num) AS spent,
+           MAX(public.raid_date_parsed(r.date_iso)) AS last_spent
+    FROM (
+      SELECT public.resolve_loot_account_id(rl.id, rl.char_id::text, rl.character_name) AS account_id,
+             COALESCE(NULLIF(trim(rl.cost), '')::numeric, 0) AS cost_num,
+             rl.raid_id
+      FROM raid_loot rl
+    ) b
+    LEFT JOIN raids r ON r.raid_id = b.raid_id
+    WHERE b.account_id IS NOT NULL
+    GROUP BY b.account_id
+  ) s ON s.account_id = t.account_id
   ON CONFLICT (account_id) DO UPDATE SET
-    spent = account_dkp_summary.spent + EXCLUDED.spent,
-    last_activity_date = GREATEST(COALESCE(account_dkp_summary.last_activity_date, '1970-01-01'::date), COALESCE(EXCLUDED.last_activity_date, '1970-01-01'::date)),
+    earned = EXCLUDED.earned,
+    spent = EXCLUDED.spent,
+    earned_30d = EXCLUDED.earned_30d,
+    earned_60d = EXCLUDED.earned_60d,
+    display_name = COALESCE(EXCLUDED.display_name, account_dkp_summary.display_name),
+    last_activity_date = EXCLUDED.last_activity_date,
     updated_at = now();
 
-  -- Period totals unchanged (still from raid_events)
-  INSERT INTO dkp_period_totals (period, total_dkp)
-  SELECT '30d', COALESCE(SUM((re.dkp_value::numeric)), 0) FROM raid_events re JOIN raids r ON r.raid_id = re.raid_id WHERE raid_date_parsed(r.date_iso) >= (current_date - 30)
-  ON CONFLICT (period) DO UPDATE SET total_dkp = EXCLUDED.total_dkp;
-  INSERT INTO dkp_period_totals (period, total_dkp)
-  SELECT '60d', COALESCE(SUM((re.dkp_value::numeric)), 0) FROM raid_events re JOIN raids r ON r.raid_id = re.raid_id WHERE raid_date_parsed(r.date_iso) >= (current_date - 60)
-  ON CONFLICT (period) DO UPDATE SET total_dkp = EXCLUDED.total_dkp;
+  DELETE FROM account_dkp_summary s
+  USING (
+    SELECT DISTINCT trim(u.account_id) AS account_id
+    FROM unnest(p_account_ids) AS u(account_id)
+    WHERE u.account_id IS NOT NULL AND trim(u.account_id) <> ''
+  ) t
+  WHERE s.account_id = t.account_id
+    AND s.earned = 0
+    AND s.spent = 0
+    AND COALESCE(s.earned_30d, 0) = 0
+    AND COALESCE(s.earned_60d, 0) = 0;
 END;
 $$;
 
-COMMENT ON FUNCTION public.refresh_account_dkp_summary_internal() IS 'Recompute account_dkp_summary. Earned from raid_attendance_dkp_by_account. Spent from raid_loot buyer (char_id / character_name).';
+-- 6) refresh_account_dkp_summary_internal: rebuild account_dkp_summary from attendance and loot.
+-- The per-raid cache is not an input. A previous refresh rewrote earned from that cache, so a stale
+-- cache survived as the leaderboard total. Mismatched attendance event ids contribute 0 here.
+CREATE OR REPLACE FUNCTION public.refresh_account_dkp_summary_internal()
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_accounts text[];
+BEGIN
+  SELECT COALESCE(ARRAY_AGG(DISTINCT src.account_id), '{}')
+  INTO v_accounts
+  FROM (
+    SELECT c.account_id FROM public.account_tic_credits() c
+    UNION
+    SELECT public.resolve_loot_account_id(rl.id, rl.char_id::text, rl.character_name)
+    FROM raid_loot rl
+  ) src
+  WHERE src.account_id IS NOT NULL;
+
+  TRUNCATE account_dkp_summary;
+  PERFORM public.refresh_account_dkp_for_accounts(v_accounts);
+  PERFORM public.refresh_dkp_period_totals();
+END;
+$$;
+
+COMMENT ON FUNCTION public.refresh_account_dkp_summary_internal() IS 'Recompute account_dkp_summary from raid_event_attendance via dkp_one_tic_value, and spent from the raid_loot buyer. Does not read raid_attendance_dkp_by_account.';
 
 -- 8) RPC for officers to refresh account DKP (and keep legacy dkp_summary in sync if desired)
 CREATE OR REPLACE FUNCTION public.refresh_account_dkp_summary()
@@ -2588,10 +2810,11 @@ BEGIN
     RAISE EXCEPTION 'Only officers can refresh account DKP summary';
   END IF;
   SET LOCAL statement_timeout = '600s';
+  PERFORM refresh_all_raid_attendance_totals();
   PERFORM refresh_account_dkp_summary_internal();
 END;
 $$;
-COMMENT ON FUNCTION public.refresh_account_dkp_summary() IS 'Officer-only: refresh account_dkp_summary from attendance and loot.';
+COMMENT ON FUNCTION public.refresh_account_dkp_summary() IS 'Officer-only: rebuild the per-raid attendance cache and account_dkp_summary from attendance and loot. The summary does not copy the cache.';
 
 -- 9) end_restore_load: also refresh account DKP
 CREATE OR REPLACE FUNCTION public.end_restore_load()
@@ -2697,14 +2920,9 @@ BEGIN
 
   SET LOCAL statement_timeout = '180s';
 
-  -- Accounts with attendance in this raid (resolve account_id from char_id/name if null) plus any extra (e.g. removed attendee)
+  -- Accounts with attendance in this raid, plus any extra (for example a removed attendee).
   WITH rea_accounts AS (
-    SELECT DISTINCT COALESCE(rea.account_id, (
-      SELECT ca.account_id FROM character_account ca
-      WHERE (rea.char_id IS NOT NULL AND trim(rea.char_id::text) <> '' AND ca.char_id = trim(rea.char_id::text))
-         OR (rea.character_name IS NOT NULL AND trim(rea.character_name) <> '' AND EXISTS (SELECT 1 FROM characters c WHERE c.char_id = ca.char_id AND trim(c.name) = trim(rea.character_name)))
-      LIMIT 1
-    )) AS account_id
+    SELECT DISTINCT public.resolve_dkp_account_id(rea.account_id, rea.char_id::text, rea.character_name) AS account_id
     FROM raid_event_attendance rea
     WHERE rea.raid_id = p_raid_id
   ),
@@ -2719,83 +2937,8 @@ BEGIN
     RETURN;
   END IF;
 
-  -- Recompute earned from raid_attendance_dkp_by_account (same rows as the account page), including targets with no rows left.
-  INSERT INTO account_dkp_summary (account_id, display_name, earned, spent, earned_30d, earned_60d, last_activity_date, updated_at)
-  SELECT
-    t.account_id,
-    MAX(acc.display_name),
-    COALESCE(SUM(a.dkp_earned), 0),
-    0::numeric,
-    COALESCE(SUM(CASE WHEN raid_date_parsed(r.date_iso) >= (current_date - 30) THEN a.dkp_earned ELSE 0 END), 0)::INTEGER,
-    COALESCE(SUM(CASE WHEN raid_date_parsed(r.date_iso) >= (current_date - 60) THEN a.dkp_earned ELSE 0 END), 0)::INTEGER,
-    MAX(raid_date_parsed(r.date_iso)),
-    now()
-  FROM unnest(target_accounts) AS t(account_id)
-  LEFT JOIN raid_attendance_dkp_by_account a ON a.account_id = t.account_id
-  LEFT JOIN raids r ON r.raid_id = a.raid_id
-  LEFT JOIN accounts acc ON acc.account_id = t.account_id
-  GROUP BY t.account_id
-  ON CONFLICT (account_id) DO UPDATE SET
-    earned = EXCLUDED.earned,
-    earned_30d = EXCLUDED.earned_30d,
-    earned_60d = EXCLUDED.earned_60d,
-    last_activity_date = GREATEST(COALESCE(account_dkp_summary.last_activity_date, '1970-01-01'::date), COALESCE(EXCLUDED.last_activity_date, '1970-01-01'::date)),
-    updated_at = now();
-
-  -- Spent follows the raid_loot buyer, never loot_assignment.
-  INSERT INTO account_dkp_summary (account_id, display_name, spent, earned_30d, earned_60d, last_activity_date, updated_at)
-  SELECT
-    sub.account_id,
-    MAX(sub.display_name),
-    SUM(sub.cost_num),
-    0,
-    0,
-    MAX(raid_date_parsed(r.date_iso)),
-    now()
-  FROM (
-    SELECT DISTINCT ON (b.id)
-      ca.account_id,
-      a.display_name,
-      COALESCE((b.cost::numeric), 0) AS cost_num,
-      b.raid_id
-    FROM (
-      SELECT rl.id, rl.raid_id, rl.cost, rl.char_id, rl.character_name
-      FROM raid_loot rl
-      WHERE (
-        COALESCE(trim(rl.char_id::text), '') <> ''
-        AND EXISTS (
-          SELECT 1 FROM character_account ca0
-          WHERE ca0.account_id = ANY(target_accounts)
-            AND ca0.char_id = trim(rl.char_id::text)
-        )
-      )
-      OR (
-        COALESCE(trim(rl.char_id::text), '') = ''
-        AND COALESCE(trim(rl.character_name), '') <> ''
-        AND EXISTS (
-          SELECT 1 FROM character_account ca0
-          INNER JOIN characters c0 ON c0.char_id = ca0.char_id
-          WHERE ca0.account_id = ANY(target_accounts)
-            AND trim(c0.name) = trim(rl.character_name)
-        )
-      )
-    ) b
-    LEFT JOIN character_account ca ON (
-      (COALESCE(trim(b.char_id::text), '') <> '' AND ca.char_id = trim(b.char_id::text))
-      OR (COALESCE(trim(b.character_name), '') <> '' AND EXISTS (
-        SELECT 1 FROM characters c WHERE c.char_id = ca.char_id AND trim(c.name) = trim(b.character_name)
-      ))
-    )
-    LEFT JOIN accounts a ON a.account_id = ca.account_id
-    WHERE ca.account_id IS NOT NULL AND ca.account_id = ANY(target_accounts)
-    ORDER BY b.id, ca.account_id
-  ) sub
-  LEFT JOIN raids r ON r.raid_id = sub.raid_id
-  GROUP BY sub.account_id
-  ON CONFLICT (account_id) DO UPDATE SET
-    spent = EXCLUDED.spent,
-    last_activity_date = GREATEST(COALESCE(account_dkp_summary.last_activity_date, '1970-01-01'::date), COALESCE(EXCLUDED.last_activity_date, '1970-01-01'::date)),
-    updated_at = now();
+  -- Includes targets with no credits left, so removed attendance does not keep old earned.
+  PERFORM public.refresh_account_dkp_for_accounts(target_accounts);
 END;
 $$;
 COMMENT ON FUNCTION public.refresh_account_dkp_summary_for_raid(TEXT, TEXT[]) IS 'Update account_dkp_summary only for accounts with attendance in this raid (plus p_extra_account_ids). Use after add/remove tic or attendee.';
@@ -2803,7 +2946,62 @@ COMMENT ON FUNCTION public.refresh_account_dkp_summary_for_raid(TEXT, TEXT[]) IS
 GRANT EXECUTE ON FUNCTION public.refresh_account_dkp_summary_for_raid(TEXT, TEXT[]) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.refresh_account_dkp_summary_for_raid(TEXT, TEXT[]) TO service_role;
 
+-- Linking or unlinking a character moves that account's earned and spent. Ordinary writes do not need Refresh DKP totals.
+CREATE OR REPLACE FUNCTION public.trigger_character_account_dkp()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_accounts text[];
+  v_chars text[];
+BEGIN
+  IF restore_load_in_progress() THEN RETURN NULL; END IF;
+  IF TG_OP = 'DELETE' THEN
+    SELECT ARRAY_AGG(DISTINCT account_id), ARRAY_AGG(DISTINCT char_id)
+    INTO v_accounts, v_chars
+    FROM old_rows;
+  ELSIF TG_OP = 'UPDATE' THEN
+    SELECT ARRAY_AGG(DISTINCT account_id), ARRAY_AGG(DISTINCT char_id)
+    INTO v_accounts, v_chars
+    FROM (
+      SELECT account_id, char_id FROM old_rows
+      UNION
+      SELECT account_id, char_id FROM new_rows
+    ) s;
+  ELSE
+    SELECT ARRAY_AGG(DISTINCT account_id), ARRAY_AGG(DISTINCT char_id)
+    INTO v_accounts, v_chars
+    FROM new_rows;
+  END IF;
 
+  PERFORM public.refresh_raid_totals_for_ids(ARRAY(
+    SELECT DISTINCT rea.raid_id
+    FROM raid_event_attendance rea
+    WHERE trim(rea.char_id::text) = ANY (v_chars)
+       OR rea.account_id = ANY (v_accounts)
+  ));
+  PERFORM public.refresh_account_dkp_for_accounts(v_accounts);
+  RETURN NULL;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS character_account_dkp_ins ON character_account;
+DROP TRIGGER IF EXISTS character_account_dkp_upd ON character_account;
+DROP TRIGGER IF EXISTS character_account_dkp_del ON character_account;
+CREATE TRIGGER character_account_dkp_ins
+  AFTER INSERT ON character_account
+  REFERENCING NEW TABLE AS new_rows
+  FOR EACH STATEMENT EXECUTE FUNCTION public.trigger_character_account_dkp();
+CREATE TRIGGER character_account_dkp_upd
+  AFTER UPDATE ON character_account
+  REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows
+  FOR EACH STATEMENT EXECUTE FUNCTION public.trigger_character_account_dkp();
+CREATE TRIGGER character_account_dkp_del
+  AFTER DELETE ON character_account
+  REFERENCING OLD TABLE AS old_rows
+  FOR EACH STATEMENT EXECUTE FUNCTION public.trigger_character_account_dkp();
 
 -- Profiles: one SELECT (own row or officer), one UPDATE (own row or officer)
 DROP POLICY IF EXISTS "Users can read own profile" ON profiles;
@@ -5679,6 +5877,12 @@ REVOKE ALL ON FUNCTION public.refresh_raid_totals_for_ids(text[]) FROM PUBLIC, a
 REVOKE ALL ON FUNCTION public.apply_earned_deltas(jsonb) FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION public.apply_spent_deltas(jsonb, text, date[]) FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION public.adjust_dkp_period_totals(jsonb) FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION public.refresh_dkp_period_totals() FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION public.account_tic_credits() FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION public.dkp_distinct_tic_sum(jsonb) FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION public.apply_raid_event_tic_deltas(jsonb, jsonb) FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION public.refresh_account_dkp_for_accounts(text[]) FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION public.dkp_earned_rows_for_events(jsonb) FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION public.refresh_dkp_last_activity(text[], text[]) FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION public.touch_dkp_last_activity(text[], text[], date) FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION public.recompute_dkp_last_activity_if_latest(text[], text[], date[]) FROM PUBLIC, anon, authenticated, service_role;

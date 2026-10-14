@@ -5,12 +5,7 @@
 import { useMemo } from 'react'
 import useSWR from 'swr'
 import { supabase } from './supabase'
-import {
-  isoDay,
-  preferAttendanceEarned,
-  sumAttendanceEarnedByAccount,
-  summaryRowsIncludingAttendance,
-} from './accountEarned'
+import { isoDay } from './accountEarned'
 
 export const ACTIVE_DAYS = 120
 /** SWR key for DKP payload (authenticated Supabase fetch). */
@@ -35,7 +30,7 @@ async function fetchAll(supabaseClient, table, select) {
 
 /** Fetch same payload as former /api/get-dkp using authenticated Supabase client (required after requiring sign-in). */
 export async function fetchDkpPayloadFromSupabase() {
-  const [summary, accountSummaryRes, adjRes, activeRaiders, activeAccountsRes, periodRes, charAccount, accounts, characters, attendanceByAccount, raids] = await Promise.all([
+  const [summary, accountSummaryRes, adjRes, activeRaiders, activeAccountsRes, periodRes, charAccount, accounts, characters] = await Promise.all([
     fetchAll(supabase, 'dkp_summary', 'character_key, character_name, earned, spent, earned_30d, earned_60d, last_activity_date, updated_at'),
     supabase.from('account_dkp_summary').select('account_id, display_name, earned, spent, earned_30d, earned_60d, last_activity_date, updated_at'),
     supabase.from('dkp_adjustments').select('character_name, account_id, earned_delta, spent_delta').limit(1000),
@@ -45,8 +40,6 @@ export async function fetchDkpPayloadFromSupabase() {
     fetchAll(supabase, 'character_account', 'char_id, account_id'),
     fetchAll(supabase, 'accounts', 'account_id, toon_names, display_name, inactive'),
     fetchAll(supabase, 'characters', 'char_id, name, class_name'),
-    fetchAll(supabase, 'raid_attendance_dkp_by_account', 'account_id, raid_id, dkp_earned'),
-    fetchAll(supabase, 'raids', 'raid_id, date_iso'),
   ])
   if (adjRes.error) throw new Error(adjRes.error.message || 'Failed to fetch dkp_adjustments')
   if (periodRes.error) throw new Error(periodRes.error.message || 'Failed to fetch dkp_period_totals')
@@ -64,8 +57,6 @@ export async function fetchDkpPayloadFromSupabase() {
     character_account: charAccount,
     accounts,
     characters,
-    raid_attendance_dkp_by_account: attendanceByAccount,
-    raids,
   }
 }
 
@@ -89,7 +80,7 @@ function applyAdjustmentsAndBalance(list, adjustmentsMap) {
  * Build account leaderboard from account_dkp_summary (account-scoped DKP). Adjustments by account_id or character_name.
  * Returns { accountList, fullAccountBalances, fullAccountTotals } so account detail pages can show true DKP for inactive accounts too.
  */
-function buildAccountLeaderboardFromAccountSummary(accountSummary, adjustments, activeAccountIds, inactiveAccountIds, accData, caData, charData, attendanceEarned) {
+function buildAccountLeaderboardFromAccountSummary(accountSummary, adjustments, activeAccountIds, inactiveAccountIds, accData, caData, charData) {
   const accountNames = {}
   ;(accData || []).forEach((r) => {
     const display = (r.display_name || '').trim()
@@ -119,16 +110,13 @@ function buildAccountLeaderboardFromAccountSummary(accountSummary, adjustments, 
   const cutoff = new Date()
   cutoff.setDate(cutoff.getDate() - ACTIVE_DAYS)
   cutoff.setHours(0, 0, 0, 0)
-  const summaryRows = summaryRowsIncludingAttendance(accountSummary, attendanceEarned)
-  const fullList = summaryRows.map((r) => {
+  const fullList = (accountSummary || []).map((r) => {
     const aid = String(r.account_id)
     const adj = adjustmentsByAccount[aid]
-    const live = attendanceEarned?.[aid]
-    const earned = preferAttendanceEarned(r.earned, live?.earned) + (adj ? adj.earned_delta : 0)
+    const earned = Math.round(Number(r.earned) || 0) + (adj ? adj.earned_delta : 0)
     const spent = Math.round(Number(r.spent) || 0) + (adj ? adj.spent_delta : 0)
     const balance = earned - spent
-    const summaryActivity = r.last_activity_date ? isoDay(r.last_activity_date) || String(r.last_activity_date).slice(0, 10) : null
-    const lastActivity = [summaryActivity, live?.last_activity_date].filter(Boolean).sort().pop() || null
+    const lastActivity = r.last_activity_date ? isoDay(r.last_activity_date) || String(r.last_activity_date).slice(0, 10) : null
     const isActive = activeSet.has(aid) || (cutoff && lastActivity && new Date(lastActivity) >= cutoff)
     return {
       account_id: aid,
@@ -136,8 +124,8 @@ function buildAccountLeaderboardFromAccountSummary(accountSummary, adjustments, 
       earned,
       spent,
       balance,
-      earned_30d: preferAttendanceEarned(r.earned_30d, live?.earned_30d),
-      earned_60d: preferAttendanceEarned(r.earned_60d, live?.earned_60d),
+      earned_30d: Math.round(Number(r.earned_30d) || 0),
+      earned_60d: Math.round(Number(r.earned_60d) || 0),
       last_activity_date: lastActivity,
       isActive,
     }
@@ -263,9 +251,6 @@ export function processApiPayload(payload) {
 
   if (payload.account_dkp_summary?.length > 0) {
     const activeAccountIds = (payload.active_accounts ?? []).map((x) => x.account_id).filter(Boolean)
-    const raidDateById = {}
-    ;(payload.raids ?? []).forEach((r) => { raidDateById[String(r.raid_id)] = r.date_iso })
-    const attendanceEarned = sumAttendanceEarnedByAccount(payload.raid_attendance_dkp_by_account, raidDateById)
     const { accountList, fullAccountBalances, fullAccountTotals } = buildAccountLeaderboardFromAccountSummary(
       payload.account_dkp_summary,
       payload.dkp_adjustments,
@@ -273,8 +258,7 @@ export function processApiPayload(payload) {
       inactiveAccountIds,
       accData,
       payload.character_account ?? [],
-      payload.characters ?? [],
-      attendanceEarned
+      payload.characters ?? []
     )
     const summaryUpdatedAt = payload.account_dkp_summary[0]?.updated_at ?? null
     return {

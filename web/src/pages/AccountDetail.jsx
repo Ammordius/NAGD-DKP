@@ -336,7 +336,7 @@ export default function AccountDetail({ isOfficer, profile, session }) {
   const displayName = account?.display_name?.trim() || account?.toon_names?.split(',')[0]?.trim() || accountId
   const linkedToonCount = characters.length
 
-  /** Align header with Loot/Activity tabs; account_dkp_summary can lag after backfill or miss legacy buyer char_id rows. */
+  /** Header figures are account_dkp_summary. A per-raid cache or loot-list gap is a warning only. */
   const accountDkp = useMemo(() => {
     const summary = accountTotalsByAccountId[accountId] || {}
     let pageSpent = 0
@@ -350,17 +350,12 @@ export default function AccountDetail({ isOfficer, profile, session }) {
     const pageEarned = Math.round(
       activityByRaid.reduce((s, a) => s + (Number(a.dkpEarned) || 0), 0),
     )
-    const summaryEarned = Math.round(Number(summary.earned) || 0)
-    const summarySpent = Math.round(Number(summary.spent) || 0)
-    const earned = Math.max(summaryEarned, pageEarned)
-    const spent = pageSpent > 0 ? Math.max(pageSpent, summarySpent) : summarySpent
+    const earned = Math.round(Number(summary.earned) || 0)
+    const spent = Math.round(Number(summary.spent) || 0)
     const balance = earned - spent
-    const summaryBalance = summaryEarned - summarySpent
     const staleSummary =
-      (summaryEarned > 0 || summarySpent > 0) &&
-      (Math.abs(spent - summarySpent) > 1 ||
-        Math.abs(earned - summaryEarned) > 1 ||
-        Math.abs(balance - summaryBalance) > 1)
+      (earned > 0 || spent > 0 || pageEarned > 0 || pageSpent > 0) &&
+      (Math.abs(pageEarned - earned) > 1 || Math.abs(pageSpent - spent) > 1)
     return { earned, spent, balance, staleSummary }
   }, [accountId, accountTotalsByAccountId, activityByRaid])
 
@@ -523,7 +518,7 @@ export default function AccountDetail({ isOfficer, profile, session }) {
             </span>
             {accountDkp.staleSummary && (
               <span style={{ color: '#f59e0b', fontSize: '0.8rem' }}>
-                {' '}· leaderboard cache differs; totals here match this page
+                {' '}· per-raid cache differs from these totals
               </span>
             )}
           </span>
