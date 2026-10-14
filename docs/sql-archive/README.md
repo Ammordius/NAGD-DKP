@@ -20,7 +20,7 @@ Older copies of tables, policies, and functions that already live in `docs/supab
 
 Historical data corrections, generated `UPDATE` scripts, the account-DKP migration definitions, reset and truncate scripts, the retired bid-forecast drop, and the optional `github_worker` role script.
 
-The account-DKP migration is not an ordinary upgrade. Production was already migrated. If `raid_event_attendance.account_id` is still null for rows that have a linked character, stop and inspect that database. Do not fold those steps into a schema apply.
+The account-DKP migration is not an ordinary upgrade. Production was already migrated. A null `raid_event_attendance.account_id` is historical data when `resolve_dkp_account_id` returns an account. Stop and inspect the database only when that function returns null. Do not fold those steps into a schema apply.
 
 `supabase-github-worker-role.sql` is not idempotent (`CREATE ROLE`) and CI does not use it. CI uses the Supabase `service_role` key.
 

@@ -25,7 +25,7 @@ See [SCHEMA_RPC_INDEX.md](SCHEMA_RPC_INDEX.md) for which RPCs the app calls.
 5. After the load, refresh derived totals: `SELECT refresh_dkp_summary();`, `SELECT refresh_all_raid_attendance_totals();`, and `SELECT refresh_account_dkp_summary();`.
 6. Promote one user in the SQL editor, which connects as `postgres`: `UPDATE profiles SET role = 'siteadmin' WHERE id = 'USER_UUID';`
 
-A fresh database has no raid rows, so the attendance unique indexes and the account-id preflight do not need a data migration.
+A fresh database has no raid rows, so the attendance unique indexes and the unresolved-attendance preflight do not need a data migration.
 
 ---
 
@@ -66,17 +66,19 @@ WHERE character_name IS NOT NULL AND trim(character_name) <> ''
 GROUP BY raid_id, event_id, character_name
 HAVING count(*) > 1;
 
--- Linked attendance that still has no account_id is outside an ordinary upgrade.
--- Do not run the archived account-DKP migration as part of this deploy.
-SELECT count(*) AS linked_attendance_missing_account
+-- A null account_id is valid when the installed resolver finds one account.
+-- Stop only when that function returns null. Do not backfill account_id
+-- and do not run the archived account-DKP migration as part of this deploy.
+SELECT count(*) AS unresolved_attendance
 FROM public.raid_event_attendance rea
-JOIN public.character_account ca ON ca.char_id = rea.char_id
-WHERE rea.account_id IS NULL
-  AND rea.char_id IS NOT NULL
-  AND trim(rea.char_id::text) <> '';
+WHERE public.resolve_dkp_account_id(
+  rea.account_id, rea.char_id::text, rea.character_name
+) IS NULL;
 ```
 
-If `linked_attendance_missing_account` is not zero, stop. The canonical file adds the column when it is missing and does not backfill it. Rewriting attendance during schema apply is not part of this upgrade.
+If `unresolved_attendance` is not zero, stop. A null `account_id` that `resolve_dkp_account_id` resolves is an ordinary upgrade. The canonical file adds the column when it is missing and does not backfill it. Rewriting attendance during schema apply is not part of this upgrade.
+
+The attendance unique indexes and the nullable `account_id` column do not require a stamped account id. A name-only row is stored when its character name is unique on that tic.
 
 ---
 
