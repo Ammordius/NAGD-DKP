@@ -799,11 +799,11 @@ BEGIN
     WHERE rea.raid_id = p_raid_id
     GROUP BY rea.raid_id, (CASE WHEN COALESCE(trim(rea.char_id::text), '') = '' THEN COALESCE(trim(rea.character_name), 'unknown') ELSE trim(rea.char_id::text) END);
 
-    -- One credit per account per tic, from account_tic_credits(), not a separate lookup.
+    -- One credit per account per tic. Pass the raid id in: account_tic_credits() is
+    -- SECURITY DEFINER and is not inlined, so a WHERE on the result still scans every raid.
     INSERT INTO raid_attendance_dkp_by_account (raid_id, account_id, dkp_earned)
     SELECT c.raid_id, c.account_id, SUM(c.dkp_earned)
-    FROM public.account_tic_credits() c
-    WHERE c.raid_id = p_raid_id
+    FROM public.account_tic_credits(p_raid_id) c
     GROUP BY c.raid_id, c.account_id;
   ELSE
     INSERT INTO raid_attendance_dkp (raid_id, character_key, character_name, dkp_earned)
@@ -989,7 +989,9 @@ COMMENT ON FUNCTION public.resolve_loot_account_id(bigint, text, text) IS
 -- One credit per account per tic. Reads raid_event_attendance and raid_events, not raid_attendance_dkp_by_account.
 -- A stale per-raid cache can disagree with this. Refreshing the summary used to leave that cache untouched.
 -- An attendance event_id with no matching raid_events row contributes 0; keeping the old cache would hide that.
-CREATE OR REPLACE FUNCTION public.account_tic_credits()
+-- p_raid_id NULL scans every raid (full refresh). A non-null id filters inside the function: this is
+-- SECURITY DEFINER, so an outer WHERE does not push down and a one-raid refresh would read all attendance.
+CREATE OR REPLACE FUNCTION public.account_tic_credits(p_raid_id text)
 RETURNS TABLE (raid_id text, event_id text, account_id text, dkp_earned numeric)
 LANGUAGE sql
 STABLE
@@ -1006,8 +1008,19 @@ AS $$
       rea.event_id,
       public.resolve_dkp_account_id(rea.account_id, rea.char_id::text, rea.character_name) AS account_id
     FROM raid_event_attendance rea
+    WHERE p_raid_id IS NULL OR rea.raid_id = trim(p_raid_id)
   ) t
   WHERE t.account_id IS NOT NULL
+$$;
+
+CREATE OR REPLACE FUNCTION public.account_tic_credits()
+RETURNS TABLE (raid_id text, event_id text, account_id text, dkp_earned numeric)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT * FROM public.account_tic_credits(NULL::text)
 $$;
 
 -- Same distinct-tic sum as dkp_one_tic_value, over an explicit row set (transition snapshots).
@@ -3710,7 +3723,9 @@ REVOKE ALL ON FUNCTION public.delete_raid_for_reupload(text) FROM PUBLIC, anon, 
 GRANT EXECUTE ON FUNCTION public.delete_raid_for_reupload(text) TO service_role;
 
 -- 2) Bulk insert raid_event_attendance (avoids per-row triggers)
--- No end_restore_load: Supabase API statement cap; upload script runs refresh_dkp_summary separately.
+-- No end_restore_load: that full refresh does not finish inside one API request.
+-- PostgREST logs in as authenticator (statement_timeout 8s). This function raises that
+-- limit for its own statement. The upload script still runs refresh_dkp_summary separately.
 CREATE OR REPLACE FUNCTION public.insert_raid_event_attendance_for_upload(p_raid_id text, p_rows jsonb)
 RETURNS void
 LANGUAGE plpgsql
@@ -3718,6 +3733,8 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 BEGIN
+  SET LOCAL statement_timeout = '120s';
+
   IF p_raid_id IS NULL OR trim(p_raid_id) = '' THEN
     RAISE EXCEPTION 'p_raid_id is required';
   END IF;
@@ -3746,7 +3763,7 @@ BEGIN
 END;
 $$;
 
-COMMENT ON FUNCTION public.insert_raid_event_attendance_for_upload(text, jsonb) IS 'Bulk insert raid_event_attendance under restore_load; clears restore flag; refresh_raid_attendance_totals for this raid only. service_role only. Caller must run refresh_account_dkp_summary_for_raid / refresh_dkp_summary.';
+COMMENT ON FUNCTION public.insert_raid_event_attendance_for_upload(text, jsonb) IS 'Bulk insert raid_event_attendance under restore_load; clears restore flag; refresh_raid_attendance_totals for this raid only. Does not call end_restore_load. service_role only. Caller must run refresh_account_dkp_summary_for_raid / refresh_dkp_summary.';
 REVOKE ALL ON FUNCTION public.insert_raid_event_attendance_for_upload(text, jsonb) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.insert_raid_event_attendance_for_upload(text, jsonb) TO service_role;
 
@@ -6034,6 +6051,7 @@ REVOKE ALL ON FUNCTION public.apply_spent_deltas(jsonb, text, date[]) FROM PUBLI
 REVOKE ALL ON FUNCTION public.adjust_dkp_period_totals(jsonb) FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION public.refresh_dkp_period_totals() FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION public.account_tic_credits() FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION public.account_tic_credits(text) FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION public.dkp_distinct_tic_sum(jsonb) FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION public.apply_raid_event_tic_deltas(jsonb, jsonb) FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION public.refresh_account_dkp_for_accounts(text[]) FROM PUBLIC, anon, authenticated, service_role;
