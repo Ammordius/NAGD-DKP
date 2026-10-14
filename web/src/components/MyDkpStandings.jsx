@@ -63,10 +63,9 @@ export function MyDkpStandingsView({ accountId, totals, recentRaid, loading, fai
   const earned = Math.round(Number(recentRaid?.dkpEarned) || 0)
   const raidTotal = Math.round(Number(recentRaid?.dkpRaidTotal) || 0)
   const missedTic = Boolean(recentRaid) && raidTotal > earned
+  const raidTitle = recentRaid?.raid_name?.trim() || ''
   const raidLabel = recentRaid
-    ? (recentRaid.raid_name
-      ? `${recentRaid.raid_name} (/raids/${recentRaid.raid_id})`
-      : `/raids/${recentRaid.raid_id}`)
+    ? [raidTitle, recentRaid.date].filter(Boolean).join(' ')
     : ''
   return (
     <div style={{ marginBottom: '1rem' }}>
@@ -83,8 +82,7 @@ export function MyDkpStandingsView({ accountId, totals, recentRaid, loading, fai
         <>
           <p style={{ color: '#a1a1aa', margin: '0.35rem 0' }}>
             Your most recent attended raid was:{' '}
-            <Link to={`/raids/${recentRaid.raid_id}`}>{raidLabel}</Link>
-            {recentRaid.date ? <span style={{ color: '#71717a' }}> · {recentRaid.date}</span> : null}
+            <Link to={`/raids/${recentRaid.raid_id}`}>{raidLabel || 'Raid'}</Link>
           </p>
           <p style={{ color: missedTic ? '#f59e0b' : '#a1a1aa', margin: '0.35rem 0' }}>
             {formatRaidDkpEarned(recentRaid)}

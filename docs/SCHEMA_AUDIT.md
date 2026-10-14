@@ -50,7 +50,7 @@ Present on live DKP and defined in `supabase-schema-full.sql`:
 - Bidding portfolio: `normalize_item_name_for_lookup`, `officer_bid_portfolio_for_loot`, `officer_account_bidding_portfolio`, `officer_backfill_bid_portfolio_batch`, procedure `dba_backfill_bid_portfolio_range`
 - Loot assignment and spent: `update_single_raid_loot_assignment`, `update_raid_loot_assignments`, `get_character_dkp_spent`, `refresh_character_dkp_spent`, `refresh_after_bulk_loot_assignment`
 - Raider activity and class coverage: `officer_raider_activity`, `officer_upsert_account_class_coverage`
-- Site admin: `siteadmin_delete_user`, `siteadmin_set_role`, `siteadmin_unclaim_profile`, `siteadmin_confirm_auth_deleted`
+- Site admin: `siteadmin_delete_user`, `siteadmin_set_role`, `siteadmin_unclaim_profile`, `siteadmin_claim_profile`, `siteadmin_confirm_auth_deleted`
 
 The 2026-10-09 live check listed `update_raid_event_times` as a separate file. It is now in `supabase-schema-full.sql`. Site-admin RPCs were added in Track 1 and are in the same file.
 

@@ -183,7 +183,7 @@ CREATE TABLE IF NOT EXISTS officer_audit_log (
   delta JSONB
 );
 ALTER TABLE officer_audit_log ADD COLUMN IF NOT EXISTS actor_display_name TEXT;
-COMMENT ON TABLE officer_audit_log IS 'Audit trail for officer actions: add_raid, add_tic, delete_event, raid_deleted, rename_raid, add_loot, add_loot_from_log, delete_loot, add_attendee_to_tic, add_attendees_to_tic, remove_attendee_from_tic, edit_event_dkp, edit_event_time, edit_loot_cost, set_account_display_name, siteadmin_unclaim_profile, siteadmin_set_role, siteadmin_delete_user. Delta is minimal (short keys) to limit storage and egress.';
+COMMENT ON TABLE officer_audit_log IS 'Audit trail for officer actions: add_raid, add_tic, delete_event, raid_deleted, rename_raid, add_loot, add_loot_from_log, delete_loot, add_attendee_to_tic, add_attendees_to_tic, remove_attendee_from_tic, edit_event_dkp, edit_event_time, edit_loot_cost, set_account_display_name, siteadmin_unclaim_profile, siteadmin_claim_profile, siteadmin_set_role, siteadmin_delete_user. Delta is minimal (short keys) to limit storage and egress.';
 
 -- Add new columns if upgrading from an older schema (no-op if already present)
 ALTER TABLE dkp_summary ADD COLUMN IF NOT EXISTS last_activity_date DATE;
@@ -5829,6 +5829,74 @@ COMMENT ON FUNCTION public.siteadmin_unclaim_profile(uuid) IS
 REVOKE ALL ON FUNCTION public.siteadmin_unclaim_profile(uuid) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.siteadmin_unclaim_profile(uuid) TO authenticated;
 
+CREATE OR REPLACE FUNCTION public.siteadmin_claim_profile(p_profile_id uuid, p_account_id text)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_account text;
+  v_old text;
+BEGIN
+  IF auth.uid() IS NULL THEN
+    RAISE EXCEPTION 'Not authenticated';
+  END IF;
+  IF NOT public.is_site_admin() THEN
+    RAISE EXCEPTION 'Only site admins can claim an account for a profile';
+  END IF;
+  IF p_profile_id IS NULL THEN
+    RAISE EXCEPTION 'Profile is required';
+  END IF;
+
+  v_account := trim(coalesce(p_account_id, ''));
+  IF v_account = '' THEN
+    RAISE EXCEPTION 'Account is required';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM public.accounts WHERE account_id = v_account) THEN
+    RAISE EXCEPTION 'Account not found';
+  END IF;
+
+  SELECT account_id INTO v_old
+  FROM public.profiles
+  WHERE id = p_profile_id
+  FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Profile not found';
+  END IF;
+  IF v_old IS NOT NULL AND btrim(v_old) <> '' THEN
+    RAISE EXCEPTION 'Profile already has a claimed account';
+  END IF;
+
+  PERFORM pg_advisory_xact_lock(hashtext('siteadmin-claim:' || v_account));
+  IF EXISTS (
+    SELECT 1 FROM public.profiles
+    WHERE account_id = v_account
+      AND id <> p_profile_id
+  ) THEN
+    RAISE EXCEPTION 'That account is already claimed';
+  END IF;
+
+  PERFORM set_config('nagddkp.allow_sensitive_profile_write', '1', true);
+  UPDATE public.profiles
+  SET account_id = v_account, updated_at = now()
+  WHERE id = p_profile_id;
+
+  PERFORM public.write_site_admin_audit(
+    'siteadmin_claim_profile',
+    'profile',
+    p_profile_id::text,
+    jsonb_build_object('account_id', v_account)
+  );
+END;
+$$;
+
+COMMENT ON FUNCTION public.siteadmin_claim_profile(uuid, text) IS
+  'Siteadmin: set profiles.account_id to an existing unclaimed accounts.account_id. Does not clear an unclaim cooldown.';
+
+REVOKE ALL ON FUNCTION public.siteadmin_claim_profile(uuid, text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.siteadmin_claim_profile(uuid, text) TO authenticated;
+
 CREATE OR REPLACE FUNCTION public.siteadmin_set_role(p_profile_id uuid, p_role text)
 RETURNS text
 LANGUAGE plpgsql
@@ -6145,6 +6213,7 @@ REVOKE ALL ON FUNCTION public.set_my_display_name(text) FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.set_my_ui_preferences(jsonb) FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.account_claim_labels() FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.siteadmin_unclaim_profile(uuid) FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.siteadmin_claim_profile(uuid, text) FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.siteadmin_set_role(uuid, text) FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.siteadmin_delete_user(uuid) FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.siteadmin_confirm_auth_deleted(uuid) FROM PUBLIC, anon;
@@ -6173,6 +6242,7 @@ GRANT EXECUTE ON FUNCTION public.set_my_display_name(text) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.set_my_ui_preferences(jsonb) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.account_claim_labels() TO authenticated;
 GRANT EXECUTE ON FUNCTION public.siteadmin_unclaim_profile(uuid) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.siteadmin_claim_profile(uuid, text) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.siteadmin_set_role(uuid, text) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.siteadmin_delete_user(uuid) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.siteadmin_confirm_auth_deleted(uuid) TO authenticated;

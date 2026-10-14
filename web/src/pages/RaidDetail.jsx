@@ -312,7 +312,7 @@ export default function RaidDetail({ isOfficer, profile }) {
       return
     }
     setMutating(true)
-    const patch = eventFieldsForTimeSave(existing?.event_name, result.stored, editingEventTime)
+    const patch = eventFieldsForTimeSave(existing?.event_name, result.stored, editingEventTime, existing?.event_order)
     const { error: err } = await supabase.from('raid_events').update(patch).eq('raid_id', raidId).eq('event_id', eventId)
     setMutating(false)
     if (err) setMutationError(err.message)

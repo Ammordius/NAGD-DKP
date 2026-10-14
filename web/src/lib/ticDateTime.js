@@ -188,7 +188,7 @@ export function eventIdFromEpoch(epochMs) {
 }
 
 const GENERIC_TIC_EVENT_NAMES = new Set(['dkp tic', 'on-time', 'on time', 'tic'])
-const GENERATED_TIC_EVENT_NAME = /^\d{1,2}:\d{2}[ap]m dkp tic$/i
+const GENERATED_TIC_EVENT_NAME = /^\d{1,2}:\d{2}[ap]m (?:dkp tic|on-time)$/i
 
 /** 24-hour clock to a 12-hour label with minutes, e.g. 21:45 → 9:45pm. */
 export function format12HourClock(hour24, minute) {
@@ -202,12 +202,20 @@ export function format12HourClock(hour24, minute) {
   return `${hour12}:${pad(min)}${suffix}`
 }
 
-/** Event name for a tic entered at this clock, e.g. 21:00:00 → "9:00pm DKP tic". */
-export function dkpTicEventName(time) {
+function isFirstTicOrder(eventOrder) {
+  return Number(eventOrder) === 1
+}
+
+/**
+ * Event name for a tic entered at this clock.
+ * Tic #1 is "9:00pm on-time". Later tics are "9:00pm DKP tic".
+ */
+export function dkpTicEventName(time, { onTime = false } = {}) {
   const match = String(time ?? '').trim().match(/^(\d{1,2}):(\d{2})/)
   if (!match) return ''
   const clock = format12HourClock(Number(match[1]), Number(match[2]))
-  return clock ? `${clock} DKP tic` : ''
+  if (!clock) return ''
+  return onTime ? `${clock} on-time` : `${clock} DKP tic`
 }
 
 /** True for placeholder tic names and names this app already generated from a clock. */
@@ -220,25 +228,29 @@ export function isGenericTicEventName(name) {
 
 /**
  * Label shown for a tic. Placeholder names ("DKP tic", "On-time") and earlier
- * clock labels follow the stored event time. Imported names are left as written.
+ * clock labels follow the stored event time. Tic #1 is "{time} on-time".
+ * Later generic tics stay "{time} DKP tic". Imported names are left as written.
  */
 export function displayTicEventName(event, raidDateIso = '') {
   const stored = String(event?.event_name ?? '').trim()
   if (!isGenericTicEventName(stored)) return stored
+  const onTime = isFirstTicOrder(event?.event_order)
   const parsed = parseStoredEventTime(event?.event_time, raidDateIso)
   if (parsed.ok) {
-    const named = dkpTicEventName(parsed.time)
+    const named = dkpTicEventName(parsed.time, { onTime })
     if (named) return named
   }
-  if (GENERATED_TIC_EVENT_NAME.test(stored)) return stored
-  return stored || 'DKP tic'
+  if (GENERATED_TIC_EVENT_NAME.test(stored)) {
+    return onTime ? stored.replace(/dkp tic$/i, 'on-time') : stored.replace(/on-time$/i, 'DKP tic')
+  }
+  return stored || (onTime ? 'on-time' : 'DKP tic')
 }
 
 /** Fields to write when an officer changes a tic time. Generic names follow the new clock. */
-export function eventFieldsForTimeSave(existingName, storedTime, clockTime) {
+export function eventFieldsForTimeSave(existingName, storedTime, clockTime, eventOrder) {
   const patch = { event_time: storedTime }
   if (isGenericTicEventName(existingName)) {
-    const named = dkpTicEventName(clockTime)
+    const named = dkpTicEventName(clockTime, { onTime: isFirstTicOrder(eventOrder) })
     if (named) patch.event_name = named
   }
   return patch

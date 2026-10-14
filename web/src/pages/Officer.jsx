@@ -716,13 +716,15 @@ export default function Officer({ isOfficer, profile }) {
     const dkpValue = parseFloat(ticDkpValue) || 1
     const event_id = timestamp.eventId
     const maxOrder = Math.max(0, ...events.map((e) => e.event_order || 0))
+    const nextOrder = maxOrder + 1
     const matched = preview.toAdd
-    const eventName = dkpTicEventName(ticTime) || 'DKP tic'
+    const onTime = nextOrder === 1
+    const eventName = dkpTicEventName(ticTime, { onTime }) || (onTime ? 'on-time' : 'DKP tic')
 
     const { error: evErr } = await supabase.rpc('add_officer_tic', {
       p_raid_id: selectedRaidId,
       p_event_id: event_id,
-      p_event_order: maxOrder + 1,
+      p_event_order: nextOrder,
       p_event_name: eventName,
       p_dkp_value: String(dkpValue),
       p_event_time: timestamp.stored,
@@ -804,7 +806,7 @@ export default function Officer({ isOfficer, profile }) {
       raid_id: selectedRaidId,
       event_id,
       event_order: 1,
-      event_name: dkpTicEventName(ticTime) || 'DKP tic',
+      event_name: dkpTicEventName(ticTime, { onTime: true }) || 'on-time',
       dkp_value: dkpValue,
       attendee_count: '0',
       event_time: timestamp.stored,
@@ -1104,7 +1106,7 @@ export default function Officer({ isOfficer, profile }) {
       return
     }
     setMutating(true)
-    const patch = eventFieldsForTimeSave(existing?.event_name, result.stored, editingEventTime)
+    const patch = eventFieldsForTimeSave(existing?.event_name, result.stored, editingEventTime, existing?.event_order)
     const { error: err } = await supabase.from('raid_events').update(patch).eq('raid_id', selectedRaidId).eq('event_id', eventId)
     setMutating(false)
     if (err) setError(err.message)
@@ -1826,7 +1828,7 @@ export default function Officer({ isOfficer, profile }) {
                   >
                     {events.map((e) => (
                       <option key={e.event_id} value={e.event_id}>
-                        #{e.event_order} {e.event_name} ({e.dkp_value} DKP)
+                        #{e.event_order} {displayTicEventName(e, raidDateIso)} ({e.dkp_value} DKP)
                       </option>
                     ))}
                   </select>

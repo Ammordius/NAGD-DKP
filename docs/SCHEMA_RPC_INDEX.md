@@ -55,6 +55,7 @@ Where each public function the app or scripts call is defined, and what calls it
 | **set_my_ui_preferences** | Profile.jsx Website settings. Owner merges `showTicCharacterPicker`, `useCharacterAdminSelectors`, and `raidNameOnly` into `profiles.ui_preferences`. Missing keys mean on. Does not change role or account claim, and does not grant table UPDATE on `profiles`. |
 | **account_claim_labels** | Accounts.jsx. `account_id` and site display name only; no email. |
 | **siteadmin_unclaim_profile** | OfficerClaimCooldowns.jsx. Clears `profiles.account_id` without a cooldown. |
+| **siteadmin_claim_profile** | OfficerClaimCooldowns.jsx. Sets `profiles.account_id` to an existing unclaimed `accounts.account_id`. Does not clear an unclaim cooldown. |
 | **siteadmin_set_role** | OfficerClaimCooldowns.jsx. Sets `player`, `officer`, or `siteadmin`. |
 | **siteadmin_delete_user** | OfficerClaimCooldowns.jsx via `POST /api/delete-site-user`. The function authorizes removal and writes a pending audit row. The API then calls `auth.admin.deleteUser` with `SUPABASE_SERVICE_ROLE_KEY` (server only). The profile row cascades when the auth user is deleted. Game accounts and characters stay. Officers may remove players. Site admins may remove players and officers. Nobody may remove a site admin or themselves. |
 | **discord_username_from_meta** | Signup trigger and Discord display-name backfill. Not called from the app. |

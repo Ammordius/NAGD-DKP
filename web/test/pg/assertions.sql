@@ -142,6 +142,10 @@ SELECT public._expect_error(
   '%Only site admins can change roles%'
 );
 SELECT public._expect_error(
+  'SELECT public.siteadmin_claim_profile(''22222222-2222-4222-8222-222222222222''::uuid, ''acct-keep'')',
+  '%Only site admins can claim an account for a profile%'
+);
+SELECT public._expect_error(
   'SELECT public.siteadmin_delete_user(''55555555-5555-4555-8555-555555555555''::uuid)',
   '%Only officers and site admins%'
 );
@@ -198,6 +202,10 @@ END $$;
 SELECT public._expect_error(
   'SELECT public.siteadmin_set_role(''11111111-1111-4111-8111-111111111111''::uuid, ''officer'')',
   '%Only site admins can change roles%'
+);
+SELECT public._expect_error(
+  'SELECT public.siteadmin_claim_profile(''11111111-1111-4111-8111-111111111111''::uuid, ''acct-keep'')',
+  '%Only site admins can claim an account for a profile%'
 );
 SELECT public._expect_error(
   'SELECT public.siteadmin_delete_user(''66666666-6666-4666-8666-666666666666''::uuid)',
@@ -273,6 +281,41 @@ BEGIN
     RAISE EXCEPTION 'unclaim_account did not record unclaim_count';
   END IF;
 END $$;
+
+-- Site admin claims an unclaimed account for a player who is still on cooldown.
+SELECT set_config('request.jwt.claim.sub', '33333333-3333-4333-8333-333333333333', false);
+SELECT public.siteadmin_claim_profile('11111111-1111-4111-8111-111111111111'::uuid, 'acct-claim');
+DO $$
+BEGIN
+  IF (SELECT account_id FROM public.profiles WHERE id = '11111111-1111-4111-8111-111111111111')
+     IS DISTINCT FROM 'acct-claim' THEN
+    RAISE EXCEPTION 'siteadmin_claim_profile did not set account_id';
+  END IF;
+  IF (SELECT unclaim_cooldown_until FROM public.profiles WHERE id = '11111111-1111-4111-8111-111111111111') IS NULL THEN
+    RAISE EXCEPTION 'siteadmin_claim_profile cleared the unclaim cooldown';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.officer_audit_log
+    WHERE action = 'siteadmin_claim_profile'
+      AND target_id = '11111111-1111-4111-8111-111111111111'
+      AND actor_id = '33333333-3333-4333-8333-333333333333'
+      AND delta->>'account_id' = 'acct-claim'
+  ) THEN
+    RAISE EXCEPTION 'siteadmin_claim_profile did not write an audit row';
+  END IF;
+END $$;
+SELECT public._expect_error(
+  'SELECT public.siteadmin_claim_profile(''22222222-2222-4222-8222-222222222222''::uuid, ''acct-claim'')',
+  '%already claimed%'
+);
+SELECT public._expect_error(
+  'SELECT public.siteadmin_claim_profile(''22222222-2222-4222-8222-222222222222''::uuid, ''missing-acct'')',
+  '%Account not found%'
+);
+SELECT public._expect_error(
+  'SELECT public.siteadmin_claim_profile(''55555555-5555-4555-8555-555555555555''::uuid, ''acct-keep'')',
+  '%already has a claimed account%'
+);
 
 -- Authorize deletion without removing the profile, then cascade from auth.users.
 SELECT set_config('request.jwt.claim.sub', '22222222-2222-4222-8222-222222222222', false);

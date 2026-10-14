@@ -175,21 +175,34 @@ describe('dkpTicEventName', () => {
     assert.equal(dkpTicEventName('09:05:00'), '9:05am DKP tic')
     assert.equal(dkpTicEventName('00:00:00'), '12:00am DKP tic')
     assert.equal(dkpTicEventName('12:00:00'), '12:00pm DKP tic')
+    assert.equal(dkpTicEventName('20:00:00', { onTime: true }), '8:00pm on-time')
   })
 })
 
 describe('displayTicEventName', () => {
   it('names a placeholder tic from its stored time', () => {
     assert.equal(
+      displayTicEventName({ event_order: 1, event_name: 'DKP tic', event_time: 'Wed Oct 14 20:00:00 2026' }),
+      '8:00pm on-time',
+    )
+    assert.equal(
+      displayTicEventName({ event_order: 1, event_name: 'On-time', event_time: 'Wed Oct 14 21:45:32 2026' }),
+      '9:45pm on-time',
+    )
+    assert.equal(
+      displayTicEventName({ event_order: 1, event_name: '9:00pm DKP tic', event_time: '2026-10-14T22:30:00-04:00' }),
+      '10:30pm on-time',
+    )
+    assert.equal(
       displayTicEventName({ event_name: 'DKP tic', event_time: 'Wed Oct 14 21:00:00 2026' }),
       '9:00pm DKP tic',
     )
     assert.equal(
-      displayTicEventName({ event_name: 'On-time', event_time: 'Wed Oct 14 21:45:32 2026' }),
+      displayTicEventName({ event_order: 2, event_name: 'On-time', event_time: 'Wed Oct 14 21:45:32 2026' }),
       '9:45pm DKP tic',
     )
     assert.equal(
-      displayTicEventName({ event_name: '9:00pm DKP tic', event_time: '2026-10-14T22:30:00-04:00' }),
+      displayTicEventName({ event_order: 2, event_name: '9:00pm DKP tic', event_time: '2026-10-14T22:30:00-04:00' }),
       '10:30pm DKP tic',
     )
   })
@@ -205,11 +218,19 @@ describe('displayTicEventName', () => {
 describe('eventFieldsForTimeSave', () => {
   it('renames a generic tic when the clock changes and keeps a custom name', () => {
     assert.deepEqual(
+      eventFieldsForTimeSave('On-time', '2026-10-14T20:00:00-04:00', '20:00:00', 1),
+      { event_time: '2026-10-14T20:00:00-04:00', event_name: '8:00pm on-time' },
+    )
+    assert.deepEqual(
       eventFieldsForTimeSave('On-time', '2026-10-14T21:00:00-04:00', '21:00:00'),
       { event_time: '2026-10-14T21:00:00-04:00', event_name: '9:00pm DKP tic' },
     )
     assert.deepEqual(
-      eventFieldsForTimeSave('Fire minis', '2026-10-14T21:00:00-04:00', '21:00:00'),
+      eventFieldsForTimeSave('8:00pm on-time', '2026-10-14T21:00:00-04:00', '21:00:00', 2),
+      { event_time: '2026-10-14T21:00:00-04:00', event_name: '9:00pm DKP tic' },
+    )
+    assert.deepEqual(
+      eventFieldsForTimeSave('Fire minis', '2026-10-14T21:00:00-04:00', '21:00:00', 1),
       { event_time: '2026-10-14T21:00:00-04:00' },
     )
   })
