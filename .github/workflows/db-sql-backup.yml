@@ -1,0 +1,50 @@
+# Portable SQL backup. Manual until the daily schedule is uncommented.
+# Does not replace DB backup (on change). See docs/CI-DB-SQL-BACKUP.md.
+# Secrets: SUPABASE_DB_URL, SQL_BACKUP_AGE_RECIPIENT. Never print them.
+
+name: DB SQL backup
+
+on:
+  workflow_dispatch:
+  # Future daily schedule. Uncomment only after SUPABASE_DB_URL and
+  # SQL_BACKUP_AGE_RECIPIENT are set and a production run is explicitly authorized.
+  # schedule:
+  #   - cron: '30 7 * * *'
+
+concurrency:
+  group: db-sql-backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install PostgreSQL client and age
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client age
+
+      - name: Export encrypted SQL backup
+        id: export
+        run: python scripts/sql_backup.py --out-dir sql-backup-out
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          SQL_BACKUP_AGE_RECIPIENT: ${{ secrets.SQL_BACKUP_AGE_RECIPIENT }}
+
+      - name: Upload encrypted backup
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sql-backup-${{ steps.export.outputs.stamp }}
+          path: sql-backup-out/*.tar.gz.age
+          retention-days: 7
+          if-no-files-found: error

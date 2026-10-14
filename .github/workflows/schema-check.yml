@@ -26,6 +26,14 @@ jobs:
         env:
           DKP_PG_TEST: '1'
         run: npm test
+      - name: SQL backup export test
+        env:
+          DKP_PG_TEST: '1'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client age
+          python3 scripts/test_sql_backup.py
+
       - name: Build
         working-directory: web
         run: npm run build

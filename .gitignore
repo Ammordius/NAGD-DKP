@@ -56,4 +56,6 @@ audit_zerodkp_rolls.json
 .magelo_dump/
 backup/
 backup-*.tar.gz
+sql-backup-out/
+sql-backup-*.tar.gz.age
 ledger/

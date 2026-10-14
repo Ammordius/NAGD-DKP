@@ -1,5 +1,7 @@
 # CI database backup (on change, tiered artifacts)
 
+CSV backups from this workflow remain the production backup and restore path. A separate portable SQL export is described in [CI-DB-SQL-BACKUP.md](CI-DB-SQL-BACKUP.md). It does not replace this workflow.
+
 Backup runs only when data has changed (e.g. after raids). Artifacts are split into: **rolling** (~last 3), **weekly**, and **monthly**, so storage stays small and you keep both recent and longer-term copies.
 
 ## Backup size estimation (one-time)
