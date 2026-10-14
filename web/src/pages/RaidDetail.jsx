@@ -12,10 +12,11 @@ import { formatAccountCharacter, formatAccountCharacters } from '../lib/formatAc
 import { groupRaidLootByEvent } from '../lib/groupRaidLootByEvent'
 import { buildItemNameToIdMap, buildLootMobLookups, subgroupLootRowsByMob } from '../lib/lootMobSubgroups'
 import { usePersistedState } from '../lib/usePersistedState'
-import { eventTimeToStore, fieldsForEdit } from '../lib/ticDateTime'
+import { displayTicEventName, eventFieldsForTimeSave, eventTimeToStore, fieldsForEdit } from '../lib/ticDateTime'
 import TicDateTimeFields from '../components/TicDateTimeFields'
 import { normalizeUiPreferences } from '../lib/uiPreferences'
 import { buildAccountAdminRows, filterAccountAdminRows } from '../lib/siteAdminCharacters'
+import AttendeeCountCell from '../components/AttendeeCountCell'
 
 /** SWR deduplication: 60s so revisiting the same raid or multiple components don't each hit the DB. */
 const RAID_DEDUPING_INTERVAL_MS = 60_000
@@ -207,7 +208,8 @@ export default function RaidDetail({ isOfficer, profile }) {
     [displayAttendance, groupAttendeesByAccount, getAccountId, getAccountDisplayName]
   )
 
-  const lootSections = useMemo(() => groupRaidLootByEvent(loot, events), [loot, events])
+  const raidDateIso = raid?.date_iso || raid?.date || ''
+  const lootSections = useMemo(() => groupRaidLootByEvent(loot, events, raidDateIso), [loot, events, raidDateIso])
   const mobLookups = useMemo(() => buildLootMobLookups(mobLoot, raidItemSources), [mobLoot, raidItemSources])
   const lootSectionsWithMobs = useMemo(
     () =>
@@ -310,7 +312,8 @@ export default function RaidDetail({ isOfficer, profile }) {
       return
     }
     setMutating(true)
-    const { error: err } = await supabase.from('raid_events').update({ event_time: result.stored }).eq('raid_id', raidId).eq('event_id', eventId)
+    const patch = eventFieldsForTimeSave(existing?.event_name, result.stored, editingEventTime)
+    const { error: err } = await supabase.from('raid_events').update(patch).eq('raid_id', raidId).eq('event_id', eventId)
     setMutating(false)
     if (err) setMutationError(err.message)
     else {
@@ -484,7 +487,7 @@ export default function RaidDetail({ isOfficer, profile }) {
         <p style={{ margin: '0 0 0.75rem 0', color: '#a1a1aa' }}>Total raid DKP (sum of event DKP): <strong>{Number(totalDkp).toFixed(1)}</strong></p>
         <table>
           <thead>
-            <tr><th style={{ width: '2rem' }}></th><th>#</th><th>Event</th><th>DKP</th><th>Time</th><th>Attendees</th>{isOfficer && <th style={{ width: '6rem' }}></th>}</tr>
+            <tr><th>#</th><th>Event</th><th>DKP</th><th>Time</th><th>Attendees</th>{isOfficer && <th style={{ width: '6rem' }}></th>}</tr>
           </thead>
           <tbody>
             {events.map((e) => {
@@ -497,22 +500,8 @@ export default function RaidDetail({ isOfficer, profile }) {
               return (
                 <Fragment key={e.event_id}>
                   <tr>
-                    <td>
-                      {hasList && (
-                        <button
-                          type="button"
-                          className="btn btn-ghost"
-                          style={{ padding: '0.25rem', fontSize: '1rem' }}
-                          onClick={() => setExpandedEvents((prev) => ({ ...prev, [e.event_id]: !prev[e.event_id] }))}
-                          aria-expanded={isExpanded}
-                          title={isExpanded ? 'Hide attendees' : 'Show attendees'}
-                        >
-                          {isExpanded ? '−' : '+'}
-                        </button>
-                      )}
-                    </td>
                     <td>{e.event_order}</td>
-                    <td>{e.event_name}</td>
+                    <td>{displayTicEventName(e, raidDateIso)}</td>
                     <td>
                       {isEditingDkp ? (
                         <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
@@ -567,7 +556,11 @@ export default function RaidDetail({ isOfficer, profile }) {
                     </td>
                     <td>
                       {hasList ? (
-                        <span>{attendees.length}{isExpanded ? '' : ' — click + to list'}</span>
+                        <AttendeeCountCell
+                          count={attendees.length}
+                          expanded={isExpanded}
+                          onToggle={() => setExpandedEvents((prev) => ({ ...prev, [e.event_id]: !prev[e.event_id] }))}
+                        />
                       ) : (
                         e.attendee_count ?? '—'
                       )}
@@ -576,7 +569,7 @@ export default function RaidDetail({ isOfficer, profile }) {
                   </tr>
                   {hasList && isExpanded && (
                     <tr key={`${e.event_id}-attendees`}>
-                      <td colSpan={isOfficer ? 7 : 6} style={{ padding: '0.5rem 1rem', verticalAlign: 'top', backgroundColor: 'rgba(0,0,0,0.2)', borderBottom: '1px solid #27272a' }}>
+                      <td colSpan={isOfficer ? 6 : 5} style={{ padding: '0.5rem 1rem', verticalAlign: 'top', backgroundColor: 'rgba(0,0,0,0.2)', borderBottom: '1px solid #27272a' }}>
                         <div className="attendee-list">
                           {groupAttendeesByAccount(
                             attendees.map((a) => ({ character_name: a.name, name: a.name, char_id: a.char_id })),
@@ -624,7 +617,7 @@ export default function RaidDetail({ isOfficer, profile }) {
             >
               {events.map((e) => (
                 <option key={e.event_id} value={e.event_id}>
-                  #{e.event_order} {e.event_name} ({e.dkp_value} DKP)
+                  #{e.event_order} {displayTicEventName(e, raidDateIso)} ({e.dkp_value} DKP)
                 </option>
               ))}
             </select>

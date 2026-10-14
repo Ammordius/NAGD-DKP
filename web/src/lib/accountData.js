@@ -126,19 +126,26 @@ export async function loadAccountActivity(accountId) {
     if (!dkpByRaid[row.raid_id]) dkpByRaid[row.raid_id] = 0
     dkpByRaid[row.raid_id] += parseFloat(row.dkp_earned || 0)
   })
+  const attendedRaidIds = new Set(
+    (attRes.data || []).map((row) => String(row.raid_id ?? '').trim()).filter(Boolean),
+  )
   const lootByRaid = {}
   ;(lootRes.data || []).forEach((row) => {
     if (!lootByRaid[row.raid_id]) lootByRaid[row.raid_id] = []
     lootByRaid[row.raid_id].push(row)
   })
-  const activityByRaid = raidList.map((raidId) => ({
-    raid_id: raidId,
-    date: (rMap[raidId]?.date_iso || '').slice(0, 10),
-    raid_name: rMap[raidId]?.raid_name || raidId,
-    dkpEarned: dkpByRaid[raidId] ?? 0,
-    dkpRaidTotal: totalRaidDkp[raidId] ?? 0,
-    items: lootByRaid[raidId] || [],
-  })).sort((a, b) => (b.date || '').localeCompare(a.date || ''))
+  const activityByRaid = raidList.map((raidId) => {
+    const dkpEarned = dkpByRaid[raidId] ?? 0
+    return {
+      raid_id: raidId,
+      date: (rMap[raidId]?.date_iso || '').slice(0, 10),
+      raid_name: rMap[raidId]?.raid_name || raidId,
+      dkpEarned,
+      dkpRaidTotal: totalRaidDkp[raidId] ?? 0,
+      attended: attendedRaidIds.has(String(raidId).trim()) || dkpEarned > 0,
+      items: lootByRaid[raidId] || [],
+    }
+  }).sort((a, b) => (b.date || '').localeCompare(a.date || ''))
 
   return { account: accRes.data, characters: chars, activityByRaid }
 }

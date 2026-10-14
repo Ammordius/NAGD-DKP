@@ -1,10 +1,13 @@
+import { displayTicEventName } from './ticDateTime.js'
+
 /**
  * Group raid_loot rows by raid_events for display: event_order, then Misc for unmatched event_id.
  * @param {Array<{ id?: number|string, event_id?: string|null }>} loot
- * @param {Array<{ event_id?: string|null, event_order?: number|string|null, event_name?: string|null }>} events
+ * @param {Array<{ event_id?: string|null, event_order?: number|string|null, event_name?: string|null, event_time?: string|null }>} events
+ * @param {string} [raidDateIso]
  * @returns {Array<{ key: string, title: string, rows: typeof loot }>}
  */
-export function groupRaidLootByEvent(loot, events) {
+export function groupRaidLootByEvent(loot, events, raidDateIso = '') {
   if (!loot?.length) return []
 
   const eventById = new Map()
@@ -47,7 +50,7 @@ export function groupRaidLootByEvent(loot, events) {
     const id = String(ev?.event_id ?? '').trim()
     const rows = buckets.get(id)
     if (rows?.length) {
-      const name = (ev?.event_name ?? '').trim()
+      const name = displayTicEventName(ev, raidDateIso)
       ordered.push({
         key: id,
         title: name || `Event ${ev?.event_order ?? ''}`,

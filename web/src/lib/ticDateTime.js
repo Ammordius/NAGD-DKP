@@ -187,6 +187,63 @@ export function eventIdFromEpoch(epochMs) {
   return `tic-${epochMs}`
 }
 
+const GENERIC_TIC_EVENT_NAMES = new Set(['dkp tic', 'on-time', 'on time', 'tic'])
+const GENERATED_TIC_EVENT_NAME = /^\d{1,2}:\d{2}[ap]m dkp tic$/i
+
+/** 24-hour clock to a 12-hour label with minutes, e.g. 21:45 → 9:45pm. */
+export function format12HourClock(hour24, minute) {
+  const hour = Number(hour24)
+  const min = Number(minute)
+  if (!Number.isInteger(hour) || !Number.isInteger(min)) return ''
+  if (hour < 0 || hour > 23 || min < 0 || min > 59) return ''
+  const suffix = hour >= 12 ? 'pm' : 'am'
+  let hour12 = hour % 12
+  if (hour12 === 0) hour12 = 12
+  return `${hour12}:${pad(min)}${suffix}`
+}
+
+/** Event name for a tic entered at this clock, e.g. 21:00:00 → "9:00pm DKP tic". */
+export function dkpTicEventName(time) {
+  const match = String(time ?? '').trim().match(/^(\d{1,2}):(\d{2})/)
+  if (!match) return ''
+  const clock = format12HourClock(Number(match[1]), Number(match[2]))
+  return clock ? `${clock} DKP tic` : ''
+}
+
+/** True for placeholder tic names and names this app already generated from a clock. */
+export function isGenericTicEventName(name) {
+  const text = String(name ?? '').trim()
+  if (!text) return true
+  if (GENERIC_TIC_EVENT_NAMES.has(text.toLowerCase())) return true
+  return GENERATED_TIC_EVENT_NAME.test(text)
+}
+
+/**
+ * Label shown for a tic. Placeholder names ("DKP tic", "On-time") and earlier
+ * clock labels follow the stored event time. Imported names are left as written.
+ */
+export function displayTicEventName(event, raidDateIso = '') {
+  const stored = String(event?.event_name ?? '').trim()
+  if (!isGenericTicEventName(stored)) return stored
+  const parsed = parseStoredEventTime(event?.event_time, raidDateIso)
+  if (parsed.ok) {
+    const named = dkpTicEventName(parsed.time)
+    if (named) return named
+  }
+  if (GENERATED_TIC_EVENT_NAME.test(stored)) return stored
+  return stored || 'DKP tic'
+}
+
+/** Fields to write when an officer changes a tic time. Generic names follow the new clock. */
+export function eventFieldsForTimeSave(existingName, storedTime, clockTime) {
+  const patch = { event_time: storedTime }
+  if (isGenericTicEventName(existingName)) {
+    const named = dkpTicEventName(clockTime)
+    if (named) patch.event_name = named
+  }
+  return patch
+}
+
 /**
  * Validate controls for a new tic. Does not substitute the current time.
  * @returns {{ ok: true, stored: string, epochMs: number, eventId: string } | { ok: false, error: string }}
