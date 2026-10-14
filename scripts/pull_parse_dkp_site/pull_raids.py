@@ -305,9 +305,20 @@ def main():
         print(f"Failed to fetch past raids list: {e}", file=sys.stderr)
         sys.exit(3)
     html0 = r.text
+    # Auth expired: GamerLaunch redirects to recruiting/login.php?...&not=REQUIRE_MEMBER_ONLY
+    final = (r.url or "").lower()
+    if "login.php" in final or "REQUIRE_MEMBER_ONLY" in html0 or (
+        "loginpassword" in html0.lower() and "raid_details.php" not in html0
+    ):
+        print("Past raids list returned a login page (session expired or cookies invalid).", file=sys.stderr)
+        print("Refresh cookies.txt from Chrome while logged in on the raids page:", file=sys.stderr)
+        print("  F12 -> Network -> refresh -> click the raids.php request -> Headers -> Cookie.", file=sys.stderr)
+        print("  Paste the full Cookie value into cookies.txt (one line).", file=sys.stderr)
+        sys.exit(3)
     raid_pool = extract_raid_pool_from_html(html0)
     if not raid_pool:
-        print("Could not determine raid_pool from first page.", file=sys.stderr)
+        print("Could not determine raid_pool from first page (no raid_details links).", file=sys.stderr)
+        print("If you are logged in, the past-raids HTML layout may have changed.", file=sys.stderr)
         sys.exit(3)
     print(f"raid_pool = {raid_pool}")
     last_page = discover_last_paging_page(html0)

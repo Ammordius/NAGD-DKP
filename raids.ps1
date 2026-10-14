@@ -183,7 +183,7 @@ function Sync-Raids {
             if ($label) {
                 Write-Host "  $rid  ${label}: skip (already in Supabase)"
             } else {
-                Write-Host "  $rid: skip (already in Supabase)"
+                Write-Host "  $rid : skip (already in Supabase)"
             }
         }
     }

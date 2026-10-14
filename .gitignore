@@ -44,6 +44,9 @@ data/second_bidder.jsonl
 # Item page HTML cache (from fetch_item_pages.py; re-run to refresh)
 data/item_pages/
 
+# Forum archive (from pull_forum.py; re-run to refresh)
+data/forums/
+
 # Generated / local artifacts (avoid committing; re-run scripts to reproduce)
 build/
 dist/
