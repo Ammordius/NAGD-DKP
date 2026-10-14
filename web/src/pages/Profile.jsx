@@ -2,13 +2,19 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { loadAccountActivity } from '../lib/accountData'
-import { normalizeUiPreferences } from '../lib/uiPreferences'
+import { discordRaidNameRequired, normalizeUiPreferences } from '../lib/uiPreferences'
 import MyDkpStandings from '../components/MyDkpStandings'
 
 const MAGELO_BASE = 'https://www.takproject.net/magelo/character.php?char='
 const MIDDLE_DOT = '\u00B7'
 
 const PROFILE_TABS = ['activity', 'characters']
+
+const RAID_ADMIN_TIPS = {
+  showTicCharacterPicker: 'Raid Admin, Add DKP tic. On: the full character list is shown so you can move people into Attending, in addition to pasting a channel list. Off: that list is hidden and attendance comes from the paste. Characters already in Attending stay selected and are still credited until you clear them.',
+  useCharacterAdminSelectors: 'Site Admin, Raid Admin loot, and the raid page. On: pickers list every character and filter by character name. Off: pickers show one row per account and match an account, alt, or character. The account and the character that will be credited are both shown.',
+  requireDiscordRaidName: 'Raid Admin, new raid. On: paste a Discord raid line. The name is the text after the colon, and the date is the text after the last dash. Off: enter a raid name. The date is today unless the text includes a Discord date.',
+}
 
 function normalizeProfileTab(raw) {
   const t = (raw || '').trim().toLowerCase()
@@ -195,61 +201,74 @@ export default function Profile({ profile, onProfileUpdate }) {
         Role: <strong>{profile?.role === 'siteadmin' ? 'Site Admin' : profile?.role === 'officer' ? 'Officer' : 'Player'}</strong>
       </p>
 
-      <div className="card" style={{ maxWidth: '28rem', marginBottom: '1.5rem' }}>
-        <h2 style={{ marginTop: 0 }}>Display Name</h2>
-        <p style={{ color: '#71717a', fontSize: '0.875rem', marginBottom: '0.75rem' }}>
-          This is your name on the site. It is shown as Claimed by on game accounts you claim.
-        </p>
-        <input
-          type="text"
-          value={displayName}
-          onChange={(e) => { setDisplayName(e.target.value); setNameSaved(false) }}
-          maxLength={32}
-          placeholder="Display name"
-          aria-label="Display Name"
-          style={{ width: '100%', marginBottom: '0.5rem' }}
-        />
-        {nameError && <p style={{ color: '#f87171', fontSize: '0.875rem', marginBottom: '0.5rem' }}>{nameError}</p>}
-        {nameSaved && <p style={{ color: '#86efac', fontSize: '0.875rem', marginBottom: '0.5rem' }}>Saved.</p>}
-        <button type="button" className="btn" onClick={handleSaveDisplayName} disabled={nameSaving}>
-          {nameSaving ? 'Saving...' : 'Save display name'}
-        </button>
-      </div>
+      <div className="profile-settings-row">
+        <div className="card profile-display-name">
+          <h2 style={{ marginTop: 0 }}>Display Name</h2>
+          <p style={{ color: '#71717a', fontSize: '0.875rem', marginBottom: '0.75rem' }}>
+            This is your name on the site. It is shown as Claimed by on game accounts you claim.
+          </p>
+          <input
+            type="text"
+            value={displayName}
+            onChange={(e) => { setDisplayName(e.target.value); setNameSaved(false) }}
+            maxLength={32}
+            placeholder="Display name"
+            aria-label="Display Name"
+            style={{ width: '100%', marginBottom: '0.5rem' }}
+          />
+          {nameError && <p style={{ color: '#f87171', fontSize: '0.875rem', marginBottom: '0.5rem' }}>{nameError}</p>}
+          {nameSaved && <p style={{ color: '#86efac', fontSize: '0.875rem', marginBottom: '0.5rem' }}>Saved.</p>}
+          <button type="button" className="btn" onClick={handleSaveDisplayName} disabled={nameSaving}>
+            {nameSaving ? 'Saving...' : 'Save display name'}
+          </button>
+        </div>
 
-      <div className="card" style={{ maxWidth: '32rem', marginBottom: '1.5rem' }}>
-        <h2 style={{ marginTop: 0 }}>Website settings</h2>
-        <p style={{ color: '#71717a', fontSize: '0.875rem', marginBottom: '0.75rem' }}>
-          These choices belong to your site login. They follow you across browsers and devices. New input controls stay on until you turn one off.
-        </p>
-        <label style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-start', marginBottom: '0.65rem' }}>
-          <input
-            type="checkbox"
-            checked={uiPrefs.showTicCharacterPicker}
-            onChange={(e) => setPreference('showTicCharacterPicker', e.target.checked)}
-          />
-          <span>Show character picker for DKP tic entry</span>
-        </label>
-        <label style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-start', marginBottom: '0.65rem' }}>
-          <input
-            type="checkbox"
-            checked={uiPrefs.useCharacterAdminSelectors}
-            onChange={(e) => setPreference('useCharacterAdminSelectors', e.target.checked)}
-          />
-          <span>Use character-based selectors for administration</span>
-        </label>
-        <label style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
-          <input
-            type="checkbox"
-            checked={uiPrefs.raidNameOnly}
-            onChange={(e) => setPreference('raidNameOnly', e.target.checked)}
-          />
-          <span>Create raids by name only</span>
-        </label>
-        {prefsError && <p style={{ color: '#f87171', fontSize: '0.875rem', marginBottom: '0.5rem' }}>{prefsError}</p>}
-        {prefsSaved && <p style={{ color: '#86efac', fontSize: '0.875rem', marginBottom: '0.5rem' }}>Saved.</p>}
-        <button type="button" className="btn" onClick={handleSavePreferences} disabled={prefsSaving}>
-          {prefsSaving ? 'Saving...' : 'Save website settings'}
-        </button>
+        {(profile?.role === 'officer' || profile?.role === 'siteadmin') && (
+          <div className="card profile-raid-admin">
+            <h2>Raid Admin settings</h2>
+            <label className="raid-admin-option">
+              <span className="raid-admin-option-row">
+                <input
+                  type="checkbox"
+                  checked={uiPrefs.showTicCharacterPicker}
+                  aria-describedby="raid-admin-tip-attendance"
+                  onChange={(e) => setPreference('showTicCharacterPicker', e.target.checked)}
+                />
+                <span>Show full list for Attendance tics</span>
+              </span>
+              <span id="raid-admin-tip-attendance" className="raid-admin-tip" role="tooltip">{RAID_ADMIN_TIPS.showTicCharacterPicker}</span>
+            </label>
+            <label className="raid-admin-option">
+              <span className="raid-admin-option-row">
+                <input
+                  type="checkbox"
+                  checked={uiPrefs.useCharacterAdminSelectors}
+                  aria-describedby="raid-admin-tip-site-admin"
+                  onChange={(e) => setPreference('useCharacterAdminSelectors', e.target.checked)}
+                />
+                <span>Show full list for Site Admin</span>
+              </span>
+              <span id="raid-admin-tip-site-admin" className="raid-admin-tip" role="tooltip">{RAID_ADMIN_TIPS.useCharacterAdminSelectors}</span>
+            </label>
+            <label className="raid-admin-option">
+              <span className="raid-admin-option-row">
+                <input
+                  type="checkbox"
+                  checked={discordRaidNameRequired(uiPrefs)}
+                  aria-describedby="raid-admin-tip-discord"
+                  onChange={(e) => setPreference('raidNameOnly', !e.target.checked)}
+                />
+                <span>Require Discord raid_schedule raid names</span>
+              </span>
+              <span id="raid-admin-tip-discord" className="raid-admin-tip" role="tooltip">{RAID_ADMIN_TIPS.requireDiscordRaidName}</span>
+            </label>
+            {prefsError && <p className="profile-raid-admin-status" style={{ color: '#f87171' }}>{prefsError}</p>}
+            {prefsSaved && <p className="profile-raid-admin-status" style={{ color: '#86efac' }}>Saved.</p>}
+            <button type="button" className="btn" onClick={handleSavePreferences} disabled={prefsSaving}>
+              {prefsSaving ? 'Saving...' : 'Save'}
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="card" style={{ maxWidth: '28rem', marginBottom: '1.5rem' }}>

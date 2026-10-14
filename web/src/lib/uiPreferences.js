@@ -1,6 +1,9 @@
 export const UI_PREFERENCE_DEFAULTS = {
   showTicCharacterPicker: true,
   useCharacterAdminSelectors: true,
+  // true (default, including a missing key): any raid name, date is today.
+  // false: Raid Admin requires a Discord raid_schedule line.
+  // The profile checkbox is the inverse of this stored value.
   raidNameOnly: true,
 }
 
@@ -13,6 +16,12 @@ export function normalizeUiPreferences(raw) {
     out[key] = typeof src[key] === 'boolean' ? src[key] : true
   }
   return out
+}
+
+/** Profile checkbox "Require Discord raid_schedule raid names".
+ *  Ticked when stored raidNameOnly is false. Default (missing or true) is unticked. */
+export function discordRaidNameRequired(raw) {
+  return !normalizeUiPreferences(raw).raidNameOnly
 }
 
 export function ticDraftStorageKey(raidId) {

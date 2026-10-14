@@ -2,6 +2,7 @@ import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import { classifyTicAttendance } from './officerRaidParse.js'
 import {
+  discordRaidNameRequired,
   emptyTicDraft,
   normalizeUiPreferences,
   readTicDraft,
@@ -27,6 +28,13 @@ describe('normalizeUiPreferences', () => {
     assert.equal(prefs.showTicCharacterPicker, false)
     assert.equal(prefs.useCharacterAdminSelectors, true)
     assert.equal(prefs.raidNameOnly, true)
+  })
+
+  it('requires a Discord raid line only when raidNameOnly is saved off', () => {
+    assert.equal(discordRaidNameRequired(null), false)
+    assert.equal(discordRaidNameRequired({}), false)
+    assert.equal(discordRaidNameRequired({ raidNameOnly: true }), false)
+    assert.equal(discordRaidNameRequired({ raidNameOnly: false }), true)
   })
 })
 
