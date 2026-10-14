@@ -244,3 +244,75 @@ BEGIN
     (SELECT spent FROM account_dkp_summary WHERE account_id = 'acct-upgrade'), 1);
 END;
 $$;
+
+-- The create-tic RPC, the one-character RPC, and the batch RPC must credit the same people.
+INSERT INTO accounts (account_id, display_name) VALUES
+  ('eq-a', 'Eq A'),
+  ('eq-b', 'Eq B');
+INSERT INTO characters (char_id, name) VALUES
+  ('eq-c1', 'Eq One'),
+  ('eq-c2', 'Eq Two');
+INSERT INTO character_account (char_id, account_id) VALUES
+  ('eq-c1', 'eq-a'),
+  ('eq-c2', 'eq-b');
+INSERT INTO raids (raid_id, raid_name, date_iso) VALUES
+  ('eq-create', 'Eq Create', to_char(current_date, 'YYYY-MM-DD')),
+  ('eq-single', 'Eq Single', to_char(current_date, 'YYYY-MM-DD')),
+  ('eq-batch', 'Eq Batch', to_char(current_date, 'YYYY-MM-DD'));
+
+SET SESSION AUTHORIZATION authenticated;
+SELECT set_config('request.jwt.claim.sub', '22222222-2222-4222-8222-222222222222', false);
+SELECT set_config('request.jwt.claim.role', 'authenticated', false);
+
+SELECT public.add_officer_tic(
+  'eq-create', 'e1', 1, 'DKP tic', '5', '9:00 pm',
+  '[{"char_id":"eq-c1","character_name":"Eq One"},{"char_id":"eq-c2","character_name":"Eq Two"}]'::jsonb
+);
+SELECT public.add_officer_tic(
+  'eq-single', 'e1', 1, 'DKP tic', '5', '9:00 pm',
+  '[{"char_id":"eq-c1","character_name":"Eq One"}]'::jsonb
+);
+SELECT public.add_attendee_to_tic('eq-single', 'e1', 'eq-c2', 'Eq Two');
+SELECT public.add_officer_tic(
+  'eq-batch', 'e1', 1, 'DKP tic', '5', '9:00 pm',
+  '[{"char_id":"eq-c1","character_name":"Eq One"}]'::jsonb
+);
+SELECT public.add_attendees_to_existing_tic(
+  'eq-batch', 'e1',
+  '[{"char_id":"eq-c2","character_name":"Eq Two"}]'::jsonb
+);
+
+RESET SESSION AUTHORIZATION;
+
+DO $$
+DECLARE
+  v_create jsonb;
+  v_single jsonb;
+  v_batch jsonb;
+BEGIN
+  SELECT jsonb_agg(jsonb_build_object(
+    'char_id', char_id, 'character_name', character_name, 'account_id', account_id
+  ) ORDER BY char_id) INTO v_create
+  FROM raid_event_attendance WHERE raid_id = 'eq-create';
+  SELECT jsonb_agg(jsonb_build_object(
+    'char_id', char_id, 'character_name', character_name, 'account_id', account_id
+  ) ORDER BY char_id) INTO v_single
+  FROM raid_event_attendance WHERE raid_id = 'eq-single';
+  SELECT jsonb_agg(jsonb_build_object(
+    'char_id', char_id, 'character_name', character_name, 'account_id', account_id
+  ) ORDER BY char_id) INTO v_batch
+  FROM raid_event_attendance WHERE raid_id = 'eq-batch';
+
+  IF v_create IS DISTINCT FROM v_single OR v_create IS DISTINCT FROM v_batch THEN
+    RAISE EXCEPTION 'tic interfaces diverged. create % single % batch %', v_create, v_single, v_batch;
+  END IF;
+  IF (SELECT count(*) FROM raid_events WHERE raid_id IN ('eq-create', 'eq-single', 'eq-batch')
+        AND dkp_value = '5' AND attendee_count = '2' AND event_time = '9:00 pm') <> 3 THEN
+    RAISE EXCEPTION 'tic event rows are not equivalent';
+  END IF;
+  PERFORM pg_temp.t3_expect('eq account a earned',
+    (SELECT earned FROM account_dkp_summary WHERE account_id = 'eq-a'), 15);
+  PERFORM pg_temp.t3_expect('eq account b earned',
+    (SELECT earned FROM account_dkp_summary WHERE account_id = 'eq-b'), 15);
+END;
+$$;
