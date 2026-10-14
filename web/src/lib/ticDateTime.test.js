@@ -8,6 +8,7 @@ import {
   eventTimeToStore,
   firstEqStampInPaste,
   floorNowEastern,
+  formatRaidSchedule,
   newTicTimestamp,
   raidCalendarDate,
   validateTicDateTime,
@@ -50,6 +51,32 @@ describe('validateTicDateTime', () => {
     assert.equal(validateTicDateTime('', '').ok, false)
     assert.equal(validateTicDateTime('2026-10-09', '').ok, false)
     assert.equal(newTicTimestamp('2026-02-31', '09:08:00').epochMs, undefined)
+  })
+})
+
+describe('profile timezone', () => {
+  it('stores a GMT+12 wall time and shows it the previous evening in EST', () => {
+    const stored = validateTicDateTime('2026-10-14', '14:00:00', 'Etc/GMT-12')
+    assert.equal(stored.ok, true)
+    assert.equal(stored.canonical, '2026-10-14T14:00:00+12:00')
+    const shown = formatRaidSchedule(stored.canonical, 'Etc/GMT+5')
+    assert.equal(shown.dateKey, '2026-10-13')
+    assert.equal(shown.label, '2026-10-13 21:00')
+  })
+
+  it('shows a New Zealand October afternoon as the previous evening in Eastern time', () => {
+    const stored = validateTicDateTime('2026-10-14', '14:00:00', 'Pacific/Auckland')
+    assert.equal(stored.ok, true)
+    assert.equal(stored.canonical, '2026-10-14T14:00:00+13:00')
+    const shown = formatRaidSchedule(stored.canonical, 'America/New_York')
+    assert.equal(shown.dateKey, '2026-10-13')
+    assert.equal(shown.label, '2026-10-13 21:00')
+  })
+
+  it('keeps a date-only raid on that calendar date', () => {
+    const shown = formatRaidSchedule('2026-10-14', 'Pacific/Auckland')
+    assert.equal(shown.dateKey, '2026-10-14')
+    assert.equal(shown.label, '2026-10-14')
   })
 })
 

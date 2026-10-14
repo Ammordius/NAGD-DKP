@@ -24,9 +24,14 @@ import {
   eventTimeToStore,
   fieldsForEdit,
   firstEqStampInPaste,
+  floorNowInZone,
+  formatRaidSchedule,
+  formatStoredClock,
   newTicTimestamp,
-  raidCalendarDate,
+  raidLocalCalendarDate,
+  raidStartToStore,
 } from '../lib/ticDateTime'
+import { profileTimeZone } from '../lib/siteTimeZone'
 import TicDateTimeFields from '../components/TicDateTimeFields'
 import TicMemberPicker from '../components/TicMemberPicker'
 import AttendeeCountCell from '../components/AttendeeCountCell'
@@ -38,9 +43,9 @@ function generateRaidId() {
   return `manual-${Date.now()}`
 }
 
-function ticOptionLabel(event, raidDateIso) {
+function ticOptionLabel(event, raidDateIso, timeZone) {
   const order = event?.event_order != null && event.event_order !== '' ? `#${event.event_order} ` : ''
-  return `${order}${displayTicEventName(event, raidDateIso)}`
+  return `${order}${displayTicEventName(event, raidDateIso, timeZone)}`
 }
 
 function ResultNames({ label, names, tone }) {
@@ -85,6 +90,7 @@ export default function Officer({ isOfficer, profile }) {
   const [accountIdToDisplayName, setAccountIdToDisplayName] = useState({})
   const [accounts, setAccounts] = useState([])
   const uiPrefs = normalizeUiPreferences(profile?.ui_preferences)
+  const siteZone = profileTimeZone(profile?.ui_preferences)
   const showTicCharacterPicker = uiPrefs.showTicCharacterPicker
   const useCharacterAdminSelectors = uiPrefs.useCharacterAdminSelectors
   const raidNameOnly = uiPrefs.raidNameOnly
@@ -104,6 +110,9 @@ export default function Officer({ isOfficer, profile }) {
 
   // Add raid
   const [raidPaste, setRaidPaste] = useState('')
+  const [raidDate, setRaidDate] = useState('')
+  const [raidTime, setRaidTime] = useState('')
+  const [raidWhenTouched, setRaidWhenTouched] = useState(false)
   const [addRaidResult, setAddRaidResult] = useState(null)
   const [showCreateRaid, setShowCreateRaid] = useState(() => window.location.hash === '#add-raid')
   const [raidPickerQuery, setRaidPickerQuery] = useState('')
@@ -494,13 +503,26 @@ export default function Officer({ isOfficer, profile }) {
       setMutating(false)
       return
     }
+    let dateVal = dateIso
+    if (!dateVal) {
+      const fields = raidWhenTouched
+        ? { date: raidDate, time: raidTime }
+        : floorNowInZone(new Date(), siteZone)
+      const stamped = raidStartToStore(fields.date, fields.time, siteZone)
+      if (!stamped.ok) {
+        setError(stamped.error || 'Enter a raid date and time.')
+        setMutating(false)
+        return
+      }
+      dateVal = stamped.stored
+    }
     const raid_id = generateRaidId()
     const { error: err } = await supabase.from('raids').insert({
       raid_id,
       raid_pool: '',
       raid_name: raidName.trim(),
-      date: dateIso || new Date().toISOString().slice(0, 10),
-      date_iso: dateIso || new Date().toISOString().slice(0, 10),
+      date: dateVal,
+      date_iso: dateVal,
       attendees: null,
       url: '',
     })
@@ -518,7 +540,6 @@ export default function Officer({ isOfficer, profile }) {
     setAddRaidResult({ raid_id, raid_name: raidName.trim() })
     setRaidPaste('')
     setShowCreateRaid(false)
-    const dateVal = dateIso || new Date().toISOString().slice(0, 10)
     const newRaidRow = { raid_id, raid_name: raidName.trim(), date_iso: dateVal, date: dateVal }
     setRaids((prev) => {
       if (prev.some((r) => r.raid_id === raid_id)) return prev
@@ -545,7 +566,7 @@ export default function Officer({ isOfficer, profile }) {
     }
     let timestamp = null
     if (!appending) {
-      timestamp = newTicTimestamp(ticDate, ticTime)
+      timestamp = newTicTimestamp(ticDate, ticTime, siteZone)
       if (!timestamp.ok) {
         setError(timestamp.error)
         return
@@ -728,7 +749,7 @@ export default function Officer({ isOfficer, profile }) {
       return
     }
     if (events.length > 0) return
-    const timestamp = newTicTimestamp(ticDate, ticTime)
+    const timestamp = newTicTimestamp(ticDate, ticTime, siteZone)
     if (!timestamp.ok) {
       setError(timestamp.error)
       return
@@ -1030,6 +1051,7 @@ export default function Officer({ isOfficer, profile }) {
       time: editingEventTime,
       raidDateIso: raid?.date_iso || raid?.date || '',
       eventId,
+      timeZone: siteZone,
     })
     if (!result.ok) {
       setError(result.error)
@@ -1091,7 +1113,7 @@ export default function Officer({ isOfficer, profile }) {
         action: 'edit_loot_tic',
         target_type: 'raid_loot',
         target_id: String(row.id),
-        delta: { r: selectedRaidId, l: row.id, i: row.item_name, e: tic ? ticOptionLabel(tic, raid?.date_iso || raid?.date || '') : eventId },
+        delta: { r: selectedRaidId, l: row.id, i: row.item_name, e: tic ? ticOptionLabel(tic, raid?.date_iso || raid?.date || '', siteZone) : eventId },
       })
       try { sessionStorage.removeItem('dkp_leaderboard_v2') } catch (_) {}
       loadSelectedRaid()
@@ -1190,7 +1212,7 @@ export default function Officer({ isOfficer, profile }) {
   }, [eventAttendance])
 
   const raidDateIso = raid?.date_iso || raid?.date || ''
-  const lootSections = useMemo(() => groupRaidLootByEvent(loot, events, raidDateIso), [loot, events, raidDateIso])
+  const lootSections = useMemo(() => groupRaidLootByEvent(loot, events, raidDateIso, siteZone), [loot, events, raidDateIso, siteZone])
   const officerItemNameToId = useMemo(() => buildItemNameToIdMap(lootMobJson), [lootMobJson])
   const officerMobLookups = useMemo(
     () => buildLootMobLookups(lootMobJson, raidItemSourcesJson),
@@ -1243,17 +1265,19 @@ export default function Officer({ isOfficer, profile }) {
     const list = !q
       ? raids
       : raids.filter((r) => {
-          const label = `${r.date_iso || r.date || ''} ${r.raid_name || ''} ${r.raid_id || ''}`.toLowerCase()
+          const shown = formatRaidSchedule(r.date_iso || r.date || '', siteZone).label
+          const label = `${shown} ${r.date_iso || r.date || ''} ${r.raid_name || ''} ${r.raid_id || ''}`.toLowerCase()
           return label.includes(q)
         })
     return list.slice(0, q ? 80 : 40)
-  }, [raids, raidPickerQuery])
+  }, [raids, raidPickerQuery, siteZone])
 
   const selectedRaidLabel = useMemo(() => {
     const row = raid || raids.find((r) => r.raid_id === selectedRaidId)
     if (!row) return ''
-    return `${row.date_iso || row.date || '—'} · ${row.raid_name || row.raid_id}`
-  }, [raid, raids, selectedRaidId])
+    const shown = formatRaidSchedule(row.date_iso || row.date || '', siteZone).label
+    return `${shown || '—'} · ${row.raid_name || row.raid_id}`
+  }, [raid, raids, selectedRaidId, siteZone])
 
   const attendeeCount = attendance.length > 0
     ? attendance.length
@@ -1298,7 +1322,7 @@ export default function Officer({ isOfficer, profile }) {
       setTicTime(draft.ticTime)
       setTicDateTimeTouched(draft.ticDateTimeTouched)
     } else {
-      const defaults = defaultTicFields(raid?.date_iso || raid?.date || '')
+      const defaults = defaultTicFields(raid?.date_iso || raid?.date || '', new Date(), siteZone)
       setTicPaste('')
       setTicResolutions({})
       setTicExcludedCharIds([])
@@ -1314,7 +1338,7 @@ export default function Officer({ isOfficer, profile }) {
     setTicMemberQuery('')
     availableAnchorRef.current = null
     attendingAnchorRef.current = null
-  }, [selectedRaidId])
+  }, [selectedRaidId, siteZone])
 
   useEffect(() => {
     if (skipTicDraftWrite.current) {
@@ -1336,21 +1360,29 @@ export default function Officer({ isOfficer, profile }) {
   }, [selectedRaidId, ticPaste, ticResolutions, ticExcludedCharIds, ticAttendingIds, ticDestination, ticDkpValue, ticDate, ticTime, ticDateTimeTouched])
 
   useEffect(() => {
-    if (firstEqStampInPaste(ticPaste)) return
-    const date = raidCalendarDate(raid?.date_iso || raid?.date || '')
+    if (firstEqStampInPaste(ticPaste, siteZone)) return
+    const date = raidLocalCalendarDate(raid?.date_iso || raid?.date || '', siteZone)
     if (!date) return
     setTicDate((current) => (ticDateTimeTouched && current ? current : date))
-  }, [raid?.date_iso, raid?.date, ticDateTimeTouched, ticPaste])
+  }, [raid?.date_iso, raid?.date, ticDateTimeTouched, ticPaste, siteZone])
 
   useEffect(() => {
     if (ticDateTimeTouched) return
-    const stamp = firstEqStampInPaste(ticPaste)
+    const stamp = firstEqStampInPaste(ticPaste, siteZone)
     if (!stamp) return
     setTicDate(stamp.date)
     setTicTime(stamp.time)
-  }, [ticPaste, ticDateTimeTouched])
+  }, [ticPaste, ticDateTimeTouched, siteZone])
+
+  useEffect(() => {
+    if (!showCreateRaid || raidWhenTouched) return
+    const nowFields = floorNowInZone(new Date(), siteZone)
+    setRaidDate(nowFields.date)
+    setRaidTime(nowFields.time)
+  }, [showCreateRaid, raidWhenTouched, siteZone])
 
   const focusAddRaid = () => {
+    setRaidWhenTouched(false)
     setShowCreateRaid(true)
     setTimeout(() => {
       addRaidSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
@@ -1478,7 +1510,7 @@ export default function Officer({ isOfficer, profile }) {
                       setShowRaidPicker(false)
                     }}
                   >
-                    {r.date_iso || r.date || '—'} · {r.raid_name || r.raid_id}
+                    {formatRaidSchedule(r.date_iso || r.date || '', siteZone).label || '—'} · {r.raid_name || r.raid_id}
                   </li>
                 ))
               )}
@@ -1507,8 +1539,8 @@ export default function Officer({ isOfficer, profile }) {
           <h2 style={{ marginTop: 0 }}>Add raid</h2>
           <p className="officer-hint">
             {raidNameOnly
-              ? 'Enter the Raid Name. The raid date is today unless the text includes a Discord date.'
-              : 'Paste a Discord raid line. The name is the text after the colon, and the date is the text after the last dash.'}
+              ? 'Enter the Raid Name. Date and time use your profile timezone unless the text includes a Discord date.'
+              : 'Paste a Discord raid line. The name is the text after the colon, and the date is the text after the last dash. When that line has no date, the date and time below are your profile timezone.'}
           </p>
           <textarea
             ref={raidPasteRef}
@@ -1521,6 +1553,21 @@ export default function Officer({ isOfficer, profile }) {
             rows={raidNameOnly ? 2 : 3}
             aria-label={raidNameOnly ? 'Raid name' : 'Discord raid line'}
           />
+          {parseRaidString(raidPaste).dateIso ? (
+            <p className="officer-hint">The Discord date in the text is stored for this raid.</p>
+          ) : (
+            <div className="officer-field-row" style={{ marginTop: '0.5rem' }}>
+              <TicDateTimeFields
+                idPrefix="new-raid"
+                date={raidDate}
+                time={raidTime}
+                dateLabel="Date"
+                timeLabel="Time"
+                onDateChange={(value) => { setRaidWhenTouched(true); setRaidDate(value) }}
+                onTimeChange={(value) => { setRaidWhenTouched(true); setRaidTime(value) }}
+              />
+            </div>
+          )}
           <div className="officer-field-row" style={{ marginTop: '0.5rem' }}>
             <button type="button" className="btn" onClick={handleAddRaid} disabled={mutating || !raidPaste.trim()}>
               {mutating ? 'Creating…' : 'Create raid'}
@@ -1579,7 +1626,7 @@ export default function Officer({ isOfficer, profile }) {
                 >
                   {events.map((e) => (
                     <option key={e.event_id} value={e.event_id}>
-                      #{e.event_order} {displayTicEventName(e, raidDateIso)} ({e.dkp_value} DKP)
+                      #{e.event_order} {displayTicEventName(e, raidDateIso, siteZone)} ({e.dkp_value} DKP)
                     </option>
                   ))}
                 </select>
@@ -1632,7 +1679,7 @@ export default function Officer({ isOfficer, profile }) {
             )}
             {ticDestination === 'existing' && appendEvent && (
               <p className="officer-hint">
-                #{appendEvent.event_order} {displayTicEventName(appendEvent, raidDateIso)} · {appendEvent.dkp_value} DKP
+                #{appendEvent.event_order} {displayTicEventName(appendEvent, raidDateIso, siteZone)} · {appendEvent.dkp_value} DKP
                 {appendEvent.event_time ? ` · ${appendEvent.event_time}` : ''}. People already on this tic stay on it.
               </p>
             )}
@@ -1841,7 +1888,7 @@ export default function Officer({ isOfficer, profile }) {
                   aria-label="Tic for new loot"
                 >
                   {events.map((e) => (
-                    <option key={e.event_id} value={e.event_id}>{ticOptionLabel(e, raidDateIso)}</option>
+                    <option key={e.event_id} value={e.event_id}>{ticOptionLabel(e, raidDateIso, siteZone)}</option>
                   ))}
                 </select>
               )}
@@ -1931,7 +1978,7 @@ export default function Officer({ isOfficer, profile }) {
             </h2>
             {raidNameError && <p className="error" role="alert">{raidNameError}</p>}
             <p style={{ color: '#a1a1aa', marginBottom: '1rem' }}>
-              {raid.date_iso || raid.date}
+              {formatRaidSchedule(raid.date_iso || raid.date, siteZone).label || raid.date_iso || raid.date}
               {` · ${attendance.length > 0 ? attendance.length : (raid.attendees != null && raid.attendees !== '' ? Math.round(Number(raid.attendees)) : '—')} attendees`}
               {' · '}
               <Link to={`/raids/${selectedRaidId}`}>View raid</Link>
@@ -1977,7 +2024,7 @@ export default function Officer({ isOfficer, profile }) {
                     <Fragment key={e.event_id}>
                       <tr>
                         <td>{e.event_order}</td>
-                        <td>{displayTicEventName(e, raidDateIso)}</td>
+                        <td>{displayTicEventName(e, raidDateIso, siteZone)}</td>
                         <td>
                           {isEditingDkp ? (
                             <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
@@ -2003,7 +2050,7 @@ export default function Officer({ isOfficer, profile }) {
                                 onDateChange={setEditingEventDate}
                                 onTimeChange={setEditingEventTime}
                               />
-                              {fieldsForEdit(e.event_time, raid?.date_iso || raid?.date || '').unparsed && e.event_time ? (
+                              {fieldsForEdit(e.event_time, raid?.date_iso || raid?.date || '', siteZone).unparsed && e.event_time ? (
                                 <span className="officer-hint">Stored: {e.event_time}</span>
                               ) : null}
                               <button type="button" className="btn btn-ghost" onClick={() => handleSaveEventTime(e.event_id)} disabled={mutating}>Save</button>
@@ -2011,9 +2058,9 @@ export default function Officer({ isOfficer, profile }) {
                             </span>
                           ) : (
                             <>
-                              {e.event_time || '—'}
+                              {formatStoredClock(e.event_time, raidDateIso, siteZone) || '—'}
                               <button type="button" className="btn btn-ghost" style={{ marginLeft: '0.25rem', fontSize: '0.85rem' }} onClick={() => {
-                                const fields = fieldsForEdit(e.event_time, raid?.date_iso || raid?.date || '')
+                                const fields = fieldsForEdit(e.event_time, raid?.date_iso || raid?.date || '', siteZone)
                                 setEditingEventTimeId(e.event_id)
                                 setEditingEventDate(fields.date)
                                 setEditingEventTime(fields.time)
@@ -2157,7 +2204,7 @@ export default function Officer({ isOfficer, profile }) {
                                       <option value="">Misc</option>
                                     )}
                                     {events.map((e) => (
-                                      <option key={e.event_id} value={e.event_id}>{ticOptionLabel(e, raidDateIso)}</option>
+                                      <option key={e.event_id} value={e.event_id}>{ticOptionLabel(e, raidDateIso, siteZone)}</option>
                                     ))}
                                   </select>
                                 ) : (

@@ -1,18 +1,17 @@
 /**
- * Tic date/time convention: America/New_York for both the controls and new storage.
+ * Tic date/time convention.
  *
- * Date and time inputs are zone-naive. Their values are an Eastern calendar date
- * (YYYY-MM-DD) and an Eastern clock (HH:mm:ss), not the browser's timezone.
- * New values are floored to whole seconds.
+ * Date and time inputs are zone-naive wall-clock values in the site profile
+ * timezone (America/New_York when the profile has none). New values are floored
+ * to whole seconds and stored as ISO-8601 with that zone's offset at that wall
+ * time, e.g. 2026-10-14T14:00:00+12:00. During the fall-back hour the earlier
+ * offset is used. A spring-forward gap is invalid and is never replaced with
+ * the current time.
  *
- * New and changed values are stored as ISO-8601 with the numeric offset
- * America/New_York had at that wall time, e.g. 2026-10-09T09:08:00-04:00.
- * During the fall-back hour the earlier offset is used. A spring-forward gap
- * is invalid and is never replaced with the current time.
- *
- * Legacy text is kept exactly when an edit's controls still match the display
- * of the stored value. Strings that do not parse are left unchanged until the
- * officer supplies a valid date and time.
+ * Instants (Z or a numeric offset) display in the viewer's profile timezone.
+ * Legacy zone-less strings and EverQuest channel stamps stay Eastern wall
+ * times, then display as that instant in the viewer's zone. An edit whose
+ * controls still match that display keeps the original string.
  */
 
 export const TIC_TIME_ZONE = 'America/New_York'
@@ -22,16 +21,38 @@ const MONTHS = {
   jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12,
 }
 
-const easternFormatter = new Intl.DateTimeFormat('en-US', {
-  timeZone: TIC_TIME_ZONE,
-  year: 'numeric',
-  month: '2-digit',
-  day: '2-digit',
-  hour: '2-digit',
-  minute: '2-digit',
-  second: '2-digit',
-  hourCycle: 'h23',
-})
+const formatterCache = new Map()
+const INSTANT_RE = /^(\d{4}-\d{2}-\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?(?:\.\d+)?(Z|[+-]\d{2}:\d{2})$/i
+
+export function normalizeTimeZone(timeZone) {
+  const id = typeof timeZone === 'string' ? timeZone.trim() : ''
+  if (!id || id === TIC_TIME_ZONE) return TIC_TIME_ZONE
+  try {
+    Intl.DateTimeFormat('en-US', { timeZone: id })
+    return id
+  } catch {
+    return TIC_TIME_ZONE
+  }
+}
+
+function formatterFor(timeZone) {
+  const zone = normalizeTimeZone(timeZone)
+  let fmt = formatterCache.get(zone)
+  if (!fmt) {
+    fmt = new Intl.DateTimeFormat('en-US', {
+      timeZone: zone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hourCycle: 'h23',
+    })
+    formatterCache.set(zone, fmt)
+  }
+  return { zone, fmt }
+}
 
 const EQ_STAMP = /\[((?:Sun|Mon|Tue|Wed|Thu|Fri|Sat)\s+[A-Za-z]{3}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2}\s+\d{4})\]/i
 
@@ -54,8 +75,9 @@ function isRealCalendarDate(year, month, day) {
   return utc.getUTCFullYear() === year && utc.getUTCMonth() === month - 1 && utc.getUTCDate() === day
 }
 
-function easternParts(epochMs) {
-  const parts = easternFormatter.formatToParts(new Date(epochMs))
+function zoneParts(epochMs, timeZone) {
+  const { fmt } = formatterFor(timeZone)
+  const parts = fmt.formatToParts(new Date(epochMs))
   const get = (type) => Number(parts.find((p) => p.type === type)?.value)
   let year = get('year')
   let month = get('month')
@@ -67,33 +89,34 @@ function easternParts(epochMs) {
   return { year, month, day, hour, minute, second }
 }
 
-function offsetMinutesAt(epochMs) {
+function offsetMinutesAt(epochMs, timeZone) {
   const wholeSecond = epochMs - (epochMs % 1000)
-  const parts = easternParts(wholeSecond)
+  const parts = zoneParts(wholeSecond, timeZone)
   const asUtc = Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, parts.second)
   return Math.round((asUtc - wholeSecond) / 60000)
 }
 
-function formatOffset(epochMs) {
-  const minutes = offsetMinutesAt(epochMs)
+function formatOffset(epochMs, timeZone) {
+  const minutes = offsetMinutesAt(epochMs, timeZone)
   const sign = minutes >= 0 ? '+' : '-'
   const abs = Math.abs(minutes)
   return `${sign}${pad(Math.floor(abs / 60))}:${pad(abs % 60)}`
 }
 
 /**
- * Resolve an Eastern wall time to epoch ms.
+ * Resolve a wall time in `timeZone` to epoch ms.
  * Fall-back ambiguous times use the earlier offset. Gaps return null.
  */
-function resolveEasternEpochMs(year, month, day, hour, minute, second) {
+function resolveZoneEpochMs(year, month, day, hour, minute, second, timeZone) {
+  const zone = normalizeTimeZone(timeZone)
   const wallAsUtc = Date.UTC(year, month - 1, day, hour, minute, second)
   let guess = wallAsUtc
   for (let i = 0; i < 4; i++) {
-    const next = wallAsUtc - offsetMinutesAt(guess) * 60 * 1000
+    const next = wallAsUtc - offsetMinutesAt(guess, zone) * 60 * 1000
     if (next === guess) break
     guess = next
   }
-  const parts = easternParts(guess)
+  const parts = zoneParts(guess, zone)
   if (
     parts.year === year &&
     parts.month === month &&
@@ -107,12 +130,23 @@ function resolveEasternEpochMs(year, month, day, hour, minute, second) {
   return null
 }
 
-function displayEastern(epochMs) {
-  const parts = easternParts(epochMs)
+function displayInZone(epochMs, timeZone) {
+  const parts = zoneParts(epochMs, timeZone)
   return {
     date: formatDate(parts.year, parts.month, parts.day),
     time: formatClock(parts.hour, parts.minute, parts.second),
   }
+}
+
+/** Eastern wall digits, shown in `timeZone`. A gap keeps the original digits. */
+function projectEasternWall(year, month, day, hour, minute, second, timeZone) {
+  const fields = wallFields(year, month, day, hour, minute, second)
+  if (!fields) return null
+  const zone = normalizeTimeZone(timeZone)
+  if (zone === TIC_TIME_ZONE) return fields
+  const epochMs = resolveZoneEpochMs(year, month, day, hour, minute, second, TIC_TIME_ZONE)
+  if (epochMs == null) return fields
+  return displayInZone(epochMs, zone)
 }
 
 /** Leading YYYY-MM-DD from a raid date_iso or date, or '' when it is not a real calendar date. */
@@ -126,18 +160,60 @@ export function raidCalendarDate(dateIso) {
   return formatDate(year, month, day)
 }
 
-/** Current Eastern clock, floored to the whole second. */
-export function floorNowEastern(now = new Date()) {
+/** Current clock in `timeZone`, floored to the whole second. */
+export function floorNowInZone(now = new Date(), timeZone = TIC_TIME_ZONE) {
   const epochMs = now instanceof Date ? now.getTime() : Number(now)
   if (!Number.isFinite(epochMs)) return { date: '', time: '' }
-  return displayEastern(epochMs)
+  return displayInZone(epochMs, timeZone)
 }
 
-/** New-tic defaults: raid calendar date, and the current Eastern time floored to seconds. */
-export function defaultTicFields(raidDateIso, now = new Date()) {
-  const clock = floorNowEastern(now)
+/** Current Eastern clock, floored to the whole second. */
+export function floorNowEastern(now = new Date()) {
+  return floorNowInZone(now, TIC_TIME_ZONE)
+}
+
+/**
+ * Calendar date of a raid in `timeZone`.
+ * Offset instants convert. Date-only and zone-less values keep their calendar date.
+ */
+export function raidLocalCalendarDate(dateIso, timeZone = TIC_TIME_ZONE) {
+  const text = String(dateIso ?? '').trim()
+  const instant = text.match(INSTANT_RE)
+  if (instant) {
+    const epochMs = Date.parse(text.replace(' ', 'T'))
+    if (!Number.isNaN(epochMs)) return displayInZone(epochMs, timeZone).date
+  }
+  return raidCalendarDate(text)
+}
+
+/**
+ * Date column and calendar key for a raid.
+ * Offset instants convert to `timeZone`. Other stored text keeps its own date.
+ */
+export function formatRaidSchedule(dateIso, timeZone = TIC_TIME_ZONE) {
+  const text = String(dateIso ?? '').trim()
+  if (!text) return { dateKey: '', label: '', sortKey: '' }
+  const instant = text.match(INSTANT_RE)
+  if (instant) {
+    const epochMs = Date.parse(text.replace(' ', 'T'))
+    if (!Number.isNaN(epochMs)) {
+      const fields = displayInZone(epochMs, timeZone)
+      return {
+        dateKey: fields.date,
+        label: `${fields.date} ${fields.time.slice(0, 5)}`,
+        sortKey: new Date(epochMs).toISOString(),
+      }
+    }
+  }
+  const dateKey = raidCalendarDate(text)
+  return { dateKey, label: text, sortKey: text }
+}
+
+/** New-tic defaults: raid date in the profile zone, and the current clock there. */
+export function defaultTicFields(raidDateIso, now = new Date(), timeZone = TIC_TIME_ZONE) {
+  const clock = floorNowInZone(now, timeZone)
   return {
-    date: raidCalendarDate(raidDateIso),
+    date: raidLocalCalendarDate(raidDateIso, timeZone),
     time: clock.time,
   }
 }
@@ -155,7 +231,7 @@ function normalizeTime(time) {
 /**
  * @returns {{ ok: true, canonical: string, epochMs: number } | { ok: false, error: string }}
  */
-export function validateTicDateTime(date, time) {
+export function validateTicDateTime(date, time, timeZone = TIC_TIME_ZONE) {
   const dateStr = String(date ?? '').trim()
   const timeStr = String(time ?? '').trim()
   if (!dateStr || !timeStr) {
@@ -175,12 +251,21 @@ export function validateTicDateTime(date, time) {
   const second = timeMatch[3] != null ? Number(timeMatch[3]) : 0
   if (hour > 23 || minute > 59 || second > 59) return { ok: false, error: 'Enter a valid tic time.' }
 
-  const epochMs = resolveEasternEpochMs(year, month, day, hour, minute, second)
+  const zone = normalizeTimeZone(timeZone)
+  const epochMs = resolveZoneEpochMs(year, month, day, hour, minute, second, zone)
   if (epochMs == null) {
-    return { ok: false, error: 'That time does not exist in Eastern time.' }
+    const where = zone === TIC_TIME_ZONE ? 'Eastern time' : 'this timezone'
+    return { ok: false, error: `That time does not exist in ${where}.` }
   }
-  const canonical = `${formatDate(year, month, day)}T${formatClock(hour, minute, second)}${formatOffset(epochMs)}`
+  const canonical = `${formatDate(year, month, day)}T${formatClock(hour, minute, second)}${formatOffset(epochMs, zone)}`
   return { ok: true, canonical, epochMs }
+}
+
+/** Raid start entered as a local wall time, stored as an offset instant. */
+export function raidStartToStore(date, time, timeZone = TIC_TIME_ZONE) {
+  const validated = validateTicDateTime(date, time, timeZone)
+  if (!validated.ok) return validated
+  return { ok: true, stored: validated.canonical, epochMs: validated.epochMs }
 }
 
 export function eventIdFromEpoch(epochMs) {
@@ -231,11 +316,11 @@ export function isGenericTicEventName(name) {
  * clock labels follow the stored event time. Tic #1 is "{time} on-time".
  * Later generic tics stay "{time} DKP tic". Imported names are left as written.
  */
-export function displayTicEventName(event, raidDateIso = '') {
+export function displayTicEventName(event, raidDateIso = '', timeZone = TIC_TIME_ZONE) {
   const stored = String(event?.event_name ?? '').trim()
   if (!isGenericTicEventName(stored)) return stored
   const onTime = isFirstTicOrder(event?.event_order)
-  const parsed = parseStoredEventTime(event?.event_time, raidDateIso)
+  const parsed = parseStoredEventTime(event?.event_time, raidDateIso, timeZone)
   if (parsed.ok) {
     const named = dkpTicEventName(parsed.time, { onTime })
     if (named) return named
@@ -260,8 +345,8 @@ export function eventFieldsForTimeSave(existingName, storedTime, clockTime, even
  * Validate controls for a new tic. Does not substitute the current time.
  * @returns {{ ok: true, stored: string, epochMs: number, eventId: string } | { ok: false, error: string }}
  */
-export function newTicTimestamp(date, time) {
-  const validated = validateTicDateTime(date, time)
+export function newTicTimestamp(date, time, timeZone = TIC_TIME_ZONE) {
+  const validated = validateTicDateTime(date, time, timeZone)
   if (!validated.ok) return validated
   return {
     ok: true,
@@ -279,39 +364,42 @@ function wallFields(year, month, day, hour, minute, second) {
 
 /**
  * Display fields for a stored event_time. Does not rewrite the original.
- * Zone-less strings are Eastern wall-clock digits. Z and numeric offsets are instants shown in Eastern.
- * Time-only strings use the raid calendar date in the controls.
+ * Zone-less strings and EQ stamps are Eastern wall times, shown in `timeZone`.
+ * Z and numeric offsets are instants shown in `timeZone`.
+ * Time-only strings use the raid calendar date.
  */
-export function parseStoredEventTime(raw, raidDateIso) {
+export function parseStoredEventTime(raw, raidDateIso, timeZone = TIC_TIME_ZONE) {
   const original = raw == null ? '' : String(raw)
   const text = original.trim()
+  const zone = normalizeTimeZone(timeZone)
   if (!text) return { ok: false, original, date: '', time: '', kind: 'empty' }
 
   const eq = text.match(/^(?:Sun|Mon|Tue|Wed|Thu|Fri|Sat)\s+([A-Za-z]{3})\s+(\d{1,2})\s+(\d{2}):(\d{2}):(\d{2})\s+(\d{4})$/i)
   if (eq) {
     const month = MONTHS[eq[1].toLowerCase()]
-    const fields = wallFields(Number(eq[6]), month, Number(eq[2]), Number(eq[3]), Number(eq[4]), Number(eq[5]))
+    const fields = projectEasternWall(Number(eq[6]), month, Number(eq[2]), Number(eq[3]), Number(eq[4]), Number(eq[5]), zone)
     if (!fields) return { ok: false, original, date: '', time: '', kind: 'unparsed' }
     return { ok: true, original, ...fields, kind: 'wall' }
   }
 
-  const instant = text.match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(Z|[+-]\d{2}:\d{2})$/i)
-  if (instant) {
+  const instant = text.match(INSTANT_RE)
+  if (instant && /:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/i.test(text)) {
     const iso = text.replace(' ', 'T')
     const epochMs = Date.parse(iso)
     if (Number.isNaN(epochMs)) return { ok: false, original, date: '', time: '', kind: 'unparsed' }
-    return { ok: true, original, ...displayEastern(epochMs), kind: 'instant' }
+    return { ok: true, original, ...displayInZone(epochMs, zone), kind: 'instant' }
   }
 
   const naive = text.match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?(?:\.\d+)?$/)
   if (naive) {
-    const fields = wallFields(
+    const fields = projectEasternWall(
       Number(naive[1]),
       Number(naive[2]),
       Number(naive[3]),
       Number(naive[4]),
       Number(naive[5]),
       naive[6] != null ? Number(naive[6]) : 0,
+      zone,
     )
     if (!fields) return { ok: false, original, date: '', time: '', kind: 'unparsed' }
     return { ok: true, original, ...fields, kind: 'wall' }
@@ -328,20 +416,28 @@ export function parseStoredEventTime(raw, raidDateIso) {
     }
     if (suffix === 'am') hour = hour === 12 ? 0 : hour
     else hour = hour === 12 ? 12 : hour + 12
-    return {
-      ok: true,
-      original,
-      date: raidCalendarDate(raidDateIso),
-      time: formatClock(hour, minute, second),
-      kind: 'time-only',
-    }
+    const raidDate = raidCalendarDate(raidDateIso)
+    const match = raidDate.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+    const fields = match
+      ? projectEasternWall(Number(match[1]), Number(match[2]), Number(match[3]), hour, minute, second, zone)
+      : { date: '', time: formatClock(hour, minute, second) }
+    if (!fields) return { ok: false, original, date: '', time: '', kind: 'unparsed' }
+    return { ok: true, original, ...fields, kind: 'time-only' }
   }
 
   return { ok: false, original, date: '', time: '', kind: 'unparsed' }
 }
 
-export function fieldsForEdit(raw, raidDateIso) {
-  const parsed = parseStoredEventTime(raw, raidDateIso)
+/** Local date and time for a tic Time cell. Unparsed text is left as stored. */
+export function formatStoredClock(raw, raidDateIso, timeZone = TIC_TIME_ZONE) {
+  const parsed = parseStoredEventTime(raw, raidDateIso, timeZone)
+  if (!parsed.ok) return String(raw ?? '').trim()
+  if (parsed.date && parsed.time) return `${parsed.date} ${parsed.time}`
+  return parsed.time || parsed.date || String(raw ?? '').trim()
+}
+
+export function fieldsForEdit(raw, raidDateIso, timeZone = TIC_TIME_ZONE) {
+  const parsed = parseStoredEventTime(raw, raidDateIso, timeZone)
   if (!parsed.ok) return { date: '', time: '', unparsed: true }
   return { date: parsed.date, time: parsed.time, unparsed: false }
 }
@@ -350,8 +446,8 @@ export function fieldsForEdit(raw, raidDateIso) {
  * Value to write for an edit. Unchanged controls keep the original string and event id.
  * @returns {{ ok: true, unchanged: boolean, stored: string, eventId: string | undefined, epochMs?: number } | { ok: false, error: string, eventId: string | undefined }}
  */
-export function eventTimeToStore({ original, date, time, raidDateIso, eventId }) {
-  const parsed = parseStoredEventTime(original, raidDateIso)
+export function eventTimeToStore({ original, date, time, raidDateIso, eventId, timeZone = TIC_TIME_ZONE }) {
+  const parsed = parseStoredEventTime(original, raidDateIso, timeZone)
   const dateNorm = String(date ?? '').trim()
   const timeNorm = normalizeTime(time)
   const sameDisplay = parsed.ok
@@ -360,7 +456,7 @@ export function eventTimeToStore({ original, date, time, raidDateIso, eventId })
   if (sameDisplay) {
     return { ok: true, unchanged: true, stored: original == null ? '' : String(original), eventId }
   }
-  const validated = validateTicDateTime(dateNorm, timeNorm)
+  const validated = validateTicDateTime(dateNorm, timeNorm, timeZone)
   if (!validated.ok) return { ...validated, eventId }
   return {
     ok: true,
@@ -371,11 +467,11 @@ export function eventTimeToStore({ original, date, time, raidDateIso, eventId })
   }
 }
 
-/** First EQ channel stamp in a paste, as Eastern wall-clock fields, or null. */
-export function firstEqStampInPaste(paste) {
+/** First EQ channel stamp in a paste, shown in `timeZone`, or null. */
+export function firstEqStampInPaste(paste, timeZone = TIC_TIME_ZONE) {
   const match = String(paste ?? '').match(EQ_STAMP)
   if (!match) return null
-  const parsed = parseStoredEventTime(match[1], '')
+  const parsed = parseStoredEventTime(match[1], '', timeZone)
   if (!parsed.ok || parsed.kind !== 'wall') return null
   return { date: parsed.date, time: parsed.time }
 }

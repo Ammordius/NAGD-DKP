@@ -5,26 +5,28 @@ export default function TicDateTimeFields({
   onTimeChange,
   idPrefix = 'tic',
   labelled = true,
+  dateLabel = 'Date',
+  timeLabel = 'Time',
 }) {
   const dateId = `${idPrefix}-date`
   const timeId = `${idPrefix}-time`
   return (
     <span className="tic-datetime-fields">
-      {labelled && <label htmlFor={dateId}>Date (Eastern)</label>}
+      {labelled && <label htmlFor={dateId}>{dateLabel}</label>}
       <input
         id={dateId}
         type="date"
         value={date}
-        aria-label="Tic date (Eastern)"
+        aria-label={dateLabel}
         onChange={(event) => onDateChange(event.target.value)}
       />
-      {labelled && <label htmlFor={timeId}>Time (Eastern)</label>}
+      {labelled && <label htmlFor={timeId}>{timeLabel}</label>}
       <input
         id={timeId}
         type="time"
         step="1"
         value={time}
-        aria-label="Tic time (Eastern)"
+        aria-label={timeLabel}
         onChange={(event) => onTimeChange(event.target.value)}
       />
     </span>

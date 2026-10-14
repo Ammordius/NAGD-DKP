@@ -12,7 +12,8 @@ import { formatAccountCharacter, formatAccountCharacters } from '../lib/formatAc
 import { groupRaidLootByEvent } from '../lib/groupRaidLootByEvent'
 import { buildItemNameToIdMap, buildLootMobLookups, subgroupLootRowsByMob } from '../lib/lootMobSubgroups'
 import { usePersistedState } from '../lib/usePersistedState'
-import { displayTicEventName, eventFieldsForTimeSave, eventTimeToStore, fieldsForEdit } from '../lib/ticDateTime'
+import { displayTicEventName, eventFieldsForTimeSave, eventTimeToStore, fieldsForEdit, formatRaidSchedule, formatStoredClock } from '../lib/ticDateTime'
+import { profileTimeZone } from '../lib/siteTimeZone'
 import TicDateTimeFields from '../components/TicDateTimeFields'
 import { normalizeUiPreferences } from '../lib/uiPreferences'
 import { buildAccountAdminRows, filterAccountAdminRows } from '../lib/siteAdminCharacters'
@@ -51,6 +52,7 @@ export default function RaidDetail({ isOfficer, profile }) {
   const { raidId } = useParams()
   const { getAccountId, getAccountDisplayName, accounts, characterAccount } = useCharToAccountMap()
   const useCharacterAdminSelectors = normalizeUiPreferences(profile?.ui_preferences).useCharacterAdminSelectors
+  const siteZone = profileTimeZone(profile?.ui_preferences)
   const { data, error: swrError, isLoading, mutate } = useSWR(
     raidId ? `raid-detail-${raidId}` : null,
     () => fetchRaidDetail(raidId),
@@ -209,7 +211,7 @@ export default function RaidDetail({ isOfficer, profile }) {
   )
 
   const raidDateIso = raid?.date_iso || raid?.date || ''
-  const lootSections = useMemo(() => groupRaidLootByEvent(loot, events, raidDateIso), [loot, events, raidDateIso])
+  const lootSections = useMemo(() => groupRaidLootByEvent(loot, events, raidDateIso, siteZone), [loot, events, raidDateIso, siteZone])
   const mobLookups = useMemo(() => buildLootMobLookups(mobLoot, raidItemSources), [mobLoot, raidItemSources])
   const lootSectionsWithMobs = useMemo(
     () =>
@@ -301,6 +303,7 @@ export default function RaidDetail({ isOfficer, profile }) {
       time: editingEventTime,
       raidDateIso: raid?.date_iso || raid?.date || '',
       eventId,
+      timeZone: siteZone,
     })
     if (!result.ok) {
       setMutationError(result.error)
@@ -480,7 +483,7 @@ export default function RaidDetail({ isOfficer, profile }) {
           </Link>
         )}
       </h1>
-      <p style={{ color: '#a1a1aa' }}>{raid.date_iso || raid.date} · {(displayAttendeeCount > 0 ? displayAttendeeCount : (raid.attendees ?? '—'))} attendees</p>
+      <p style={{ color: '#a1a1aa' }}>{formatRaidSchedule(raid.date_iso || raid.date, siteZone).label || raid.date_iso || raid.date} · {(displayAttendeeCount > 0 ? displayAttendeeCount : (raid.attendees ?? '—'))} attendees</p>
 
       <h2>DKP by event</h2>
       <div className="card">
@@ -501,7 +504,7 @@ export default function RaidDetail({ isOfficer, profile }) {
                 <Fragment key={e.event_id}>
                   <tr>
                     <td>{e.event_order}</td>
-                    <td>{displayTicEventName(e, raidDateIso)}</td>
+                    <td>{displayTicEventName(e, raidDateIso, siteZone)}</td>
                     <td>
                       {isEditingDkp ? (
                         <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
@@ -534,7 +537,7 @@ export default function RaidDetail({ isOfficer, profile }) {
                             onDateChange={setEditingEventDate}
                             onTimeChange={setEditingEventTime}
                           />
-                          {fieldsForEdit(e.event_time, raid?.date_iso || raid?.date || '').unparsed && e.event_time ? (
+                          {fieldsForEdit(e.event_time, raid?.date_iso || raid?.date || '', siteZone).unparsed && e.event_time ? (
                             <span style={{ color: '#71717a', fontSize: '0.85rem' }}>Stored: {e.event_time}</span>
                           ) : null}
                           <button type="button" className="btn btn-ghost" onClick={() => handleSaveEventTime(e.event_id)} disabled={mutating}>Save</button>
@@ -542,10 +545,10 @@ export default function RaidDetail({ isOfficer, profile }) {
                         </span>
                       ) : (
                         <>
-                          {e.event_time || '—'}
+                          {formatStoredClock(e.event_time, raidDateIso, siteZone) || '—'}
                           {isOfficer && (
                             <button type="button" className="btn btn-ghost" style={{ marginLeft: '0.25rem', fontSize: '0.85rem' }} onClick={() => {
-                              const fields = fieldsForEdit(e.event_time, raid?.date_iso || raid?.date || '')
+                              const fields = fieldsForEdit(e.event_time, raid?.date_iso || raid?.date || '', siteZone)
                               setEditingEventTimeId(e.event_id)
                               setEditingEventDate(fields.date)
                               setEditingEventTime(fields.time)
@@ -617,7 +620,7 @@ export default function RaidDetail({ isOfficer, profile }) {
             >
               {events.map((e) => (
                 <option key={e.event_id} value={e.event_id}>
-                  #{e.event_order} {displayTicEventName(e, raidDateIso)} ({e.dkp_value} DKP)
+                  #{e.event_order} {displayTicEventName(e, raidDateIso, siteZone)} ({e.dkp_value} DKP)
                 </option>
               ))}
             </select>

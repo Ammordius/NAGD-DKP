@@ -157,7 +157,7 @@ export default function App() {
         <Route path="/login" element={<Login session={session} />} />
         <Route path="/auth/callback" element={<AuthCallback session={session} />} />
         <Route path="/" element={<RequireAuth><Dashboard isOfficer={isOfficer} profile={profile} /></RequireAuth>} />
-        <Route path="/raids" element={<RequireAuth><Raids isOfficer={isOfficer} /></RequireAuth>} />
+        <Route path="/raids" element={<RequireAuth><Raids isOfficer={isOfficer} profile={profile} /></RequireAuth>} />
         <Route path="/raids/:raidId" element={<RequireAuth><RaidDetail isOfficer={isOfficer} profile={profile} /></RequireAuth>} />
         <Route path="/dkp" element={<RequireAuth><DKP isOfficer={isOfficer} profile={profile} /></RequireAuth>} />
         <Route path="/officer" element={<RedirectPreserve to="/officer/RaidAdmin" />} />

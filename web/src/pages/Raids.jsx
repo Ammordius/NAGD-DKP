@@ -6,16 +6,20 @@ import { supabase } from '../lib/supabase'
 import { fetchAll } from '../lib/accountData'
 import { createCache } from '../lib/cache'
 import { usePersistedState } from '../lib/usePersistedState'
+import { floorNowInZone, formatRaidSchedule } from '../lib/ticDateTime'
+import { profileTimeZone } from '../lib/siteTimeZone'
 
-const CACHE_KEY_PREFIX = 'raids_month_v4_'
+const CACHE_KEY_PREFIX = 'raids_month_v5_'
 const CACHE_TTL = 15 * 60 * 1000 // 15 min per month
 
 const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
 const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
-function getRaidDateKey(r) {
-  const iso = (r.date_iso || r.date || '').toString().trim()
-  return iso.length >= 10 ? iso.slice(0, 10) : null
+function shiftIsoDate(isoDate, days) {
+  const [y, m, d] = isoDate.split('-').map(Number)
+  const utc = new Date(Date.UTC(y, m - 1, d))
+  utc.setUTCDate(utc.getUTCDate() + days)
+  return utc.toISOString().slice(0, 10)
 }
 
 /** Returns 3 (year, month) pairs for the window ending at endYear/endMonth, oldest first. */
@@ -63,7 +67,7 @@ function getMonthRange(year, month) {
     endYear += 1
   }
   const end = `${endYear}-${String(endMonth).padStart(2, '0')}-01`
-  return { start, end }
+  return { start: shiftIsoDate(start, -1), end: shiftIsoDate(end, 1) }
 }
 
 const CHUNK = 80
@@ -148,20 +152,20 @@ async function fetchOneMonth(year, month) {
 
 function mergeMonthData(arrays) {
   const raids = []
+  const seen = new Set()
   const paidOutByRaid = {}
   const ticsByRaid = {}
   const spentByRaid = {}
   arrays.forEach(({ raids: r, paidOutByRaid: p, ticsByRaid: t, spentByRaid: s }) => {
-    raids.push(...r)
+    for (const raid of r) {
+      const id = String(raid.raid_id ?? '')
+      if (seen.has(id)) continue
+      seen.add(id)
+      raids.push(raid)
+    }
     Object.assign(paidOutByRaid, p)
     Object.assign(ticsByRaid, t)
     Object.assign(spentByRaid, s)
-  })
-  raids.sort((a, b) => {
-    const ai = (a.date_iso || a.date || '').toString().trim()
-    const bi = (b.date_iso || b.date || '').toString().trim()
-    if (bi !== ai) return bi.localeCompare(ai)
-    return String(b.raid_id).localeCompare(String(a.raid_id))
   })
   return { raids, paidOutByRaid, ticsByRaid, spentByRaid }
 }
@@ -171,12 +175,15 @@ function isInWindow(windowMonths, year, month) {
   return windowMonths.some((wm) => wm.year === year && wm.month === month)
 }
 
-export default function Raids({ isOfficer }) {
-  const now = useMemo(() => new Date(), [])
-  const [windowEndYear, setWindowEndYear] = usePersistedState('/raids:windowEndYear', now.getFullYear())
-  const [windowEndMonth, setWindowEndMonth] = usePersistedState('/raids:windowEndMonth', now.getMonth() + 1)
-  const [viewYear, setViewYear] = usePersistedState('/raids:viewYear', now.getFullYear())
-  const [viewMonth, setViewMonth] = usePersistedState('/raids:viewMonth', now.getMonth() + 1)
+export default function Raids({ isOfficer, profile }) {
+  const timeZone = profileTimeZone(profile?.ui_preferences)
+  const zoneToday = useMemo(() => floorNowInZone(new Date(), timeZone), [timeZone])
+  const zoneYear = Number(zoneToday.date.slice(0, 4))
+  const zoneMonth = Number(zoneToday.date.slice(5, 7))
+  const [windowEndYear, setWindowEndYear] = usePersistedState('/raids:windowEndYear', zoneYear)
+  const [windowEndMonth, setWindowEndMonth] = usePersistedState('/raids:windowEndMonth', zoneMonth)
+  const [viewYear, setViewYear] = usePersistedState('/raids:viewYear', zoneYear)
+  const [viewMonth, setViewMonth] = usePersistedState('/raids:viewMonth', zoneMonth)
   const [raids, setRaids] = useState([])
   const [paidOutByRaid, setPaidOutByRaid] = useState({})
   const [ticsByRaid, setTicsByRaid] = useState({})
@@ -189,7 +196,7 @@ export default function Raids({ isOfficer }) {
     [windowEndYear, windowEndMonth]
   )
 
-  const isAtCurrentMonth = windowEndYear === now.getFullYear() && windowEndMonth === now.getMonth() + 1
+  const isAtCurrentMonth = windowEndYear === zoneYear && windowEndMonth === zoneMonth
 
   const viewIndex = useMemo(() => {
     const i = windowMonths.findIndex((wm) => wm.year === viewYear && wm.month === viewMonth)
@@ -252,8 +259,8 @@ export default function Raids({ isOfficer }) {
   }
 
   const goToCurrentMonth = () => {
-    setWindowEndYear(now.getFullYear())
-    setWindowEndMonth(now.getMonth() + 1)
+    setWindowEndYear(zoneYear)
+    setWindowEndMonth(zoneMonth)
   }
 
   const goPrevMonth = () => {
@@ -272,21 +279,37 @@ export default function Raids({ isOfficer }) {
     }
   }
 
+  const visibleRaids = useMemo(() => {
+    const out = []
+    for (const r of raids) {
+      const schedule = formatRaidSchedule(r.date_iso || r.date, timeZone)
+      if (schedule.dateKey) {
+        const [y, m] = schedule.dateKey.split('-').map(Number)
+        if (!isInWindow(windowMonths, y, m)) continue
+      }
+      out.push({ ...r, schedule })
+    }
+    out.sort((a, b) => {
+      const ai = a.schedule.sortKey || ''
+      const bi = b.schedule.sortKey || ''
+      if (bi !== ai) return bi.localeCompare(ai)
+      return String(b.raid_id).localeCompare(String(a.raid_id))
+    })
+    return out
+  }, [raids, timeZone, windowMonths])
+
   const raidsByDate = useMemo(() => {
     const byDate = {}
-    for (const r of raids) {
-      const key = getRaidDateKey(r)
+    for (const r of visibleRaids) {
+      const key = r.schedule.dateKey
       if (!key) continue
       if (!byDate[key]) byDate[key] = []
       byDate[key].push(r)
     }
     return byDate
-  }, [raids])
+  }, [visibleRaids])
 
-  const todayKey = useMemo(() => {
-    const t = new Date()
-    return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`
-  }, [])
+  const todayKey = zoneToday.date
 
   const calendarGrid = useMemo(
     () => buildCalendarGrid(viewYear, viewMonth, raidsByDate),
@@ -297,8 +320,8 @@ export default function Raids({ isOfficer }) {
 
   const raidsByMonth = useMemo(() => {
     const map = new Map()
-    for (const r of raids) {
-      const iso = (r.date_iso || r.date || '').toString().trim()
+    for (const r of visibleRaids) {
+      const iso = r.schedule.dateKey || ''
       const yyyyMm = iso.length >= 7 ? iso.slice(0, 7) : 'Unknown'
       if (!map.has(yyyyMm)) {
         if (yyyyMm === 'Unknown') {
@@ -316,7 +339,7 @@ export default function Raids({ isOfficer }) {
       return b.localeCompare(a)
     })
     return keys.map((k) => ({ key: k, ...map.get(k) }))
-  }, [raids])
+  }, [visibleRaids])
 
   if (loading && raids.length === 0)
     return (
@@ -377,7 +400,7 @@ export default function Raids({ isOfficer }) {
               ref={jumpToMonthInputRef}
               type="month"
               value={`${windowEndYear}-${String(windowEndMonth).padStart(2, '0')}`}
-              max={`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`}
+              max={`${zoneYear}-${String(zoneMonth).padStart(2, '0')}`}
               onChange={(e) => {
                 const v = e.target.value
                 if (!v) return
@@ -508,7 +531,7 @@ export default function Raids({ isOfficer }) {
                   const spent = spentByRaid[rid] ?? 0
                   return (
                     <tr key={r.raid_id}>
-                      <td>{r.date_iso || r.date || '—'}</td>
+                      <td>{r.schedule?.label || r.date_iso || r.date || '—'}</td>
                       <td><Link to={`/raids/${r.raid_id}`}>{r.raid_name || r.raid_id}</Link></td>
                       <td>{Math.round(Number(paidOut))}</td>
                       <td>{tics}</td>
