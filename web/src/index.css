@@ -79,6 +79,47 @@ label { display: block; margin-bottom: 0.25rem; font-size: 0.875rem; color: #a1a
 .attendee-list { max-height: 200px; overflow-y: auto; font-size: 0.9rem; display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: flex-start; }
 .attendee-list a { display: inline-block; padding: 0.2rem 0.5rem; background: #27272a; border-radius: 4px; color: #a78bfa; }
 .attendee-list a:hover { background: #3f3f46; text-decoration: none; }
+.attendee-count { display: inline-flex; align-items: center; gap: 0.45rem; white-space: nowrap; }
+.attendee-show-all {
+  padding: 0.1rem 0.4rem;
+  border: none;
+  background: transparent;
+  color: #a78bfa;
+  font: inherit;
+  font-size: 0.8rem;
+  line-height: 1.2;
+  cursor: pointer;
+  border-radius: 4px;
+}
+.attendee-show-all:hover { background: #27272a; color: #c4b5fd; }
+
+.my-dkp-total {
+  display: inline-flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.5rem;
+  margin: 0 0 0.85rem;
+  padding: 0.7rem 1rem 0.75rem;
+  border: 1px solid #d4a017;
+  border-radius: 10px;
+  background: linear-gradient(180deg, rgba(251, 191, 36, 0.2), rgba(24, 24, 27, 0.55));
+  box-shadow: 0 0 0 1px rgba(253, 230, 138, 0.18), 0 8px 22px rgba(0, 0, 0, 0.28);
+  color: #fde68a;
+  font-family: Palatino, "Palatino Linotype", "Book Antiqua", Georgia, serif;
+  font-size: 1.08rem;
+  letter-spacing: 0.01em;
+}
+.my-dkp-total-value {
+  color: #fbbf24;
+  font-size: 1.65rem;
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.my-dkp-total-detail {
+  color: #fcd34d;
+  font-size: 0.95rem;
+}
 
 /* Raids calendar */
 .calendar-wrap { padding: 1.25rem; max-width: 720px; }

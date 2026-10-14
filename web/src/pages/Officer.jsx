@@ -18,6 +18,9 @@ import {
 } from '../lib/officerRaidParse'
 import {
   defaultTicFields,
+  displayTicEventName,
+  dkpTicEventName,
+  eventFieldsForTimeSave,
   eventTimeToStore,
   fieldsForEdit,
   firstEqStampInPaste,
@@ -25,15 +28,16 @@ import {
   raidCalendarDate,
 } from '../lib/ticDateTime'
 import TicDateTimeFields from '../components/TicDateTimeFields'
+import AttendeeCountCell from '../components/AttendeeCountCell'
 
 /** Generate a unique raid_id for officer-created raids (string, no collision with numeric imports). */
 function generateRaidId() {
   return `manual-${Date.now()}`
 }
 
-function ticOptionLabel(event) {
+function ticOptionLabel(event, raidDateIso) {
   const order = event?.event_order != null && event.event_order !== '' ? `#${event.event_order} ` : ''
-  return `${order}${event?.event_name || 'Tic'}`
+  return `${order}${displayTicEventName(event, raidDateIso)}`
 }
 
 function MemberList({ label, rows, highlight, emptyText, onRowClick, onRowDoubleClick, className }) {
@@ -168,12 +172,6 @@ export default function Officer({ isOfficer }) {
   const [expandedEvents, setExpandedEvents] = useState({})
   const [showLootDropdown, setShowLootDropdown] = useState(false)
   const [showLootCharDropdown, setShowLootCharDropdown] = useState(false)
-
-  // Add single attendee to a tic
-  const [addToTicEventId, setAddToTicEventId] = useState('')
-  const [addToTicCharQuery, setAddToTicCharQuery] = useState('')
-  const [showCharDropdown, setShowCharDropdown] = useState(false)
-  const [addToTicResult, setAddToTicResult] = useState(null)
 
   const nameToChar = useMemo(() => {
     const m = {}
@@ -452,15 +450,6 @@ export default function Officer({ isOfficer }) {
     }
   }, [ticResult?.event_id])
 
-  // Keep addToTicEventId in sync with events (default to first tic; clear when no tics)
-  useEffect(() => {
-    if (events.length > 0 && (!addToTicEventId || !events.some((e) => e.event_id === addToTicEventId))) {
-      setAddToTicEventId(events[0].event_id)
-    } else if (events.length === 0 && addToTicEventId) {
-      setAddToTicEventId('')
-    }
-  }, [events, addToTicEventId])
-
   useEffect(() => {
     if (events.length > 0 && (!appendEventId || !events.some((e) => e.event_id === appendEventId))) {
       setAppendEventId(events[0].event_id)
@@ -477,57 +466,6 @@ export default function Officer({ isOfficer }) {
       setLootEventId('')
     }
   }, [events, lootEventId])
-
-  const handleAddAttendeeToTic = async () => {
-    if (!selectedRaidId || !addToTicEventId) return
-    const name = addToTicCharQuery.trim()
-    const char = nameToChar[name.toLowerCase()]
-    if (!char) {
-      setError('Select a character from the list (name must match DKP list).')
-      return
-    }
-    const alreadyInTic = eventAttendance.some((r) => String(r.event_id) === String(addToTicEventId) && String(r.char_id) === String(char.char_id))
-    if (alreadyInTic) {
-      setError(`${char.name} is already in this tic.`)
-      return
-    }
-    const accountId = charIdToAccountId[char.char_id] ?? null
-    if (accountId != null) {
-      const accountAlreadyInTic = eventAttendance.some(
-        (r) => String(r.event_id) === String(addToTicEventId) && charIdToAccountId[r.char_id] === accountId
-      )
-      if (accountAlreadyInTic) {
-        setError('That account already has a character in this tic. Only one character per account per tic is allowed.')
-        return
-      }
-    }
-    setMutating(true)
-    setAddToTicResult(null)
-    setError('')
-    const { error: attErr } = await supabase.rpc('add_attendee_to_tic', {
-      p_raid_id: selectedRaidId,
-      p_event_id: addToTicEventId,
-      p_char_id: String(char.char_id),
-      p_character_name: char.name,
-    })
-    if (attErr) {
-      setError(attErr.message)
-      setMutating(false)
-      return
-    }
-    await logOfficerAudit(supabase, {
-      action: 'add_attendee_to_tic',
-      target_type: 'raid_event_attendance',
-      target_id: addToTicEventId,
-      delta: { r: selectedRaidId, e: addToTicEventId, c: char.name },
-    })
-    setAddToTicResult(char.name)
-    setAddToTicCharQuery('')
-    try { sessionStorage.removeItem('dkp_leaderboard_v2') } catch (_) {}
-    await loadSelectedRaid()
-    globalMutate(DKP_DATA_KEY)
-    setMutating(false)
-  }
 
   const handleCreateAccount = async () => {
     setNewAccountError('')
@@ -727,14 +665,14 @@ export default function Officer({ isOfficer }) {
     const dkpValue = parseFloat(ticDkpValue) || 1
     const event_id = timestamp.eventId
     const maxOrder = Math.max(0, ...events.map((e) => e.event_order || 0))
-    const isFirstTic = events.length === 0
     const matched = preview.toAdd
+    const eventName = dkpTicEventName(ticTime) || 'DKP tic'
 
     const { error: evErr } = await supabase.rpc('add_officer_tic', {
       p_raid_id: selectedRaidId,
       p_event_id: event_id,
       p_event_order: maxOrder + 1,
-      p_event_name: isFirstTic ? 'On-time' : 'DKP tic',
+      p_event_name: eventName,
       p_dkp_value: String(dkpValue),
       p_event_time: timestamp.stored,
       p_attendees: matched,
@@ -815,7 +753,7 @@ export default function Officer({ isOfficer }) {
       raid_id: selectedRaidId,
       event_id,
       event_order: 1,
-      event_name: 'On-time',
+      event_name: dkpTicEventName(ticTime) || 'DKP tic',
       dkp_value: dkpValue,
       attendee_count: '0',
       event_time: timestamp.stored,
@@ -1108,7 +1046,8 @@ export default function Officer({ isOfficer }) {
       return
     }
     setMutating(true)
-    const { error: err } = await supabase.from('raid_events').update({ event_time: result.stored }).eq('raid_id', selectedRaidId).eq('event_id', eventId)
+    const patch = eventFieldsForTimeSave(existing?.event_name, result.stored, editingEventTime)
+    const { error: err } = await supabase.from('raid_events').update(patch).eq('raid_id', selectedRaidId).eq('event_id', eventId)
     setMutating(false)
     if (err) setError(err.message)
     else {
@@ -1157,7 +1096,7 @@ export default function Officer({ isOfficer }) {
         action: 'edit_loot_tic',
         target_type: 'raid_loot',
         target_id: String(row.id),
-        delta: { r: selectedRaidId, l: row.id, i: row.item_name, e: tic ? ticOptionLabel(tic) : eventId },
+        delta: { r: selectedRaidId, l: row.id, i: row.item_name, e: tic ? ticOptionLabel(tic, raid?.date_iso || raid?.date || '') : eventId },
       })
       try { sessionStorage.removeItem('dkp_leaderboard_v2') } catch (_) {}
       loadSelectedRaid()
@@ -1255,7 +1194,8 @@ export default function Officer({ isOfficer }) {
     return byEvent
   }, [eventAttendance])
 
-  const lootSections = useMemo(() => groupRaidLootByEvent(loot, events), [loot, events])
+  const raidDateIso = raid?.date_iso || raid?.date || ''
+  const lootSections = useMemo(() => groupRaidLootByEvent(loot, events, raidDateIso), [loot, events, raidDateIso])
   const officerItemNameToId = useMemo(() => buildItemNameToIdMap(lootMobJson), [lootMobJson])
   const officerMobLookups = useMemo(
     () => buildLootMobLookups(lootMobJson, raidItemSourcesJson),
@@ -1283,13 +1223,6 @@ export default function Officer({ isOfficer }) {
   }, [itemNames])
 
   const characterNamesList = useMemo(() => characters.map((c) => (c.name || '').trim()).filter(Boolean).sort((a, b) => a.localeCompare(b)), [characters])
-  const filteredCharacterNames = useMemo(() => {
-    const q = addToTicCharQuery.toLowerCase().trim()
-    if (!q) return characterNamesList.slice(0, 200)
-    return characterNamesList.filter((n) => n.toLowerCase().includes(q)).slice(0, 200)
-  }, [characterNamesList, addToTicCharQuery])
-
-  const showAddToTicDropdown = showCharDropdown
 
   const filteredLootCharacterNames = useMemo(() => {
     const q = lootCharName.toLowerCase().trim()
@@ -1536,7 +1469,7 @@ export default function Officer({ isOfficer }) {
       {selectedRaidId && raid && (
         <div className="officer-workspace">
           <div className="officer-col">
-          <section className={`card${showAddToTicDropdown ? ' officer-card--menu-open' : ''}`}>
+          <section className="card">
             <h2 style={{ marginTop: 0 }}>Add DKP tic (attendance)</h2>
             <p className="officer-hint">Paste a channel member list, one name per line, or a comma-separated list. Or move characters to Attending. Names are matched to the DKP list before anything is saved.</p>
             <details className="officer-hint">
@@ -1573,7 +1506,7 @@ export default function Officer({ isOfficer }) {
                 >
                   {events.map((e) => (
                     <option key={e.event_id} value={e.event_id}>
-                      #{e.event_order} {e.event_name} ({e.dkp_value} DKP)
+                      #{e.event_order} {displayTicEventName(e, raidDateIso)} ({e.dkp_value} DKP)
                     </option>
                   ))}
                 </select>
@@ -1653,7 +1586,7 @@ export default function Officer({ isOfficer }) {
             )}
             {ticDestination === 'existing' && appendEvent && (
               <p className="officer-hint">
-                #{appendEvent.event_order} {appendEvent.event_name} · {appendEvent.dkp_value} DKP
+                #{appendEvent.event_order} {displayTicEventName(appendEvent, raidDateIso)} · {appendEvent.dkp_value} DKP
                 {appendEvent.event_time ? ` · ${appendEvent.event_time}` : ''}. People already on this tic stay on it.
               </p>
             )}
@@ -1756,73 +1689,6 @@ export default function Officer({ isOfficer }) {
                 <ResultNames label="New this tic" names={ticResult.newThisTicDisplay} tone="muted" />
               </div>
             )}
-            {events.length > 0 && (
-              <>
-                <hr className="officer-divider" />
-                <h3 style={{ marginTop: 0 }}>Add one character</h3>
-                <p className="officer-hint">
-                  Someone missed the paste. DKP goes to that character&apos;s linked account.
-                </p>
-                <div className="officer-loot-fields">
-                  <select
-                    value={addToTicEventId}
-                    onChange={(e) => { setAddToTicEventId(e.target.value); setAddToTicResult(null) }}
-                    aria-label="Select DKP tic to add character to"
-                  >
-                    {events.map((e) => (
-                      <option key={e.event_id} value={e.event_id}>
-                        #{e.event_order} {e.event_name} ({e.dkp_value} DKP)
-                      </option>
-                    ))}
-                  </select>
-                  <div className="officer-suggest-wrap">
-                    <input
-                      type="text"
-                      name="dkp-tic-character"
-                      value={addToTicCharQuery}
-                      onChange={(e) => { setAddToTicCharQuery(e.target.value); setAddToTicResult(null); setShowCharDropdown(true) }}
-                      onFocus={() => setShowCharDropdown(true)}
-                      onBlur={() => setTimeout(() => setShowCharDropdown(false), 200)}
-                      placeholder="Character name (type to filter)"
-                      autoComplete="off"
-                      aria-expanded={showAddToTicDropdown}
-                      aria-haspopup="listbox"
-                      aria-controls="add-to-tic-char-list"
-                    />
-                    {showAddToTicDropdown && (
-                      <ul key={addToTicCharQuery} id="add-to-tic-char-list" className="card officer-suggest" role="listbox" onMouseDown={(e) => e.preventDefault()}>
-                        {filteredCharacterNames.length === 0 ? (
-                          <li style={{ color: '#71717a', cursor: 'default' }}>
-                            {characterNamesList.length === 0 ? 'Loading characters…' : (addToTicCharQuery.trim() ? 'No matching characters' : 'Type to filter')}
-                          </li>
-                        ) : (
-                          filteredCharacterNames.map((n) => (
-                            <li
-                              key={n}
-                              role="option"
-                              onMouseDown={(e) => {
-                                e.preventDefault()
-                                e.stopPropagation()
-                                setAddToTicCharQuery(n)
-                                setTimeout(() => setShowCharDropdown(false), 0)
-                              }}
-                            >
-                              {n}
-                            </li>
-                          ))
-                        )}
-                      </ul>
-                    )}
-                  </div>
-                  <button type="button" className="btn" onClick={handleAddAttendeeToTic} disabled={mutating || !addToTicCharQuery.trim()}>
-                    Add to tic
-                  </button>
-                </div>
-                {addToTicResult && (
-                  <p className="officer-success" style={{ marginBottom: 0 }}>Added {addToTicResult} to tic.</p>
-                )}
-              </>
-            )}
           </section>
 
           {/* Add loot */}
@@ -1900,7 +1766,7 @@ export default function Officer({ isOfficer }) {
                   aria-label="Tic for new loot"
                 >
                   {events.map((e) => (
-                    <option key={e.event_id} value={e.event_id}>{ticOptionLabel(e)}</option>
+                    <option key={e.event_id} value={e.event_id}>{ticOptionLabel(e, raidDateIso)}</option>
                   ))}
                 </select>
               )}
@@ -1920,7 +1786,7 @@ export default function Officer({ isOfficer }) {
               </div>
             </div>
             <hr className="officer-divider" />
-            <p className="officer-hint">Paste log award line here. The line must contain exact Character name match, # value and word &quot;DKP&quot; in so it&apos;s parsed. If the format does not match it will error. Refer to below example.</p>
+            <p className="officer-hint">Paste log award line here. The line must contain the full character name, a number, and the word &quot;DKP&quot;. A shorter name inside that name is not added, so deepmind does not also add mind. If the format does not match it will error. Refer to the example below.</p>
             <textarea
               className="officer-paste"
               value={lootLogPaste}
@@ -2017,12 +1883,12 @@ export default function Officer({ isOfficer }) {
             <div className="officer-table-scroll">
             <table>
               <thead>
-                <tr><th style={{ width: '2rem' }}></th><th>#</th><th>Event</th><th>DKP</th><th>Time</th><th>Attendees</th><th style={{ width: '5rem' }}></th></tr>
+                <tr><th>#</th><th>Event</th><th>DKP</th><th>Time</th><th>Attendees</th><th style={{ width: '5rem' }}></th></tr>
               </thead>
               <tbody>
                 {events.length === 0 && (
                   <tr>
-                    <td colSpan={7} style={{ color: '#71717a' }}>No tics. Use + to add a tic, then search for a character.</td>
+                    <td colSpan={6} style={{ color: '#71717a' }}>No tics. Use + to add a tic, then search for a character.</td>
                   </tr>
                 )}
                 {events.map((e) => {
@@ -2035,15 +1901,8 @@ export default function Officer({ isOfficer }) {
                   return (
                     <Fragment key={e.event_id}>
                       <tr>
-                        <td>
-                          {hasList && (
-                            <button type="button" className="btn btn-ghost" style={{ padding: '0.25rem', fontSize: '1rem' }} onClick={() => setExpandedEvents((prev) => ({ ...prev, [e.event_id]: !prev[e.event_id] }))} aria-expanded={isExpanded} title={isExpanded ? 'Hide attendees' : 'Show attendees'}>
-                              {isExpanded ? '−' : '+'}
-                            </button>
-                          )}
-                        </td>
                         <td>{e.event_order}</td>
-                        <td>{e.event_name}</td>
+                        <td>{displayTicEventName(e, raidDateIso)}</td>
                         <td>
                           {isEditingDkp ? (
                             <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
@@ -2087,14 +1946,24 @@ export default function Officer({ isOfficer }) {
                             </>
                           )}
                         </td>
-                        <td>{hasList ? `${attendees.length}${isExpanded ? '' : ' — click +'}` : (e.attendee_count && e.attendee_count !== '0' ? e.attendee_count : '—')}</td>
+                        <td>
+                          {hasList ? (
+                            <AttendeeCountCell
+                              count={attendees.length}
+                              expanded={isExpanded}
+                              onToggle={() => setExpandedEvents((prev) => ({ ...prev, [e.event_id]: !prev[e.event_id] }))}
+                            />
+                          ) : (
+                            e.attendee_count && e.attendee_count !== '0' ? e.attendee_count : '—'
+                          )}
+                        </td>
                         <td>
                           <button type="button" className="btn btn-ghost" style={{ fontSize: '0.85rem', color: '#f87171' }} onClick={() => handleDeleteEvent(e.event_id)} disabled={mutating} title="Remove tic">Remove</button>
                         </td>
                       </tr>
                       {hasList && isExpanded && (
                         <tr>
-                          <td colSpan={7} style={{ padding: '0.5rem 1rem', verticalAlign: 'top', backgroundColor: 'rgba(0,0,0,0.2)', borderBottom: '1px solid #27272a' }}>
+                          <td colSpan={6} style={{ padding: '0.5rem 1rem', verticalAlign: 'top', backgroundColor: 'rgba(0,0,0,0.2)', borderBottom: '1px solid #27272a' }}>
                             <div className="attendee-list">
                               {groupAttendeesByAccount(
                                 attendees.map((a) => ({ character_name: a.name, name: a.name, char_id: a.char_id })),
@@ -2207,13 +2076,13 @@ export default function Officer({ isOfficer }) {
                                     value={events.some((e) => String(e.event_id) === String(row.event_id ?? '')) ? String(row.event_id) : ''}
                                     disabled={mutating}
                                     onChange={(ev) => handleSaveLootEvent(row, ev.target.value)}
-                                    style={{ maxWidth: '11rem', fontSize: '0.85rem' }}
+                                    style={{ maxWidth: '18rem', fontSize: '0.85rem' }}
                                   >
                                     {!events.some((e) => String(e.event_id) === String(row.event_id ?? '')) && (
                                       <option value="">Misc</option>
                                     )}
                                     {events.map((e) => (
-                                      <option key={e.event_id} value={e.event_id}>{ticOptionLabel(e)}</option>
+                                      <option key={e.event_id} value={e.event_id}>{ticOptionLabel(e, raidDateIso)}</option>
                                     ))}
                                   </select>
                                 ) : (

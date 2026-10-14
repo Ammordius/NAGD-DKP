@@ -2,6 +2,9 @@ import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   defaultTicFields,
+  displayTicEventName,
+  dkpTicEventName,
+  eventFieldsForTimeSave,
   eventTimeToStore,
   firstEqStampInPaste,
   floorNowEastern,
@@ -162,5 +165,52 @@ describe('newTicTimestamp', () => {
     const result = newTicTimestamp('2026-10-10', '00:30:00')
     assert.equal(result.stored, '2026-10-10T00:30:00-04:00')
     assert.equal(result.eventId, `tic-${result.epochMs}`)
+  })
+})
+
+describe('dkpTicEventName', () => {
+  it('turns the entered clock into a 12-hour tic name with minutes', () => {
+    assert.equal(dkpTicEventName('21:00:00'), '9:00pm DKP tic')
+    assert.equal(dkpTicEventName('21:45'), '9:45pm DKP tic')
+    assert.equal(dkpTicEventName('09:05:00'), '9:05am DKP tic')
+    assert.equal(dkpTicEventName('00:00:00'), '12:00am DKP tic')
+    assert.equal(dkpTicEventName('12:00:00'), '12:00pm DKP tic')
+  })
+})
+
+describe('displayTicEventName', () => {
+  it('names a placeholder tic from its stored time', () => {
+    assert.equal(
+      displayTicEventName({ event_name: 'DKP tic', event_time: 'Wed Oct 14 21:00:00 2026' }),
+      '9:00pm DKP tic',
+    )
+    assert.equal(
+      displayTicEventName({ event_name: 'On-time', event_time: 'Wed Oct 14 21:45:32 2026' }),
+      '9:45pm DKP tic',
+    )
+    assert.equal(
+      displayTicEventName({ event_name: '9:00pm DKP tic', event_time: '2026-10-14T22:30:00-04:00' }),
+      '10:30pm DKP tic',
+    )
+  })
+
+  it('leaves an imported event name alone', () => {
+    assert.equal(
+      displayTicEventName({ event_name: '1 Hour Single/Double Boxing', event_time: 'Wed Oct 14 21:00:00 2026' }),
+      '1 Hour Single/Double Boxing',
+    )
+  })
+})
+
+describe('eventFieldsForTimeSave', () => {
+  it('renames a generic tic when the clock changes and keeps a custom name', () => {
+    assert.deepEqual(
+      eventFieldsForTimeSave('On-time', '2026-10-14T21:00:00-04:00', '21:00:00'),
+      { event_time: '2026-10-14T21:00:00-04:00', event_name: '9:00pm DKP tic' },
+    )
+    assert.deepEqual(
+      eventFieldsForTimeSave('Fire minis', '2026-10-14T21:00:00-04:00', '21:00:00'),
+      { event_time: '2026-10-14T21:00:00-04:00' },
+    )
   })
 })

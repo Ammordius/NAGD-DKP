@@ -70,11 +70,12 @@ export function MyDkpStandingsView({ accountId, totals, recentRaid, loading, fai
     : ''
   return (
     <div style={{ marginBottom: '1rem' }}>
-      <p style={{ color: '#a1a1aa', marginTop: 0, marginBottom: '0.35rem' }}>
+      <p className="my-dkp-total">
         {marked ? (
           <>
-            Your DKP total is: <strong>{balance}</strong>
-            {line.slice(marker.length)}
+            <span className="my-dkp-total-label">Your DKP total is:</span>
+            <strong className="my-dkp-total-value">{balance}</strong>
+            <span className="my-dkp-total-detail">{line.slice(marker.length)}</span>
           </>
         ) : line}
       </p>

@@ -139,6 +139,52 @@ describe('parseLootLogByMatch', () => {
     assert.equal(row.cost, 4)
     assert.equal(row.hasDkp, true)
   })
+
+  it('does not add a shorter name that sits inside the pasted character', () => {
+    const line = "[Wed Oct 14 15:52:32 2026] Inacht says out of character, 'Belt of Temporal Bindings congrats DEEPMIND 5 dkp'"
+    const [row] = parseLootLogByMatch(
+      line,
+      ['Mind', 'Deepmind', 'Inacht'],
+      ['Belt of Temporal Bindings', 'Mind'],
+    )
+    assert.equal(row.itemName, 'Belt of Temporal Bindings')
+    assert.deepEqual(row.characterNames, ['Deepmind'])
+    assert.equal(row.cost, 5)
+    assert.equal(row.hasDkp, true)
+  })
+
+  it('does not turn the pasted name into a shorter item', () => {
+    const [row] = parseLootLogByMatch(
+      "[Wed Oct 14 15:52:32 2026] Inacht says out of character, 'congrats DEEPMIND 5 dkp'",
+      ['Deepmind', 'Mind'],
+      ['Mind'],
+    )
+    assert.equal(row.itemName, '')
+    assert.deepEqual(row.characterNames, ['Deepmind'])
+  })
+
+  it('credits bobby and bobbyson only when each full name is in the paste', () => {
+    const [bobbyson] = parseLootLogByMatch(
+      "[Wed Oct 14 15:52:32 2026] Inacht says out of character, 'Some Item congrats Bobbyson 3 dkp'",
+      ['Bobby', 'Bobbyson'],
+      ['Some Item'],
+    )
+    assert.deepEqual(bobbyson.characterNames, ['Bobbyson'])
+
+    const [bobby] = parseLootLogByMatch(
+      "[Wed Oct 14 15:52:32 2026] Inacht says out of character, 'Some Item congrats Bobby 3 dkp'",
+      ['Bobby', 'Bobbyson'],
+      ['Some Item'],
+    )
+    assert.deepEqual(bobby.characterNames, ['Bobby'])
+
+    const [both] = parseLootLogByMatch(
+      "[Wed Oct 14 15:52:32 2026] Inacht says out of character, 'Some Item congrats Bobby and Bobbyson 3 dkp'",
+      ['Bobby', 'Bobbyson'],
+      ['Some Item'],
+    )
+    assert.deepEqual(both.characterNames, ['Bobbyson', 'Bobby'])
+  })
 })
 
 describe('resolveTicNames', () => {
