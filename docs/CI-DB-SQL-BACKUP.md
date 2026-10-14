@@ -1,6 +1,6 @@
 # Portable SQL backup
 
-This workflow exports guild DKP data as inspectable SQL so it can move between independent Supabase projects. It runs beside the CSV backup. It does not replace [CI-DB-BACKUP.md](CI-DB-BACKUP.md) or [CI-DB-RESTORE.md](CI-DB-RESTORE.md). Restore from this artifact is a later track. Do not run this against production until `SUPABASE_DB_URL` and `SQL_BACKUP_AGE_RECIPIENT` are set and that run is explicitly authorized.
+This workflow exports guild DKP data as inspectable SQL so it can move between independent Supabase projects. It runs beside the CSV backup. It does not replace [CI-DB-BACKUP.md](CI-DB-BACKUP.md) or [CI-DB-RESTORE.md](CI-DB-RESTORE.md). Restore from this artifact is [CI-DB-SQL-RESTORE.md](CI-DB-SQL-RESTORE.md). Do not run this against production until `SUPABASE_DB_URL` and `SQL_BACKUP_AGE_RECIPIENT` are set and that run is explicitly authorized.
 
 Another repository can discover and download the artifact without database credentials. See [CI-DB-SQL-BACKUP-FETCH.md](CI-DB-SQL-BACKUP-FETCH.md). That workflow does not restore a database. Decrypting the archive needs the offline age identity, which this backup workflow does not store.
 
@@ -39,7 +39,7 @@ Another repository can discover and download the artifact without database crede
 | `account_class_coverage` | Magelo rankings cache refreshed by CI. |
 | Views | Not source data. |
 
-A later restore should load the included tables, then call the existing refresh functions (`end_restore_load()` already runs the DKP, attendance, and character-spent refreshes). This track does not restore.
+Restore loads these tables in one transaction, then calls `end_restore_load()`. See [CI-DB-SQL-RESTORE.md](CI-DB-SQL-RESTORE.md).
 
 ## GitHub Actions
 

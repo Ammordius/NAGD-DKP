@@ -39,6 +39,11 @@ jobs:
           DKP_PG_TEST: '1'
         run: python3 scripts/test_sql_backup_fetch.py
 
+      - name: SQL restore test
+        env:
+          DKP_PG_TEST: '1'
+        run: python3 scripts/test_sql_restore.py
+
       - name: Build
         working-directory: web
         run: npm run build
