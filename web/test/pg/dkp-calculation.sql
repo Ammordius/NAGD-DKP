@@ -40,7 +40,8 @@ BEGIN
     ('t3-loot-other', 'Loot Other'),
     ('t3-link', 'Link Later'),
     ('t3-restore', 'Restore'),
-    ('t3-nameonly', 'Name Only');
+    ('t3-nameonly', 'Name Only'),
+    ('unlinked_Buyer', 'Unlinked Buyer');
 
   INSERT INTO characters (char_id, name) VALUES
     ('t3-c-a', 'SameName'),
@@ -51,7 +52,8 @@ BEGIN
     ('t3-c-amb2', 'Shared'),
     ('t3-c-win', 'Window'),
     ('t3-c-bad', 'BadEvent'),
-    ('t3-c-loot', 'Buyer'),
+    ('t3-c-loot', 'LootBuyer'),
+    ('unlinked_Buyer', 'Buyer'),
     ('t3-c-loot-other', 'Assignee'),
     ('t3-c-link', 'LinkMe'),
     ('t3-c-restore', 'Restored'),
@@ -68,6 +70,7 @@ BEGIN
     ('t3-c-win', 't3-win'),
     ('t3-c-bad', 't3-bad'),
     ('t3-c-loot', 't3-loot'),
+    ('unlinked_Buyer', 'unlinked_Buyer'),
     ('t3-c-loot-other', 't3-loot-other'),
     ('t3-c-nameonly', 't3-nameonly');
 
@@ -157,7 +160,7 @@ BEGIN
     (SELECT earned FROM account_dkp_summary WHERE account_id = 't3-a'), 4);
 
   INSERT INTO raid_loot (raid_id, event_id, item_name, char_id, character_name, cost)
-  VALUES ('t3-loot-raid', 'e1', 'Sword', 't3-c-loot', 'Buyer', '10');
+  VALUES ('t3-loot-raid', 'e1', 'Sword', 't3-c-loot', 'LootBuyer', '10');
   INSERT INTO loot_assignment (loot_id, assigned_char_id, assigned_character_name)
   SELECT id, 't3-c-loot-other', 'Assignee'
   FROM raid_loot WHERE raid_id = 't3-loot-raid' AND item_name = 'Sword';
@@ -172,6 +175,20 @@ BEGIN
   DELETE FROM raid_loot WHERE raid_id = 't3-loot-raid' AND item_name = 'Sword';
   PERFORM pg_temp.t3_expect('deleted loot',
     COALESCE((SELECT spent FROM account_dkp_summary WHERE account_id = 't3-loot'), 0), 0);
+
+  -- Placeholder account, loot stored under a Gamer Launch id that is not linked.
+  INSERT INTO raid_loot (raid_id, event_id, item_name, char_id, character_name, cost)
+  VALUES ('t3-loot-raid', 'e1', 'Ring', '999', 'Buyer', '10');
+  PERFORM pg_temp.t3_expect('unlinked char id falls through to unique name',
+    (SELECT spent FROM account_dkp_summary WHERE account_id = 'unlinked_Buyer'), 10);
+
+  INSERT INTO raid_loot (raid_id, event_id, item_name, char_id, character_name, cost)
+  VALUES ('t3-loot-raid', 'e1', 'SharedRing', '888', 'SameName', '7');
+  PERFORM pg_temp.t3_expect('unknown char id shared name does not spend',
+    COALESCE((SELECT spent FROM account_dkp_summary WHERE account_id = 't3-a'), 0), 0);
+  PERFORM pg_temp.t3_expect('unknown char id shared name does not spend on the other',
+    COALESCE((SELECT spent FROM account_dkp_summary WHERE account_id = 't3-b'), 0), 0);
+  DELETE FROM raid_loot WHERE raid_id = 't3-loot-raid' AND item_name = 'SharedRing';
 
   -- The tic was written before the character was linked, so linking does not credit it.
   -- A character is on a raid only when they are on a tic, and that tic write updates DKP.
@@ -206,6 +223,8 @@ BEGIN
   PERFORM public.refresh_account_dkp_summary_internal();
   PERFORM pg_temp.t3_expect('corrupt cache does not set earned',
     (SELECT earned FROM account_dkp_summary WHERE account_id = 't3-a'), 4);
+  PERFORM pg_temp.t3_expect('unlinked char id spent survives full rebuild',
+    (SELECT spent FROM account_dkp_summary WHERE account_id = 'unlinked_Buyer'), 10);
   PERFORM pg_temp.t3_expect('internal refresh leaves the corrupt cache',
     (SELECT dkp_earned FROM raid_attendance_dkp_by_account WHERE raid_id = 't3-names' AND account_id = 't3-a'),
     999999);

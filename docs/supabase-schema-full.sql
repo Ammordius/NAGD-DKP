@@ -966,9 +966,12 @@ AS $$
       SELECT MIN(ca.account_id)
       FROM character_account ca
       JOIN characters c ON c.char_id = ca.char_id
-      WHERE NULLIF(trim(p_char_id), '') IS NULL
-        AND NULLIF(trim(p_character_name), '') IS NOT NULL
+      WHERE NULLIF(trim(p_character_name), '') IS NOT NULL
         AND trim(c.name) = trim(p_character_name)
+        AND NOT EXISTS (
+          SELECT 1 FROM character_account known
+          WHERE known.char_id = trim(p_char_id)
+        )
       HAVING COUNT(DISTINCT ca.account_id) = 1
     )
   )
@@ -2726,9 +2729,10 @@ CREATE TABLE IF NOT EXISTS active_accounts (
 COMMENT ON TABLE active_accounts IS 'Optional: accounts always shown on DKP leaderboard (exceptions). Default view shows accounts with recent activity; this is for pin-to-list only.';
 
 -- Recompute earned and spent for the given accounts from attendance and the loot buyer.
--- Only reads rows that can resolve to those accounts (stamped account_id, or char_id / name
--- linked to exactly one of them). Same rules as resolve_dkp_account_id. Does not read
--- raid_attendance_dkp_by_account. Sets earned to 0 when the account has no tic credits left.
+-- Only reads rows that can resolve to those accounts (stamped account_id, a linked char_id,
+-- or a unique name when that char_id is not in character_account). Same rules as
+-- resolve_dkp_account_id. Does not read raid_attendance_dkp_by_account. Sets earned to 0
+-- when the account has no tic credits left.
 CREATE OR REPLACE FUNCTION public.refresh_account_dkp_for_accounts(p_account_ids text[])
 RETURNS void
 LANGUAGE plpgsql
@@ -2788,7 +2792,10 @@ BEGIN
         FROM raid_event_attendance rea
         JOIN unique_name_accounts un ON un.name = trim(rea.character_name)
         WHERE NULLIF(trim(rea.account_id), '') IS NULL
-          AND NULLIF(trim(rea.char_id::text), '') IS NULL
+          AND NOT EXISTS (
+            SELECT 1 FROM character_account ca
+            WHERE ca.char_id = trim(rea.char_id::text)
+          )
       ) tic
       WHERE tic.account_id IN (SELECT account_id FROM targets)
     ) c
@@ -2812,8 +2819,11 @@ BEGIN
              rl.raid_id
       FROM raid_loot rl
       JOIN unique_name_accounts un ON un.name = trim(rl.character_name)
-      WHERE NULLIF(trim(rl.char_id::text), '') IS NULL
-        AND NULLIF(trim(rl.character_name), '') IS NOT NULL
+      WHERE NULLIF(trim(rl.character_name), '') IS NOT NULL
+        AND NOT EXISTS (
+          SELECT 1 FROM character_account ca
+          WHERE ca.char_id = trim(rl.char_id::text)
+        )
     ) b
     LEFT JOIN raids r ON r.raid_id = b.raid_id
     WHERE b.account_id IN (SELECT account_id FROM targets)
