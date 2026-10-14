@@ -5,8 +5,8 @@ export default function TicDateTimeFields({
   onTimeChange,
   idPrefix = 'tic',
   labelled = true,
-  dateLabel = 'Date',
-  timeLabel = 'Time',
+  dateLabel = 'Date (Eastern)',
+  timeLabel = 'Time (Eastern)',
 }) {
   const dateId = `${idPrefix}-date`
   const timeId = `${idPrefix}-time`

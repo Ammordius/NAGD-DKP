@@ -54,29 +54,35 @@ describe('validateTicDateTime', () => {
   })
 })
 
-describe('profile timezone', () => {
-  it('stores a GMT+12 wall time and shows it the previous evening in EST', () => {
-    const stored = validateTicDateTime('2026-10-14', '14:00:00', 'Etc/GMT-12')
-    assert.equal(stored.ok, true)
-    assert.equal(stored.canonical, '2026-10-14T14:00:00+12:00')
-    const shown = formatRaidSchedule(stored.canonical, 'Etc/GMT+5')
-    assert.equal(shown.dateKey, '2026-10-13')
-    assert.equal(shown.label, '2026-10-13 21:00')
+describe('eastern site time', () => {
+  it('stores October as EDT and January as EST', () => {
+    const october = validateTicDateTime('2026-10-14', '14:00:00')
+    assert.equal(october.ok, true)
+    assert.equal(october.canonical, '2026-10-14T14:00:00-04:00')
+    const january = validateTicDateTime('2026-01-14', '14:00:00')
+    assert.equal(january.ok, true)
+    assert.equal(january.canonical, '2026-01-14T14:00:00-05:00')
   })
 
-  it('shows a New Zealand October afternoon as the previous evening in Eastern time', () => {
+  it('shows an offset instant in Eastern time, EDT in October and EST in January', () => {
+    const october = formatRaidSchedule('2026-10-14T02:00:00Z')
+    assert.equal(october.dateKey, '2026-10-13')
+    assert.equal(october.label, '2026-10-13 22:00')
+    const january = formatRaidSchedule('2026-01-14T02:00:00Z')
+    assert.equal(january.dateKey, '2026-01-13')
+    assert.equal(january.label, '2026-01-13 21:00')
+  })
+
+  it('ignores a caller timezone and keeps a date-only raid on that calendar date', () => {
     const stored = validateTicDateTime('2026-10-14', '14:00:00', 'Pacific/Auckland')
     assert.equal(stored.ok, true)
-    assert.equal(stored.canonical, '2026-10-14T14:00:00+13:00')
-    const shown = formatRaidSchedule(stored.canonical, 'America/New_York')
+    assert.equal(stored.canonical, '2026-10-14T14:00:00-04:00')
+    const shown = formatRaidSchedule('2026-10-14T14:00:00+13:00', 'Pacific/Auckland')
     assert.equal(shown.dateKey, '2026-10-13')
     assert.equal(shown.label, '2026-10-13 21:00')
-  })
-
-  it('keeps a date-only raid on that calendar date', () => {
-    const shown = formatRaidSchedule('2026-10-14', 'Pacific/Auckland')
-    assert.equal(shown.dateKey, '2026-10-14')
-    assert.equal(shown.label, '2026-10-14')
+    const dateOnly = formatRaidSchedule('2026-10-14', 'Pacific/Auckland')
+    assert.equal(dateOnly.dateKey, '2026-10-14')
+    assert.equal(dateOnly.label, '2026-10-14')
   })
 })
 

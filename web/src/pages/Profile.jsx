@@ -1,10 +1,9 @@
-import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { Link, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { loadAccountActivity } from '../lib/accountData'
 import { discordRaidNameRequired, normalizeUiPreferences } from '../lib/uiPreferences'
-import { listTimeZoneOptions, profileTimeZone } from '../lib/siteTimeZone'
 import MyDkpStandings from '../components/MyDkpStandings'
 
 const MAGELO_BASE = 'https://www.takproject.net/magelo/character.php?char='
@@ -15,15 +14,13 @@ const PROFILE_TABS = ['activity', 'characters']
 const RAID_ADMIN_TIPS = {
   showTicCharacterPicker: 'Raid Admin, Add DKP tic. On: the full character list is shown so you can move people into Attending, in addition to pasting a channel list. Off: that list is hidden and attendance comes from the paste. Characters already in Attending stay selected and are still credited until you clear them.',
   useCharacterAdminSelectors: 'Site Admin, Raid Admin loot, and the raid page. On: pickers list every character and filter by character name. Off: pickers show one row per account and match an account, alt, or character. The account and the character that will be credited are both shown.',
-  requireDiscordRaidName: 'Raid Admin, new raid. On: paste a Discord raid line. The name is the text after the colon, and the date is the text after the last dash. Off: enter a raid name. The date is today unless the text includes a Discord date.',
+  requireDiscordRaidName: 'Raid Admin, new raid. On: paste a Discord raid line. The name is the text after the colon, and the date is the text after the last dash. Off: enter a raid name. The date and time are Eastern (EST, or EDT during daylight saving) unless the text includes a Discord date.',
 }
-
-const TIMEZONE_TIP = 'Set your local Timezone for the site. This will affect how the Raids date and time is shown. Site Default is Eastern Standard Time EST time UTC-5. Shifts to Eastern Daylight Time (EDT, UTC-4) during summer months.'
 
 const TIP_DELAY_MS = 400
 const TIP_OFFSET = 8
 
-function RaidSettingTip({ label, tip, tipId, className = 'raid-admin-option', cardHeight = 220, children }) {
+function RaidSettingTip({ label, tip, tipId, children }) {
   const [open, setOpen] = useState(false)
   const [ready, setReady] = useState(false)
   const [position, setPosition] = useState({ top: 0, left: 0 })
@@ -52,6 +49,7 @@ function RaidSettingTip({ label, tip, tipId, className = 'raid-admin-option', ca
     if (!open || !anchorRef.current) return
     const rect = anchorRef.current.getBoundingClientRect()
     const cardWidth = 280
+    const cardHeight = 220
     let left = rect.right + TIP_OFFSET
     let top = rect.top
     if (left + cardWidth > window.innerWidth - 12) left = rect.left - cardWidth - TIP_OFFSET
@@ -59,7 +57,7 @@ function RaidSettingTip({ label, tip, tipId, className = 'raid-admin-option', ca
     if (top + cardHeight > window.innerHeight - 12) top = Math.max(12, window.innerHeight - cardHeight - 12)
     setPosition({ top, left })
     setReady(true)
-  }, [open, cardHeight])
+  }, [open])
 
   const popover = open && ready && createPortal(
     <div className="item-card-popover" style={{ top: position.top, left: position.left }} role="tooltip" id={tipId}>
@@ -78,7 +76,7 @@ function RaidSettingTip({ label, tip, tipId, className = 'raid-admin-option', ca
   return (
     <label
       ref={anchorRef}
-      className={className}
+      className="raid-admin-option"
       onMouseEnter={show}
       onMouseLeave={hide}
       onFocus={show}
@@ -134,11 +132,6 @@ export default function Profile({ profile, onProfileUpdate }) {
   const [prefsSaving, setPrefsSaving] = useState(false)
   const [prefsError, setPrefsError] = useState('')
   const [prefsSaved, setPrefsSaved] = useState(false)
-  const [timeZone, setTimeZone] = useState(() => profileTimeZone(profile?.ui_preferences))
-  const [zoneSaving, setZoneSaving] = useState(false)
-  const [zoneError, setZoneError] = useState('')
-  const [zoneSaved, setZoneSaved] = useState(false)
-  const timeZoneOptions = useMemo(() => listTimeZoneOptions(), [])
 
   useEffect(() => {
     setDisplayName(profile?.display_name || '')
@@ -146,24 +139,7 @@ export default function Profile({ profile, onProfileUpdate }) {
 
   useEffect(() => {
     setUiPrefs(normalizeUiPreferences(profile?.ui_preferences))
-    setTimeZone(profileTimeZone(profile?.ui_preferences))
   }, [profile?.ui_preferences])
-
-  async function handleSaveTimeZone() {
-    setZoneError('')
-    setZoneSaved(false)
-    setZoneSaving(true)
-    const { error: rpcErr } = await supabase.rpc('set_my_ui_preferences', {
-      p_preferences: { timeZone },
-    })
-    setZoneSaving(false)
-    if (rpcErr) {
-      setZoneError(rpcErr.message)
-      return
-    }
-    setZoneSaved(true)
-    onProfileUpdate?.()
-  }
 
   useEffect(() => {
     if (!profile?.account_id) {
@@ -319,34 +295,6 @@ export default function Profile({ profile, onProfileUpdate }) {
           </button>
         </div>
 
-        <div className="profile-settings-side">
-          <div className="card profile-timezone">
-            <h2>Timezone</h2>
-            <RaidSettingTip
-              className="profile-timezone-field"
-              label="Timezone"
-              tip={TIMEZONE_TIP}
-              tipId="profile-timezone-tip"
-              cardHeight={260}
-            >
-              <select
-                aria-label="Timezone"
-                aria-describedby="profile-timezone-tip"
-                value={timeZone}
-                onChange={(e) => { setTimeZone(e.target.value); setZoneSaved(false) }}
-              >
-                {timeZoneOptions.map((option) => (
-                  <option key={option.id} value={option.id}>{option.label}</option>
-                ))}
-              </select>
-            </RaidSettingTip>
-            {zoneError && <p className="profile-raid-admin-status" style={{ color: '#f87171' }}>{zoneError}</p>}
-            {zoneSaved && <p className="profile-raid-admin-status" style={{ color: '#86efac' }}>Saved.</p>}
-            <button type="button" className="btn" onClick={handleSaveTimeZone} disabled={zoneSaving}>
-              {zoneSaving ? 'Saving...' : 'Save'}
-            </button>
-          </div>
-
         {(profile?.role === 'officer' || profile?.role === 'siteadmin') && (
           <div className="card profile-raid-admin">
             <h2>Raid Admin settings</h2>
@@ -384,7 +332,6 @@ export default function Profile({ profile, onProfileUpdate }) {
             </button>
           </div>
         )}
-        </div>
       </div>
 
       <div className="card" style={{ maxWidth: '28rem', marginBottom: '1.5rem' }}>

@@ -201,7 +201,7 @@ ALTER TABLE profiles ADD COLUMN IF NOT EXISTS display_name TEXT;
 COMMENT ON COLUMN profiles.display_name IS 'Site profile name (the person). Not the game account label (accounts.display_name).';
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS ui_preferences JSONB NOT NULL DEFAULT '{}'::jsonb;
 COMMENT ON COLUMN profiles.ui_preferences IS
-  'Per site user presentation preferences. Allowed keys: showTicCharacterPicker, useCharacterAdminSelectors, raidNameOnly (booleans; missing keys mean on in the app), and timeZone (IANA id; missing means America/New_York). Not a game account and not shared by officers.';
+  'Per site user presentation preferences. Allowed keys: showTicCharacterPicker, useCharacterAdminSelectors, raidNameOnly. Missing keys mean on in the app. Not a game account and not shared by officers.';
 ALTER TABLE profiles DROP CONSTRAINT IF EXISTS profiles_ui_preferences_object;
 ALTER TABLE profiles ADD CONSTRAINT profiles_ui_preferences_object
   CHECK (jsonb_typeof(ui_preferences) = 'object');
@@ -5698,7 +5698,6 @@ DECLARE
   v_next jsonb := '{}'::jsonb;
   v_key text;
   v_allowed text[] := ARRAY['showTicCharacterPicker', 'useCharacterAdminSelectors', 'raidNameOnly'];
-  v_zone text;
 BEGIN
   v_uid := auth.uid();
   IF v_uid IS NULL THEN
@@ -5710,17 +5709,10 @@ BEGIN
 
   FOR v_key IN SELECT jsonb_object_keys(p_preferences)
   LOOP
-    IF v_key = 'timeZone' THEN
-      IF jsonb_typeof(p_preferences -> v_key) <> 'string' THEN
-        RAISE EXCEPTION 'Preference timeZone must be a time zone id';
-      END IF;
-      v_zone := p_preferences ->> 'timeZone';
-      IF v_zone !~ '^[A-Za-z0-9_+-]{1,40}(/[A-Za-z0-9_+-]{1,40}){0,3}$' THEN
-        RAISE EXCEPTION 'Preference timeZone must be a time zone id';
-      END IF;
-    ELSIF NOT (v_key = ANY (v_allowed)) THEN
+    IF NOT (v_key = ANY (v_allowed)) THEN
       RAISE EXCEPTION 'Unknown preference %', v_key;
-    ELSIF jsonb_typeof(p_preferences -> v_key) <> 'boolean' THEN
+    END IF;
+    IF jsonb_typeof(p_preferences -> v_key) <> 'boolean' THEN
       RAISE EXCEPTION 'Preference % must be true or false', v_key;
     END IF;
   END LOOP;
@@ -5746,14 +5738,6 @@ BEGIN
     END IF;
   END LOOP;
 
-  IF p_preferences ? 'timeZone' THEN
-    v_next := v_next || jsonb_build_object('timeZone', p_preferences -> 'timeZone');
-  ELSIF v_current ? 'timeZone'
-    AND jsonb_typeof(v_current -> 'timeZone') = 'string'
-    AND (v_current ->> 'timeZone') ~ '^[A-Za-z0-9_+-]{1,40}(/[A-Za-z0-9_+-]{1,40}){0,3}$' THEN
-    v_next := v_next || jsonb_build_object('timeZone', v_current -> 'timeZone');
-  END IF;
-
   UPDATE public.profiles
   SET ui_preferences = v_next,
       updated_at = now()
@@ -5764,7 +5748,7 @@ END;
 $$;
 
 COMMENT ON FUNCTION public.set_my_ui_preferences(jsonb) IS
-  'Owner-only: merge allowed boolean keys and timeZone into profiles.ui_preferences for auth.uid(). Omitted keys are kept. Does not change role, account claim, email, or unclaim fields.';
+  'Owner-only: merge allowed boolean keys into profiles.ui_preferences for auth.uid(). Does not change role, account claim, email, or unclaim fields.';
 
 REVOKE ALL ON FUNCTION public.set_my_ui_preferences(jsonb) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.set_my_ui_preferences(jsonb) TO authenticated;

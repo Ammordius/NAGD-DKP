@@ -462,17 +462,17 @@ BEGIN
   END IF;
 END $$;
 
+RESET SESSION AUTHORIZATION;
+UPDATE public.profiles
+SET ui_preferences = '{"useCharacterAdminSelectors": false, "timeZone": "Pacific/Auckland"}'::jsonb
+WHERE id = '22222222-2222-4222-8222-222222222222';
+
 SET SESSION AUTHORIZATION authenticated;
 SELECT set_config('request.jwt.claim.sub', '22222222-2222-4222-8222-222222222222', false);
 SELECT set_config('request.jwt.claim.role', 'authenticated', false);
-SELECT public.set_my_ui_preferences('{"timeZone": "Pacific/Auckland"}'::jsonb);
 SELECT public._expect_error(
-  'SELECT public.set_my_ui_preferences(''{"timeZone": "not a zone"}''::jsonb)',
-  '%time zone id%'
-);
-SELECT public._expect_error(
-  'SELECT public.set_my_ui_preferences(''{"timeZone": true}''::jsonb)',
-  '%time zone id%'
+  'SELECT public.set_my_ui_preferences(''{"timeZone": "Pacific/Auckland"}''::jsonb)',
+  '%Unknown preference%'
 );
 SELECT public.set_my_ui_preferences('{"showTicCharacterPicker": false}'::jsonb);
 
@@ -480,11 +480,11 @@ RESET SESSION AUTHORIZATION;
 DO $$
 BEGIN
   IF (SELECT ui_preferences FROM public.profiles WHERE id = '22222222-2222-4222-8222-222222222222')
-     IS DISTINCT FROM '{"showTicCharacterPicker": false, "useCharacterAdminSelectors": false, "timeZone": "Pacific/Auckland"}'::jsonb THEN
-    RAISE EXCEPTION 'timezone was not kept when raid settings were saved';
+     IS DISTINCT FROM '{"showTicCharacterPicker": false, "useCharacterAdminSelectors": false}'::jsonb THEN
+    RAISE EXCEPTION 'a saved timezone was kept with raid settings';
   END IF;
   IF (SELECT ui_preferences FROM public.profiles WHERE id = '11111111-1111-4111-8111-111111111111') ? 'timeZone' THEN
-    RAISE EXCEPTION 'saving an officer timezone changed the player profile';
+    RAISE EXCEPTION 'dropping an officer timezone changed the player profile';
   END IF;
 END $$;
 

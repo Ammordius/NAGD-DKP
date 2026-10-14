@@ -5,10 +5,9 @@ import { displayTicEventName } from './ticDateTime.js'
  * @param {Array<{ id?: number|string, event_id?: string|null }>} loot
  * @param {Array<{ event_id?: string|null, event_order?: number|string|null, event_name?: string|null, event_time?: string|null }>} events
  * @param {string} [raidDateIso]
- * @param {string} [timeZone]
  * @returns {Array<{ key: string, title: string, rows: typeof loot }>}
  */
-export function groupRaidLootByEvent(loot, events, raidDateIso = '', timeZone) {
+export function groupRaidLootByEvent(loot, events, raidDateIso = '') {
   if (!loot?.length) return []
 
   const eventById = new Map()
@@ -51,7 +50,7 @@ export function groupRaidLootByEvent(loot, events, raidDateIso = '', timeZone) {
     const id = String(ev?.event_id ?? '').trim()
     const rows = buckets.get(id)
     if (rows?.length) {
-      const name = displayTicEventName(ev, raidDateIso, timeZone)
+      const name = displayTicEventName(ev, raidDateIso)
       ordered.push({
         key: id,
         title: name || `Event ${ev?.event_order ?? ''}`,

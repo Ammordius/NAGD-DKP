@@ -6,8 +6,7 @@ import { supabase } from '../lib/supabase'
 import { fetchAll } from '../lib/accountData'
 import { createCache } from '../lib/cache'
 import { usePersistedState } from '../lib/usePersistedState'
-import { floorNowInZone, formatRaidSchedule } from '../lib/ticDateTime'
-import { profileTimeZone } from '../lib/siteTimeZone'
+import { floorNowEastern, formatRaidSchedule } from '../lib/ticDateTime'
 
 const CACHE_KEY_PREFIX = 'raids_month_v5_'
 const CACHE_TTL = 15 * 60 * 1000 // 15 min per month
@@ -175,9 +174,8 @@ function isInWindow(windowMonths, year, month) {
   return windowMonths.some((wm) => wm.year === year && wm.month === month)
 }
 
-export default function Raids({ isOfficer, profile }) {
-  const timeZone = profileTimeZone(profile?.ui_preferences)
-  const zoneToday = useMemo(() => floorNowInZone(new Date(), timeZone), [timeZone])
+export default function Raids({ isOfficer }) {
+  const zoneToday = useMemo(() => floorNowEastern(), [])
   const zoneYear = Number(zoneToday.date.slice(0, 4))
   const zoneMonth = Number(zoneToday.date.slice(5, 7))
   const [windowEndYear, setWindowEndYear] = usePersistedState('/raids:windowEndYear', zoneYear)
@@ -282,7 +280,7 @@ export default function Raids({ isOfficer, profile }) {
   const visibleRaids = useMemo(() => {
     const out = []
     for (const r of raids) {
-      const schedule = formatRaidSchedule(r.date_iso || r.date, timeZone)
+      const schedule = formatRaidSchedule(r.date_iso || r.date)
       if (schedule.dateKey) {
         const [y, m] = schedule.dateKey.split('-').map(Number)
         if (!isInWindow(windowMonths, y, m)) continue
@@ -296,7 +294,7 @@ export default function Raids({ isOfficer, profile }) {
       return String(b.raid_id).localeCompare(String(a.raid_id))
     })
     return out
-  }, [raids, timeZone, windowMonths])
+  }, [raids, windowMonths])
 
   const raidsByDate = useMemo(() => {
     const byDate = {}
