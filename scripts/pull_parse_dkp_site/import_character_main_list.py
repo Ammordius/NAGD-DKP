@@ -176,14 +176,108 @@ def _in_chars(s: str, existing: set[str]) -> bool:
     return bool(s and (s in existing or s.lower() in existing))
 
 
-def build_plan(pairs: list[tuple[str, str]], existing_chars: set[str], existing_accounts: set[str], existing_links: set[tuple[str, str]]) -> dict:
+def _split_toon_names(raw: str) -> list[str]:
+    return [p.strip() for p in (raw or "").split(",") if p.strip()]
+
+
+def _is_numeric_account_id(account_id: str) -> bool:
+    return bool(account_id) and account_id.isdigit()
+
+
+def _prefer_account_id(current: str | None, candidate: str) -> str:
+    if not candidate:
+        return current or ""
+    if not current:
+        return candidate
+    if _is_numeric_account_id(candidate) and not _is_numeric_account_id(current):
+        return candidate
+    return current
+
+
+def build_main_account_resolver(
+    accounts_rows: list[dict],
+    chars_rows: list[dict],
+    ca_rows: list[dict],
+    by_main: dict[str, list[str]],
+) -> dict[str, str]:
+    """Map main name (lowercase) -> existing account_id via toon_names / linked roster."""
+    char_id_to_name: dict[str, str] = {}
+    name_to_char_ids: dict[str, list[str]] = {}
+    for r in chars_rows:
+        cid = str(r.get("char_id") or "").strip()
+        name = str(r.get("name") or "").strip()
+        if cid:
+            char_id_to_name[cid] = name
+            name_to_char_ids.setdefault(cid.lower(), []).append(cid)
+        if name:
+            name_to_char_ids.setdefault(name.lower(), []).append(cid)
+
+    name_to_accounts: dict[str, set[str]] = {}
+    for r in accounts_rows:
+        aid = str(r.get("account_id") or "").strip()
+        if not aid:
+            continue
+        labels = [aid, str(r.get("display_name") or "").strip(), *_split_toon_names(str(r.get("toon_names") or ""))]
+        for label in labels:
+            if label:
+                name_to_accounts.setdefault(label.lower(), set()).add(aid)
+
+    char_id_to_account: dict[str, str] = {}
+    for r in ca_rows:
+        cid = str(r.get("char_id") or "").strip()
+        aid = str(r.get("account_id") or "").strip()
+        if cid and aid:
+            char_id_to_account[cid] = aid
+            cname = char_id_to_name.get(cid, "")
+            if cname:
+                name_to_accounts.setdefault(cname.lower(), set()).add(aid)
+
+    resolved: dict[str, str] = {}
+    for main, roster in by_main.items():
+        pick: str | None = None
+        for acc in name_to_accounts.get(main.lower(), set()):
+            pick = _prefer_account_id(pick, acc)
+
+        votes: dict[str, int] = {}
+        for char in roster:
+            for cid in name_to_char_ids.get(char.lower(), []):
+                acc = char_id_to_account.get(cid)
+                if acc:
+                    votes[acc] = votes.get(acc, 0) + 1
+            for acc in name_to_accounts.get(char.lower(), set()):
+                votes[acc] = votes.get(acc, 0) + 1
+
+        if votes:
+            best_acc, best_count = max(votes.items(), key=lambda item: (item[1], _is_numeric_account_id(item[0])))
+            if best_count >= 2 or main.lower() in {c.lower() for c in roster}:
+                pick = _prefer_account_id(pick, best_acc)
+
+        if pick:
+            resolved[main.lower()] = pick
+    return resolved
+
+
+def build_plan(
+    pairs: list[tuple[str, str]],
+    existing_chars: set[str],
+    existing_accounts: set[str],
+    existing_links: set[tuple[str, str]],
+    main_resolved: dict[str, str] | None = None,
+) -> dict:
     """Compute what to add: new characters, new accounts, new character_account links.
     existing_links uses normalized (lowercase) pairs for case-insensitive match.
     """
+    main_resolved = main_resolved or {}
+
+    def _resolved_main(m: str) -> str | None:
+        return main_resolved.get(m.lower())
+
     all_chars = {c for c, _ in pairs}
     all_mains = {m for _, m in pairs}
     new_chars = sorted(c for c in all_chars if not _in_chars(c, existing_chars))
-    new_accounts = sorted(m for m in all_mains if not _in_chars(m, existing_accounts))
+    new_accounts = sorted(
+        m for m in all_mains if not _in_chars(m, existing_accounts) and not _resolved_main(m)
+    )
     links_to_add = [(c, m) for c, m in pairs if (c.lower(), m.lower()) not in existing_links]
     links_to_add = list(dict.fromkeys(links_to_add))  # preserve order, dedupe
 
@@ -204,12 +298,18 @@ def build_plan(pairs: list[tuple[str, str]], existing_chars: set[str], existing_
             "new_accounts_count": len(new_accounts),
             "new_links_count": len(links_to_add),
             "existing_characters_used": sum(1 for c in all_chars if _in_chars(c, existing_chars)),
-            "existing_accounts_used": sum(1 for m in all_mains if _in_chars(m, existing_accounts)),
+            "existing_accounts_used": sum(
+                1 for m in all_mains if _in_chars(m, existing_accounts) or _resolved_main(m)
+            ),
             "existing_links_skipped": len([1 for c, m in pairs if (c.lower(), m.lower()) in existing_links]),
         },
         "new_characters": new_chars,
         "new_accounts": new_accounts,
-        "new_links": [{"char_id": c, "account_id": m} for c, m in links_to_add],
+        "new_links": [
+            {"char_id": c, "account_id": _resolved_main(m) or m}
+            for c, m in links_to_add
+        ],
+        "main_resolved": {m: _resolved_main(m) for m in all_mains if _resolved_main(m)},
         "by_main": {m: sorted(chars) for m, chars in sorted(by_main.items())},
     }
 
@@ -252,7 +352,7 @@ def main() -> int:
 
     print("Fetching existing characters, accounts, character_account from Supabase...", flush=True)
     chars_rows = fetch_all(client, "characters", "char_id,name")
-    accounts_rows = fetch_all(client, "accounts", "account_id,display_name")
+    accounts_rows = fetch_all(client, "accounts", "account_id,display_name,toon_names")
     ca_rows = fetch_all(client, "character_account", "char_id,account_id")
 
     # Characters: match list by char_id OR name (DB may use numeric char_id with name = display name)
@@ -309,7 +409,14 @@ def main() -> int:
             for ak in a_keys:
                 existing_links.add((ck.lower(), ak.lower()))
 
-    plan = build_plan(pairs, existing_chars, existing_accounts, existing_links)
+    by_main_preview: dict[str, list[str]] = {}
+    for c, m in pairs:
+        by_main_preview.setdefault(m, [])
+        if c not in by_main_preview[m]:
+            by_main_preview[m].append(c)
+    main_resolved = build_main_account_resolver(accounts_rows, chars_rows, ca_rows, by_main_preview)
+
+    plan = build_plan(pairs, existing_chars, existing_accounts, existing_links, main_resolved)
 
     # For --apply: resolve list (character_name, main_name) to DB (char_id, account_id)
     name_to_char_id: dict[str, str] = {}
@@ -332,6 +439,12 @@ def main() -> int:
         if disp:
             main_to_account_id[disp] = aid or disp
             main_to_account_id[disp.lower()] = aid or disp
+        for toon in _split_toon_names(str(r.get("toon_names") or "")):
+            main_to_account_id[toon] = aid
+            main_to_account_id[toon.lower()] = aid
+    for main, aid in (plan.get("main_resolved") or {}).items():
+        main_to_account_id[main] = aid
+        main_to_account_id[main.lower()] = aid
 
     # Always write review file and HTML with data inlined (so opening file:// shows details)
     args.review_out.parent.mkdir(parents=True, exist_ok=True)
@@ -406,9 +519,14 @@ def main() -> int:
     if new_links:
         resolved = []
         for row in new_links:
-            c, m = row["char_id"], row["account_id"]
+            c = row["char_id"]
             char_id = name_to_char_id.get(c) or name_to_char_id.get(c.lower()) or c
-            account_id = main_to_account_id.get(m) or main_to_account_id.get(m.lower()) or m
+            account_id = row["account_id"]
+            account_id = (
+                main_to_account_id.get(account_id)
+                or main_to_account_id.get(str(account_id).lower())
+                or account_id
+            )
             resolved.append({"char_id": char_id, "account_id": account_id})
         batch = 500
         for i in range(0, len(resolved), batch):

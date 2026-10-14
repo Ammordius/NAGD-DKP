@@ -128,7 +128,7 @@ def main() -> int:
     client = create_client(url, key)
     print("Fetching Supabase: characters, accounts, character_account...")
     characters = fetch_all(client, "characters", "char_id, name")
-    accounts = fetch_all(client, "accounts", "account_id, display_name")
+    accounts = fetch_all(client, "accounts", "account_id, display_name, toon_names")
     ca_list = fetch_all(client, "character_account", "char_id, account_id")
 
     # name (normalized lower for match) -> list of (char_id, name as stored)
@@ -140,6 +140,52 @@ def main() -> int:
             continue
         key_lower = name.lower()
         name_to_chars.setdefault(key_lower, []).append((cid, name))
+    char_id_to_name = {_norm(r.get("char_id", "")): _norm(r.get("name", "")) for r in characters}
+    name_to_account_ids: dict[str, set[str]] = {}
+    for r in accounts:
+        aid = _norm(r.get("account_id", ""))
+        if not aid:
+            continue
+        for label in (
+            aid,
+            _norm(r.get("display_name", "")),
+            *[_norm(p) for p in (_norm(r.get("toon_names", "")) or "").split(",") if _norm(p)],
+        ):
+            if label:
+                name_to_account_ids.setdefault(label.lower(), set()).add(aid)
+    for r in ca_list:
+        aid = _norm(r.get("account_id", ""))
+        cid = _norm(r.get("char_id", ""))
+        if not aid or not cid:
+            continue
+        cname = char_id_to_name.get(cid, "")
+        if cname:
+            name_to_account_ids.setdefault(cname.lower(), set()).add(aid)
+
+    def _prefer_account_id(current: str | None, candidate: str) -> str:
+        if not candidate:
+            return current or ""
+        if not current:
+            return candidate
+        if candidate.isdigit() and not current.isdigit():
+            return candidate
+        return current
+
+    def resolve_existing_account_id(main_name: str) -> str | None:
+        roster = main_to_chars.get(main_name, [])
+        pick: str | None = None
+        for acc in name_to_account_ids.get(main_name.lower(), set()):
+            pick = _prefer_account_id(pick, acc)
+        votes: dict[str, int] = {}
+        for char in roster:
+            for acc in name_to_account_ids.get(char.lower(), set()):
+                votes[acc] = votes.get(acc, 0) + 1
+        if votes:
+            best_acc = max(votes.items(), key=lambda item: (item[1], item[0].isdigit()))[0]
+            if votes[best_acc] >= 2 or main_name.lower() in {c.lower() for c in roster}:
+                pick = _prefer_account_id(pick, best_acc)
+        return pick
+
     # account: by display_name (normalized) and account_id
     account_by_display: dict[str, str] = {}
     account_by_id: dict[str, dict] = {}
@@ -161,6 +207,11 @@ def main() -> int:
 
     def get_or_create_account_id(main_name: str) -> str:
         """Return account_id for this main. Create if missing (or simulate in dry-run)."""
+        resolved = resolve_existing_account_id(main_name)
+        if resolved:
+            nonlocal accounts_existing
+            accounts_existing += 1
+            return resolved
         main_lower = main_name.lower()
         if main_lower in account_by_display:
             nonlocal accounts_existing
