@@ -1,8 +1,9 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { loadAccountActivity } from '../lib/accountData'
 import { normalizeUiPreferences } from '../lib/uiPreferences'
+import MyDkpStandings from '../components/MyDkpStandings'
 
 const MAGELO_BASE = 'https://www.takproject.net/magelo/character.php?char='
 const MIDDLE_DOT = '\u00B7'
@@ -39,8 +40,10 @@ export default function Profile({ profile, onProfileUpdate }) {
   const [error, setError] = useState('')
   const [refreshKey, setRefreshKey] = useState(0)
   const [addCharOpen, setAddCharOpen] = useState(false)
+  const [addCharReveal, setAddCharReveal] = useState(0)
+  const addCharSectionRef = useRef(null)
+  const addCharNameRef = useRef(null)
   const [addCharInput, setAddCharInput] = useState('')
-  const [addCharIdInput, setAddCharIdInput] = useState('')
   const [addCharError, setAddCharError] = useState('')
   const [addCharLoading, setAddCharLoading] = useState(false)
   const [displayName, setDisplayName] = useState(profile?.display_name || '')
@@ -90,6 +93,14 @@ export default function Profile({ profile, onProfileUpdate }) {
       setError('Failed to load account activity')
     })
   }, [profile?.account_id, refreshKey])
+
+  useEffect(() => {
+    if (!addCharReveal) return
+    const section = addCharSectionRef.current
+    if (!section) return
+    section.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    addCharNameRef.current?.focus({ preventScroll: true })
+  }, [addCharReveal])
 
   async function handleSaveDisplayName() {
     const name = displayName.trim()
@@ -164,7 +175,6 @@ export default function Profile({ profile, onProfileUpdate }) {
     setAddCharLoading(true)
     const { error: rpcErr } = await supabase.rpc('add_character_to_my_account', {
       p_character_name: raw,
-      p_char_id_override: addCharIdInput.trim() || null,
       p_account_id: null,
     })
     setAddCharLoading(false)
@@ -174,7 +184,6 @@ export default function Profile({ profile, onProfileUpdate }) {
     }
     setAddCharOpen(false)
     setAddCharInput('')
-    setAddCharIdInput('')
     setRefreshKey((k) => k + 1)
   }
 
@@ -254,8 +263,13 @@ export default function Profile({ profile, onProfileUpdate }) {
               </Link>
               {' '}(<code>{claimedAccount.account_id}</code>).
             </p>
+            <MyDkpStandings
+              accountId={profile.account_id}
+              activityByRaid={activityByRaid}
+              activityReady={!accountLoading}
+            />
             <p style={{ color: '#71717a', fontSize: '0.875rem', marginBottom: '0.75rem' }}>
-              View your characters and activity below. Use the + on the Characters tab to add alts. Unclaim below to release it and claim a different account.
+              View your characters and activity below. Use + Add character on the Characters tab to add alts. Unclaim below to release it and claim a different account.
             </p>
             {error && <p style={{ color: '#f87171', fontSize: '0.875rem', marginBottom: '0.5rem' }}>{error}</p>}
             <button
@@ -311,19 +325,25 @@ export default function Profile({ profile, onProfileUpdate }) {
           ) : tab === 'characters' ? (
             <div className="card">
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-                <h2 style={{ marginTop: 0 }}>Characters</h2>
+                <h2 style={{ margin: 0 }}>Characters</h2>
                 <button
                   type="button"
                   className="btn btn-ghost"
-                  style={{ padding: '0.25rem 0.5rem', fontSize: '1.25rem', lineHeight: 1 }}
-                  onClick={() => { setAddCharOpen(true); setAddCharError(''); setAddCharInput(''); setAddCharIdInput(''); }}
-                  title="Add alt to this account"
+                  style={{ padding: '0.35rem 0.65rem', fontSize: '0.95rem', lineHeight: 1.2, display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
+                  onClick={() => {
+                    setAddCharOpen(true)
+                    setAddCharError('')
+                    setAddCharInput('')
+                    setAddCharReveal((n) => n + 1)
+                  }}
+                  title="Add an alt to this account"
                 >
-                  +
+                  <span aria-hidden="true" style={{ fontSize: '1.25rem', fontWeight: 600, lineHeight: 1 }}>+</span>
+                  Add character
                 </button>
               </div>
               {characters.length === 0 ? (
-                <p style={{ color: '#71717a' }}>No characters linked to this account. Use + to add a character.</p>
+                <p style={{ color: '#71717a' }}>No characters linked to this account. Use + Add character to add one.</p>
               ) : (
                 <ul style={{ listStyle: 'none', paddingLeft: 0, margin: 0 }}>
                   {characters.map((c) => {
@@ -350,10 +370,11 @@ export default function Profile({ profile, onProfileUpdate }) {
           ) : null}
 
           {tab === 'characters' && addCharOpen && (
-            <div className="card" style={{ marginTop: '1rem', maxWidth: '24rem' }}>
+            <div ref={addCharSectionRef} className="card" style={{ marginTop: '1rem', maxWidth: '24rem', scrollMarginTop: '1rem' }}>
               <h3 style={{ marginTop: 0 }}>Add character to account</h3>
-              <p style={{ color: '#a1a1aa', fontSize: '0.875rem', marginBottom: '0.75rem' }}>Enter character name. If they’re not in the database, we’ll add them. Optionally provide char ID from server.</p>
+              <p style={{ color: '#a1a1aa', fontSize: '0.875rem', marginBottom: '0.75rem' }}>Enter character name. If they’re not in the database, we’ll add them.</p>
               <input
+                ref={addCharNameRef}
                 type="text"
                 className="input"
                 placeholder="Character name (required)"
@@ -362,23 +383,14 @@ export default function Profile({ profile, onProfileUpdate }) {
                 onKeyDown={(e) => e.key === 'Enter' && handleAddCharacter()}
                 style={{ marginBottom: '0.5rem', width: '100%' }}
               />
-              <input
-                type="text"
-                className="input"
-                placeholder="Char ID (optional, from server)"
-                value={addCharIdInput}
-                onChange={(e) => setAddCharIdInput(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleAddCharacter()}
-                style={{ marginBottom: '0.5rem', width: '100%' }}
-              />
               {addCharError && <p style={{ color: '#f87171', fontSize: '0.875rem', marginBottom: '0.5rem' }}>{addCharError}</p>}
               <div style={{ display: 'flex', gap: '0.5rem' }}>
                 <button type="button" className="btn" onClick={handleAddCharacter} disabled={addCharLoading}>
                   {addCharLoading ? 'Adding...' : 'Add'}
                 </button>
-<button type="button" className="btn btn-ghost" onClick={() => { setAddCharOpen(false); setAddCharError(''); setAddCharInput(''); setAddCharIdInput(''); }} disabled={addCharLoading}>
-              Cancel
-            </button>
+                <button type="button" className="btn btn-ghost" onClick={() => { setAddCharOpen(false); setAddCharError(''); setAddCharInput(''); }} disabled={addCharLoading}>
+                  Cancel
+                </button>
               </div>
             </div>
           )}

@@ -18,6 +18,9 @@ import {
 } from '../lib/officerRaidParse'
 import {
   defaultTicFields,
+  displayTicEventName,
+  dkpTicEventName,
+  eventFieldsForTimeSave,
   eventTimeToStore,
   fieldsForEdit,
   firstEqStampInPaste,
@@ -26,6 +29,7 @@ import {
 } from '../lib/ticDateTime'
 import TicDateTimeFields from '../components/TicDateTimeFields'
 import TicMemberPicker from '../components/TicMemberPicker'
+import AttendeeCountCell from '../components/AttendeeCountCell'
 import { normalizeUiPreferences, readTicDraft, writeTicDraft } from '../lib/uiPreferences'
 import { buildAccountAdminRows, filterAccountAdminRows } from '../lib/siteAdminCharacters'
 
@@ -34,9 +38,9 @@ function generateRaidId() {
   return `manual-${Date.now()}`
 }
 
-function ticOptionLabel(event) {
+function ticOptionLabel(event, raidDateIso) {
   const order = event?.event_order != null && event.event_order !== '' ? `#${event.event_order} ` : ''
-  return `${order}${event?.event_name || 'Tic'}`
+  return `${order}${displayTicEventName(event, raidDateIso)}`
 }
 
 function ResultNames({ label, names, tone }) {
@@ -437,15 +441,6 @@ export default function Officer({ isOfficer, profile }) {
     }
   }, [ticResult?.event_id])
 
-  // Keep addToTicEventId in sync with events (default to first tic; clear when no tics)
-  useEffect(() => {
-    if (events.length > 0 && (!addToTicEventId || !events.some((e) => e.event_id === addToTicEventId))) {
-      setAddToTicEventId(events[0].event_id)
-    } else if (events.length === 0 && addToTicEventId) {
-      setAddToTicEventId('')
-    }
-  }, [events, addToTicEventId])
-
   useEffect(() => {
     if (events.length > 0 && (!appendEventId || !events.some((e) => e.event_id === appendEventId))) {
       setAppendEventId(events[0].event_id)
@@ -721,14 +716,14 @@ export default function Officer({ isOfficer, profile }) {
     const dkpValue = parseFloat(ticDkpValue) || 1
     const event_id = timestamp.eventId
     const maxOrder = Math.max(0, ...events.map((e) => e.event_order || 0))
-    const isFirstTic = events.length === 0
     const matched = preview.toAdd
+    const eventName = dkpTicEventName(ticTime) || 'DKP tic'
 
     const { error: evErr } = await supabase.rpc('add_officer_tic', {
       p_raid_id: selectedRaidId,
       p_event_id: event_id,
       p_event_order: maxOrder + 1,
-      p_event_name: isFirstTic ? 'On-time' : 'DKP tic',
+      p_event_name: eventName,
       p_dkp_value: String(dkpValue),
       p_event_time: timestamp.stored,
       p_attendees: matched,
@@ -809,7 +804,7 @@ export default function Officer({ isOfficer, profile }) {
       raid_id: selectedRaidId,
       event_id,
       event_order: 1,
-      event_name: 'On-time',
+      event_name: dkpTicEventName(ticTime) || 'DKP tic',
       dkp_value: dkpValue,
       attendee_count: '0',
       event_time: timestamp.stored,
@@ -1109,7 +1104,8 @@ export default function Officer({ isOfficer, profile }) {
       return
     }
     setMutating(true)
-    const { error: err } = await supabase.from('raid_events').update({ event_time: result.stored }).eq('raid_id', selectedRaidId).eq('event_id', eventId)
+    const patch = eventFieldsForTimeSave(existing?.event_name, result.stored, editingEventTime)
+    const { error: err } = await supabase.from('raid_events').update(patch).eq('raid_id', selectedRaidId).eq('event_id', eventId)
     setMutating(false)
     if (err) setError(err.message)
     else {
@@ -1158,7 +1154,7 @@ export default function Officer({ isOfficer, profile }) {
         action: 'edit_loot_tic',
         target_type: 'raid_loot',
         target_id: String(row.id),
-        delta: { r: selectedRaidId, l: row.id, i: row.item_name, e: tic ? ticOptionLabel(tic) : eventId },
+        delta: { r: selectedRaidId, l: row.id, i: row.item_name, e: tic ? ticOptionLabel(tic, raid?.date_iso || raid?.date || '') : eventId },
       })
       try { sessionStorage.removeItem('dkp_leaderboard_v2') } catch (_) {}
       loadSelectedRaid()
@@ -1256,7 +1252,8 @@ export default function Officer({ isOfficer, profile }) {
     return byEvent
   }, [eventAttendance])
 
-  const lootSections = useMemo(() => groupRaidLootByEvent(loot, events), [loot, events])
+  const raidDateIso = raid?.date_iso || raid?.date || ''
+  const lootSections = useMemo(() => groupRaidLootByEvent(loot, events, raidDateIso), [loot, events, raidDateIso])
   const officerItemNameToId = useMemo(() => buildItemNameToIdMap(lootMobJson), [lootMobJson])
   const officerMobLookups = useMemo(
     () => buildLootMobLookups(lootMobJson, raidItemSourcesJson),
@@ -1616,7 +1613,7 @@ export default function Officer({ isOfficer, profile }) {
       {selectedRaidId && raid && (
         <div className="officer-workspace">
           <div className="officer-col">
-          <section className={`card${showAddToTicDropdown ? ' officer-card--menu-open' : ''}`}>
+          <section className="card">
             <h2 style={{ marginTop: 0 }}>Add DKP tic (attendance)</h2>
             <p className="officer-hint">
               {showTicCharacterPicker
@@ -1657,7 +1654,7 @@ export default function Officer({ isOfficer, profile }) {
                 >
                   {events.map((e) => (
                     <option key={e.event_id} value={e.event_id}>
-                      #{e.event_order} {e.event_name} ({e.dkp_value} DKP)
+                      #{e.event_order} {displayTicEventName(e, raidDateIso)} ({e.dkp_value} DKP)
                     </option>
                   ))}
                 </select>
@@ -1710,7 +1707,7 @@ export default function Officer({ isOfficer, profile }) {
             )}
             {ticDestination === 'existing' && appendEvent && (
               <p className="officer-hint">
-                #{appendEvent.event_order} {appendEvent.event_name} · {appendEvent.dkp_value} DKP
+                #{appendEvent.event_order} {displayTicEventName(appendEvent, raidDateIso)} · {appendEvent.dkp_value} DKP
                 {appendEvent.event_time ? ` · ${appendEvent.event_time}` : ''}. People already on this tic stay on it.
               </p>
             )}
@@ -2012,7 +2009,7 @@ export default function Officer({ isOfficer, profile }) {
                   aria-label="Tic for new loot"
                 >
                   {events.map((e) => (
-                    <option key={e.event_id} value={e.event_id}>{ticOptionLabel(e)}</option>
+                    <option key={e.event_id} value={e.event_id}>{ticOptionLabel(e, raidDateIso)}</option>
                   ))}
                 </select>
               )}
@@ -2032,7 +2029,7 @@ export default function Officer({ isOfficer, profile }) {
               </div>
             </div>
             <hr className="officer-divider" />
-            <p className="officer-hint">Or paste loot log lines. A line is added when the character, item, and optional &quot;N DKP&quot; all match. Those rows use the tic selected above.</p>
+            <p className="officer-hint">Paste log award line here. The line must contain the full character name, a number, and the word &quot;DKP&quot;. A shorter name inside that name is not added, so deepmind does not also add mind. If the format does not match it will error. Refer to the example below.</p>
             <textarea
               className="officer-paste"
               value={lootLogPaste}
@@ -2129,12 +2126,12 @@ export default function Officer({ isOfficer, profile }) {
             <div className="officer-table-scroll">
             <table>
               <thead>
-                <tr><th style={{ width: '2rem' }}></th><th>#</th><th>Event</th><th>DKP</th><th>Time</th><th>Attendees</th><th style={{ width: '5rem' }}></th></tr>
+                <tr><th>#</th><th>Event</th><th>DKP</th><th>Time</th><th>Attendees</th><th style={{ width: '5rem' }}></th></tr>
               </thead>
               <tbody>
                 {events.length === 0 && (
                   <tr>
-                    <td colSpan={7} style={{ color: '#71717a' }}>No tics. Use + to add a tic, then search for a character.</td>
+                    <td colSpan={6} style={{ color: '#71717a' }}>No tics. Use + to add a tic, then search for a character.</td>
                   </tr>
                 )}
                 {events.map((e) => {
@@ -2147,15 +2144,8 @@ export default function Officer({ isOfficer, profile }) {
                   return (
                     <Fragment key={e.event_id}>
                       <tr>
-                        <td>
-                          {hasList && (
-                            <button type="button" className="btn btn-ghost" style={{ padding: '0.25rem', fontSize: '1rem' }} onClick={() => setExpandedEvents((prev) => ({ ...prev, [e.event_id]: !prev[e.event_id] }))} aria-expanded={isExpanded} title={isExpanded ? 'Hide attendees' : 'Show attendees'}>
-                              {isExpanded ? '−' : '+'}
-                            </button>
-                          )}
-                        </td>
                         <td>{e.event_order}</td>
-                        <td>{e.event_name}</td>
+                        <td>{displayTicEventName(e, raidDateIso)}</td>
                         <td>
                           {isEditingDkp ? (
                             <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
@@ -2199,14 +2189,24 @@ export default function Officer({ isOfficer, profile }) {
                             </>
                           )}
                         </td>
-                        <td>{hasList ? `${attendees.length}${isExpanded ? '' : ' — click +'}` : (e.attendee_count && e.attendee_count !== '0' ? e.attendee_count : '—')}</td>
+                        <td>
+                          {hasList ? (
+                            <AttendeeCountCell
+                              count={attendees.length}
+                              expanded={isExpanded}
+                              onToggle={() => setExpandedEvents((prev) => ({ ...prev, [e.event_id]: !prev[e.event_id] }))}
+                            />
+                          ) : (
+                            e.attendee_count && e.attendee_count !== '0' ? e.attendee_count : '—'
+                          )}
+                        </td>
                         <td>
                           <button type="button" className="btn btn-ghost" style={{ fontSize: '0.85rem', color: '#f87171' }} onClick={() => handleDeleteEvent(e.event_id)} disabled={mutating} title="Remove tic">Remove</button>
                         </td>
                       </tr>
                       {hasList && isExpanded && (
                         <tr>
-                          <td colSpan={7} style={{ padding: '0.5rem 1rem', verticalAlign: 'top', backgroundColor: 'rgba(0,0,0,0.2)', borderBottom: '1px solid #27272a' }}>
+                          <td colSpan={6} style={{ padding: '0.5rem 1rem', verticalAlign: 'top', backgroundColor: 'rgba(0,0,0,0.2)', borderBottom: '1px solid #27272a' }}>
                             <div className="attendee-list">
                               {groupAttendeesByAccount(
                                 attendees.map((a) => ({ character_name: a.name, name: a.name, char_id: a.char_id })),
@@ -2319,13 +2319,13 @@ export default function Officer({ isOfficer, profile }) {
                                     value={events.some((e) => String(e.event_id) === String(row.event_id ?? '')) ? String(row.event_id) : ''}
                                     disabled={mutating}
                                     onChange={(ev) => handleSaveLootEvent(row, ev.target.value)}
-                                    style={{ maxWidth: '11rem', fontSize: '0.85rem' }}
+                                    style={{ maxWidth: '18rem', fontSize: '0.85rem' }}
                                   >
                                     {!events.some((e) => String(e.event_id) === String(row.event_id ?? '')) && (
                                       <option value="">Misc</option>
                                     )}
                                     {events.map((e) => (
-                                      <option key={e.event_id} value={e.event_id}>{ticOptionLabel(e)}</option>
+                                      <option key={e.event_id} value={e.event_id}>{ticOptionLabel(e, raidDateIso)}</option>
                                     ))}
                                   </select>
                                 ) : (

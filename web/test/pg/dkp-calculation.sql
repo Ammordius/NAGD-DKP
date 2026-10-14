@@ -39,7 +39,8 @@ BEGIN
     ('t3-loot', 'Loot Buyer'),
     ('t3-loot-other', 'Loot Other'),
     ('t3-link', 'Link Later'),
-    ('t3-restore', 'Restore');
+    ('t3-restore', 'Restore'),
+    ('t3-nameonly', 'Name Only');
 
   INSERT INTO characters (char_id, name) VALUES
     ('t3-c-a', 'SameName'),
@@ -53,7 +54,8 @@ BEGIN
     ('t3-c-loot', 'Buyer'),
     ('t3-c-loot-other', 'Assignee'),
     ('t3-c-link', 'LinkMe'),
-    ('t3-c-restore', 'Restored');
+    ('t3-c-restore', 'Restored'),
+    ('t3-c-nameonly', 'OnlyName');
 
   -- Same historical name, different char ids and accounts. Credit follows char id.
   INSERT INTO character_account (char_id, account_id) VALUES
@@ -66,7 +68,8 @@ BEGIN
     ('t3-c-win', 't3-win'),
     ('t3-c-bad', 't3-bad'),
     ('t3-c-loot', 't3-loot'),
-    ('t3-c-loot-other', 't3-loot-other');
+    ('t3-c-loot-other', 't3-loot-other'),
+    ('t3-c-nameonly', 't3-nameonly');
 
   INSERT INTO raids (raid_id, raid_name, date_iso) VALUES
     ('t3-names', 'Names', v_today),
@@ -100,6 +103,7 @@ BEGIN
     ('t3-win-31', 'e1', 't3-c-win', 'Window', 't3-win'),
     ('t3-win-61', 'e1', 't3-c-win', 'Window', 't3-win'),
     ('t3-bad-raid', 'e1', 't3-c-bad', 'BadEvent', 't3-bad'),
+    ('t3-bad-raid', 'e1', NULL, 'OnlyName', NULL),
     ('t3-link-raid', 'e1', 't3-c-link', 'LinkMe', NULL),
     ('t3-edit-raid', 'e1', 't3-c-a', 'SameName', 't3-a');
 
@@ -210,6 +214,27 @@ BEGIN
     (SELECT earned_60d FROM account_dkp_summary WHERE account_id = 't3-win'), 5);
   PERFORM pg_temp.t3_expect('bad event id earns 0',
     COALESCE((SELECT earned FROM account_dkp_summary WHERE account_id = 't3-bad'), 0), 0);
+  PERFORM pg_temp.t3_expect('unique name-only resolves',
+    CASE WHEN public.resolve_dkp_account_id(NULL, NULL, 'OnlyName') = 't3-nameonly' THEN 1 ELSE 0 END,
+    1);
+  PERFORM pg_temp.t3_expect('unique name-only row stored',
+    (SELECT count(*) FROM raid_event_attendance
+     WHERE raid_id = 't3-bad-raid' AND character_name = 'OnlyName'
+       AND char_id IS NULL AND account_id IS NULL),
+    1);
+  PERFORM pg_temp.t3_expect('unique name-only preflight',
+    (SELECT count(*) FROM raid_event_attendance rea
+     WHERE rea.raid_id = 't3-bad-raid' AND rea.character_name = 'OnlyName'
+       AND public.resolve_dkp_account_id(rea.account_id, rea.char_id::text, rea.character_name) IS NULL),
+    0);
+  PERFORM pg_temp.t3_expect('unique name-only earns nothing without an event',
+    COALESCE((SELECT earned FROM account_dkp_summary WHERE account_id = 't3-nameonly'), 0),
+    0);
+  PERFORM pg_temp.t3_expect('ambiguous name-only stays unresolved',
+    (SELECT count(*) FROM raid_event_attendance rea
+     WHERE rea.raid_id = 't3-amb-raid'
+       AND public.resolve_dkp_account_id(rea.account_id, rea.char_id::text, rea.character_name) IS NULL),
+    1);
 
   INSERT INTO raid_attendance_dkp_by_account (raid_id, account_id, dkp_earned)
   VALUES ('t3-bad-raid', 't3-bad', 50)
