@@ -420,14 +420,15 @@ $$;
 
 -- RPC: add a character to an account. Links existing character or creates a new one if not in DB.
 -- p_account_id: account to add to (optional); if null, uses current user's claimed account. Officers can pass any account_id.
--- p_character_name: display name (required). p_char_id_override: optional server char_id; if provided and exists, links that character.
--- After linking, refreshes account_dkp_summary so historical attendance credits the account without re-upload.
+-- p_character_name: display name (required). p_char_id_override: optional server char_id; kept for callers, unused by the account page.
+-- After linking, appends the character name to accounts.toon_names (and char_ids / toon_count).
+-- Does not refresh DKP. A character is on a raid only when they are on a tic, and adding
+-- or removing that tic updates the account total.
 CREATE OR REPLACE FUNCTION public.add_character_to_my_account(p_character_name text, p_char_id_override text DEFAULT NULL, p_account_id text DEFAULT NULL)
 RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
-SET statement_timeout = '120s'
 AS $$
 DECLARE
   v_account_id text;
@@ -435,6 +436,7 @@ DECLARE
   v_char_id text;
   v_name_trim text;
   v_char_id_use text;
+  v_linked_name text;
 BEGIN
   IF auth.uid() IS NULL THEN
     RAISE EXCEPTION 'Not authenticated';
@@ -461,70 +463,88 @@ BEGIN
   END IF;
 
   -- Resolve character: by char_id override if given, else by name
+  v_char_id := NULL;
   IF p_char_id_override IS NOT NULL AND trim(p_char_id_override) <> '' THEN
     SELECT c.char_id INTO v_char_id FROM characters c WHERE c.char_id = trim(p_char_id_override) LIMIT 1;
-    IF v_char_id IS NOT NULL THEN
-      INSERT INTO character_account (char_id, account_id) VALUES (v_char_id, v_account_id)
-      ON CONFLICT (char_id, account_id) DO NOTHING;
-      IF EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'public' AND p.proname = 'refresh_account_dkp_summary_internal') THEN
-        SET LOCAL statement_timeout = '120s';
-        PERFORM refresh_account_dkp_summary_internal();
-      END IF;
-      RETURN;
-    END IF;
   END IF;
 
-  -- Look up by name (exact match preferred, then ilike)
-  SELECT c.char_id INTO v_char_id
-  FROM characters c
-  WHERE trim(coalesce(c.name, '')) = v_name_trim
-  LIMIT 1;
   IF v_char_id IS NULL THEN
+    -- Look up by name (exact match preferred, then ilike)
     SELECT c.char_id INTO v_char_id
     FROM characters c
-    WHERE c.name ILIKE v_name_trim
+    WHERE trim(coalesce(c.name, '')) = v_name_trim
     LIMIT 1;
+    IF v_char_id IS NULL THEN
+      SELECT c.char_id INTO v_char_id
+      FROM characters c
+      WHERE c.name ILIKE v_name_trim
+      LIMIT 1;
+    END IF;
   END IF;
 
   IF v_char_id IS NOT NULL THEN
     INSERT INTO character_account (char_id, account_id) VALUES (v_char_id, v_account_id)
     ON CONFLICT (char_id, account_id) DO NOTHING;
-    IF EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'public' AND p.proname = 'refresh_account_dkp_summary_internal') THEN
-      SET LOCAL statement_timeout = '120s';
-      PERFORM refresh_account_dkp_summary_internal();
+  ELSE
+    -- Multiple matches by ilike: require exact name or char_id
+    IF (SELECT count(*) FROM characters c WHERE c.name ILIKE v_name_trim) > 1 THEN
+      RAISE EXCEPTION 'Multiple characters match; use exact name or char_id';
     END IF;
-    RETURN;
+
+    -- Not found: create new character and link. char_id defaults to the character name.
+    v_char_id_use := coalesce(nullif(trim(p_char_id_override), ''), v_name_trim);
+    BEGIN
+      INSERT INTO characters (char_id, name) VALUES (v_char_id_use, v_name_trim);
+      v_char_id := v_char_id_use;
+    EXCEPTION
+      WHEN unique_violation THEN
+        -- character already exists (e.g. char_id_use taken); try to link it
+        SELECT char_id INTO v_char_id FROM characters WHERE char_id = v_char_id_use LIMIT 1;
+        IF v_char_id IS NULL THEN
+          RAISE EXCEPTION 'Character with this ID already exists; use a different name or char_id';
+        END IF;
+    END;
+    INSERT INTO character_account (char_id, account_id) VALUES (v_char_id, v_account_id)
+    ON CONFLICT (char_id, account_id) DO NOTHING;
   END IF;
 
-  -- Multiple matches by ilike: require exact name or char_id
-  IF (SELECT count(*) FROM characters c WHERE c.name ILIKE v_name_trim) > 1 THEN
-    RAISE EXCEPTION 'Multiple characters match; use exact name or char_id';
+  SELECT COALESCE(NULLIF(trim(c.name), ''), v_name_trim)
+  INTO v_linked_name
+  FROM characters c
+  WHERE c.char_id = v_char_id;
+  IF v_linked_name IS NULL OR trim(v_linked_name) = '' THEN
+    v_linked_name := v_name_trim;
   END IF;
 
-  -- Not found: create new character and link
-  v_char_id_use := coalesce(nullif(trim(p_char_id_override), ''), v_name_trim);
-  INSERT INTO characters (char_id, name) VALUES (v_char_id_use, v_name_trim);
-  INSERT INTO character_account (char_id, account_id) VALUES (v_char_id_use, v_account_id)
-  ON CONFLICT (char_id, account_id) DO NOTHING;
-  IF EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'public' AND p.proname = 'refresh_account_dkp_summary_internal') THEN
-    SET LOCAL statement_timeout = '120s';
-    PERFORM refresh_account_dkp_summary_internal();
-  END IF;
+  -- Keep the denormalized account character list in sync with character_account.
+  UPDATE public.accounts a
+  SET
+    toon_names = CASE
+      WHEN a.toon_names IS NULL OR btrim(a.toon_names) = '' THEN v_linked_name
+      WHEN EXISTS (
+        SELECT 1
+        FROM unnest(string_to_array(a.toon_names, ',')) AS t(n)
+        WHERE lower(btrim(n)) = lower(v_linked_name)
+      ) THEN a.toon_names
+      ELSE rtrim(a.toon_names, ', ') || ', ' || v_linked_name
+    END,
+    char_ids = CASE
+      WHEN a.char_ids IS NULL OR btrim(a.char_ids) = '' THEN v_char_id
+      WHEN EXISTS (
+        SELECT 1
+        FROM unnest(string_to_array(a.char_ids, ',')) AS t(n)
+        WHERE btrim(n) = v_char_id
+      ) THEN a.char_ids
+      ELSE rtrim(a.char_ids, ',') || ',' || v_char_id
+    END,
+    toon_count = (
+      SELECT COUNT(DISTINCT ca.char_id)::integer
+      FROM public.character_account ca
+      WHERE ca.account_id = a.account_id
+    )
+  WHERE a.account_id = v_account_id;
+
   RETURN;
-EXCEPTION
-  WHEN unique_violation THEN
-    -- character already exists (e.g. char_id_use taken); try to link it
-    SELECT char_id INTO v_char_id FROM characters WHERE char_id = v_char_id_use LIMIT 1;
-    IF v_char_id IS NOT NULL THEN
-      INSERT INTO character_account (char_id, account_id) VALUES (v_char_id, v_account_id)
-      ON CONFLICT (char_id, account_id) DO NOTHING;
-      IF EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'public' AND p.proname = 'refresh_account_dkp_summary_internal') THEN
-        SET LOCAL statement_timeout = '120s';
-        PERFORM refresh_account_dkp_summary_internal();
-      END IF;
-      RETURN;
-    END IF;
-    RAISE EXCEPTION 'Character with this ID already exists; use a different name or char_id';
 END;
 $$;
 
@@ -2693,7 +2713,9 @@ CREATE TABLE IF NOT EXISTS active_accounts (
 COMMENT ON TABLE active_accounts IS 'Optional: accounts always shown on DKP leaderboard (exceptions). Default view shows accounts with recent activity; this is for pin-to-list only.';
 
 -- Recompute earned and spent for the given accounts from attendance and the loot buyer.
--- Does not read raid_attendance_dkp_by_account. Sets earned to 0 when the account has no tic credits left.
+-- Only reads rows that can resolve to those accounts (stamped account_id, or char_id / name
+-- linked to exactly one of them). Same rules as resolve_dkp_account_id. Does not read
+-- raid_attendance_dkp_by_account. Sets earned to 0 when the account has no tic credits left.
 CREATE OR REPLACE FUNCTION public.refresh_account_dkp_for_accounts(p_account_ids text[])
 RETURNS void
 LANGUAGE plpgsql
@@ -2708,6 +2730,82 @@ BEGIN
   INSERT INTO account_dkp_summary (
     account_id, display_name, earned, spent, earned_30d, earned_60d, last_activity_date, updated_at
   )
+  WITH targets AS (
+    SELECT DISTINCT trim(u.account_id) AS account_id
+    FROM unnest(p_account_ids) AS u(account_id)
+    WHERE u.account_id IS NOT NULL AND trim(u.account_id) <> ''
+  ),
+  unique_char_accounts AS (
+    SELECT ca.char_id, MIN(trim(ca.account_id)) AS account_id
+    FROM character_account ca
+    GROUP BY ca.char_id
+    HAVING COUNT(DISTINCT trim(ca.account_id)) = 1
+       AND MIN(trim(ca.account_id)) IN (SELECT account_id FROM targets)
+  ),
+  unique_name_accounts AS (
+    SELECT trim(c.name) AS name, MIN(trim(ca.account_id)) AS account_id
+    FROM character_account ca
+    JOIN characters c ON c.char_id = ca.char_id
+    WHERE NULLIF(trim(c.name), '') IS NOT NULL
+    GROUP BY trim(c.name)
+    HAVING COUNT(DISTINCT trim(ca.account_id)) = 1
+       AND MIN(trim(ca.account_id)) IN (SELECT account_id FROM targets)
+  ),
+  earned AS (
+    SELECT c.account_id,
+           SUM(c.dkp_earned) AS earned,
+           SUM(CASE WHEN public.raid_date_parsed(r.date_iso) >= (current_date - 30) THEN c.dkp_earned ELSE 0 END)::integer AS earned_30d,
+           SUM(CASE WHEN public.raid_date_parsed(r.date_iso) >= (current_date - 60) THEN c.dkp_earned ELSE 0 END)::integer AS earned_60d,
+           MAX(public.raid_date_parsed(r.date_iso)) AS last_earned
+    FROM (
+      SELECT tic.raid_id,
+             tic.account_id,
+             public.dkp_one_tic_value(tic.raid_id, tic.event_id) AS dkp_earned
+      FROM (
+        SELECT rea.raid_id, rea.event_id, trim(rea.account_id) AS account_id
+        FROM raid_event_attendance rea
+        WHERE NULLIF(trim(rea.account_id), '') IN (SELECT account_id FROM targets)
+        UNION
+        SELECT rea.raid_id, rea.event_id, uc.account_id
+        FROM raid_event_attendance rea
+        JOIN unique_char_accounts uc ON uc.char_id = trim(rea.char_id::text)
+        WHERE NULLIF(trim(rea.account_id), '') IS NULL
+        UNION
+        SELECT rea.raid_id, rea.event_id, un.account_id
+        FROM raid_event_attendance rea
+        JOIN unique_name_accounts un ON un.name = trim(rea.character_name)
+        WHERE NULLIF(trim(rea.account_id), '') IS NULL
+          AND NULLIF(trim(rea.char_id::text), '') IS NULL
+      ) tic
+      WHERE tic.account_id IN (SELECT account_id FROM targets)
+    ) c
+    LEFT JOIN raids r ON r.raid_id = c.raid_id
+    GROUP BY c.account_id
+  ),
+  spent AS (
+    SELECT b.account_id,
+           SUM(b.cost_num) AS spent,
+           MAX(public.raid_date_parsed(r.date_iso)) AS last_spent
+    FROM (
+      SELECT uc.account_id,
+             COALESCE(NULLIF(trim(rl.cost), '')::numeric, 0) AS cost_num,
+             rl.raid_id
+      FROM raid_loot rl
+      JOIN unique_char_accounts uc ON uc.char_id = trim(rl.char_id::text)
+      WHERE NULLIF(trim(rl.char_id::text), '') IS NOT NULL
+      UNION ALL
+      SELECT un.account_id,
+             COALESCE(NULLIF(trim(rl.cost), '')::numeric, 0) AS cost_num,
+             rl.raid_id
+      FROM raid_loot rl
+      JOIN unique_name_accounts un ON un.name = trim(rl.character_name)
+      WHERE NULLIF(trim(rl.char_id::text), '') IS NULL
+        AND NULLIF(trim(rl.character_name), '') IS NOT NULL
+    ) b
+    LEFT JOIN raids r ON r.raid_id = b.raid_id
+    WHERE b.account_id IN (SELECT account_id FROM targets)
+    GROUP BY b.account_id
+  )
   SELECT
     t.account_id,
     acc.display_name,
@@ -2717,36 +2815,10 @@ BEGIN
     COALESCE(e.earned_60d, 0),
     GREATEST(e.last_earned, s.last_spent),
     now()
-  FROM (
-    SELECT DISTINCT trim(u.account_id) AS account_id
-    FROM unnest(p_account_ids) AS u(account_id)
-    WHERE u.account_id IS NOT NULL AND trim(u.account_id) <> ''
-  ) t
+  FROM targets t
   JOIN accounts acc ON acc.account_id = t.account_id
-  LEFT JOIN (
-    SELECT c.account_id,
-           SUM(c.dkp_earned) AS earned,
-           SUM(CASE WHEN public.raid_date_parsed(r.date_iso) >= (current_date - 30) THEN c.dkp_earned ELSE 0 END)::integer AS earned_30d,
-           SUM(CASE WHEN public.raid_date_parsed(r.date_iso) >= (current_date - 60) THEN c.dkp_earned ELSE 0 END)::integer AS earned_60d,
-           MAX(public.raid_date_parsed(r.date_iso)) AS last_earned
-    FROM public.account_tic_credits() c
-    LEFT JOIN raids r ON r.raid_id = c.raid_id
-    GROUP BY c.account_id
-  ) e ON e.account_id = t.account_id
-  LEFT JOIN (
-    SELECT b.account_id,
-           SUM(b.cost_num) AS spent,
-           MAX(public.raid_date_parsed(r.date_iso)) AS last_spent
-    FROM (
-      SELECT public.resolve_loot_account_id(rl.id, rl.char_id::text, rl.character_name) AS account_id,
-             COALESCE(NULLIF(trim(rl.cost), '')::numeric, 0) AS cost_num,
-             rl.raid_id
-      FROM raid_loot rl
-    ) b
-    LEFT JOIN raids r ON r.raid_id = b.raid_id
-    WHERE b.account_id IS NOT NULL
-    GROUP BY b.account_id
-  ) s ON s.account_id = t.account_id
+  LEFT JOIN earned e ON e.account_id = t.account_id
+  LEFT JOIN spent s ON s.account_id = t.account_id
   ON CONFLICT (account_id) DO UPDATE SET
     earned = EXCLUDED.earned,
     spent = EXCLUDED.spent,
@@ -2952,7 +3024,8 @@ COMMENT ON FUNCTION public.refresh_account_dkp_summary_for_raid(TEXT, TEXT[]) IS
 GRANT EXECUTE ON FUNCTION public.refresh_account_dkp_summary_for_raid(TEXT, TEXT[]) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.refresh_account_dkp_summary_for_raid(TEXT, TEXT[]) TO service_role;
 
--- Linking or unlinking a character moves that account's earned and spent. Ordinary writes do not need Refresh DKP totals.
+-- Unlinking a character moves that account's earned and spent. Linking does not:
+-- a character is on a raid only when they are on a tic, and the tic write updates DKP.
 CREATE OR REPLACE FUNCTION public.trigger_character_account_dkp()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -2964,6 +3037,7 @@ DECLARE
   v_chars text[];
 BEGIN
   IF restore_load_in_progress() THEN RETURN NULL; END IF;
+  IF TG_OP = 'INSERT' THEN RETURN NULL; END IF;
   IF TG_OP = 'DELETE' THEN
     SELECT ARRAY_AGG(DISTINCT account_id), ARRAY_AGG(DISTINCT char_id)
     INTO v_accounts, v_chars
@@ -2977,16 +3051,23 @@ BEGIN
       SELECT account_id, char_id FROM new_rows
     ) s;
   ELSE
-    SELECT ARRAY_AGG(DISTINCT account_id), ARRAY_AGG(DISTINCT char_id)
-    INTO v_accounts, v_chars
-    FROM new_rows;
+    RETURN NULL;
   END IF;
 
+  -- Raids this character is on. Attendance exists only for tics.
   PERFORM public.refresh_raid_totals_for_ids(ARRAY(
     SELECT DISTINCT rea.raid_id
     FROM raid_event_attendance rea
     WHERE trim(rea.char_id::text) = ANY (v_chars)
-       OR rea.account_id = ANY (v_accounts)
+       OR (
+         NULLIF(trim(rea.char_id::text), '') IS NULL
+         AND trim(rea.character_name) IN (
+           SELECT trim(c.name)
+           FROM characters c
+           WHERE c.char_id = ANY (v_chars)
+             AND NULLIF(trim(c.name), '') IS NOT NULL
+         )
+       )
   ));
   PERFORM public.refresh_account_dkp_for_accounts(v_accounts);
   RETURN NULL;
