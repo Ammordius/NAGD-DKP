@@ -173,10 +173,11 @@ BEGIN
   PERFORM pg_temp.t3_expect('deleted loot',
     COALESCE((SELECT spent FROM account_dkp_summary WHERE account_id = 't3-loot'), 0), 0);
 
-  -- Historical attendance with a null account_id credits the account when the character is linked.
+  -- The tic was written before the character was linked, so linking does not credit it.
+  -- A character is on a raid only when they are on a tic, and that tic write updates DKP.
   INSERT INTO character_account (char_id, account_id) VALUES ('t3-c-link', 't3-link');
-  PERFORM pg_temp.t3_expect('link credits existing attendance',
-    (SELECT earned FROM account_dkp_summary WHERE account_id = 't3-link'), 6);
+  PERFORM pg_temp.t3_expect('link does not credit existing attendance',
+    COALESCE((SELECT earned FROM account_dkp_summary WHERE account_id = 't3-link'), 0), 0);
 
   -- Bulk load with triggers off, then one rebuild. Must not double-count.
   PERFORM public.begin_restore_load();
