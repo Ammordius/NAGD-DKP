@@ -8,7 +8,7 @@ The Officer page used to load characters with `.limit(5000)`. With 5,000+ charac
 
 ## 2. Script didn’t match what the RPC does
 
-The RPC `add_character_to_my_account` does **both** of these:
+The RPC `add_character_to_my_account` does **all** of these:
 
 1. **Ensure the character exists in `characters`**  
    - If not found by name or `char_id`, it inserts:  
@@ -17,6 +17,10 @@ The RPC `add_character_to_my_account` does **both** of these:
 
 2. **Link to the account**  
    - `INSERT INTO character_account (char_id, account_id)` with the same `char_id`.
+   - On the account page this `account_id` is the account in the URL. The Characters tab reads this table.
+
+3. **Append the name to `accounts.toon_names`**  
+   - If that comma-separated list does not already contain the character name, the RPC appends it and updates `char_ids` and `toon_count` for the same account.
 
 So for the app to “recognize” a character everywhere (account list, Officer tick/loot/add attendee), you need:
 
