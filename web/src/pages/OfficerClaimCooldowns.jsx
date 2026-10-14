@@ -3,7 +3,8 @@ import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useDkpData } from '../lib/dkpLeaderboard'
 import { usePersistedState } from '../lib/usePersistedState'
-import { buildAccountColumnRows, buildCharacterRows, characterMatchesQuery } from '../lib/siteAdminCharacters'
+import { buildAccountAdminRows, buildAccountColumnRows, buildCharacterRows, characterMatchesQuery, filterAccountAdminRows, accountColumnLabel } from '../lib/siteAdminCharacters'
+import { normalizeUiPreferences } from '../lib/uiPreferences'
 import { canRemoveSiteUser, removalBlockReason } from '../lib/siteAdminRemoveUser'
 
 const SUGGEST_LIMIT = 80
@@ -23,7 +24,12 @@ function gameAccountLabel(account) {
   return account.display_name?.trim() || account.toon_names?.split(',')[0]?.trim() || account.account_id
 }
 
-export default function OfficerClaimCooldowns({ isOfficer, isSiteAdmin = false }) {
+function accountListLabel(row) {
+  if (!row?.account_id || row.label === row.account_id) return row?.label || ''
+  return `${row.label} (${row.account_id})`
+}
+
+export default function OfficerClaimCooldowns({ isOfficer, isSiteAdmin = false, profile }) {
   const navigate = useNavigate()
   const [profiles, setProfiles] = useState([])
   const [loading, setLoading] = useState(true)
@@ -44,6 +50,9 @@ export default function OfficerClaimCooldowns({ isOfficer, isSiteAdmin = false }
   const { apiData, isLoading: dkpLoading, mutate } = useDkpData()
   const [charQuery, setCharQuery] = usePersistedState('/officer/SiteAdmin:charQuery', '')
   const [selectedCharId, setSelectedCharId] = useState(null)
+  const [selectedAccountId, setSelectedAccountId] = useState(null)
+  const useCharacterAdminSelectors = normalizeUiPreferences(profile?.ui_preferences).useCharacterAdminSelectors
+  const adminModeRef = useRef(useCharacterAdminSelectors)
   const [showSuggest, setShowSuggest] = useState(false)
   const [suggestIndex, setSuggestIndex] = useState(0)
   const [charError, setCharError] = useState('')
@@ -65,16 +74,29 @@ export default function OfficerClaimCooldowns({ isOfficer, isSiteAdmin = false }
     [apiData?.characters, apiData?.character_account, apiData?.accounts]
   )
 
+  const accountAdminRows = useMemo(
+    () => buildAccountAdminRows(apiData?.characters, apiData?.character_account, apiData?.accounts),
+    [apiData?.characters, apiData?.character_account, apiData?.accounts]
+  )
+
   const filteredRows = useMemo(
     () => characterRows.filter((row) => characterMatchesQuery(row, charQuery)),
     [characterRows, charQuery]
   )
+  const filteredAccountRows = useMemo(
+    () => filterAccountAdminRows(accountAdminRows, charQuery),
+    [accountAdminRows, charQuery]
+  )
+  const pickerRows = useCharacterAdminSelectors ? filteredRows : filteredAccountRows
 
-  const suggestRows = filteredRows.slice(0, SUGGEST_LIMIT)
+  const suggestRows = pickerRows.slice(0, SUGGEST_LIMIT)
   const selectedCharacter = useMemo(
     () => characterRows.find((row) => row.char_id === selectedCharId) || null,
     [characterRows, selectedCharId]
   )
+  const actionAccountId = selectedAccountId || selectedCharacter?.account_id || null
+  const actionAccount = actionAccountId ? accountsById.get(String(actionAccountId)) : null
+  const actionAccountLabel = actionAccount ? accountColumnLabel(actionAccount) : (actionAccountId || '')
 
   const activeCharRows = useMemo(
     () => buildAccountColumnRows(
@@ -246,19 +268,43 @@ export default function OfficerClaimCooldowns({ isOfficer, isSiteAdmin = false }
 
   const selectCharacter = useCallback((row) => {
     if (!row) return
-    setSelectedCharId(row.char_id)
+    setSelectedCharId(row.char_id || null)
+    setSelectedAccountId(row.account_id || null)
     setCharQuery(row.label)
     setShowSuggest(false)
     setCharError('')
   }, [setCharQuery])
 
-  const handleSetActive = useCallback(async () => {
-    if (!selectedCharacter) return
-    if (!selectedCharacter.account_id) {
-      setCharError('That character is not linked to an account.')
+  useEffect(() => {
+    if (adminModeRef.current === useCharacterAdminSelectors) return
+    const wasCharacterMode = adminModeRef.current
+    adminModeRef.current = useCharacterAdminSelectors
+    if (wasCharacterMode) {
+      const fromChar = characterRows.find((row) => row.char_id === selectedCharId)
+      if (fromChar?.account_id) {
+        setSelectedAccountId(fromChar.account_id)
+        const accountRow = accountAdminRows.find((row) => row.account_id === fromChar.account_id)
+        if (accountRow) setCharQuery(accountRow.label)
+      } else if (fromChar) {
+        const unlinked = accountAdminRows.find((row) => row.unlinked && row.char_id === fromChar.char_id)
+        if (unlinked) setCharQuery(unlinked.label)
+      }
       return
     }
-    const accountId = selectedCharacter.account_id
+    if (!selectedAccountId) return
+    const keep = characterRows.find((row) => row.char_id === selectedCharId && row.account_id === selectedAccountId)
+    const match = keep || characterRows.find((row) => row.account_id === selectedAccountId)
+    if (!match) return
+    setSelectedCharId(match.char_id)
+    setCharQuery(match.label)
+  }, [useCharacterAdminSelectors, characterRows, accountAdminRows, selectedCharId, selectedAccountId, setCharQuery])
+
+  const handleSetActive = useCallback(async () => {
+    if (!actionAccountId) {
+      setCharError(selectedCharId ? 'That character is not linked to an account.' : 'Select an account.')
+      return
+    }
+    const accountId = actionAccountId
     setCharMutating(true)
     setCharError('')
     const { error: upsertErr } = await supabase
@@ -280,15 +326,14 @@ export default function OfficerClaimCooldowns({ isOfficer, isSiteAdmin = false }
     }
     setSelectedInactiveAccountId((current) => (current === accountId ? null : current))
     await mutate()
-  }, [selectedCharacter, mutate])
+  }, [actionAccountId, selectedCharId, mutate])
 
   const handleSetInactive = useCallback(async () => {
-    if (!selectedCharacter) return
-    if (!selectedCharacter.account_id) {
-      setCharError('That character is not linked to an account.')
+    if (!actionAccountId) {
+      setCharError(selectedCharId ? 'That character is not linked to an account.' : 'Select an account.')
       return
     }
-    const accountId = selectedCharacter.account_id
+    const accountId = actionAccountId
     setCharMutating(true)
     setCharError('')
     const { error: updateErr } = await supabase
@@ -311,7 +356,7 @@ export default function OfficerClaimCooldowns({ isOfficer, isSiteAdmin = false }
     }
     setSelectedActiveAccountId((current) => (current === accountId ? null : current))
     await mutate()
-  }, [selectedCharacter, mutate])
+  }, [actionAccountId, selectedCharId, mutate])
 
   const handleRemoveActive = useCallback(async () => {
     if (!selectedActiveAccountId) return
@@ -366,7 +411,7 @@ export default function OfficerClaimCooldowns({ isOfficer, isSiteAdmin = false }
     }
     if (event.key === 'Enter') {
       event.preventDefault()
-      const row = (showSuggest && suggestRows[suggestIndex]) || (filteredRows.length === 1 ? filteredRows[0] : null)
+      const row = (showSuggest && suggestRows[suggestIndex]) || (pickerRows.length === 1 ? pickerRows[0] : null)
       if (row) selectCharacter(row)
     }
   }
@@ -439,17 +484,25 @@ export default function OfficerClaimCooldowns({ isOfficer, isSiteAdmin = false }
       </section>
 
       <section className="card" style={{ marginBottom: '1.5rem' }}>
-        <h2 style={{ marginTop: 0 }}>Set characters as Active or Inactive</h2>
+        <h2 style={{ marginTop: 0 }}>Set accounts as active or inactive</h2>
         <p style={{ color: '#71717a', fontSize: '0.9rem', marginTop: 0 }}>
-          Characters on DKP Leaderboard are automatically hidden if they have no attendance or loot in the last 120 days. You can set a character as Active so they always show up, or you can set a character as Inactive to always hide them.
+          Active and inactive apply to a whole game account, including every linked character. Accounts on the DKP leaderboard are hidden when they have no attendance or loot in the last 120 days. Set an account active so it always shows, or inactive so it stays hidden.
+          {useCharacterAdminSelectors
+            ? ' Search by character name. The account in the label is the one that changes.'
+            : ' Search by account, character, alt, or account id. Each account is listed once.'}
         </p>
         {charError && <p className="error" style={{ marginBottom: '0.75rem' }}>{charError}</p>}
+        {actionAccountId && (
+          <p className="officer-hint" style={{ marginTop: 0 }}>
+            This sets the whole account {actionAccountLabel} (<code>{actionAccountId}</code>) active or inactive.
+          </p>
+        )}
         <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.75rem', marginBottom: '0.5rem' }}>
-          <button type="button" onClick={handleSetActive} disabled={charMutating || !selectedCharacter}>
-            Set Active
+          <button type="button" onClick={handleSetActive} disabled={charMutating || !actionAccountId}>
+            Set account active
           </button>
-          <button type="button" onClick={handleSetInactive} disabled={charMutating || !selectedCharacter}>
-            Set Inactive
+          <button type="button" onClick={handleSetInactive} disabled={charMutating || !actionAccountId}>
+            Set account inactive
           </button>
         </div>
         <div className="officer-suggest-wrap" style={{ maxWidth: '28rem' }}>
@@ -459,14 +512,15 @@ export default function OfficerClaimCooldowns({ isOfficer, isSiteAdmin = false }
             onChange={(e) => {
               setCharQuery(e.target.value)
               setSelectedCharId(null)
+              setSelectedAccountId(null)
               setShowSuggest(true)
             }}
             onFocus={() => setShowSuggest(true)}
             onBlur={() => setTimeout(() => setShowSuggest(false), 200)}
             onKeyDown={handleCharQueryKeyDown}
-            placeholder="Character name"
+            placeholder={useCharacterAdminSelectors ? 'Character name' : 'Account, character, or alt'}
             autoComplete="off"
-            aria-label="Search characters"
+            aria-label={useCharacterAdminSelectors ? 'Search characters' : 'Search accounts'}
             aria-autocomplete="list"
             aria-expanded={showSuggestList}
             aria-controls="site-admin-char-suggest"
@@ -481,14 +535,14 @@ export default function OfficerClaimCooldowns({ isOfficer, isSiteAdmin = false }
             >
               {suggestRows.length === 0 ? (
                 <li style={{ color: '#71717a', cursor: 'default' }}>
-                  {dkpLoading || !apiData ? 'Loading characters…' : 'No matching characters'}
+                  {dkpLoading || !apiData ? 'Loading…' : (useCharacterAdminSelectors ? 'No matching characters' : 'No matching accounts')}
                 </li>
               ) : (
                 suggestRows.map((row, index) => (
                   <li
-                    key={row.char_id}
+                    key={row.key || row.char_id}
                     role="option"
-                    aria-selected={index === suggestIndex || selectedCharId === row.char_id}
+                    aria-selected={index === suggestIndex || (row.account_id ? row.account_id === actionAccountId : row.char_id === selectedCharId)}
                     style={index === suggestIndex ? { background: '#27272a' } : undefined}
                     onMouseDown={(e) => {
                       e.preventDefault()
@@ -500,7 +554,7 @@ export default function OfficerClaimCooldowns({ isOfficer, isSiteAdmin = false }
                   </li>
                 ))
               )}
-              {filteredRows.length > SUGGEST_LIMIT && (
+              {pickerRows.length > SUGGEST_LIMIT && (
                 <li style={{ color: '#71717a', cursor: 'default' }}>
                   Showing first {SUGGEST_LIMIT} matches. Keep typing, or pick from the list below.
                 </li>
@@ -511,35 +565,42 @@ export default function OfficerClaimCooldowns({ isOfficer, isSiteAdmin = false }
         <div
           className="officer-member-list"
           role="listbox"
-          aria-label="Characters"
+          aria-label={useCharacterAdminSelectors ? 'Characters' : 'Accounts'}
           style={{ maxWidth: '28rem', marginTop: '0.5rem' }}
         >
-          {filteredRows.length === 0 ? (
+          {pickerRows.length === 0 ? (
             <p className="officer-member-empty">
-              {dkpLoading || !apiData ? 'Loading characters…' : (query ? 'No matching characters' : 'No characters')}
+              {dkpLoading || !apiData
+                ? (useCharacterAdminSelectors ? 'Loading characters…' : 'Loading accounts…')
+                : (query
+                  ? (useCharacterAdminSelectors ? 'No matching characters' : 'No matching accounts')
+                  : (useCharacterAdminSelectors ? 'No characters' : 'No accounts'))}
             </p>
           ) : (
-            filteredRows.map((row) => (
-              <button
-                key={row.char_id}
-                ref={selectedCharId === row.char_id ? selectedCharRef : null}
-                type="button"
-                role="option"
-                aria-selected={selectedCharId === row.char_id}
-                className={selectedCharId === row.char_id ? 'is-highlighted' : undefined}
-                title={row.label}
-                onClick={() => selectCharacter(row)}
-              >
-                {row.label}
-              </button>
-            ))
+            pickerRows.map((row) => {
+              const selected = row.account_id ? row.account_id === actionAccountId : row.char_id === selectedCharId
+              return (
+                <button
+                  key={row.key || row.char_id}
+                  ref={selected ? selectedCharRef : null}
+                  type="button"
+                  role="option"
+                  aria-selected={selected}
+                  className={selected ? 'is-highlighted' : undefined}
+                  title={row.label}
+                  onClick={() => selectCharacter(row)}
+                >
+                  {row.label}
+                </button>
+              )
+            })
           )}
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(16rem, 1fr))', gap: '1rem', marginTop: '1rem' }}>
           <div>
-            <strong>Active Chars</strong>
-            <div className="officer-member-list" role="listbox" aria-label="Active Chars" style={{ marginTop: '0.35rem' }}>
+            <strong>Active accounts</strong>
+            <div className="officer-member-list" role="listbox" aria-label="Active accounts" style={{ marginTop: '0.35rem' }}>
               {activeCharRows.length === 0 ? (
                 <p className="officer-member-empty">None</p>
               ) : (
@@ -550,11 +611,11 @@ export default function OfficerClaimCooldowns({ isOfficer, isSiteAdmin = false }
                       role="option"
                       aria-selected={selectedActiveAccountId === row.account_id}
                       className={selectedActiveAccountId === row.account_id ? 'is-highlighted' : undefined}
-                      title={row.label}
+                      title={accountListLabel(row)}
                       onClick={() => setSelectedActiveAccountId(row.account_id)}
                       style={{ flex: '1 1 auto', width: 'auto' }}
                     >
-                      {row.label}
+                      {accountListLabel(row)}
                     </button>
                     <Link to={`/accounts/${row.account_id}`} style={{ fontSize: '0.8rem', padding: '0 0.45rem', flex: '0 0 auto' }}>View</Link>
                   </div>
@@ -571,8 +632,8 @@ export default function OfficerClaimCooldowns({ isOfficer, isSiteAdmin = false }
             </button>
           </div>
           <div>
-            <strong>Inactive Chars</strong>
-            <div className="officer-member-list" role="listbox" aria-label="Inactive Chars" style={{ marginTop: '0.35rem' }}>
+            <strong>Inactive accounts</strong>
+            <div className="officer-member-list" role="listbox" aria-label="Inactive accounts" style={{ marginTop: '0.35rem' }}>
               {inactiveCharRows.length === 0 ? (
                 <p className="officer-member-empty">None</p>
               ) : (
@@ -583,11 +644,11 @@ export default function OfficerClaimCooldowns({ isOfficer, isSiteAdmin = false }
                       role="option"
                       aria-selected={selectedInactiveAccountId === row.account_id}
                       className={selectedInactiveAccountId === row.account_id ? 'is-highlighted' : undefined}
-                      title={row.label}
+                      title={accountListLabel(row)}
                       onClick={() => setSelectedInactiveAccountId(row.account_id)}
                       style={{ flex: '1 1 auto', width: 'auto' }}
                     >
-                      {row.label}
+                      {accountListLabel(row)}
                     </button>
                     <Link to={`/accounts/${row.account_id}`} style={{ fontSize: '0.8rem', padding: '0 0.45rem', flex: '0 0 auto' }}>View</Link>
                   </div>

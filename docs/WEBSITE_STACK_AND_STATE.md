@@ -71,6 +71,8 @@ Defined in `web/src/App.jsx`.
 
 **Roles:** `App` loads `profiles.role` for the signed-in user. `player`, `officer`, and `siteadmin` are allowed. `isOfficer` is true for `officer` and `siteadmin` and toggles officer nav links; individual pages may also `navigate('/')` if not officer. `isSiteAdmin` is true only for `siteadmin`. On `/officer/SiteAdmin`, officers and site admins see Site Profile Accounts. Unclaim and role changes are siteadmin only. Remove user is `POST /api/delete-site-user`: it deletes the profile, then `auth.admin.deleteUser` with the server-only service role key. Officers may remove players. Site admins may remove players and officers. Nobody may remove a site admin or themselves. `profiles.display_name` is the site name (email sign-up field, or the Discord username). It is separate from `accounts.display_name`. Nav labels are Game Accounts (`/accounts`) and My Site Profile (`/profile`).
 
+**Website settings** live on My Site Profile and belong to the signed-in site user, stored in `profiles.ui_preferences` through `set_my_ui_preferences`. They are not stored on the game account and are not shared by every officer. Missing keys stay on, which keeps the newer input controls until that user turns one off. The three settings are: show the DKP tic character picker, use character-based selectors for administration, and create raids by name only. Turning one off restores the earlier presentation (paste-first tic entry, one row per account, or the Discord raid-line paste). Raid Admin, raid detail, and Site Admin read the same profile object. The tic paste, resolutions, and Attending selections for the open raid stay in `sessionStorage` under `pageState:/officer/RaidAdmin:ticDraft:<raid id>`, so opening Profile and coming back does not drop an unsaved tic. Hiding the picker does not clear those selections; Raid Admin lists them and offers Clear selected characters. Active and inactive on Site Admin always change the whole account.
+
 ## Data sources (where values come from)
 
 ### Supabase (runtime)
@@ -99,6 +101,7 @@ Fetched with `fetch('/…')` from `public/` or CDN:
 |-----------|------------|---------|
 | `sessionStorage` | `dkp-last-path` | Last visited path (see below) |
 | `sessionStorage` | `pageState:…` | `usePersistedState` UI persistence (filters, Raids calendar month, raid detail expanded tics, account activity page index, etc.) |
+| `sessionStorage` | `pageState:/officer/RaidAdmin:ticDraft:<raid id>` | Unsaved tic paste, resolutions, and Attending character ids for that raid |
 | `sessionStorage` | `account-detail-cache-${accountId}` | SWR fallback for account page |
 | `sessionStorage` | `pageState:/loot:*` | Item History search text and sort. Results are not cached; `/loot` queries `raid_loot_history` one page at a time (`LootSearch.jsx`). Deploy the view with `docs/sql-archive/superseded/supabase-raid-loot-history.sql`. |
 | TTL cache | `raids_month_*` | Raids calendar month blobs (`web/src/lib/cache.js`) |

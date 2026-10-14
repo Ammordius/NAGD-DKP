@@ -199,6 +199,12 @@ COMMENT ON COLUMN profiles.unclaim_cooldown_until IS 'After unclaiming an accoun
 COMMENT ON COLUMN profiles.unclaim_count IS 'Number of times this user has unclaimed an account; used to tier cooldown duration.';
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS display_name TEXT;
 COMMENT ON COLUMN profiles.display_name IS 'Site profile name (the person). Not the game account label (accounts.display_name).';
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS ui_preferences JSONB NOT NULL DEFAULT '{}'::jsonb;
+COMMENT ON COLUMN profiles.ui_preferences IS
+  'Per site user presentation preferences. Allowed keys: showTicCharacterPicker, useCharacterAdminSelectors, raidNameOnly. Missing keys mean on in the app. Not a game account and not shared by officers.';
+ALTER TABLE profiles DROP CONSTRAINT IF EXISTS profiles_ui_preferences_object;
+ALTER TABLE profiles ADD CONSTRAINT profiles_ui_preferences_object
+  CHECK (jsonb_typeof(ui_preferences) = 'object');
 ALTER TABLE profiles DROP CONSTRAINT IF EXISTS profiles_display_name_len;
 ALTER TABLE profiles ADD CONSTRAINT profiles_display_name_len
   CHECK (display_name IS NULL OR (char_length(display_name) BETWEEN 1 AND 32 AND display_name = btrim(display_name)));
@@ -5571,6 +5577,74 @@ COMMENT ON FUNCTION public.set_my_display_name(text) IS
 REVOKE ALL ON FUNCTION public.set_my_display_name(text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.set_my_display_name(text) TO authenticated;
 
+-- Owner-only presentation preferences. Does not grant table UPDATE on profiles.
+CREATE OR REPLACE FUNCTION public.set_my_ui_preferences(p_preferences jsonb)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_uid uuid;
+  v_current jsonb;
+  v_next jsonb := '{}'::jsonb;
+  v_key text;
+  v_allowed text[] := ARRAY['showTicCharacterPicker', 'useCharacterAdminSelectors', 'raidNameOnly'];
+BEGIN
+  v_uid := auth.uid();
+  IF v_uid IS NULL THEN
+    RAISE EXCEPTION 'Not authenticated';
+  END IF;
+  IF p_preferences IS NULL OR jsonb_typeof(p_preferences) <> 'object' THEN
+    RAISE EXCEPTION 'Preferences must be a JSON object';
+  END IF;
+
+  FOR v_key IN SELECT jsonb_object_keys(p_preferences)
+  LOOP
+    IF NOT (v_key = ANY (v_allowed)) THEN
+      RAISE EXCEPTION 'Unknown preference %', v_key;
+    END IF;
+    IF jsonb_typeof(p_preferences -> v_key) <> 'boolean' THEN
+      RAISE EXCEPTION 'Preference % must be true or false', v_key;
+    END IF;
+  END LOOP;
+
+  SELECT COALESCE(ui_preferences, '{}'::jsonb)
+  INTO v_current
+  FROM public.profiles
+  WHERE id = v_uid
+  FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Profile not found';
+  END IF;
+  IF jsonb_typeof(v_current) <> 'object' THEN
+    v_current := '{}'::jsonb;
+  END IF;
+
+  FOREACH v_key IN ARRAY v_allowed
+  LOOP
+    IF p_preferences ? v_key THEN
+      v_next := v_next || jsonb_build_object(v_key, p_preferences -> v_key);
+    ELSIF v_current ? v_key AND jsonb_typeof(v_current -> v_key) = 'boolean' THEN
+      v_next := v_next || jsonb_build_object(v_key, v_current -> v_key);
+    END IF;
+  END LOOP;
+
+  UPDATE public.profiles
+  SET ui_preferences = v_next,
+      updated_at = now()
+  WHERE id = v_uid;
+
+  RETURN v_next;
+END;
+$$;
+
+COMMENT ON FUNCTION public.set_my_ui_preferences(jsonb) IS
+  'Owner-only: merge allowed boolean keys into profiles.ui_preferences for auth.uid(). Does not change role, account claim, email, or unclaim fields.';
+
+REVOKE ALL ON FUNCTION public.set_my_ui_preferences(jsonb) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.set_my_ui_preferences(jsonb) TO authenticated;
+
 -- Claimed-by labels for the accounts list. No email and no profile id.
 CREATE OR REPLACE FUNCTION public.account_claim_labels()
 RETURNS TABLE (account_id text, display_name text)
@@ -5959,6 +6033,7 @@ REVOKE ALL ON FUNCTION public.officer_raider_activity(integer, integer) FROM PUB
 REVOKE ALL ON FUNCTION public.officer_upsert_account_class_coverage(jsonb) FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.officer_set_account_display_name(text, text) FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.set_my_display_name(text) FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.set_my_ui_preferences(jsonb) FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.account_claim_labels() FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.siteadmin_unclaim_profile(uuid) FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.siteadmin_set_role(uuid, text) FROM PUBLIC, anon;
@@ -5986,6 +6061,7 @@ GRANT EXECUTE ON FUNCTION public.officer_raider_activity(integer, integer) TO au
 GRANT EXECUTE ON FUNCTION public.officer_upsert_account_class_coverage(jsonb) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.officer_set_account_display_name(text, text) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.set_my_display_name(text) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.set_my_ui_preferences(jsonb) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.account_claim_labels() TO authenticated;
 GRANT EXECUTE ON FUNCTION public.siteadmin_unclaim_profile(uuid) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.siteadmin_set_role(uuid, text) TO authenticated;

@@ -52,6 +52,7 @@ Where each public function the app or scripts call is defined, and what calls it
 | **is_officer** | RLS and officer RPCs. True for `officer` and `siteadmin`. |
 | **is_site_admin** | Site Profile Accounts actions on `/officer/SiteAdmin` |
 | **set_my_display_name** | Profile.jsx. Owner sets `profiles.display_name` (1-32 characters). |
+| **set_my_ui_preferences** | Profile.jsx Website settings. Owner merges `showTicCharacterPicker`, `useCharacterAdminSelectors`, and `raidNameOnly` into `profiles.ui_preferences`. Missing keys mean on. Does not change role or account claim, and does not grant table UPDATE on `profiles`. |
 | **account_claim_labels** | Accounts.jsx. `account_id` and site display name only; no email. |
 | **siteadmin_unclaim_profile** | OfficerClaimCooldowns.jsx. Clears `profiles.account_id` without a cooldown. |
 | **siteadmin_set_role** | OfficerClaimCooldowns.jsx. Sets `player`, `officer`, or `siteadmin`. |

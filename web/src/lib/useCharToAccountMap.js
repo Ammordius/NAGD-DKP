@@ -17,7 +17,7 @@ async function fetchAllAccounts() {
   for (;;) {
     const { data, error } = await supabase
       .from('accounts')
-      .select('account_id, display_name')
+      .select('account_id, display_name, toon_names')
       .order('account_id')
       .range(offset, offset + ACCOUNTS_PAGE - 1)
     if (error) throw error
@@ -73,7 +73,15 @@ async function fetchCharToAccountMap() {
   ;(accRows || []).forEach((a) => {
     if (a?.account_id) accountIdToDisplayName[a.account_id] = (a.display_name || '').trim() || a.account_id
   })
-  return { charToAccount: map, accountIdToDisplayName, accountIdToSampleCharName, charIdToName }
+  return {
+    charToAccount: map,
+    accountIdToDisplayName,
+    accountIdToSampleCharName,
+    charIdToName,
+    accounts: accRows || [],
+    characters: chRows || [],
+    characterAccount: caRows || [],
+  }
 }
 
 /**
@@ -155,6 +163,9 @@ export function useCharToAccountMap() {
     getDisplayNameForAccountId,
     getRepresentativeCharNameForAccount,
     getCharacterNameForCharId,
+    accounts: data?.accounts ?? [],
+    characters: data?.characters ?? [],
+    characterAccount: data?.characterAccount ?? [],
     loading: isLoading,
   }
 }

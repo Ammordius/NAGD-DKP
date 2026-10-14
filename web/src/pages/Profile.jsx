@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { loadAccountActivity } from '../lib/accountData'
+import { normalizeUiPreferences } from '../lib/uiPreferences'
 
 const MAGELO_BASE = 'https://www.takproject.net/magelo/character.php?char='
 const MIDDLE_DOT = '\u00B7'
@@ -46,10 +47,18 @@ export default function Profile({ profile, onProfileUpdate }) {
   const [nameSaving, setNameSaving] = useState(false)
   const [nameError, setNameError] = useState('')
   const [nameSaved, setNameSaved] = useState(false)
+  const [uiPrefs, setUiPrefs] = useState(() => normalizeUiPreferences(profile?.ui_preferences))
+  const [prefsSaving, setPrefsSaving] = useState(false)
+  const [prefsError, setPrefsError] = useState('')
+  const [prefsSaved, setPrefsSaved] = useState(false)
 
   useEffect(() => {
     setDisplayName(profile?.display_name || '')
   }, [profile?.display_name])
+
+  useEffect(() => {
+    setUiPrefs(normalizeUiPreferences(profile?.ui_preferences))
+  }, [profile?.ui_preferences])
 
   useEffect(() => {
     if (!profile?.account_id) {
@@ -98,6 +107,31 @@ export default function Profile({ profile, onProfileUpdate }) {
       return
     }
     setNameSaved(true)
+    onProfileUpdate?.()
+  }
+
+  function setPreference(key, value) {
+    setUiPrefs((current) => ({ ...current, [key]: value }))
+    setPrefsSaved(false)
+  }
+
+  async function handleSavePreferences() {
+    setPrefsError('')
+    setPrefsSaved(false)
+    setPrefsSaving(true)
+    const { error: rpcErr } = await supabase.rpc('set_my_ui_preferences', {
+      p_preferences: {
+        showTicCharacterPicker: uiPrefs.showTicCharacterPicker,
+        useCharacterAdminSelectors: uiPrefs.useCharacterAdminSelectors,
+        raidNameOnly: uiPrefs.raidNameOnly,
+      },
+    })
+    setPrefsSaving(false)
+    if (rpcErr) {
+      setPrefsError(rpcErr.message)
+      return
+    }
+    setPrefsSaved(true)
     onProfileUpdate?.()
   }
 
@@ -170,6 +204,42 @@ export default function Profile({ profile, onProfileUpdate }) {
         {nameSaved && <p style={{ color: '#86efac', fontSize: '0.875rem', marginBottom: '0.5rem' }}>Saved.</p>}
         <button type="button" className="btn" onClick={handleSaveDisplayName} disabled={nameSaving}>
           {nameSaving ? 'Saving...' : 'Save display name'}
+        </button>
+      </div>
+
+      <div className="card" style={{ maxWidth: '32rem', marginBottom: '1.5rem' }}>
+        <h2 style={{ marginTop: 0 }}>Website settings</h2>
+        <p style={{ color: '#71717a', fontSize: '0.875rem', marginBottom: '0.75rem' }}>
+          These choices belong to your site login. They follow you across browsers and devices. New input controls stay on until you turn one off.
+        </p>
+        <label style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-start', marginBottom: '0.65rem' }}>
+          <input
+            type="checkbox"
+            checked={uiPrefs.showTicCharacterPicker}
+            onChange={(e) => setPreference('showTicCharacterPicker', e.target.checked)}
+          />
+          <span>Show character picker for DKP tic entry</span>
+        </label>
+        <label style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-start', marginBottom: '0.65rem' }}>
+          <input
+            type="checkbox"
+            checked={uiPrefs.useCharacterAdminSelectors}
+            onChange={(e) => setPreference('useCharacterAdminSelectors', e.target.checked)}
+          />
+          <span>Use character-based selectors for administration</span>
+        </label>
+        <label style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
+          <input
+            type="checkbox"
+            checked={uiPrefs.raidNameOnly}
+            onChange={(e) => setPreference('raidNameOnly', e.target.checked)}
+          />
+          <span>Create raids by name only</span>
+        </label>
+        {prefsError && <p style={{ color: '#f87171', fontSize: '0.875rem', marginBottom: '0.5rem' }}>{prefsError}</p>}
+        {prefsSaved && <p style={{ color: '#86efac', fontSize: '0.875rem', marginBottom: '0.5rem' }}>Saved.</p>}
+        <button type="button" className="btn" onClick={handleSavePreferences} disabled={prefsSaving}>
+          {prefsSaving ? 'Saving...' : 'Save website settings'}
         </button>
       </div>
 

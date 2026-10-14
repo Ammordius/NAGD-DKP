@@ -353,6 +353,74 @@ BEGIN
   END IF;
 END $$;
 
+-- Website settings belong to the signed-in user and do not change role or grants.
+DO $$
+BEGIN
+  IF (SELECT ui_preferences FROM public.profiles WHERE id = '66666666-6666-4666-8666-666666666666')
+     IS DISTINCT FROM '{}'::jsonb THEN
+    RAISE EXCEPTION 'a profile that has not saved settings should store {}';
+  END IF;
+END $$;
+
+SET SESSION AUTHORIZATION anon;
+SELECT set_config('request.jwt.claim.sub', '', false);
+SELECT set_config('request.jwt.claim.role', 'anon', false);
+SELECT public._expect_error(
+  'SELECT public.set_my_ui_preferences(''{}''::jsonb)',
+  '42501'
+);
+
+RESET SESSION AUTHORIZATION;
+SET SESSION AUTHORIZATION authenticated;
+SELECT set_config('request.jwt.claim.sub', '11111111-1111-4111-8111-111111111111', false);
+SELECT set_config('request.jwt.claim.role', 'authenticated', false);
+SELECT public.set_my_ui_preferences('{"showTicCharacterPicker": false}'::jsonb);
+SELECT public.set_my_ui_preferences('{"raidNameOnly": false}'::jsonb);
+SELECT set_config('request.jwt.claim.sub', '22222222-2222-4222-8222-222222222222', false);
+SELECT public.set_my_ui_preferences('{"useCharacterAdminSelectors": false}'::jsonb);
+SELECT public._expect_error(
+  'SELECT public.set_my_ui_preferences(''{"role": "siteadmin"}''::jsonb)',
+  '%Unknown preference%'
+);
+SELECT public._expect_error(
+  'SELECT public.set_my_ui_preferences(''{"showTicCharacterPicker": "yes"}''::jsonb)',
+  '%must be true or false%'
+);
+SELECT public._expect_error(
+  'UPDATE public.profiles SET ui_preferences = ''{"showTicCharacterPicker": false}''::jsonb WHERE id = ''22222222-2222-4222-8222-222222222222''',
+  '42501'
+);
+SELECT set_config('request.jwt.claim.sub', '11111111-1111-4111-8111-111111111111', false);
+SELECT public._expect_error(
+  'SELECT public.delete_raid(''missing'')',
+  '%Only officers can delete raids%'
+);
+
+RESET SESSION AUTHORIZATION;
+DO $$
+BEGIN
+  IF (SELECT role FROM public.profiles WHERE id = '11111111-1111-4111-8111-111111111111') <> 'player' THEN
+    RAISE EXCEPTION 'saving website settings changed the player role';
+  END IF;
+  IF (SELECT role FROM public.profiles WHERE id = '22222222-2222-4222-8222-222222222222') <> 'officer' THEN
+    RAISE EXCEPTION 'saving website settings changed the officer role';
+  END IF;
+  IF (SELECT ui_preferences FROM public.profiles WHERE id = '11111111-1111-4111-8111-111111111111')
+     IS DISTINCT FROM '{"showTicCharacterPicker": false, "raidNameOnly": false}'::jsonb THEN
+    RAISE EXCEPTION 'player preferences were not merged';
+  END IF;
+  IF (SELECT ui_preferences FROM public.profiles WHERE id = '22222222-2222-4222-8222-222222222222')
+     IS DISTINCT FROM '{"useCharacterAdminSelectors": false}'::jsonb THEN
+    RAISE EXCEPTION 'officer preferences leaked or were overwritten';
+  END IF;
+  IF has_table_privilege('authenticated', 'public.profiles', 'UPDATE')
+     OR has_table_privilege('anon', 'public.profiles', 'UPDATE') THEN
+    RAISE EXCEPTION 'website settings reopened UPDATE on profiles';
+  END IF;
+END $$;
+
+RESET SESSION AUTHORIZATION;
+
 -- Test helper for the concurrent demotion. Lives only in the disposable database.
 CREATE OR REPLACE FUNCTION public._demote_holding_lock(p_actor uuid, p_target uuid)
 RETURNS void

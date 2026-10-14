@@ -25,6 +25,9 @@ import {
   raidCalendarDate,
 } from '../lib/ticDateTime'
 import TicDateTimeFields from '../components/TicDateTimeFields'
+import TicMemberPicker from '../components/TicMemberPicker'
+import { normalizeUiPreferences, readTicDraft, writeTicDraft } from '../lib/uiPreferences'
+import { buildAccountAdminRows, filterAccountAdminRows } from '../lib/siteAdminCharacters'
 
 /** Generate a unique raid_id for officer-created raids (string, no collision with numeric imports). */
 function generateRaidId() {
@@ -34,32 +37,6 @@ function generateRaidId() {
 function ticOptionLabel(event) {
   const order = event?.event_order != null && event.event_order !== '' ? `#${event.event_order} ` : ''
   return `${order}${event?.event_name || 'Tic'}`
-}
-
-function MemberList({ label, rows, highlight, emptyText, onRowClick, onRowDoubleClick, className }) {
-  const highlighted = new Set(highlight)
-  return (
-    <div className={className ? `officer-member-list ${className}` : 'officer-member-list'} role="listbox" aria-label={label} aria-multiselectable="true">
-      {rows.length === 0 ? (
-        <p className="officer-member-empty">{emptyText}</p>
-      ) : (
-        rows.map((row, index) => (
-          <button
-            key={row.char_id}
-            type="button"
-            role="option"
-            aria-selected={highlighted.has(row.char_id)}
-            className={highlighted.has(row.char_id) ? 'is-highlighted' : undefined}
-            title={row.label}
-            onClick={(e) => onRowClick(row.char_id, index, e.shiftKey)}
-            onDoubleClick={() => onRowDoubleClick(row.char_id)}
-          >
-            {row.label}
-          </button>
-        ))
-      )}
-    </div>
-  )
 }
 
 function ResultNames({ label, names, tone }) {
@@ -76,7 +53,7 @@ function ResultNames({ label, names, tone }) {
   )
 }
 
-export default function Officer({ isOfficer }) {
+export default function Officer({ isOfficer, profile }) {
   const navigate = useNavigate()
   const location = useLocation()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -102,6 +79,11 @@ export default function Officer({ isOfficer }) {
   const [characters, setCharacters] = useState([])
   const [charIdToAccountId, setCharIdToAccountId] = useState({})
   const [accountIdToDisplayName, setAccountIdToDisplayName] = useState({})
+  const [accounts, setAccounts] = useState([])
+  const uiPrefs = normalizeUiPreferences(profile?.ui_preferences)
+  const showTicCharacterPicker = uiPrefs.showTicCharacterPicker
+  const useCharacterAdminSelectors = uiPrefs.useCharacterAdminSelectors
+  const raidNameOnly = uiPrefs.raidNameOnly
   const [itemNames, setItemNames] = useState([])
   const [jsonLootItemNames, setJsonLootItemNames] = useState([])
   const [lootMobJson, setLootMobJson] = useState(null)
@@ -144,6 +126,7 @@ export default function Officer({ isOfficer }) {
   // Add loot manual
   const [lootItemQuery, setLootItemQuery] = useState('')
   const [lootCharName, setLootCharName] = useState('')
+  const [lootCharId, setLootCharId] = useState('')
   const [lootCost, setLootCost] = useState('0')
   const [lootLogPaste, setLootLogPaste] = useState('')
   const [lootResult, setLootResult] = useState(null)
@@ -172,6 +155,7 @@ export default function Officer({ isOfficer }) {
   // Add single attendee to a tic
   const [addToTicEventId, setAddToTicEventId] = useState('')
   const [addToTicCharQuery, setAddToTicCharQuery] = useState('')
+  const [addToTicCharId, setAddToTicCharId] = useState('')
   const [showCharDropdown, setShowCharDropdown] = useState(false)
   const [addToTicResult, setAddToTicResult] = useState(null)
 
@@ -353,11 +337,12 @@ export default function Officer({ isOfficer }) {
       if (r.char_id && r.account_id && map[r.char_id] == null) map[r.char_id] = r.account_id
     })
     setCharIdToAccountId(map)
-    const accRes = await supabase.from('accounts').select('account_id, display_name').limit(5000)
+    const accRes = await supabase.from('accounts').select('account_id, display_name, toon_names').limit(5000)
     const accNames = {}
     ;(accRes.data || []).forEach((a) => {
       if (a?.account_id) accNames[a.account_id] = (a.display_name || '').trim() || a.account_id
     })
+    setAccounts(accRes.data || [])
     setAccountIdToDisplayName(accNames)
     // Fetch all distinct item_name from raid_loot (paginate; Supabase returns max 1000 per request)
     const allItemRows = []
@@ -481,9 +466,16 @@ export default function Officer({ isOfficer }) {
   const handleAddAttendeeToTic = async () => {
     if (!selectedRaidId || !addToTicEventId) return
     const name = addToTicCharQuery.trim()
-    const char = nameToChar[name.toLowerCase()]
+    const picked = addToTicCharId
+      ? characters.find((row) => String(row.char_id) === String(addToTicCharId) && (row.name || '').trim())
+      : null
+    const char = picked
+      ? { char_id: picked.char_id, name: picked.name.trim() }
+      : nameToChar[name.toLowerCase()]
     if (!char) {
-      setError('Select a character from the list (name must match DKP list).')
+      setError(useCharacterAdminSelectors
+        ? 'Select a character from the list (name must match DKP list).'
+        : 'Select an account from the list so the character to credit is known.')
       return
     }
     const alreadyInTic = eventAttendance.some((r) => String(r.event_id) === String(addToTicEventId) && String(r.char_id) === String(char.char_id))
@@ -634,7 +626,9 @@ export default function Officer({ isOfficer }) {
     setError('')
     const { names } = parseChannelList(ticPaste)
     if (names.length === 0 && ticAttendingIds.length === 0) {
-      setError('No names found. Paste a channel log, one name per line, a comma-separated list, or move characters to Attending.')
+      setError(showTicCharacterPicker
+        ? 'No names found. Paste a channel log, one name per line, a comma-separated list, or move characters to Attending.'
+        : 'No names found. Paste a channel log, one name per line, or a comma-separated list.')
       setMutating(false)
       return
     }
@@ -850,9 +844,16 @@ export default function Officer({ isOfficer }) {
       return
     }
     const itemName = itemNameToCanonical[itemNameRaw.toLowerCase()] || itemNameRaw
-    const char = nameToChar[characterName.toLowerCase()]
+    const picked = lootCharId
+      ? characters.find((row) => String(row.char_id) === String(lootCharId) && (row.name || '').trim())
+      : null
+    const char = picked
+      ? { char_id: picked.char_id, name: picked.name.trim() }
+      : nameToChar[characterName.toLowerCase()]
     if (!char) {
-      setError('Character not on DKP list. Pick a character from the list so the loot can be linked.')
+      setError(useCharacterAdminSelectors
+        ? 'Character not on DKP list. Pick a character from the list so the loot can be linked.'
+        : 'Select an account from the list so the loot can be linked to a character.')
       return
     }
     setMutating(true)
@@ -1283,11 +1284,23 @@ export default function Officer({ isOfficer }) {
   }, [itemNames])
 
   const characterNamesList = useMemo(() => characters.map((c) => (c.name || '').trim()).filter(Boolean).sort((a, b) => a.localeCompare(b)), [characters])
+  const characterAccountRows = useMemo(
+    () => Object.entries(charIdToAccountId).map(([char_id, account_id]) => ({ char_id, account_id })),
+    [charIdToAccountId]
+  )
+  const accountAdminRows = useMemo(
+    () => buildAccountAdminRows(characters, characterAccountRows, accounts),
+    [characters, characterAccountRows, accounts]
+  )
   const filteredCharacterNames = useMemo(() => {
     const q = addToTicCharQuery.toLowerCase().trim()
     if (!q) return characterNamesList.slice(0, 200)
     return characterNamesList.filter((n) => n.toLowerCase().includes(q)).slice(0, 200)
   }, [characterNamesList, addToTicCharQuery])
+  const filteredAddToTicAccounts = useMemo(
+    () => filterAccountAdminRows(accountAdminRows, addToTicCharQuery).slice(0, 200),
+    [accountAdminRows, addToTicCharQuery]
+  )
 
   const showAddToTicDropdown = showCharDropdown
 
@@ -1296,6 +1309,10 @@ export default function Officer({ isOfficer }) {
     if (!q) return characterNamesList.slice(0, 200)
     return characterNamesList.filter((n) => n.toLowerCase().includes(q)).slice(0, 200)
   }, [characterNamesList, lootCharName])
+  const filteredLootAccounts = useMemo(
+    () => filterAccountAdminRows(accountAdminRows, lootCharName).slice(0, 200),
+    [accountAdminRows, lootCharName]
+  )
 
   const showLootCharDropdownList = showLootCharDropdown
 
@@ -1325,20 +1342,76 @@ export default function Officer({ isOfficer }) {
   const raidEditSectionRef = useRef(null)
   const ticPasteRef = useRef(ticPaste)
   ticPasteRef.current = ticPaste
+  const ticDraftRef = useRef(null)
+  ticDraftRef.current = {
+    ticPaste,
+    ticResolutions,
+    ticExcludedCharIds,
+    ticAttendingIds,
+    ticDestination,
+    ticDkpValue,
+    ticDate,
+    ticTime,
+    ticDateTimeTouched,
+  }
+  const ticRaidRef = useRef(selectedRaidId)
+  const skipTicDraftWrite = useRef(true)
 
   useEffect(() => {
-    const defaults = defaultTicFields(raid?.date_iso || raid?.date || '')
-    const stamp = firstEqStampInPaste(ticPasteRef.current)
-    setTicDate(stamp?.date || defaults.date)
-    setTicTime(stamp?.time || defaults.time)
-    setTicDateTimeTouched(false)
-    setTicAttendingIds([])
+    const previousRaidId = ticRaidRef.current
+    if (previousRaidId && previousRaidId !== selectedRaidId) {
+      writeTicDraft(sessionStorage, previousRaidId, ticDraftRef.current)
+    }
+    ticRaidRef.current = selectedRaidId
+    skipTicDraftWrite.current = true
+    const draft = readTicDraft(sessionStorage, selectedRaidId)
+    if (draft) {
+      setTicPaste(draft.ticPaste)
+      setTicResolutions(draft.ticResolutions)
+      setTicExcludedCharIds(draft.ticExcludedCharIds)
+      setTicAttendingIds(draft.ticAttendingIds)
+      setTicDestination(draft.ticDestination)
+      setTicDkpValue(draft.ticDkpValue)
+      setTicDate(draft.ticDate)
+      setTicTime(draft.ticTime)
+      setTicDateTimeTouched(draft.ticDateTimeTouched)
+    } else {
+      const defaults = defaultTicFields(raid?.date_iso || raid?.date || '')
+      setTicPaste('')
+      setTicResolutions({})
+      setTicExcludedCharIds([])
+      setTicDestination('new')
+      setTicDkpValue('1')
+      setTicDate(defaults.date)
+      setTicTime(defaults.time)
+      setTicDateTimeTouched(false)
+      setTicAttendingIds([])
+    }
     setAvailableHighlight([])
     setAttendingHighlight([])
     setTicMemberQuery('')
     availableAnchorRef.current = null
     attendingAnchorRef.current = null
   }, [selectedRaidId])
+
+  useEffect(() => {
+    if (skipTicDraftWrite.current) {
+      skipTicDraftWrite.current = false
+      return
+    }
+    if (!selectedRaidId) return
+    writeTicDraft(sessionStorage, selectedRaidId, {
+      ticPaste,
+      ticResolutions,
+      ticExcludedCharIds,
+      ticAttendingIds,
+      ticDestination,
+      ticDkpValue,
+      ticDate,
+      ticTime,
+      ticDateTimeTouched,
+    })
+  }, [selectedRaidId, ticPaste, ticResolutions, ticExcludedCharIds, ticAttendingIds, ticDestination, ticDkpValue, ticDate, ticTime, ticDateTimeTouched])
 
   useEffect(() => {
     if (firstEqStampInPaste(ticPaste)) return
@@ -1510,14 +1583,21 @@ export default function Officer({ isOfficer }) {
       {showCreateRaid && (
         <section ref={addRaidSectionRef} className="card officer-create">
           <h2 style={{ marginTop: 0 }}>Add raid</h2>
-          <p className="officer-hint">Enter the Raid Name</p>
+          <p className="officer-hint">
+            {raidNameOnly
+              ? 'Enter the Raid Name. The raid date is today unless the text includes a Discord date.'
+              : 'Paste a Discord raid line. The name is the text after the colon, and the date is the text after the last dash.'}
+          </p>
           <textarea
             ref={raidPasteRef}
             className="officer-paste"
             value={raidPaste}
             onChange={(e) => setRaidPaste(e.target.value)}
-            placeholder="Enter the Raid Name"
-            rows={2}
+            placeholder={raidNameOnly
+              ? 'Enter the Raid Name'
+              : 'Friday 10/09 12:46pm est: Water Minis - October 9, 2026 12:46 PM'}
+            rows={raidNameOnly ? 2 : 3}
+            aria-label={raidNameOnly ? 'Raid name' : 'Discord raid line'}
           />
           <div className="officer-field-row" style={{ marginTop: '0.5rem' }}>
             <button type="button" className="btn" onClick={handleAddRaid} disabled={mutating || !raidPaste.trim()}>
@@ -1538,7 +1618,11 @@ export default function Officer({ isOfficer }) {
           <div className="officer-col">
           <section className={`card${showAddToTicDropdown ? ' officer-card--menu-open' : ''}`}>
             <h2 style={{ marginTop: 0 }}>Add DKP tic (attendance)</h2>
-            <p className="officer-hint">Paste a channel member list, one name per line, or a comma-separated list. Or move characters to Attending. Names are matched to the DKP list before anything is saved.</p>
+            <p className="officer-hint">
+              {showTicCharacterPicker
+                ? 'Paste a channel member list, one name per line, or a comma-separated list. Or move characters to Attending. Names are matched to the DKP list before anything is saved.'
+                : 'Paste a channel member list, one name per line, or a comma-separated list. Names are matched to the DKP list before anything is saved.'}
+            </p>
             <details className="officer-hint">
               <summary>How matching works</summary>
               <p>
@@ -1586,57 +1670,30 @@ export default function Officer({ isOfficer }) {
               placeholder="Channel log, one name per line, or Name1, Name2, Name3"
               rows={5}
             />
-            <div className="officer-member-picker">
-              <p className="officer-member-picker-label officer-member-avail-label">Available Members</p>
-              <p className="officer-member-picker-label officer-member-attend-label">Attending</p>
-              <input
-                className="officer-member-filter"
-                type="search"
-                value={ticMemberQuery}
-                onChange={(e) => setTicMemberQuery(e.target.value)}
-                placeholder="Filter members"
-                aria-label="Filter available members"
-                autoComplete="off"
+            {showTicCharacterPicker ? (
+              <TicMemberPicker
+                memberQuery={ticMemberQuery}
+                onMemberQueryChange={setTicMemberQuery}
+                availableMembers={availableMembers}
+                attendingMembers={attendingMembers}
+                availableHighlight={availableHighlight}
+                attendingHighlight={attendingHighlight}
+                onAvailableClick={(id, index, shiftKey) => highlightMember(id, index, shiftKey, availableMembers, setAvailableHighlight, availableAnchorRef)}
+                onAttendingClick={(id, index, shiftKey) => highlightMember(id, index, shiftKey, attendingMembers, setAttendingHighlight, attendingAnchorRef)}
+                onMoveToAttending={moveToAttending}
+                onMoveToAvailable={moveToAvailable}
+                charactersLoading={characters.length === 0}
               />
-              <MemberList
-                className="officer-member-avail-list"
-                label="Available Members"
-                rows={availableMembers}
-                highlight={availableHighlight}
-                emptyText={characters.length === 0 ? 'Loading characters…' : (ticMemberQuery.trim() ? 'No matching characters' : 'No characters')}
-                onRowClick={(id, index, shiftKey) => highlightMember(id, index, shiftKey, availableMembers, setAvailableHighlight, availableAnchorRef)}
-                onRowDoubleClick={(id) => moveToAttending([id])}
-              />
-              <div className="officer-member-moves">
-                <button
-                  type="button"
-                  className="btn btn-ghost"
-                  onClick={() => moveToAttending(availableHighlight)}
-                  disabled={availableHighlight.length === 0}
-                  aria-label="Add selected members to attending"
-                >
-                  &gt;&gt;
+            ) : ticAttendingIds.length > 0 && (
+              <p className="officer-hint">
+                {ticAttendingIds.length} character{ticAttendingIds.length === 1 ? '' : 's'} remain selected and will be included
+                {attendingMembers.length > 0 ? `: ${attendingMembers.map((row) => row.label).join(', ')}` : ''}.
+                {' '}
+                <button type="button" className="btn btn-ghost" onClick={() => moveToAvailable(ticAttendingIds)}>
+                  Clear selected characters
                 </button>
-                <button
-                  type="button"
-                  className="btn btn-ghost"
-                  onClick={() => moveToAvailable(attendingHighlight)}
-                  disabled={attendingHighlight.length === 0}
-                  aria-label="Remove selected members from attending"
-                >
-                  &lt;&lt;
-                </button>
-              </div>
-              <MemberList
-                className="officer-member-attend-list"
-                label="Attending"
-                rows={attendingMembers}
-                highlight={attendingHighlight}
-                emptyText="None selected"
-                onRowClick={(id, index, shiftKey) => highlightMember(id, index, shiftKey, attendingMembers, setAttendingHighlight, attendingAnchorRef)}
-                onRowDoubleClick={(id) => moveToAvailable([id])}
-              />
-            </div>
+              </p>
+            )}
             {ticDestination === 'new' && (
               <>
                 <div className="officer-field-row" style={{ marginTop: '0.5rem' }}>
@@ -1762,6 +1819,7 @@ export default function Officer({ isOfficer }) {
                 <h3 style={{ marginTop: 0 }}>Add one character</h3>
                 <p className="officer-hint">
                   Someone missed the paste. DKP goes to that character&apos;s linked account.
+                  {!useCharacterAdminSelectors && ' Search by account, alt, or character. The account and the character that will be credited are both shown.'}
                 </p>
                 <div className="officer-loot-fields">
                   <select
@@ -1780,34 +1838,59 @@ export default function Officer({ isOfficer }) {
                       type="text"
                       name="dkp-tic-character"
                       value={addToTicCharQuery}
-                      onChange={(e) => { setAddToTicCharQuery(e.target.value); setAddToTicResult(null); setShowCharDropdown(true) }}
+                      onChange={(e) => { setAddToTicCharQuery(e.target.value); setAddToTicCharId(''); setAddToTicResult(null); setShowCharDropdown(true) }}
                       onFocus={() => setShowCharDropdown(true)}
                       onBlur={() => setTimeout(() => setShowCharDropdown(false), 200)}
-                      placeholder="Character name (type to filter)"
+                      placeholder={useCharacterAdminSelectors ? 'Character name (type to filter)' : 'Account, character, or alt'}
                       autoComplete="off"
                       aria-expanded={showAddToTicDropdown}
                       aria-haspopup="listbox"
                       aria-controls="add-to-tic-char-list"
+                      aria-label={useCharacterAdminSelectors ? 'Character to add' : 'Account to add'}
                     />
                     {showAddToTicDropdown && (
                       <ul key={addToTicCharQuery} id="add-to-tic-char-list" className="card officer-suggest" role="listbox" onMouseDown={(e) => e.preventDefault()}>
-                        {filteredCharacterNames.length === 0 ? (
+                        {useCharacterAdminSelectors ? (
+                          filteredCharacterNames.length === 0 ? (
+                            <li style={{ color: '#71717a', cursor: 'default' }}>
+                              {characterNamesList.length === 0 ? 'Loading characters…' : (addToTicCharQuery.trim() ? 'No matching characters' : 'Type to filter')}
+                            </li>
+                          ) : (
+                            filteredCharacterNames.map((n) => (
+                              <li
+                                key={n}
+                                role="option"
+                                onMouseDown={(e) => {
+                                  e.preventDefault()
+                                  e.stopPropagation()
+                                  const matches = characters.filter((row) => (row.name || '').trim().toLowerCase() === n.toLowerCase())
+                                  setAddToTicCharQuery(n)
+                                  setAddToTicCharId(matches.length === 1 ? String(matches[0].char_id) : '')
+                                  setTimeout(() => setShowCharDropdown(false), 0)
+                                }}
+                              >
+                                {n}
+                              </li>
+                            ))
+                          )
+                        ) : filteredAddToTicAccounts.length === 0 ? (
                           <li style={{ color: '#71717a', cursor: 'default' }}>
-                            {characterNamesList.length === 0 ? 'Loading characters…' : (addToTicCharQuery.trim() ? 'No matching characters' : 'Type to filter')}
+                            {accountAdminRows.length === 0 ? 'Loading accounts…' : (addToTicCharQuery.trim() ? 'No matching accounts' : 'Type to filter')}
                           </li>
                         ) : (
-                          filteredCharacterNames.map((n) => (
+                          filteredAddToTicAccounts.map((row) => (
                             <li
-                              key={n}
+                              key={row.key}
                               role="option"
                               onMouseDown={(e) => {
                                 e.preventDefault()
                                 e.stopPropagation()
-                                setAddToTicCharQuery(n)
+                                setAddToTicCharQuery(row.label)
+                                setAddToTicCharId(row.char_id ? String(row.char_id) : '')
                                 setTimeout(() => setShowCharDropdown(false), 0)
                               }}
                             >
-                              {n}
+                              {row.label}
                             </li>
                           ))
                         )}
@@ -1828,7 +1911,11 @@ export default function Officer({ isOfficer }) {
           {/* Add loot */}
           <section className={`card${(showLootDropdown && filteredItemNames.length > 0) || showLootCharDropdownList ? ' officer-card--menu-open' : ''}`}>
             <h2 style={{ marginTop: 0 }}>Add loot</h2>
-            <p className="officer-hint">Pick an item, a character on the DKP list, a tic, and a cost. New loot starts on the first tic unless you pick another.</p>
+            <p className="officer-hint">
+              {useCharacterAdminSelectors
+                ? 'Pick an item, a character on the DKP list, a tic, and a cost. New loot starts on the first tic unless you pick another.'
+                : 'Pick an item, an account, a tic, and a cost. The list shows the account and the character that will be credited. New loot starts on the first tic unless you pick another.'}
+            </p>
             <div className="officer-loot-fields">
               <div className="officer-suggest-wrap">
                 <input
@@ -1859,34 +1946,59 @@ export default function Officer({ isOfficer }) {
                   type="text"
                   name="dkp-loot-character"
                   value={lootCharName}
-                  onChange={(e) => { setLootCharName(e.target.value); setError(''); setShowLootCharDropdown(true) }}
+                  onChange={(e) => { setLootCharName(e.target.value); setLootCharId(''); setError(''); setShowLootCharDropdown(true) }}
                   onFocus={() => setShowLootCharDropdown(true)}
                   onBlur={() => setTimeout(() => setShowLootCharDropdown(false), 200)}
-                  placeholder="Character name (type to filter)"
+                  placeholder={useCharacterAdminSelectors ? 'Character name (type to filter)' : 'Account, character, or alt'}
                   autoComplete="off"
                   aria-expanded={showLootCharDropdownList}
                   aria-haspopup="listbox"
                   aria-controls="loot-char-list"
+                  aria-label={useCharacterAdminSelectors ? 'Loot character' : 'Loot account'}
                 />
                 {showLootCharDropdownList && (
                   <ul key={lootCharName} id="loot-char-list" className="card officer-suggest" role="listbox" onMouseDown={(e) => e.preventDefault()}>
-                    {filteredLootCharacterNames.length === 0 ? (
+                    {useCharacterAdminSelectors ? (
+                      filteredLootCharacterNames.length === 0 ? (
+                        <li style={{ color: '#71717a', cursor: 'default' }}>
+                          {characterNamesList.length === 0 ? 'Loading characters…' : (lootCharName.trim() ? 'No matching characters' : 'Type to filter')}
+                        </li>
+                      ) : (
+                        filteredLootCharacterNames.map((n) => (
+                          <li
+                            key={n}
+                            role="option"
+                            onMouseDown={(e) => {
+                              e.preventDefault()
+                              e.stopPropagation()
+                              const matches = characters.filter((row) => (row.name || '').trim().toLowerCase() === n.toLowerCase())
+                              setLootCharName(n)
+                              setLootCharId(matches.length === 1 ? String(matches[0].char_id) : '')
+                              setTimeout(() => setShowLootCharDropdown(false), 0)
+                            }}
+                          >
+                            {n}
+                          </li>
+                        ))
+                      )
+                    ) : filteredLootAccounts.length === 0 ? (
                       <li style={{ color: '#71717a', cursor: 'default' }}>
-                        {characterNamesList.length === 0 ? 'Loading characters…' : (lootCharName.trim() ? 'No matching characters' : 'Type to filter')}
+                        {accountAdminRows.length === 0 ? 'Loading accounts…' : (lootCharName.trim() ? 'No matching accounts' : 'Type to filter')}
                       </li>
                     ) : (
-                      filteredLootCharacterNames.map((n) => (
+                      filteredLootAccounts.map((row) => (
                         <li
-                          key={n}
+                          key={row.key}
                           role="option"
                           onMouseDown={(e) => {
                             e.preventDefault()
                             e.stopPropagation()
-                            setLootCharName(n)
+                            setLootCharName(row.label)
+                            setLootCharId(row.char_id ? String(row.char_id) : '')
                             setTimeout(() => setShowLootCharDropdown(false), 0)
                           }}
                         >
-                          {n}
+                          {row.label}
                         </li>
                       ))
                     )}

@@ -87,7 +87,7 @@ export default function App() {
 
   async function fetchProfile(userId) {
     try {
-      const { data } = await supabase.from('profiles').select('role, account_id, unclaim_cooldown_until, display_name').eq('id', userId).single()
+      const { data } = await supabase.from('profiles').select('role, account_id, unclaim_cooldown_until, display_name, ui_preferences').eq('id', userId).single()
       setProfile(data)
       profileUserIdRef.current = userId
     } finally {
@@ -158,14 +158,14 @@ export default function App() {
         <Route path="/auth/callback" element={<AuthCallback session={session} />} />
         <Route path="/" element={<RequireAuth><Dashboard isOfficer={isOfficer} /></RequireAuth>} />
         <Route path="/raids" element={<RequireAuth><Raids isOfficer={isOfficer} /></RequireAuth>} />
-        <Route path="/raids/:raidId" element={<RequireAuth><RaidDetail isOfficer={isOfficer} /></RequireAuth>} />
+        <Route path="/raids/:raidId" element={<RequireAuth><RaidDetail isOfficer={isOfficer} profile={profile} /></RequireAuth>} />
         <Route path="/dkp" element={<RequireAuth><DKP isOfficer={isOfficer} /></RequireAuth>} />
         <Route path="/officer" element={<RedirectPreserve to="/officer/RaidAdmin" />} />
-        <Route path="/officer/RaidAdmin" element={<RequireAuth><Officer isOfficer={isOfficer} /></RequireAuth>} />
+        <Route path="/officer/RaidAdmin" element={<RequireAuth><Officer isOfficer={isOfficer} profile={profile} /></RequireAuth>} />
         <Route path="/officer/dkp-changelog" element={<RequireAuth><DkpChangelog isOfficer={isOfficer} /></RequireAuth>} />
         <Route path="/officer/who-parser" element={<RequireAuth><OfficerWhoParser isOfficer={isOfficer} /></RequireAuth>} />
         <Route path="/officer/claim-cooldowns" element={<RedirectPreserve to="/officer/SiteAdmin" />} />
-        <Route path="/officer/SiteAdmin" element={<RequireAuth><OfficerClaimCooldowns isOfficer={isOfficer} isSiteAdmin={isSiteAdmin} /></RequireAuth>} />
+        <Route path="/officer/SiteAdmin" element={<RequireAuth><OfficerClaimCooldowns isOfficer={isOfficer} isSiteAdmin={isSiteAdmin} profile={profile} /></RequireAuth>} />
         <Route path="/officer/raider-activity" element={<RequireAuth><OfficerRaiderActivity isOfficer={isOfficer} /></RequireAuth>} />
         <Route path="/tools/discord-schedule" element={<RequireAuth><DiscordSchedule /></RequireAuth>} />
         <Route path="/loot" element={<RequireAuth><LootSearch /></RequireAuth>} />

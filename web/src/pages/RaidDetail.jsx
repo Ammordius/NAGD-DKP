@@ -14,6 +14,8 @@ import { buildItemNameToIdMap, buildLootMobLookups, subgroupLootRowsByMob } from
 import { usePersistedState } from '../lib/usePersistedState'
 import { eventTimeToStore, fieldsForEdit } from '../lib/ticDateTime'
 import TicDateTimeFields from '../components/TicDateTimeFields'
+import { normalizeUiPreferences } from '../lib/uiPreferences'
+import { buildAccountAdminRows, filterAccountAdminRows } from '../lib/siteAdminCharacters'
 
 /** SWR deduplication: 60s so revisiting the same raid or multiple components don't each hit the DB. */
 const RAID_DEDUPING_INTERVAL_MS = 60_000
@@ -44,9 +46,10 @@ async function fetchRaidDetail(raidId) {
   }
 }
 
-export default function RaidDetail({ isOfficer }) {
+export default function RaidDetail({ isOfficer, profile }) {
   const { raidId } = useParams()
-  const { getAccountId, getAccountDisplayName } = useCharToAccountMap()
+  const { getAccountId, getAccountDisplayName, accounts, characterAccount } = useCharToAccountMap()
+  const useCharacterAdminSelectors = normalizeUiPreferences(profile?.ui_preferences).useCharacterAdminSelectors
   const { data, error: swrError, isLoading, mutate } = useSWR(
     raidId ? `raid-detail-${raidId}` : null,
     () => fetchRaidDetail(raidId),
@@ -75,6 +78,7 @@ export default function RaidDetail({ isOfficer }) {
   const [characters, setCharacters] = useState([])
   const [addToTicEventId, setAddToTicEventId] = useState('')
   const [addToTicCharQuery, setAddToTicCharQuery] = useState('')
+  const [addToTicCharId, setAddToTicCharId] = useState('')
   const [showCharDropdown, setShowCharDropdown] = useState(false)
   const [addToTicResult, setAddToTicResult] = useState(null)
   const [mobLoot, setMobLoot] = useState(null)
@@ -124,6 +128,14 @@ export default function RaidDetail({ isOfficer }) {
     if (!q) return characterNamesList.slice(0, 200)
     return characterNamesList.filter((n) => n.toLowerCase().includes(q)).slice(0, 200)
   }, [characterNamesList, addToTicCharQuery])
+  const accountAdminRows = useMemo(
+    () => buildAccountAdminRows(characters, characterAccount, accounts),
+    [characters, characterAccount, accounts]
+  )
+  const filteredAccountRows = useMemo(
+    () => filterAccountAdminRows(accountAdminRows, addToTicCharQuery).slice(0, 200),
+    [accountAdminRows, addToTicCharQuery]
+  )
 
   const attendeesByEvent = useMemo(() => {
     const byEvent = {}
@@ -362,9 +374,16 @@ export default function RaidDetail({ isOfficer }) {
   const handleAddAttendeeToTic = async () => {
     if (!raidId || !addToTicEventId) return
     const name = addToTicCharQuery.trim()
-    const char = nameToChar[name.toLowerCase()]
+    const picked = addToTicCharId
+      ? characters.find((row) => String(row.char_id) === String(addToTicCharId) && (row.name || '').trim())
+      : null
+    const char = picked
+      ? { char_id: picked.char_id, name: picked.name.trim() }
+      : nameToChar[name.toLowerCase()]
     if (!char) {
-      setMutationError('Select a character from the list (name must match DKP list).')
+      setMutationError(useCharacterAdminSelectors
+        ? 'Select a character from the list (name must match DKP list).'
+        : 'Select an account from the list so the character to credit is known.')
       return
     }
     const alreadyInTic = eventAttendance.some((r) => String(r.event_id) === String(addToTicEventId) && String(r.char_id) === String(char.char_id))
@@ -592,7 +611,11 @@ export default function RaidDetail({ isOfficer }) {
       {isOfficer && events.length > 0 && (
         <div className={`card${showCharDropdown ? ' officer-card--menu-open' : ''}`} style={{ marginTop: '1rem' }}>
           <h3 style={{ marginTop: 0 }}>Add attendee to tic</h3>
-          <p style={{ color: '#71717a', fontSize: '0.9rem' }}>Pick a tic and a character to add them (e.g. someone missed the paste).</p>
+          <p style={{ color: '#71717a', fontSize: '0.9rem' }}>
+            {useCharacterAdminSelectors
+              ? 'Pick a tic and a character to add them (e.g. someone missed the paste). DKP goes to that character’s linked account.'
+              : 'Pick a tic and an account to add them. The list shows the account and the character that will be credited.'}
+          </p>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', alignItems: 'flex-start' }}>
             <select
               value={addToTicEventId}
@@ -610,10 +633,11 @@ export default function RaidDetail({ isOfficer }) {
                 type="text"
                 name="dkp-tic-character"
                 value={addToTicCharQuery}
-                onChange={(e) => { setAddToTicCharQuery(e.target.value); setAddToTicResult(null); setShowCharDropdown(true) }}
+                onChange={(e) => { setAddToTicCharQuery(e.target.value); setAddToTicCharId(''); setAddToTicResult(null); setShowCharDropdown(true) }}
                 onFocus={() => setShowCharDropdown(true)}
                 onBlur={() => setTimeout(() => setShowCharDropdown(false), 200)}
-                placeholder="Character name (type to filter)"
+                placeholder={useCharacterAdminSelectors ? 'Character name (type to filter)' : 'Account, character, or alt'}
+                aria-label={useCharacterAdminSelectors ? 'Character to add' : 'Account to add'}
                 autoComplete="off"
                 aria-expanded={showCharDropdown}
                 aria-haspopup="listbox"
@@ -622,22 +646,45 @@ export default function RaidDetail({ isOfficer }) {
               />
               {showCharDropdown && (
                 <ul key={addToTicCharQuery} id="raid-tic-char-list" className="card officer-suggest" role="listbox" onMouseDown={(e) => e.preventDefault()}>
-                  {filteredCharacterNames.length === 0 ? (
+                  {useCharacterAdminSelectors ? (
+                    filteredCharacterNames.length === 0 ? (
+                      <li style={{ color: '#71717a', cursor: 'default' }}>
+                        {characterNamesList.length === 0 ? 'Loading characters…' : (addToTicCharQuery.trim() ? 'No matching characters' : 'Type to filter')}
+                      </li>
+                    ) : (
+                      filteredCharacterNames.map((n) => (
+                        <li
+                          key={n}
+                          role="option"
+                          onMouseDown={(e) => {
+                            e.preventDefault()
+                            const matches = characters.filter((row) => (row.name || '').trim().toLowerCase() === n.toLowerCase())
+                            setAddToTicCharQuery(n)
+                            setAddToTicCharId(matches.length === 1 ? String(matches[0].char_id) : '')
+                            setTimeout(() => setShowCharDropdown(false), 0)
+                          }}
+                        >
+                          {n}
+                        </li>
+                      ))
+                    )
+                  ) : filteredAccountRows.length === 0 ? (
                     <li style={{ color: '#71717a', cursor: 'default' }}>
-                      {characterNamesList.length === 0 ? 'Loading characters…' : (addToTicCharQuery.trim() ? 'No matching characters' : 'Type to filter')}
+                      {accountAdminRows.length === 0 ? 'Loading accounts…' : (addToTicCharQuery.trim() ? 'No matching accounts' : 'Type to filter')}
                     </li>
                   ) : (
-                    filteredCharacterNames.map((n) => (
+                    filteredAccountRows.map((row) => (
                       <li
-                        key={n}
+                        key={row.key}
                         role="option"
                         onMouseDown={(e) => {
                           e.preventDefault()
-                          setAddToTicCharQuery(n)
+                          setAddToTicCharQuery(row.label)
+                          setAddToTicCharId(row.char_id ? String(row.char_id) : '')
                           setTimeout(() => setShowCharDropdown(false), 0)
                         }}
                       >
-                        {n}
+                        {row.label}
                       </li>
                     ))
                   )}
