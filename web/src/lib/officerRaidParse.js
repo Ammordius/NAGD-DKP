@@ -51,9 +51,29 @@ export function parseChannelList(paste) {
   return { eventTime, names }
 }
 
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+/** Index of name as its own token. A shorter name inside a longer one does not match. */
+function wholeTokenIndex(haystack, token) {
+  const source = String(haystack ?? '')
+  const needle = String(token ?? '')
+  if (!needle) return -1
+  const re = new RegExp(`(^|[^A-Za-z0-9])${escapeRegExp(needle)}(?![A-Za-z0-9])`, 'i')
+  const match = re.exec(source)
+  if (!match) return -1
+  return match.index + match[1].length
+}
+
+function blankSpan(text, index, length) {
+  return text.slice(0, index) + ' '.repeat(length) + text.slice(index + length)
+}
+
 /**
  * Parse loot log by matching against known character names and item names.
- * Longest item match wins. Character names are matched only after the item text is removed.
+ * Longest whole item match wins. Character names are matched only after the item
+ * text is removed, and only as whole tokens, so "deepmind" does not also add "mind".
  */
 export function parseLootLogByMatch(paste, characterNamesList, itemNamesList) {
   const lines = (paste || '').split(/\r?\n/).map((l) => l.trim()).filter(Boolean)
@@ -63,24 +83,30 @@ export function parseLootLogByMatch(paste, characterNamesList, itemNamesList) {
   for (const line of lines) {
     const quoted = (line.match(/'([^']+)'/)?.[1] || line).trim()
     if (!quoted) continue
-    const lower = quoted.toLowerCase()
     let itemName = ''
+    let itemIndex = -1
     for (const name of items) {
-      if (name && lower.includes(name.toLowerCase())) {
+      const idx = wholeTokenIndex(quoted, name)
+      if (idx >= 0) {
         itemName = name
+        itemIndex = idx
         break
       }
     }
-    const itemIndex = itemName ? lower.indexOf(itemName.toLowerCase()) : -1
-    const lineWithoutItem = itemIndex >= 0
-      ? (quoted.slice(0, itemIndex) + quoted.slice(itemIndex + itemName.length)).trim()
+    let search = itemIndex >= 0
+      ? blankSpan(quoted, itemIndex, itemName.length)
       : quoted
-    const lowerWithoutItem = lineWithoutItem.toLowerCase()
-    const characterNames = chars.filter((name) => name && lowerWithoutItem.includes(name.toLowerCase()))
+    const characterNames = []
+    for (const name of chars) {
+      const idx = wholeTokenIndex(search, name)
+      if (idx < 0) continue
+      characterNames.push(name)
+      search = blankSpan(search, idx, name.length)
+    }
     const dkpMatch = quoted.match(/(\d+)\s*dkp/i)
     const cost = dkpMatch ? parseInt(dkpMatch[1], 10) : 0
     const hasDkp = !!dkpMatch
-    results.push({ rawLine: quoted, itemName, characterNames: [...characterNames], cost: isNaN(cost) ? 0 : cost, hasDkp })
+    results.push({ rawLine: quoted, itemName, characterNames, cost: isNaN(cost) ? 0 : cost, hasDkp })
   }
   return results
 }
