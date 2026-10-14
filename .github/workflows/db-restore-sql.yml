@@ -68,7 +68,8 @@ jobs:
 
       - name: Dry-run SQL restore preflight
         env:
-          GH_TOKEN: ${{ (inputs.source_repository == 'Current repository' || inputs.source_repository == github.repository) && github.token || secrets.BACKUP_ARTIFACT_READ_TOKEN }}
+          GH_TOKEN: ${{ (inputs.source_repository == 'Current repository' || inputs.source_repository == github.repository) && github.token || (inputs.source_repository == 'RimidalEQ/RimidalEQ-NAGD-DKP-backup' && secrets.BACKUP_ARTIFACT_READ_TOKEN_STAGING) || '' }}
+          BACKUP_ARTIFACT_TOKEN_SECRET: ${{ (inputs.source_repository == 'Current repository' || inputs.source_repository == github.repository) && 'GITHUB_TOKEN' || (inputs.source_repository == 'RimidalEQ/RimidalEQ-NAGD-DKP-backup' && 'BACKUP_ARTIFACT_READ_TOKEN_STAGING') || '' }}
           SQL_BACKUP_AGE_IDENTITY: ${{ secrets.SQL_BACKUP_AGE_IDENTITY }}
           SQL_RESTORE_DB_URL: ${{ secrets.SQL_RESTORE_DB_URL }}
           SQL_RESTORE_DESTINATION_NAME: ${{ vars.SQL_RESTORE_DESTINATION_NAME }}
@@ -151,7 +152,8 @@ jobs:
       - name: Restore SQL backup
         if: success()
         env:
-          GH_TOKEN: ${{ (inputs.source_repository == 'Current repository' || inputs.source_repository == github.repository) && github.token || secrets.BACKUP_ARTIFACT_READ_TOKEN }}
+          GH_TOKEN: ${{ (inputs.source_repository == 'Current repository' || inputs.source_repository == github.repository) && github.token || (inputs.source_repository == 'RimidalEQ/RimidalEQ-NAGD-DKP-backup' && secrets.BACKUP_ARTIFACT_READ_TOKEN_STAGING) || '' }}
+          BACKUP_ARTIFACT_TOKEN_SECRET: ${{ (inputs.source_repository == 'Current repository' || inputs.source_repository == github.repository) && 'GITHUB_TOKEN' || (inputs.source_repository == 'RimidalEQ/RimidalEQ-NAGD-DKP-backup' && 'BACKUP_ARTIFACT_READ_TOKEN_STAGING') || '' }}
           SQL_BACKUP_AGE_IDENTITY: ${{ secrets.SQL_BACKUP_AGE_IDENTITY }}
           SQL_RESTORE_DB_URL: ${{ secrets.SQL_RESTORE_DB_URL }}
           SQL_RESTORE_DESTINATION_NAME: ${{ vars.SQL_RESTORE_DESTINATION_NAME }}

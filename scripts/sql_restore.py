@@ -30,17 +30,13 @@ PRODUCTION_RESTORE_ENABLED = False
 MAX_DATA_SQL_BYTES = 512 * 1024 * 1024
 MIN_POSTGRES_MAJOR = 15
 TRANSACTION_POOLER_PORT = 6543
+# Explicit non-production destinations: (name, host, database).
+# Empty until an officer commits a staging identity. A hostname string is not enough.
+# Production is never listed. PRODUCTION_RESTORE_ENABLED stays false.
+ALLOWED_RESTORE_DESTINATIONS: tuple[tuple[str, str, str], ...] = ()
+LOCAL_DESTINATION_HOSTS = frozenset({"localhost", "127.0.0.1"})
 
-REQUIRED_FUNCTIONS = (
-    "begin_restore_load",
-    "end_restore_load",
-    "fix_serial_sequences_for_restore",
-    "refresh_dkp_summary",
-    "refresh_all_raid_attendance_totals",
-    "refresh_account_dkp_summary_internal",
-    "refresh_character_dkp_spent",
-    "refresh_dkp_period_totals",
-)
+REQUIRED_FUNCTIONS = sql_backup.SOURCE_RESTORE_FUNCTIONS
 
 DELETE_ORDER = (
     "bid_portfolio_auction_fact",
@@ -175,6 +171,25 @@ def assert_production_locked(destination_name: str, host: str, denied_hosts: set
         raise RestoreError("Production restore is disabled.")
 
 
+def assert_destination_identity(name: str, host: str, database: str) -> None:
+    """Allow a destination only when its name, host, and database are an explicit identity."""
+    if (
+        production_name(name)
+        or production_name(host)
+        or production_name(database)
+    ):
+        raise RestoreError("Production restore is disabled.")
+    identity = (name, host.lower(), database)
+    allowed = {(item_name, item_host.lower(), item_database) for item_name, item_host, item_database in ALLOWED_RESTORE_DESTINATIONS}
+    if os.environ.get("GITHUB_ACTIONS") == "true":
+        if identity not in allowed:
+            raise RestoreError("Destination identity is not an approved restore target.")
+        return
+    if host.lower() in LOCAL_DESTINATION_HOSTS or identity in allowed:
+        return
+    raise RestoreError("Destination identity is not an approved restore target.")
+
+
 def assert_actions_context() -> None:
     if os.environ.get("GITHUB_ACTIONS") != "true":
         return
@@ -204,6 +219,9 @@ def _redact(text: str, secrets: list[str]) -> str:
 
 def _psql_env(conn: dict[str, str | int], *, read_only: bool) -> dict[str, str]:
     env = os.environ.copy()
+    for key in list(env):
+        if key.startswith("BACKUP_ARTIFACT_READ_TOKEN") or key == "BACKUP_ARTIFACT_TOKEN_SECRET":
+            env.pop(key, None)
     for key in (
         "SUPABASE_DB_URL",
         "SQL_RESTORE_DB_URL",
@@ -212,7 +230,6 @@ def _psql_env(conn: dict[str, str | int], *, read_only: bool) -> dict[str, str]:
         "DATABASE_URL",
         "PGPASSWORD",
         "GH_TOKEN",
-        "BACKUP_ARTIFACT_READ_TOKEN",
         "GITHUB_TOKEN",
     ):
         env.pop(key, None)
@@ -288,6 +305,7 @@ def connect_destination() -> dict[str, str | int]:
         raise RestoreError("Connected database does not match SQL_RESTORE_DATABASE_NAME.")
     if production_name(expected_name):
         raise RestoreError("Production restore is disabled.")
+    assert_destination_identity(expected_name, str(conn["host"]), str(conn["database"]))
     return conn
 
 
@@ -361,6 +379,7 @@ def verify_bundle_bytes(files: dict[str, bytes], *, source: str, schema_path: Pa
         raise RestoreError(f"Missing canonical schema file {sql_backup.CANONICAL_SCHEMA}.")
     if fingerprint != sql_backup.schema_fingerprint(schema_path):
         raise RestoreError("Schema fingerprint does not match docs/supabase-schema-full.sql.")
+    require_restorable_live_schema(manifest)
     version = manifest.get("postgresql_version")
     if not isinstance(version, str) or not version.strip() or len(version) > 200 or "\n" in version:
         raise RestoreError("Manifest postgresql_version is invalid.")
@@ -379,6 +398,20 @@ def verify_bundle_bytes(files: dict[str, bytes], *, source: str, schema_path: Pa
     return sql_text, manifest
 
 
+def require_restorable_live_schema(manifest: dict) -> dict:
+    """Separate the repository file hash from the live catalog. Do not apply schema."""
+    try:
+        live = sql_backup.live_schema_record(manifest)
+    except sql_backup.BackupError as exc:
+        raise RestoreError(str(exc)) from None
+    if live["status"] == "incompatible":
+        raise RestoreError(
+            "Live schema status is incompatible. "
+            "The source-code fingerprint is not live verification, and restore does not apply schema."
+        )
+    return live
+
+
 def load_bundle_dir(directory: Path, source: str) -> tuple[str, dict]:
     files = _read_bundle_files(directory)
     return verify_bundle_bytes(files, source=source, schema_path=repo_root() / sql_backup.CANONICAL_SCHEMA)
@@ -390,7 +423,7 @@ def load_from_fetch(source: str, current_repository: str, artifact_id: str) -> t
     identity = sql_backup_fetch._identity_from_env()
     if not identity:
         raise RestoreError("Set SQL_BACKUP_AGE_IDENTITY to verify the backup.")
-    token = sql_backup_fetch._token_from_env()
+    token = sql_backup_fetch.token_for_source(source, current_repository)
     work = Path(tempfile.mkdtemp(prefix="sql-restore-fetch-"))
     try:
         try:
@@ -922,6 +955,10 @@ def build_report(
         f"workflow_run_id: {manifest['workflow_run_id']}",
         f"artifact_id: {artifact_id or 'bundle'}",
         f"canonical_schema_sha256: {manifest['canonical_schema_sha256']}",
+        "source_schema_fingerprint: match",
+        f"live_schema_status: {sql_backup.live_schema_record(manifest)['status']}",
+        "live_schema_compared_to_repository_file: false",
+        "restore_compatibility: compatible",
         f"postgresql_source: {manifest['postgresql_version']}",
         f"postgresql_destination_major: {int(meta['version_num']) // 10000}",
         f"destination_name: {destination_name}",

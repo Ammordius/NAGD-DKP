@@ -56,19 +56,33 @@ Create a GitHub Environment named `sql-restore` before the first run. Give it re
 | `SQL_RESTORE_DESTINATION_HOST` | Variable | Host of `SQL_RESTORE_DB_URL`, without the user or password. |
 | `SQL_RESTORE_DATABASE_NAME` | Variable | Database name in that URI. |
 
-The workflow also reads the existing repository secrets `SQL_BACKUP_AGE_IDENTITY`, `SQL_BACKUP_AGE_RECIPIENT`, and, for another repository, `BACKUP_ARTIFACT_READ_TOKEN`.
+The workflow also reads the existing repository secrets `SQL_BACKUP_AGE_IDENTITY` and `SQL_BACKUP_AGE_RECIPIENT`. A backup from `RimidalEQ/RimidalEQ-NAGD-DKP-backup` uses `BACKUP_ARTIFACT_READ_TOKEN_STAGING`. The current repository uses `GITHUB_TOKEN`. `Ammordius/NAGD-DKP` has no mapped token, so that choice fails closed.
 
 Inputs:
 
 - **execution** defaults to `dry-run`.
 - **source repository** is limited to this repository, `Ammordius/NAGD-DKP`, and `RimidalEQ/RimidalEQ-NAGD-DKP-backup`.
-- **artifact id** is required. The latest artifact is not selected automatically.
+- **artifact id** is required. The latest artifact is not selected automatically. A weekly or monthly id is valid. A `supabase-backup-*` id is refused.
 - **destination name** must match `SQL_RESTORE_DESTINATION_NAME`.
 - **confirm** stays empty for a dry-run. A restore requires `RESTORE <destination name>`.
 
 The restore job runs only after the dry-run succeeds. It then takes an encrypted backup of the destination and uploads that artifact before any mutation. If that backup fails, the restore does not start. Only one restore workflow runs at a time.
 
-`PRODUCTION_RESTORE_ENABLED` in `scripts/sql_restore.py` is false. A destination name of production, or a host listed in `scripts/sql_restore_production_denylist.txt`, is refused even if a variable says otherwise. Enabling a production restore is a later code change after a separate test.
+`PRODUCTION_RESTORE_ENABLED` in `scripts/sql_restore.py` is false. A destination is accepted only when its name, host, and database equal an entry in `ALLOWED_RESTORE_DESTINATIONS`. That tuple is empty, so a GitHub Actions restore has no approved target. Outside Actions, only `localhost` and `127.0.0.1` are accepted, which is how the disposable tests run. A hostname that merely avoids the letters `prod` is not an approved destination. A destination name of production, or a host listed in `scripts/sql_restore_production_denylist.txt`, is still refused. Enabling a production restore is a later code change after a separate test.
+
+Create the `sql-restore` environment, with required reviewers and a deployment branch policy of `main` only, before the first restore. The workflow does not create that protection by itself.
+
+## Officer procedure
+
+1. On the source repository, set `SUPABASE_DB_URL` to the session-pooler URI (port 5432, `sslmode=require`) and `SQL_BACKUP_AGE_RECIPIENT` to the age public key. Generate the key pair with `age-keygen` on a machine you control. Keep the identity file offline. Put that identity only in the destination secret `SQL_BACKUP_AGE_IDENTITY`. The backup workflow must not have the private key.
+2. To read artifacts from `RimidalEQ/RimidalEQ-NAGD-DKP-backup`, store a fine-grained token with Actions read on that source as `BACKUP_ARTIFACT_READ_TOKEN_STAGING`. The allowlist is the current repository plus the names in `APPROVED_SOURCE_REPOSITORIES` in `scripts/sql_backup_fetch.py`. The token map is `SOURCE_READ_TOKEN_SECRETS`. One token has one owner. Forking the source does not grant artifact access. Do not rename the staging secret.
+3. Run **DB SQL backup fetch** and copy the numeric artifact id from the step summary. Latest discovery ignores `sql-backup-weekly-*` and `sql-backup-monthly-*`. Paste one of those ids when you want that copy.
+4. Run **DB SQL restore** with execution `dry-run` and that id. The summary should show `writes: none`, source and destination row counts, preserved claims, and expected DKP. A fetch that reports `inner_verified: false` has not done this check.
+5. Approve the `sql-restore` environment. Required reviewers and a `main`-only branch policy are the approval. The operator still types `RESTORE <destination name>` in the confirm field. The workflow uploads `sql-restore-destination-backup-*` before it writes. Both the dry-run job and the restore job use that environment, so reviewers may be asked twice.
+6. After a committed restore, read the step summary again: counts, claim anchors, and DKP totals. `source_schema_fingerprint: match` means the artifact matches the checked-out `docs/supabase-schema-full.sql`. `live_schema_status` is the source catalog probe and is not that file hash. `restore_compatibility: compatible` means the destination preflight passed. `schema_apply: false` means this workflow did not apply schema. `not_assessed` is not a live-schema verification.
+7. A failed statement rolls the transaction back, including derived totals and the restore flag. If the destination backup fails, the restore does not start. If a committed restore is wrong, run this workflow again with the `sql-restore-destination-backup-*` artifact id and the same destination. Production restore stays disabled in `scripts/sql_restore.py`.
+
+Set `SQL_BACKUP_SCHEDULE` to `enabled` only after a manual backup has succeeded and an officer has authorized the scheduled read of production. This repository does not set that variable by itself.
 
 ## Local test
 
@@ -78,4 +92,4 @@ python scripts/test_sql_restore.py
 
 Set `DKP_PG_TEST=1` to fail instead of skip when Docker, `psql`, `pg_dump`, or `age` is missing. The test uses two disposable Postgres databases. It does not read a production URL.
 
-The test checks source DKP totals, preserved destination auth and privileges, historical name-only attendance, a rolled-back mid-restore failure, and a second restore that does not duplicate rows.
+The test checks source DKP totals, preserved destination auth and privileges, historical name-only attendance, a rolled-back mid-restore failure, and a second restore that does not duplicate rows. It also zips the backup, discovers it as a same-repository artifact and as an approved-fork artifact, refuses a CSV artifact in that listing, and restores the downloaded bytes.

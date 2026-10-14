@@ -15,6 +15,7 @@ import sys
 import tarfile
 import tempfile
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 import sql_backup
@@ -179,6 +180,38 @@ def test_allowlist_contract() -> None:
         check(name in excluded, f"{name} is missing from the exclusion list")
 
 
+def test_csv_coverage() -> None:
+    if str(ROOT) not in sys.path:
+        sys.path.insert(0, str(ROOT))
+    from export_supabase_public_tables import PUBLIC_TABLES
+
+    included = set(sql_backup.INCLUDED_TABLES)
+    left_out = set(sql_backup.CSV_NOT_IN_PORTABLE_BACKUP)
+    excluded = {item["name"] for item in sql_backup.EXCLUDED_TABLES}
+    check(not (included & left_out), "A portable table is also marked as a CSV-only exclusion")
+    check(left_out <= excluded, "A CSV exclusion is missing from EXCLUDED_TABLES")
+    check(
+        set(PUBLIC_TABLES) == included | left_out,
+        "CSV exporter tables are not classified as portable or intentionally excluded",
+    )
+
+
+def test_retention_tiers() -> None:
+    now = datetime(2026, 10, 14, tzinfo=timezone.utc)
+    weekly = f"sql-backup-weekly-{now.strftime('%G-W%V')}"
+    monthly = f"sql-backup-monthly-{now.strftime('%Y-%m')}"
+    check(weekly == "sql-backup-weekly-2026-W42", weekly)
+    check(monthly == "sql-backup-monthly-2026-10", monthly)
+    fresh = sql_backup.retention_tiers(set(), now, False)
+    check(fresh == [(weekly, 90), (monthly, 90)], str(fresh))
+    present = sql_backup.retention_tiers({weekly, monthly}, now, False)
+    check(present == [], str(present))
+    forced = sql_backup.retention_tiers({weekly, monthly}, now, True)
+    check(forced == fresh, str(forced))
+    monthly_only = sql_backup.retention_tiers({weekly}, now, False)
+    check(monthly_only == [(monthly, 90)], str(monthly_only))
+
+
 def test_missing_credentials() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         out_dir = Path(tmp)
@@ -302,6 +335,7 @@ def test_disposable_snapshot() -> None:
     missing_tools = [
         name
         for name, present in (
+            ("psql", command_exists("psql")),
             ("docker", docker_ok()),
             ("pg_dump", command_exists("pg_dump")),
             ("age", command_exists("age")),
@@ -449,6 +483,12 @@ def test_disposable_snapshot() -> None:
                 manifest["canonical_schema_sha256"] == sql_backup.schema_fingerprint(ROOT / "docs" / "supabase-schema-full.sql"),
                 "schema fingerprint mismatch",
             )
+            file_hash = manifest["canonical_schema_sha256"]
+            check(manifest["live_schema_status"] == "compatible", "live schema was not assessed as compatible")
+            check(manifest["live_schema_compared_to_repository_file"] is False, "live schema was compared to the repository file")
+            check(manifest["live_schema_fingerprint"] != file_hash, "live fingerprint reused the repository file hash")
+            check("live_schema_status: compatible" in combined, "summary omitted the live schema status")
+            check("live_schema_compared_to_repository_file: false" in combined, "summary claimed a file comparison")
             check(manifest["postgresql_version"], "postgresql_version is empty")
             check(manifest["included_tables"] == list(EXPECTED_INCLUDED), "included_tables mismatch")
             excluded_names = [item["name"] for item in manifest["excluded_tables"]]
@@ -466,15 +506,67 @@ def test_disposable_snapshot() -> None:
             "SELECT CASE WHEN account_id IS NULL THEN 'null' ELSE 'set' END FROM raid_event_attendance WHERE char_id = 'char-hist-1';",
         )
         check("null" in after.stdout, "Backup modified historical attendance")
+
+        file_hash = sql_backup.schema_fingerprint(ROOT / "docs" / "supabase-schema-full.sql")
+        dropped = psql(container, "ALTER TABLE public.characters DROP COLUMN guild_rank CASCADE;")
+        check(dropped.returncode == 0, "could not drop a column for the drift check:\n" + (dropped.stderr or dropped.stdout))
+        drifted = sql_backup.assess_live_schema(
+            sql_backup.parse_database_url(
+                f"postgresql://postgres:{FIXTURE_PASSWORD}@127.0.0.1:{port}/postgres?sslmode=disable"
+            )
+        )
+        check(drifted["status"] == "incompatible", "dropped column was still compatible")
+        check(drifted["compared_to_repository_file"] is False, "drift assessment compared the repository file")
+        check(sql_backup.schema_fingerprint(ROOT / "docs" / "supabase-schema-full.sql") == file_hash, "schema file hash changed")
+        check(drifted["fingerprint"] != file_hash, "drift fingerprint reused the repository file hash")
     finally:
         run_docker(["rm", "-f", container], timeout=60)
+
+
+def test_live_schema_contract() -> None:
+    sql = sql_backup.source_catalog_sql()
+    upper = sql.upper()
+    for word in ("CREATE", "ALTER", "DROP", "INSERT", "UPDATE", "DELETE", "TRUNCATE"):
+        check(word not in upper, f"probe SQL contains {word}")
+    tables = {name: list(columns) for name, columns in sql_backup.REQUIRED_SOURCE_COLUMNS.items()}
+    functions = list(sql_backup.SOURCE_RESTORE_FUNCTIONS)
+    fresh = sql_backup.interpret_source_catalog({"tables": tables, "functions": functions})
+    check(fresh["status"] == "compatible", fresh["status"])
+    check(fresh["compared_to_repository_file"] is False, "catalog interpretation compared the repository file")
+    file_hash = sql_backup.schema_fingerprint(ROOT / "docs" / "supabase-schema-full.sql")
+    check(fresh["fingerprint"] != file_hash, "catalog fingerprint reused the repository file hash")
+    tables["characters"] = [column for column in tables["characters"] if column != "guild_rank"]
+    drifted = sql_backup.interpret_source_catalog({"tables": tables, "functions": functions})
+    check(drifted["status"] == "incompatible", "missing column stayed compatible")
+    check(sql_backup.schema_fingerprint(ROOT / "docs" / "supabase-schema-full.sql") == file_hash, "schema file hash changed")
+    missing = sql_backup.live_schema_record({})
+    check(missing["status"] == "not_assessed", "a missing probe was marked assessed")
+    check(missing["status"] != "compatible", "a missing probe was marked compatible")
+    try:
+        sql_backup.live_schema_record(
+            {
+                "live_schema_status": "compatible",
+                "live_schema_fingerprint": fresh["fingerprint"],
+                "live_schema_compared_to_repository_file": True,
+            }
+        )
+        fail("a repository-file comparison was accepted")
+    except sql_backup.BackupError:
+        pass
+    workflow = (ROOT / ".github" / "workflows" / "db-sql-backup.yml").read_text(encoding="utf-8")
+    check("github.ref == 'refs/heads/main'" in workflow, "SQL backup is not limited to main")
+    check("vars.SQL_BACKUP_SCHEDULE == 'enabled'" in workflow, "schedule gate was removed")
+    check("SQL_BACKUP_SCHEDULE: enabled" not in workflow, "schedule was enabled in the workflow")
 
 
 def main() -> None:
     test_copy_parser()
     test_allowlist_contract()
+    test_csv_coverage()
+    test_retention_tiers()
     test_missing_credentials()
     test_failed_dump()
+    test_live_schema_contract()
     test_disposable_snapshot()
     print("SQL backup export tests passed")
 

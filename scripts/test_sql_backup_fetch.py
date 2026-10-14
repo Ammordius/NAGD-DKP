@@ -236,6 +236,47 @@ def test_legacy_csv_and_wrong_name() -> None:
     expect_error("not an SQL backup", named, artifact_id=str(ARTIFACT_ID))
 
 
+def test_tier_names_need_an_artifact_id() -> None:
+    payload = zip_bytes(AGE_NAME, b"age-encryption.org/v1\n-> fake\n")
+    weekly_name = "sql-backup-weekly-2026-W42"
+    monthly_name = "sql-backup-monthly-2026-10"
+    runs = f"/repos/{SOURCE}/actions/workflows/db-sql-backup.yml/runs"
+    artifacts = f"/repos/{SOURCE}/actions/runs/{RUN_ID}/artifacts"
+
+    latest = FakeGitHub()
+    weekly = artifact_record(name=weekly_name, size=len(payload))
+    latest.add_json(runs, {"workflow_runs": [success_run()]})
+    latest.add_json(artifacts, {"artifacts": [weekly]})
+    expect_error("No eligible SQL backup artifact", latest)
+    check(not any(kind == "bytes" for kind, _path in latest.calls), "latest discovery downloaded a weekly artifact")
+
+    explicit = FakeGitHub()
+    record = artifact_record(name=weekly_name, size=len(payload))
+    bind_artifact(explicit, record, success_run(), payload)
+    summary = run_fetch(explicit, artifact_id=str(ARTIFACT_ID))
+    check(f"artifact_name: {weekly_name}" in summary, summary)
+    check("inner_verified: false" in summary, summary)
+    check(any(kind == "bytes" for kind, _path in explicit.calls), "explicit weekly id was not downloaded")
+
+    month = FakeGitHub()
+    month_record = artifact_record(artifact_id=8080, name=monthly_name, size=len(payload))
+    bind_artifact(month, month_record, success_run(), payload)
+    month_summary = run_fetch(month, artifact_id="8080")
+    check(f"artifact_name: {monthly_name}" in month_summary, month_summary)
+
+    mixed = FakeGitHub()
+    daily = artifact_record(artifact_id=1, name=STAMP, size=len(payload))
+    tier = artifact_record(artifact_id=2, name=weekly_name, size=len(payload))
+    mixed.add_json(runs, {"workflow_runs": [success_run()]})
+    mixed.add_json(artifacts, {"artifacts": [tier, daily]})
+    mixed.add_json(f"/repos/{SOURCE}/actions/runs/{RUN_ID}", success_run())
+    mixed.zips["1"] = payload
+    mixed_summary = run_fetch(mixed)
+    check("artifact_id: 1" in mixed_summary, mixed_summary)
+    check("artifact_name: " + STAMP in mixed_summary, mixed_summary)
+    check("sql-backup-weekly" not in mixed_summary, mixed_summary)
+
+
 def test_pagination_and_unverified_download() -> None:
     client = FakeGitHub()
     runs = f"/repos/{SOURCE}/actions/workflows/db-sql-backup.yml/runs"
@@ -465,6 +506,8 @@ def test_valid_approved_fork() -> None:
         check(f"artifact_id: {ARTIFACT_ID}" in summary, summary)
         check("characters: 2" in summary, summary)
         check("format_version: 1" in summary, summary)
+        check("live_schema_status: not_assessed" in summary, summary)
+        check("live_schema_compared_to_repository_file: false" in summary, summary)
         check(ROW_MARKER.decode("ascii") not in summary, "SQL row text was printed")
         check(TOKEN not in summary, "token leaked in summary")
         check("AGE-SECRET-KEY-" not in summary, "age identity was printed")
@@ -528,19 +571,123 @@ def test_redirect_drops_authorization() -> None:
         blob_server.server_close()
 
 
+def test_token_secret_map() -> None:
+    check(
+        sql_backup_fetch.token_secret_name(OTHER, CURRENT) == "BACKUP_ARTIFACT_READ_TOKEN_STAGING",
+        "staging repository did not select its secret",
+    )
+    check(
+        sql_backup_fetch.token_secret_name(CURRENT, CURRENT) == "GITHUB_TOKEN",
+        "current repository did not select GITHUB_TOKEN",
+    )
+    try:
+        sql_backup_fetch.token_secret_name(SOURCE, CURRENT)
+        fail("unmapped approved repository was given a token")
+    except sql_backup_fetch.FetchError as exc:
+        check("mapped" in str(exc), str(exc))
+        check(TOKEN not in str(exc), "token leaked in an unmapped-source error")
+    saved = {
+        key: os.environ.get(key)
+        for key in ("BACKUP_ARTIFACT_TOKEN_SECRET", "GH_TOKEN", "BACKUP_ARTIFACT_READ_TOKEN_STAGING")
+    }
+    try:
+        os.environ["BACKUP_ARTIFACT_TOKEN_SECRET"] = "BACKUP_ARTIFACT_READ_TOKEN"
+        os.environ["GH_TOKEN"] = TOKEN
+        try:
+            sql_backup_fetch.token_for_source(OTHER, CURRENT)
+            fail("wrong secret name was accepted")
+        except sql_backup_fetch.FetchError as exc:
+            check("does not match" in str(exc), str(exc))
+            check(TOKEN not in str(exc), "token leaked in a secret-name error")
+        os.environ["BACKUP_ARTIFACT_TOKEN_SECRET"] = "BACKUP_ARTIFACT_READ_TOKEN_STAGING"
+        check(sql_backup_fetch.token_for_source(OTHER, CURRENT) == TOKEN, "mapped source did not read GH_TOKEN")
+        os.environ.pop("GH_TOKEN", None)
+        os.environ.pop("BACKUP_ARTIFACT_TOKEN_SECRET", None)
+        os.environ["BACKUP_ARTIFACT_READ_TOKEN_STAGING"] = TOKEN
+        check(sql_backup_fetch.token_for_source(OTHER, CURRENT) == TOKEN, "mapped source did not read its named secret")
+    finally:
+        for key, previous in saved.items():
+            if previous is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = previous
+    for relative in (".github/workflows/db-sql-backup-fetch.yml", ".github/workflows/db-restore-sql.yml"):
+        text = (ROOT / relative).read_text(encoding="utf-8")
+        check("secrets.BACKUP_ARTIFACT_READ_TOKEN_STAGING" in text, relative)
+        check("secrets.BACKUP_ARTIFACT_READ_TOKEN}" not in text, relative + " still requires the unmapped secret")
+
+
+def test_official_artifact_list_request() -> None:
+    """Record the artifact-list request shape. A loopback response does not authorize the real secret."""
+    seen: dict[str, str | None] = {}
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self) -> None:  # noqa: N802
+            seen["path"] = self.path.split("?", 1)[0]
+            seen["query"] = self.path
+            seen["accept"] = self.headers.get("Accept")
+            seen["version"] = self.headers.get("X-GitHub-Api-Version")
+            seen["auth"] = self.headers.get("Authorization")
+            body = b'{"artifacts":[]}'
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, fmt: str, *args) -> None:
+            return
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        port = server.server_address[1]
+        client = sql_backup_fetch.UrllibGitHub(TOKEN, base_url=f"http://127.0.0.1:{port}")
+        payload = client.get_json("/repos/RimidalEQ/RimidalEQ-NAGD-DKP-backup/actions/artifacts?per_page=1")
+        check(
+            seen.get("path") == "/repos/RimidalEQ/RimidalEQ-NAGD-DKP-backup/actions/artifacts",
+            str(seen.get("path")),
+        )
+        check("per_page=1" in str(seen.get("query")), str(seen.get("query")))
+        check(seen.get("accept") == "application/vnd.github+json", str(seen.get("accept")))
+        check(seen.get("version") == "2022-11-28", str(seen.get("version")))
+        check(seen.get("auth") == "Bearer " + TOKEN, "API host did not receive the bearer token")
+        check(TOKEN not in json.dumps(payload), "token leaked in the artifact list")
+        official = sql_backup_fetch.UrllibGitHub(TOKEN)
+        check(sql_backup_fetch.API_ROOT == "https://api.github.com", "client does not use the official GitHub API")
+        check(
+            official.send_authorization(
+                "https://api.github.com/repos/RimidalEQ/RimidalEQ-NAGD-DKP-backup/actions/artifacts?per_page=1"
+            ),
+            "official API host would not receive authorization",
+        )
+        check(
+            official.send_authorization("https://objects.githubusercontent.com/file") is False,
+            "authorization would be sent to the download host",
+        )
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
 def test_live_optional() -> None:
     if os.environ.get("BACKUP_ARTIFACT_LIVE_TEST") != "1":
         return
-    token = os.environ.get("BACKUP_ARTIFACT_READ_TOKEN", "")
     repo = os.environ.get("BACKUP_ARTIFACT_LIVE_REPO", "")
     artifact_id = os.environ.get("BACKUP_ARTIFACT_LIVE_ARTIFACT_ID", "")
+    current = os.environ.get("GITHUB_REPOSITORY", "local/not-the-live-source")
     check(
-        bool(token and repo and artifact_id),
-        "BACKUP_ARTIFACT_LIVE_TEST=1 requires BACKUP_ARTIFACT_READ_TOKEN, "
-        "BACKUP_ARTIFACT_LIVE_REPO, and BACKUP_ARTIFACT_LIVE_ARTIFACT_ID",
+        bool(repo and artifact_id),
+        "BACKUP_ARTIFACT_LIVE_TEST=1 requires BACKUP_ARTIFACT_LIVE_REPO and BACKUP_ARTIFACT_LIVE_ARTIFACT_ID",
     )
-    check(repo in sql_backup_fetch.APPROVED_SOURCE_REPOSITORIES, "live repository is not on the allowlist")
     check(sql_backup_fetch._DIGITS.fullmatch(artifact_id) is not None, "live artifact id must be a number")
+    try:
+        token = sql_backup_fetch.token_for_source(repo, current)
+    except sql_backup_fetch.FetchError as exc:
+        message = str(exc)
+        check("github_pat_" not in message and "ghp_" not in message, "token leaked in a live setup error")
+        fail(message)
     client = sql_backup_fetch.UrllibGitHub(token)
     try:
         payload = client.get_json(f"/repos/{repo}/actions/artifacts/{artifact_id}")
@@ -559,9 +706,12 @@ def main() -> None:
     test_expired_artifact()
     test_failed_workflow_and_unapproved_branch()
     test_legacy_csv_and_wrong_name()
+    test_tier_names_need_an_artifact_id()
     test_pagination_and_unverified_download()
     test_zip_path_traversal()
     test_redirect_drops_authorization()
+    test_token_secret_map()
+    test_official_artifact_list_request()
     test_corrupt_checksum()
     test_schema_mismatch()
     test_wrong_format_version()

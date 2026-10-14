@@ -32,6 +32,13 @@ APPROVED_SOURCE_REPOSITORIES = (
     "Ammordius/NAGD-DKP",
     "RimidalEQ/RimidalEQ-NAGD-DKP-backup",
 )
+# Secret names only. The current repository uses the job token. An approved
+# repository with no entry fails closed. Add a production source by naming
+# its secret here and in the workflow expressions. Do not store token values.
+CURRENT_REPOSITORY_TOKEN_SECRET = "GITHUB_TOKEN"
+SOURCE_READ_TOKEN_SECRETS = {
+    "RimidalEQ/RimidalEQ-NAGD-DKP-backup": "BACKUP_ARTIFACT_READ_TOKEN_STAGING",
+}
 APPROVED_HEAD_BRANCHES = ("main",)
 WORKFLOW_FILE = "db-sql-backup.yml"
 LEGACY_WORKFLOW_FILE = "db-backup.yml"
@@ -51,6 +58,8 @@ MAX_REDIRECTS = 3
 ARCHIVE_NAMES = ("data.sql", "manifest.json", "SHA256SUMS", "summary.txt")
 _REPO = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")
 _ARTIFACT_NAME = re.compile(r"sql-backup-[0-9]{8}T[0-9]{6}Z")
+_WEEKLY_NAME = re.compile(r"sql-backup-weekly-[0-9]{4}-W[0-9]{2}")
+_MONTHLY_NAME = re.compile(r"sql-backup-monthly-[0-9]{4}-[0-9]{2}")
 _AGE_MEMBER = re.compile(r"sql-backup-[0-9]{8}T[0-9]{6}Z\.tar\.gz\.age")
 _DIGITS = re.compile(r"[1-9][0-9]*")
 _SHA256 = re.compile(r"sha256:[0-9a-f]{64}")
@@ -85,6 +94,35 @@ def require_source(source: str, current_repository: str) -> str:
             "A fork relationship does not grant artifact access."
         )
     return repo
+
+
+def token_secret_name(source: str, current_repository: str) -> str:
+    """Return the Actions secret name for this source. Never returns a token value."""
+    repo = require_source(source, current_repository)
+    current = normalize_repo(current_repository) if (current_repository or "").strip() else ""
+    if current and repo == current:
+        return CURRENT_REPOSITORY_TOKEN_SECRET
+    mapped = SOURCE_READ_TOKEN_SECRETS.get(repo)
+    if not mapped:
+        raise FetchError("No artifact-read token is mapped for that repository.")
+    return mapped
+
+
+def token_for_source(source: str, current_repository: str) -> str:
+    """Read the token selected for this source. The value is not included in errors."""
+    expected = token_secret_name(source, current_repository)
+    declared = os.environ.get("BACKUP_ARTIFACT_TOKEN_SECRET", "").strip()
+    if declared and declared != expected:
+        raise FetchError("Artifact-read token secret does not match the source repository.")
+    if expected == CURRENT_REPOSITORY_TOKEN_SECRET:
+        value = (os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN") or "").strip()
+    else:
+        named = os.environ.get(expected, "").strip()
+        job_token = os.environ.get("GH_TOKEN", "").strip()
+        value = job_token or named if declared == expected else named or job_token
+    if not value:
+        raise FetchError("Set the mapped artifact-read token to read that repository.")
+    return value
 
 
 def _redact(text: str, secrets: list[str]) -> str:
@@ -299,14 +337,23 @@ def _legacy_name(name: object) -> bool:
 
 
 def _eligible_name(name: object) -> bool:
+    """Daily artifacts. Latest discovery ignores weekly and monthly copies."""
     return isinstance(name, str) and _ARTIFACT_NAME.fullmatch(name) is not None
+
+
+def _restorable_name(name: object) -> bool:
+    """Names an explicit artifact id may restore. The zip member stays a daily stamp."""
+    return _eligible_name(name) or (
+        isinstance(name, str)
+        and (_WEEKLY_NAME.fullmatch(name) is not None or _MONTHLY_NAME.fullmatch(name) is not None)
+    )
 
 
 def _require_artifact_shape(artifact: dict, now: datetime) -> None:
     name = artifact.get("name")
     if _legacy_name(name):
         raise FetchError("Refusing a legacy CSV backup artifact.")
-    if not _eligible_name(name):
+    if not _restorable_name(name):
         raise FetchError("Artifact name is not an SQL backup.")
     if _expired(artifact, now):
         raise FetchError("Artifact is expired.")
@@ -558,6 +605,10 @@ def verify_plaintext(tar_path: Path, *, source: str, run_id: str, schema_path: P
     fingerprint = _require_text(manifest.get("canonical_schema_sha256"), "canonical_schema_sha256", _SHA256)
     if fingerprint != sql_backup.schema_fingerprint(schema_path):
         raise FetchError("Schema fingerprint does not match docs/supabase-schema-full.sql.")
+    try:
+        sql_backup.live_schema_record(manifest)
+    except sql_backup.BackupError as exc:
+        raise FetchError(str(exc)) from None
     version = manifest.get("postgresql_version")
     if not isinstance(version, str) or not version.strip() or len(version) > 200 or "\n" in version:
         raise FetchError("Manifest postgresql_version is invalid.")
@@ -590,7 +641,10 @@ def _summary(artifact: dict, run: dict, manifest: dict | None) -> str:
             f"format_version: {manifest['format_version']}",
             f"created_at: {manifest['created_at']}",
             f"source_commit_sha: {manifest['source_commit_sha']}",
+            f"source_schema_fingerprint: {manifest['canonical_schema_sha256']}",
             f"canonical_schema_sha256: {manifest['canonical_schema_sha256']}",
+            f"live_schema_status: {sql_backup.live_schema_record(manifest)['status']}",
+            "live_schema_compared_to_repository_file: false",
             f"postgresql_version: {manifest['postgresql_version']}",
             "row_counts:",
         ]
@@ -648,7 +702,7 @@ def _fetch(
     per_page: int,
 ) -> str:
     if not (token or "").strip():
-        raise FetchError("Set BACKUP_ARTIFACT_READ_TOKEN to read artifacts from another repository.")
+        raise FetchError("Set the mapped artifact-read token to read that repository.")
     repo = require_source(source, current_repository)
     run_id = _require_id(run_id, "Workflow run id")
     artifact_id = _require_id(artifact_id, "Artifact id")
@@ -690,10 +744,6 @@ def _identity_from_env() -> str | None:
     return text or None
 
 
-def _token_from_env() -> str:
-    return (os.environ.get("GH_TOKEN") or os.environ.get("BACKUP_ARTIFACT_READ_TOKEN") or "").strip()
-
-
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Download and verify a portable SQL backup artifact.")
     parser.add_argument("--source", required=True, help="Approved source repository (owner/name)")
@@ -702,8 +752,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--artifact-id", default="")
     parser.add_argument("--out-dir", type=Path, default=Path("sql-backup-fetch-out"))
     args = parser.parse_args(argv)
-    token = _token_from_env()
     try:
+        token = token_for_source(args.source, args.current_repository)
         summary = fetch(
             source=args.source,
             current_repository=args.current_repository,

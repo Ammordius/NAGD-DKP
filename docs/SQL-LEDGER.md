@@ -2,6 +2,8 @@
 
 The **Public SQL Ledger** produces **daily SQL-to-SQL diffs**: it compares the last two backup artifacts table-by-table and publishes exact **added / removed / changed** row deltas to GitHub Pages. That gives you a transparent, historical record of database state. Because it is hosted on GitHub, it acts as a **root of trust** — even a site admin cannot easily wipe it without leaving a trace (history lives in the repo and in Actions).
 
+The ledger still reads plaintext `supabase-backup-*` CSV artifacts from [CI-DB-BACKUP.md](CI-DB-BACKUP.md). It does not read `sql-backup-*` artifacts. Those are age-encrypted, and the private key is not stored in CI. The CSV schedule stays so this report can keep running. Portable recovery is [CI-DB-SQL-BACKUP.md](CI-DB-SQL-BACKUP.md).
+
 ## Backup type selection
 
 When you run the SQL Ledger workflow (manually or on schedule), you can choose which backup artifacts to compare:

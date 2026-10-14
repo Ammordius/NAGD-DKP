@@ -45,6 +45,35 @@ INCLUDED_TABLES = [
     "active_accounts",
 ]
 
+# Columns the portable backup expects on the source. Extra columns stay compatible.
+# This is a code contract, not a byte comparison with the schema file.
+REQUIRED_SOURCE_COLUMNS = {
+    "characters": ("char_id", "name", "race", "class_name", "level", "guild_rank", "claim"),
+    "accounts": ("account_id", "char_ids", "toon_names", "toon_count", "display_name", "inactive"),
+    "character_account": ("char_id", "account_id"),
+    "raids": ("raid_id", "raid_pool", "raid_name", "date", "date_iso", "attendees", "url"),
+    "raid_events": ("id", "raid_id", "event_id", "event_order", "event_name", "dkp_value", "attendee_count", "event_time"),
+    "raid_attendance": ("id", "raid_id", "char_id", "character_name"),
+    "raid_event_attendance": ("id", "raid_id", "event_id", "char_id", "character_name", "account_id"),
+    "raid_loot": ("id", "raid_id", "event_id", "item_name", "char_id", "character_name", "cost"),
+    "loot_assignment": ("loot_id", "assigned_char_id", "assigned_character_name", "assigned_via_magelo"),
+    "dkp_adjustments": ("character_name", "earned_delta", "spent_delta", "account_id"),
+    "raid_classifications": ("raid_id", "mob", "zone"),
+    "active_raiders": ("character_key",),
+    "active_accounts": ("account_id",),
+}
+
+SOURCE_RESTORE_FUNCTIONS = (
+    "begin_restore_load",
+    "end_restore_load",
+    "fix_serial_sequences_for_restore",
+    "refresh_dkp_summary",
+    "refresh_all_raid_attendance_totals",
+    "refresh_account_dkp_summary_internal",
+    "refresh_character_dkp_spent",
+    "refresh_dkp_period_totals",
+)
+
 EXCLUDED_TABLES = [
     {"name": "auth.users", "reason": "Supabase-managed identity"},
     {"name": "profiles", "reason": "auth-linked identity"},
@@ -61,6 +90,38 @@ EXCLUDED_TABLES = [
     {"name": "bid_portfolio_auction_fact", "reason": "rebuilt by the bidding backfill"},
     {"name": "account_class_coverage", "reason": "Magelo rankings cache refreshed by CI"},
 ]
+
+# Tables export_supabase_public_tables.py writes that this portable backup leaves out.
+CSV_NOT_IN_PORTABLE_BACKUP = (
+    "profiles",
+    "account_class_coverage",
+    "bid_portfolio_auction_fact",
+    "raid_dkp_totals",
+    "raid_attendance_dkp",
+    "raid_attendance_dkp_by_account",
+    "dkp_summary",
+    "account_dkp_summary",
+    "dkp_period_totals",
+    "character_loot_assignment_counts",
+    "officer_audit_log",
+)
+
+
+def retention_tiers(existing_names: set[str], now: datetime, force: bool) -> list[tuple[str, int]]:
+    """Weekly and monthly artifact names to upload, with retention days.
+
+    existing_names are this repository's own non-expired Actions artifact names.
+    A fork does not inherit another repository's list. force uploads both tiers
+    even when that period already has a copy.
+    """
+    weekly = f"sql-backup-weekly-{now.strftime('%G-W%V')}"
+    monthly = f"sql-backup-monthly-{now.strftime('%Y-%m')}"
+    chosen: list[tuple[str, int]] = []
+    if force or weekly not in existing_names:
+        chosen.append((weekly, 90))
+    if force or monthly not in existing_names:
+        chosen.append((monthly, 90))
+    return chosen
 
 _COPY_HEADER = re.compile(
     r'^COPY\s+(?:"(?P<schema>[^"]+)"\."(?P<table>[^"]+)"|(?P<schema2>[A-Za-z_]\w*)\.(?P<table2>[A-Za-z_]\w*))\s+\((?P<cols>.*)\)\s+FROM stdin;$'
@@ -83,6 +144,136 @@ def schema_fingerprint(schema_path: Path) -> str:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return "sha256:" + digest.hexdigest()
+
+
+def unevaluated_live_schema() -> dict:
+    return {
+        "status": "not_assessed",
+        "fingerprint": None,
+        "compared_to_repository_file": False,
+    }
+
+
+def live_schema_record(manifest: dict) -> dict:
+    """Read the manifest's live-catalog status. A missing block is not assessed."""
+    has_status = "live_schema_status" in manifest
+    has_fingerprint = "live_schema_fingerprint" in manifest
+    has_compared = "live_schema_compared_to_repository_file" in manifest
+    if not has_status and not has_fingerprint and not has_compared:
+        return unevaluated_live_schema()
+    status = manifest.get("live_schema_status")
+    if status not in ("not_assessed", "compatible", "incompatible"):
+        raise BackupError("Manifest live_schema_status is invalid.")
+    if manifest.get("live_schema_compared_to_repository_file") is not False:
+        raise BackupError("Manifest claims the live schema was compared to the repository file.")
+    fingerprint = manifest.get("live_schema_fingerprint")
+    if status == "not_assessed":
+        if fingerprint not in (None, ""):
+            raise BackupError("An unassessed live schema cannot carry a fingerprint.")
+        fingerprint = None
+    elif not isinstance(fingerprint, str) or not re.fullmatch(r"sha256:[0-9a-f]{64}", fingerprint):
+        raise BackupError("Manifest live_schema_fingerprint is invalid.")
+    return {
+        "status": status,
+        "fingerprint": fingerprint,
+        "compared_to_repository_file": False,
+    }
+
+
+def _sql_literal(value: str) -> str:
+    if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", value):
+        raise BackupError("Rejected an unexpected SQL identifier.")
+    return "'" + value + "'"
+
+
+def source_catalog_sql() -> str:
+    tables = ", ".join(_sql_literal(name) for name in INCLUDED_TABLES)
+    functions = ", ".join(_sql_literal(name) for name in SOURCE_RESTORE_FUNCTIONS)
+    return f"""
+SET default_transaction_read_only = on;
+SELECT json_build_object(
+  'tables', COALESCE((
+    SELECT json_object_agg(table_name, cols)
+    FROM (
+      SELECT c.table_name, json_agg(c.column_name ORDER BY c.ordinal_position) AS cols
+      FROM information_schema.columns c
+      WHERE c.table_schema = 'public' AND c.table_name IN ({tables})
+      GROUP BY c.table_name
+    ) present
+  ), '{{}}'::json),
+  'functions', COALESCE((
+    SELECT json_agg(p.proname ORDER BY p.proname)
+    FROM pg_proc p
+    JOIN pg_namespace n ON n.oid = p.pronamespace
+    WHERE n.nspname = 'public' AND p.pronargs = 0 AND p.proname IN ({functions})
+  ), '[]'::json)
+)::text;
+"""
+
+
+def catalog_fingerprint(payload: dict) -> str:
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return "sha256:" + hashlib.sha256(encoded).hexdigest()
+
+
+def interpret_source_catalog(payload: dict) -> dict:
+    tables = payload.get("tables")
+    functions = payload.get("functions")
+    if not isinstance(tables, dict) or not isinstance(functions, list):
+        tables = {}
+        functions = []
+        compatible = False
+    else:
+        compatible = True
+    observed_tables: dict[str, list[str]] = {}
+    for name in INCLUDED_TABLES:
+        present = tables.get(name) if isinstance(tables, dict) else None
+        columns = [column for column in present if isinstance(column, str)] if isinstance(present, list) else []
+        observed_tables[name] = sorted(set(columns))
+        required = set(REQUIRED_SOURCE_COLUMNS[name])
+        if not required.issubset(columns):
+            compatible = False
+    observed_functions = sorted({item for item in functions if isinstance(item, str)})
+    if not set(SOURCE_RESTORE_FUNCTIONS).issubset(observed_functions):
+        compatible = False
+    return {
+        "status": "compatible" if compatible else "incompatible",
+        "fingerprint": catalog_fingerprint({"functions": observed_functions, "tables": observed_tables}),
+        "compared_to_repository_file": False,
+    }
+
+
+def assess_live_schema(conn: dict[str, str | int]) -> dict:
+    """Read the source catalog. Does not apply schema and does not hash the repository file."""
+    if not shutil.which("psql"):
+        raise BackupError("psql is not installed or not on PATH.")
+    sql = source_catalog_sql()
+    upper = sql.upper()
+    for forbidden in ("CREATE", "ALTER", "DROP", "INSERT", "UPDATE", "DELETE", "TRUNCATE"):
+        if forbidden in upper:
+            raise BackupError("Live schema probe is not read-only.")
+    secrets = [str(conn["password"]), str(conn["user"])]
+    with tempfile.TemporaryDirectory(prefix="sql-backup-schema-") as tmp:
+        script = Path(tmp) / "probe.sql"
+        script.write_text(sql, encoding="utf-8", newline="\n")
+        if os.name == "posix":
+            os.chmod(script, 0o600)
+        completed = _run(
+            ["psql", "-X", "-v", "ON_ERROR_STOP=1", "-q", "-t", "-A", "-f", str(script)],
+            _child_env(conn),
+            secrets,
+            "psql",
+        )
+    text = (completed.stdout or "").strip()
+    if not text:
+        raise BackupError("Live schema probe returned no rows.")
+    try:
+        payload = json.loads(text.splitlines()[-1])
+    except json.JSONDecodeError as exc:
+        raise BackupError("Live schema probe returned unexpected data.") from exc
+    if not isinstance(payload, dict):
+        raise BackupError("Live schema probe returned unexpected data.")
+    return interpret_source_catalog(payload)
 
 
 def sha256_file(path: Path) -> str:
@@ -258,8 +449,16 @@ def _run(args: list[str], env: dict[str, str], secrets: list[str], label: str) -
 
 def _child_env(conn: dict[str, str | int]) -> dict[str, str]:
     env = os.environ.copy()
-    for key in ("SUPABASE_DB_URL", "SQL_BACKUP_AGE_RECIPIENT", "DATABASE_URL"):
-        env.pop(key, None)
+    for key in list(env):
+        if key.startswith("BACKUP_ARTIFACT_READ_TOKEN") or key in (
+            "SUPABASE_DB_URL",
+            "SQL_BACKUP_AGE_RECIPIENT",
+            "DATABASE_URL",
+            "GH_TOKEN",
+            "GITHUB_TOKEN",
+            "BACKUP_ARTIFACT_TOKEN_SECRET",
+        ):
+            env.pop(key, None)
     env["PGHOST"] = str(conn["host"])
     env["PGPORT"] = str(conn["port"])
     env["PGUSER"] = str(conn["user"])
@@ -315,7 +514,10 @@ def write_summary(path: Path, manifest: dict) -> None:
         f"workflow_run_id: {manifest['workflow_run_id']}",
         f"source_commit_sha: {manifest['source_commit_sha']}",
         f"canonical_schema_source: {manifest['canonical_schema_source']}",
+        f"source_schema_fingerprint: {manifest['canonical_schema_sha256']}",
         f"canonical_schema_sha256: {manifest['canonical_schema_sha256']}",
+        f"live_schema_status: {manifest['live_schema_status']}",
+        "live_schema_compared_to_repository_file: false",
         f"postgresql_version: {manifest['postgresql_version']}",
         f"included_tables: {len(manifest['included_tables'])}",
         f"total_rows: {sum(manifest['row_counts'].values())}",
@@ -338,6 +540,7 @@ def build_bundle(
     workflow_run_id: str,
     source_commit_sha: str,
     created_at: str,
+    live_schema: dict | None = None,
 ) -> dict:
     if _CREATE_TABLE.search(sql_text):
         raise BackupError("Refusing to package a dump that contains CREATE TABLE.")
@@ -345,6 +548,15 @@ def build_bundle(
     row_counts = require_allowlist(blocks)
     data_path = bundle / "data.sql"
     data_path.write_bytes(sql_text.encode("utf-8"))
+    assessed = dict(live_schema or unevaluated_live_schema())
+    assessed["compared_to_repository_file"] = False
+    live = live_schema_record(
+        {
+            "live_schema_status": assessed.get("status"),
+            "live_schema_fingerprint": assessed.get("fingerprint"),
+            "live_schema_compared_to_repository_file": False,
+        }
+    )
     manifest = {
         "format_version": FORMAT_VERSION,
         "source_repository": source_repository,
@@ -353,6 +565,9 @@ def build_bundle(
         "created_at": created_at,
         "canonical_schema_source": CANONICAL_SCHEMA,
         "canonical_schema_sha256": schema_fingerprint(schema_path),
+        "live_schema_status": live["status"],
+        "live_schema_fingerprint": live["fingerprint"],
+        "live_schema_compared_to_repository_file": False,
         "postgresql_version": postgresql_version(sql_text),
         "included_tables": list(INCLUDED_TABLES),
         "excluded_tables": [dict(item) for item in EXCLUDED_TABLES],
@@ -444,6 +659,7 @@ def run_backup(out_path: Path) -> dict:
             os.chmod(bundle, 0o700)
         data_path = bundle / "data.sql"
         dump_data(conn, data_path)
+        live_schema = assess_live_schema(conn)
         sql_text = data_path.read_text(encoding="utf-8")
         manifest = build_bundle(
             bundle,
@@ -453,6 +669,7 @@ def run_backup(out_path: Path) -> dict:
             workflow_run_id=os.environ.get("GITHUB_RUN_ID", "").strip() or "local",
             source_commit_sha=_git_sha(root),
             created_at=created_at,
+            live_schema=live_schema,
         )
         encrypt_archive(bundle, recipient, out_path)
         return manifest
@@ -498,7 +715,10 @@ def main(argv: list[str] | None = None) -> int:
         f"source_repository: {manifest['source_repository']}",
         f"workflow_run_id: {manifest['workflow_run_id']}",
         f"source_commit_sha: {manifest['source_commit_sha']}",
+        f"source_schema_fingerprint: {manifest['canonical_schema_sha256']}",
         f"canonical_schema_sha256: {manifest['canonical_schema_sha256']}",
+        f"live_schema_status: {manifest['live_schema_status']}",
+        "live_schema_compared_to_repository_file: false",
         f"postgresql_version: {manifest['postgresql_version']}",
         f"artifact_bytes: {out_path.stat().st_size}",
         "row_counts:",

@@ -61,7 +61,7 @@ Do not truncate the new project with an archived reset script. Load data with th
 
 ## Step 4: Load data into your mirror DB
 
-You need to get CSV data into Supabase. Two main options: **from a backup artifact** (e.g. from the original repo’s Actions) or **from your own `data/` CSVs**.
+You need guild data in Supabase. The portable copy is an SQL backup ([CI-DB-SQL-BACKUP.md](CI-DB-SQL-BACKUP.md), restore in [CI-DB-SQL-RESTORE.md](CI-DB-SQL-RESTORE.md)). The steps below remain the legacy CSV load from a `supabase-backup-*` artifact or from your own `data/` CSVs. Do not unzip an `sql-backup-*` artifact and treat it as those CSVs.
 
 ### Option A: Restore from a GitHub backup artifact (recommended if you have one)
 
@@ -164,11 +164,12 @@ See [LOOT-TO-CHARACTER.md](LOOT-TO-CHARACTER.md) and [DEBUG-loot-to-character-su
 
 | Workflow | Schedule | What it does | Needs |
 |----------|----------|--------------|--------|
-| **DB backup (on change)** | Daily (e.g. 07:00 UTC) | If `raid_loot` count changed, or a manual run checks **force**: exports public tables to CSV (including loot assignments and bid facts), uploads artifact `supabase-backup-YYYY-MM-DD` (and weekly/monthly when applicable). | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` |
+| **DB SQL backup** | Daily at 07:30 UTC once `SQL_BACKUP_SCHEDULE` is `enabled`; manual anytime | Age-encrypted guild SQL. Daily artifact for 7 days, plus weekly and monthly copies for 90 days when this repo does not already have that period’s artifact. Not gated on `raid_loot`. | `SUPABASE_DB_URL`, `SQL_BACKUP_AGE_RECIPIENT` |
+| **DB backup (on change)** | Daily (e.g. 07:00 UTC) | Legacy CSV export. If `raid_loot` count changed, or a manual run checks **force**: exports public tables to CSV, uploads `supabase-backup-YYYY-MM-DD` (and weekly/monthly when applicable). The public ledger still reads these. | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` |
 | **SQL Ledger** | Daily (e.g. 07:30 UTC) | Downloads two latest backup artifacts, diffs them (excluding `raid_loot`), publishes delta to GitHub Pages. | At least 2 backup artifacts (from DB backup workflow). No Supabase secrets. |
 | **Loot-to-character assignment** | Daily (e.g. 18:00 UTC) or manual | Fetches raid_loot (and related) from Supabase, downloads Magelo dumps, assigns loot to characters, pushes assignments and counts to Supabase. | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`; optional: `data/elemental_armor.json`, `dkp_elemental_to_magelo.json` |
 
-All three workflows use the **same** repo and the **same** Supabase project (your mirror DB). The SQL in the repo (e.g. in `docs/`) is the source of schema; data comes from your DB and (for the ledger) from the backup artifacts produced by CI.
+These workflows use the **same** repo and the **same** Supabase project (your mirror DB). The SQL in the repo is the source of schema (`docs/supabase-schema-full.sql` only). Guild data for a new database comes from the portable SQL backup. The ledger still reads the CSV artifacts.
 
 ---
 

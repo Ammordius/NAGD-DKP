@@ -8,6 +8,7 @@ This test never reads a production database URL.
 
 from __future__ import annotations
 
+import io
 import os
 import socket
 import subprocess
@@ -15,11 +16,14 @@ import sys
 import tarfile
 import tempfile
 import time
-from datetime import date
+import zipfile
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 import sql_backup
+import sql_backup_fetch
 import sql_restore
+from test_sql_backup_fetch import FakeGitHub
 
 ROOT = Path(__file__).resolve().parents[1]
 BACKUP_SCRIPT = ROOT / "scripts" / "sql_backup.py"
@@ -33,12 +37,19 @@ ADMIN_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
 OFFICER_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
 SOURCE_ID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
 AS_OF = date(2026, 10, 14)
+SOURCE_REPO = "Ammordius/NAGD-DKP"
+CURRENT_REPO = "example/dkp"
+FETCH_TOKEN = "github_pat_e2e_not_a_real_token"
+WORKFLOW_RUN_ID = 123456789
+SQL_ARTIFACT_ID = 9091
+CSV_ARTIFACT_ID = 9092
 
 SOURCE_SQL = """
 INSERT INTO auth.users (id, email) VALUES ('cccccccc-cccc-4ccc-8ccc-cccccccccccc', 'source-player@example.test');
 
 INSERT INTO public.characters (char_id, name, class_name) VALUES
   ('char-linked', 'LinkedToon', 'Warrior'),
+  ('char-explicit', 'ExplicitToon', 'Shadow Knight'),
   ('char-name', 'UniqueName', 'Cleric'),
   ('char-a', 'SharedA', 'Rogue'),
   ('char-b', 'SharedB', 'Mage'),
@@ -50,6 +61,7 @@ INSERT INTO public.accounts (account_id, display_name, toon_count) VALUES
   ('acct-old', 'OldRaid', 1);
 INSERT INTO public.character_account (char_id, account_id) VALUES
   ('char-linked', 'acct-linked'),
+  ('char-explicit', 'acct-linked'),
   ('char-name', 'acct-name'),
   ('char-a', 'acct-shared'),
   ('char-b', 'acct-shared'),
@@ -59,21 +71,30 @@ INSERT INTO public.raids (raid_id, raid_name, date_iso) VALUES
   ('raid-old', 'Old', to_char(current_date - 90, 'YYYY-MM-DD'));
 INSERT INTO public.raid_events (raid_id, event_id, event_order, event_name, dkp_value) VALUES
   ('raid-recent', '1', 1, 'Boss', '10'),
+  ('raid-recent', 'corr', 2, 'Add', '15'),
   ('raid-old', '1', 1, 'Ancient', '4');
+UPDATE public.raid_events SET dkp_value = '0' WHERE raid_id = 'raid-recent' AND event_id = 'corr';
 INSERT INTO public.raid_attendance (raid_id, char_id, character_name) VALUES
   ('raid-recent', 'char-linked', 'LinkedToon');
 INSERT INTO public.raid_event_attendance (raid_id, event_id, char_id, character_name, account_id) VALUES
   ('raid-recent', '1', 'char-linked', 'LinkedToon', NULL),
+  ('raid-recent', '1', 'char-explicit', 'ExplicitToon', 'acct-linked'),
   ('raid-recent', '1', NULL, 'UniqueName', NULL),
   ('raid-recent', '1', 'char-a', 'SharedA', 'acct-shared'),
   ('raid-recent', '1', 'char-b', 'SharedB', 'acct-shared'),
-  ('raid-old', '1', 'char-old', 'OldToon', NULL);
+  ('raid-old', '1', 'char-old', 'OldToon', 'acct-old'),
+  ('raid-old', '1', NULL, 'ForgottenName', NULL);
 INSERT INTO public.raid_loot (raid_id, event_id, item_name, char_id, character_name, cost) VALUES
   ('raid-recent', '1', 'SourceBlade', 'char-linked', 'LinkedToon', '3');
 INSERT INTO public.loot_assignment (loot_id, assigned_char_id, assigned_character_name)
 SELECT id, 'char-linked', 'LinkedToon' FROM public.raid_loot WHERE item_name = 'SourceBlade';
 INSERT INTO public.dkp_adjustments (character_name, earned_delta, spent_delta, account_id) VALUES
-  ('LinkedToon', 100, 7, 'acct-linked');
+  ('LinkedToon', 100, 7, 'acct-linked'),
+  ('ExplicitToon', 5, 0, 'acct-linked');
+UPDATE public.profiles
+SET display_name = 'Source Player',
+    ui_preferences = '{"theme":"source"}'::jsonb
+WHERE id = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
 INSERT INTO public.raid_classifications (raid_id, mob, zone) VALUES
   ('raid-recent', 'Boss', 'Test Zone');
 INSERT INTO public.active_raiders (character_key) VALUES ('char-linked');
@@ -165,6 +186,7 @@ def sample_blocks() -> dict[str, dict]:
             ["char_id", "name"],
             [
                 ("char-linked", "LinkedToon"),
+                ("char-explicit", "ExplicitToon"),
                 ("char-name", "UniqueName"),
                 ("char-a", "SharedA"),
                 ("char-b", "SharedB"),
@@ -184,6 +206,7 @@ def sample_blocks() -> dict[str, dict]:
             ["char_id", "account_id"],
             [
                 ("char-linked", "acct-linked"),
+                ("char-explicit", "acct-linked"),
                 ("char-name", "acct-name"),
                 ("char-a", "acct-shared"),
                 ("char-b", "acct-shared"),
@@ -196,7 +219,11 @@ def sample_blocks() -> dict[str, dict]:
         ),
         "raid_events": block(
             ["id", "raid_id", "event_id", "event_order", "event_name", "dkp_value"],
-            [("1", "raid-recent", "1", "1", "Boss", "10"), ("2", "raid-old", "1", "1", "Ancient", "4")],
+            [
+                ("1", "raid-recent", "1", "1", "Boss", "10"),
+                ("3", "raid-recent", "corr", "2", "Add", "0"),
+                ("2", "raid-old", "1", "1", "Ancient", "4"),
+            ],
         ),
         "raid_attendance": block(
             ["id", "raid_id", "char_id", "character_name"],
@@ -206,10 +233,12 @@ def sample_blocks() -> dict[str, dict]:
             ["id", "raid_id", "event_id", "char_id", "character_name", "account_id"],
             [
                 ("1", "raid-recent", "1", "char-linked", "LinkedToon", None),
+                ("6", "raid-recent", "1", "char-explicit", "ExplicitToon", "acct-linked"),
                 ("2", "raid-recent", "1", None, "UniqueName", None),
                 ("3", "raid-recent", "1", "char-a", "SharedA", "acct-shared"),
                 ("4", "raid-recent", "1", "char-b", "SharedB", "acct-shared"),
-                ("5", "raid-old", "1", "char-old", "OldToon", None),
+                ("5", "raid-old", "1", "char-old", "OldToon", "acct-old"),
+                ("7", "raid-old", "1", None, "ForgottenName", None),
             ],
         ),
         "raid_loot": block(
@@ -219,7 +248,7 @@ def sample_blocks() -> dict[str, dict]:
         "loot_assignment": block(["loot_id"], [("1",)]),
         "dkp_adjustments": block(
             ["character_name", "earned_delta", "account_id"],
-            [("LinkedToon", "100", "acct-linked")],
+            [("LinkedToon", "100", "acct-linked"), ("ExplicitToon", "5", "acct-linked")],
         ),
         "raid_classifications": block(["raid_id", "mob"], [("raid-recent", "Boss")]),
         "active_raiders": block(["character_key"], [("char-linked",)]),
@@ -252,6 +281,57 @@ def test_policy_and_totals() -> None:
             os.environ.pop("SQL_RESTORE_ALLOW_PRODUCTION", None)
         else:
             os.environ["SQL_RESTORE_ALLOW_PRODUCTION"] = previous
+    sql_restore.assert_destination_identity("disposable-destination", "127.0.0.1", "postgres")
+    try:
+        sql_restore.assert_destination_identity("staging", "db.example.supabase.co", "postgres")
+        fail("non-local host was allowed without an allowlist entry")
+    except sql_restore.RestoreError as exc:
+        check("approved" in str(exc), str(exc))
+    actions = os.environ.get("GITHUB_ACTIONS")
+    os.environ["GITHUB_ACTIONS"] = "true"
+    try:
+        sql_restore.assert_destination_identity("disposable-destination", "127.0.0.1", "postgres")
+        fail("GitHub Actions accepted an unlisted destination")
+    except sql_restore.RestoreError as exc:
+        check("approved" in str(exc), str(exc))
+    finally:
+        if actions is None:
+            os.environ.pop("GITHUB_ACTIONS", None)
+        else:
+            os.environ["GITHUB_ACTIONS"] = actions
+    try:
+        sql_restore.assert_destination_identity("production", "127.0.0.1", "postgres")
+        fail("production name was allowed on localhost")
+    except sql_restore.RestoreError as exc:
+        check("disabled" in str(exc), str(exc))
+    incompatible = {
+        "live_schema_status": "incompatible",
+        "live_schema_fingerprint": "sha256:" + ("ab" * 32),
+        "live_schema_compared_to_repository_file": False,
+    }
+    try:
+        sql_restore.require_restorable_live_schema(incompatible)
+        fail("incompatible live schema was restorable")
+    except sql_restore.RestoreError as exc:
+        check("incompatible" in str(exc), str(exc))
+        check("does not apply schema" in str(exc), str(exc))
+    unevaluated = sql_restore.require_restorable_live_schema({})
+    check(unevaluated["status"] == "not_assessed", "a missing live assessment was treated as compatible")
+    secret_name = "BACKUP_ARTIFACT_READ_TOKEN_STAGING"
+    previous_token = os.environ.get(secret_name)
+    os.environ[secret_name] = "github_pat_test_token_value_not_real"
+    try:
+        child = sql_restore._psql_env(
+            {"host": "127.0.0.1", "port": 5432, "user": "postgres", "password": "secret", "database": "postgres", "sslmode": "disable"},
+            read_only=True,
+        )
+        check(secret_name not in child, "artifact token name was passed to psql")
+        check("github_pat_test_token_value_not_real" not in "\n".join(child.values()), "artifact token was passed to psql")
+    finally:
+        if previous_token is None:
+            os.environ.pop(secret_name, None)
+        else:
+            os.environ[secret_name] = previous_token
     totals = sql_restore.expected_account_totals(sample_blocks(), AS_OF)
     check(
         totals
@@ -303,6 +383,18 @@ def test_cli_refuses_unsafe_requests() -> None:
     completed = run_restore(env, ["--bundle-dir", "missing", "--source", "example/dkp", "--destination-name", "disposable-destination"])
     check(completed.returncode != 0, "transaction pooler was accepted")
     check("6543" in completed.stderr or "pooler" in completed.stderr, completed.stderr)
+    check(PASSWORD not in completed.stderr, "password was printed")
+
+    env = restore_env(5432)
+    env["SQL_RESTORE_DB_URL"] = "postgresql://postgres:postgres@db.example.supabase.co:5432/postgres?sslmode=require"
+    env["SQL_RESTORE_DESTINATION_HOST"] = "db.example.supabase.co"
+    env["SQL_RESTORE_DESTINATION_NAME"] = "staging"
+    completed = run_restore(
+        env,
+        ["--bundle-dir", "missing", "--source", "example/dkp", "--destination-name", "staging"],
+    )
+    check(completed.returncode != 0, "unlisted destination host was accepted")
+    check("approved" in completed.stderr, completed.stderr)
     check(PASSWORD not in completed.stderr, "password was printed")
 
     env = restore_env(5432)
@@ -470,8 +562,8 @@ def backup_source(port: int, out_dir: Path, recipient: str) -> None:
         env.pop(key, None)
     env["SUPABASE_DB_URL"] = f"postgresql://postgres:{PASSWORD}@127.0.0.1:{port}/postgres?sslmode=disable"
     env["SQL_BACKUP_AGE_RECIPIENT"] = recipient
-    env["GITHUB_REPOSITORY"] = "example/dkp"
-    env["GITHUB_RUN_ID"] = "123456789"
+    env["GITHUB_REPOSITORY"] = SOURCE_REPO
+    env["GITHUB_RUN_ID"] = str(WORKFLOW_RUN_ID)
     env["GITHUB_SHA"] = "abc123deadbeef"
     completed = subprocess.run(
         [sys.executable, str(BACKUP_SCRIPT), "--out-dir", str(out_dir)],
@@ -507,6 +599,98 @@ def extract_bundle(age_file: Path, key_path: Path, directory: Path) -> None:
             archive.extractall(bundle, filter="data")
         except TypeError:
             archive.extractall(bundle)
+
+
+def artifact_zip(age_file: Path) -> bytes:
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        archive.writestr(age_file.name, age_file.read_bytes())
+    return buffer.getvalue()
+
+
+def bind_discovery(client: FakeGitHub, repo: str, age_file: Path, payload: bytes) -> None:
+    sql_name = age_file.name.removesuffix(".tar.gz.age")
+    run = {
+        "id": WORKFLOW_RUN_ID,
+        "path": ".github/workflows/db-sql-backup.yml",
+        "status": "completed",
+        "conclusion": "success",
+        "head_branch": "main",
+        "head_sha": "abc123deadbeef",
+    }
+    sql_artifact = {
+        "id": SQL_ARTIFACT_ID,
+        "name": sql_name,
+        "expired": False,
+        "expires_at": "2099-01-01T00:00:00Z",
+        "size_in_bytes": len(payload),
+        "created_at": "2026-10-14T15:04:05Z",
+        "workflow_run": {"id": WORKFLOW_RUN_ID, "head_branch": "main", "head_sha": "abc123deadbeef"},
+    }
+    csv_artifact = {
+        "id": CSV_ARTIFACT_ID,
+        "name": "supabase-backup-2026-10-14",
+        "expired": False,
+        "expires_at": "2099-01-01T00:00:00Z",
+        "size_in_bytes": 32,
+        "created_at": "2026-10-14T15:04:05Z",
+        "workflow_run": {"id": WORKFLOW_RUN_ID, "head_branch": "main", "head_sha": "abc123deadbeef"},
+    }
+    client.add_json(
+        f"/repos/{repo}/actions/workflows/db-sql-backup.yml/runs",
+        {"workflow_runs": [run]},
+    )
+    client.add_json(
+        f"/repos/{repo}/actions/runs/{WORKFLOW_RUN_ID}/artifacts",
+        {"artifacts": [csv_artifact, sql_artifact]},
+    )
+    client.add_json(f"/repos/{repo}/actions/runs/{WORKFLOW_RUN_ID}", run)
+    client.add_json(f"/repos/{repo}/actions/artifacts/{SQL_ARTIFACT_ID}", sql_artifact)
+    client.add_json(f"/repos/{repo}/actions/artifacts/{CSV_ARTIFACT_ID}", csv_artifact)
+    client.zips[str(SQL_ARTIFACT_ID)] = payload
+
+
+def discover_verified_backup(repo: str, current: str, age_file: Path, identity: str, out_dir: Path) -> Path:
+    payload = artifact_zip(age_file)
+    client = FakeGitHub()
+    bind_discovery(client, repo, age_file, payload)
+    summary = sql_backup_fetch.fetch(
+        source=repo,
+        current_repository=current,
+        token=FETCH_TOKEN,
+        client=client,
+        out_dir=out_dir,
+        identity=identity,
+        now=datetime.now(timezone.utc),
+    )
+    check("inner_verified: true" in summary, "fetch did not verify the archive:\n" + summary)
+    check("format_version: 1" in summary, "fetch did not report format_version:\n" + summary)
+    for table in sql_backup.INCLUDED_TABLES:
+        check(f"  {table}:" in summary, f"fetch summary omitted {table}")
+    check("supabase-backup" not in summary, "fetch selected a CSV artifact:\n" + summary)
+    check(FETCH_TOKEN not in summary and PASSWORD not in summary, "fetch summary leaked a secret")
+    check(SOURCE_EMAIL not in summary and "LinkedToon" not in summary, "fetch summary printed row data")
+    downloaded = out_dir / age_file.name
+    check(downloaded.is_file(), "fetch did not write the age file")
+    check(downloaded.read_bytes() == age_file.read_bytes(), "downloaded artifact bytes differ from the backup")
+    check(downloaded.read_bytes().startswith(b"age-encryption.org/"), "downloaded file is not age ciphertext")
+    refused = out_dir / "csv-refused"
+    try:
+        sql_backup_fetch.fetch(
+            source=repo,
+            current_repository=current,
+            token=FETCH_TOKEN,
+            client=client,
+            out_dir=refused,
+            artifact_id=str(CSV_ARTIFACT_ID),
+            identity=identity,
+            now=datetime.now(timezone.utc),
+        )
+        fail("CSV artifact was accepted")
+    except sql_backup_fetch.FetchError as exc:
+        check("legacy CSV" in str(exc), str(exc))
+    check(not refused.exists(), "refused CSV artifact was written for restore")
+    return downloaded
 
 
 def assert_clean_output(completed: subprocess.CompletedProcess[str]) -> None:
@@ -567,17 +751,30 @@ def test_two_databases() -> None:
             backup_source(source_port, out_dir, age_public_key(key_path))
             artifacts = list(out_dir.glob("sql-backup-*.tar.gz.age"))
             check(len(artifacts) == 1, "expected one source backup")
-            extract_bundle(artifacts[0], key_path, tmp_path)
+            identity = key_path.read_text(encoding="utf-8")
+            same_repo = discover_verified_backup(
+                SOURCE_REPO, SOURCE_REPO, artifacts[0], identity, tmp_path / "same-repo"
+            )
+            cross_repo = discover_verified_backup(
+                SOURCE_REPO, CURRENT_REPO, artifacts[0], identity, tmp_path / "cross-repo"
+            )
+            check(same_repo.read_bytes() == cross_repo.read_bytes(), "cross-repo download differed")
+            extract_bundle(same_repo, key_path, tmp_path)
             bundle = tmp_path / "bundle"
             env = restore_env(dest_port)
 
             dry = run_restore(
                 env,
-                ["--bundle-dir", str(bundle), "--source", "example/dkp", "--destination-name", "disposable-destination"],
+                ["--bundle-dir", str(bundle), "--source", SOURCE_REPO, "--destination-name", "disposable-destination"],
             )
             assert_clean_output(dry)
             check(dry.returncode == 0, "dry-run failed:\n" + (dry.stderr or dry.stdout)[-4000:])
             check("writes: none" in dry.stdout, "dry-run did not report that it was read-only")
+            check("source_schema_fingerprint: match" in dry.stdout, "dry-run omitted the source fingerprint status")
+            check("live_schema_status: compatible" in dry.stdout, "dry-run omitted the live schema status")
+            check("live_schema_compared_to_repository_file: false" in dry.stdout, "dry-run compared the repository file")
+            check("restore_compatibility: compatible" in dry.stdout, "dry-run omitted restore compatibility")
+            check("schema_apply: false" in dry.stdout, "dry-run applied schema")
             check("acct-linked earned=10 spent=3 balance=7" in dry.stdout, "dry-run DKP report was wrong")
             check("claims_preserved_absent:\n  acct-local-only" in dry.stdout, "dry-run missed the preserved claim")
             check(query(dest, SNAPSHOT_SQL) == before, "dry-run wrote to the destination")
@@ -592,7 +789,7 @@ def test_two_databases() -> None:
                     "--bundle-dir",
                     str(bundle),
                     "--source",
-                    "example/dkp",
+                    SOURCE_REPO,
                     "--destination-name",
                     "disposable-destination",
                     "--confirm",
@@ -612,7 +809,7 @@ def test_two_databases() -> None:
                     "--bundle-dir",
                     str(bundle),
                     "--source",
-                    "example/dkp",
+                    SOURCE_REPO,
                     "--destination-name",
                     "disposable-destination",
                     "--confirm",
@@ -677,7 +874,7 @@ ROLLBACK;
                     "--bundle-dir",
                     str(bundle),
                     "--source",
-                    "example/dkp",
+                    SOURCE_REPO,
                     "--destination-name",
                     "disposable-destination",
                     "--confirm",
@@ -713,14 +910,27 @@ FROM public.account_dkp_summary;
         f"restored DKP totals were wrong: {totals}",
     )
     check(query(container, "SELECT earned_delta::int::text FROM public.dkp_adjustments WHERE character_name = 'LinkedToon';") == "100", "adjustment row was lost")
+    check(query(container, "SELECT earned_delta::int::text FROM public.dkp_adjustments WHERE character_name = 'ExplicitToon';") == "5", "tic correction adjustment was lost")
     check(query(container, "SELECT count(*) FROM public.raids;") == "2", "raid count was wrong")
-    check(query(container, "SELECT count(*) FROM public.raid_events;") == "2", "tic count was wrong")
-    check(query(container, "SELECT count(*) FROM public.raid_event_attendance;") == "5", "attendance count was wrong")
+    check(query(container, "SELECT count(*) FROM public.raid_events;") == "3", "tic count was wrong")
+    check(query(container, "SELECT dkp_value FROM public.raid_events WHERE event_id = 'corr';") == "0", "corrected tic value was wrong")
+    check(query(container, "SELECT count(*) FROM public.raid_event_attendance;") == "7", "attendance count was wrong")
+    check(
+        query(container, "SELECT count(*) FROM public.raid_event_attendance WHERE character_name = 'ForgottenName' AND char_id IS NULL AND account_id IS NULL;")
+        == "1",
+        "historical name-only attendance was lost",
+    )
     check(query(container, "SELECT count(*) FROM public.raid_loot;") == "1", "loot count was wrong")
     check(query(container, "SELECT cost FROM public.raid_loot;") == "3", "loot cost was wrong")
-    check(query(container, "SELECT count(*) FROM public.character_account;") == "5", "character mapping count was wrong")
+    check(query(container, "SELECT count(*) FROM public.character_account;") == "6", "character mapping count was wrong")
+    check(
+        query(container, "SELECT account_id FROM public.raid_event_attendance WHERE char_id = 'char-explicit';") == "acct-linked",
+        "explicit account id was lost",
+    )
     check(query(container, "SELECT count(*) FROM auth.users;") == "2", "destination auth users changed")
     check(query(container, f"SELECT count(*) FROM auth.users WHERE email = '{SOURCE_EMAIL}';") == "0", "source auth user was copied")
+    check(query(container, f"SELECT count(*) FROM public.profiles WHERE email = '{SOURCE_EMAIL}';") == "0", "source profile was copied")
+    check(query(container, "SELECT count(*) FROM public.profiles WHERE display_name = 'Source Player';") == "0", "source profile name was copied")
     check(query(container, "SELECT count(*) FROM auth.identities WHERE provider = 'discord';") == "1", "destination sign-in method changed")
     check(
         query(container, f"SELECT role || ':' || account_id FROM public.profiles WHERE id = '{ADMIN_ID}';") == "siteadmin:acct-linked",

@@ -1,10 +1,10 @@
 # Portable SQL backup
 
-This workflow exports guild DKP data as inspectable SQL so it can move between independent Supabase projects. It runs beside the CSV backup. It does not replace [CI-DB-BACKUP.md](CI-DB-BACKUP.md) or [CI-DB-RESTORE.md](CI-DB-RESTORE.md). Restore from this artifact is [CI-DB-SQL-RESTORE.md](CI-DB-SQL-RESTORE.md). Do not run this against production until `SUPABASE_DB_URL` and `SQL_BACKUP_AGE_RECIPIENT` are set and that run is explicitly authorized.
+This workflow exports guild DKP data as inspectable SQL so it can move between independent Supabase projects. It is the portable recovery backup. The CSV export in [CI-DB-BACKUP.md](CI-DB-BACKUP.md) stays scheduled for the public ledger and for legacy recovery. Restore from this artifact is [CI-DB-SQL-RESTORE.md](CI-DB-SQL-RESTORE.md). Do not run a scheduled production backup until `SUPABASE_DB_URL` and `SQL_BACKUP_AGE_RECIPIENT` are set and `SQL_BACKUP_SCHEDULE` is `enabled`. A manual run is separate and still needs those two secrets.
 
 Another repository can discover and download the artifact without database credentials. See [CI-DB-SQL-BACKUP-FETCH.md](CI-DB-SQL-BACKUP-FETCH.md). That workflow does not restore a database. Decrypting the archive needs the offline age identity, which this backup workflow does not store.
 
-`docs/supabase-schema-full.sql` remains the only schema deploy file. The artifact does not contain schema SQL.
+The artifact records two different schema facts. `canonical_schema_sha256` is the sha256 of the checked-out `docs/supabase-schema-full.sql`. It is the source-code fingerprint. `live_schema_status` is a read-only catalog probe of the source database: `compatible` or `incompatible` after that probe, and `not_assessed` when the probe did not run. `live_schema_compared_to_repository_file` is false. A matching file hash does not mean the live catalog was verified. The probe does not apply the schema file. An incompatible catalog is still exported, and restore refuses that artifact before any write.
 
 ## Why `pg_dump`
 
@@ -32,22 +32,41 @@ Another repository can discover and download the artifact without database crede
 | `officer_audit_log` | `actor_id` references `auth.users`, and rows store email plus site-admin actions. Those identities do not exist on another project. The CSV backup still exports this table for same-project recovery. |
 | `restore_in_progress` | One-row operational flag for the database that was dumped. |
 | `raid_dkp_totals`, `raid_attendance_dkp`, `raid_attendance_dkp_by_account` | Rebuilt by `refresh_all_raid_attendance_totals()`. |
-| `dkp_summary`, `account_dkp_summary`, `dkp_period_totals` | Rebuilt by `refresh_dkp_summary()` and `refresh_account_dkp_summary_internal()`. |
+| `dkp_summary` | Rebuilt by `refresh_dkp_summary()`. |
+| `account_dkp_summary` | Rebuilt by `refresh_account_dkp_summary_internal()`. |
+| `dkp_period_totals` | Rebuilt by `refresh_dkp_period_totals()`. |
 | `character_dkp_spent` | Rebuilt by `refresh_character_dkp_spent()`. |
 | `character_loot_assignment_counts` | Rebuilt from `loot_assignment`. |
 | `bid_portfolio_auction_fact` | Denormalized bidding facts. Rebuild with the existing backfill. |
 | `account_class_coverage` | Magelo rankings cache refreshed by CI. |
 | Views | Not source data. |
 
-Restore loads these tables in one transaction, then calls `end_restore_load()`. See [CI-DB-SQL-RESTORE.md](CI-DB-SQL-RESTORE.md).
+## Portable guild backup and disaster recovery
+
+A portable guild backup is the 13 allowlisted tables above. It is enough to rebuild DKP on another database that already has `docs/supabase-schema-full.sql`. It is not a complete disaster-recovery copy. Supabase’s own backup or point-in-time recovery is what recreates logins, roles, secrets, and schema. This artifact cannot.
+
+The CSV exporter still writes profiles, the officer audit log, and several caches. [scripts/restore_supabase_from_backup.py](../scripts/restore_supabase_from_backup.py) does not load every CSV it finds. `character_dkp_spent` is in neither export; restore rebuilds it.
+
+| Table | CSV export | SQL portable backup |
+| --- | --- | --- |
+| `characters`, `accounts`, `character_account`, `raids`, `raid_events`, `raid_attendance`, `raid_event_attendance`, `raid_loot`, `loot_assignment`, `dkp_adjustments`, `raid_classifications`, `active_raiders`, `active_accounts` | yes | yes |
+| `profiles`, `officer_audit_log` | yes | no; identity-linked, destination keeps its own |
+| `account_class_coverage`, `bid_portfolio_auction_fact` | yes | no; cache and bidding facts |
+| `raid_dkp_totals`, `raid_attendance_dkp`, `raid_attendance_dkp_by_account`, `dkp_summary`, `account_dkp_summary`, `dkp_period_totals`, `character_loot_assignment_counts` | yes | no; rebuilt after restore |
+| `character_dkp_spent` | no | no; rebuilt |
+| `auth.users` and other non-public schemas | no | no; Supabase-managed |
+| `restore_in_progress` | no | no; environment flag |
+| Views | no | no |
+
+Restore loads the allowlisted tables in one transaction, then calls `end_restore_load()`. See [CI-DB-SQL-RESTORE.md](CI-DB-SQL-RESTORE.md).
 
 ## GitHub Actions
 
 Workflow: [`.github/workflows/db-sql-backup.yml`](../.github/workflows/db-sql-backup.yml).
 
-- **Manual:** Actions → **DB SQL backup** → Run workflow.
-- **Daily:** the cron is present but commented. Uncomment it only after both secrets exist and a production run is explicitly authorized. It is `30 7 * * *` so it does not start at the same minute as the CSV backup.
-- The job has `contents: read` and `actions: write` (artifact upload only). It does not commit or push.
+- **Manual:** Actions → **DB SQL backup** → Run workflow, from `main`. This is the on-demand backup. It does not consult the `raid_loot` count. Check **force** to also upload this week’s and this month’s long-retention copies even when those names already exist. A run selected from another branch does not start the job.
+- **Daily:** `30 7 * * *`, thirty minutes after the CSV job. GitHub runs the schedule only from the default branch. The export runs only when that ref is `main` and the repository variable `SQL_BACKUP_SCHEDULE` is `enabled`, or when someone starts the workflow by hand from `main`. A push of this file does not read production. The schedule is not gated on the `raid_loot` row count, and it does not commit `.ci` marker files.
+- The job has `contents: read` and `actions: write`. It does not commit or push. Weekly and monthly copies are chosen by listing this repository’s own Actions artifacts. A fork does not inherit another fork’s artifact list, so a stale `.ci` commit cannot suppress or repeat those copies.
 - Upload runs only after the export step succeeds (`if: success()`), and `if-no-files-found: error` rejects an empty upload. A failed `pg_dump` or missing secret writes no artifact.
 - Logs and the step summary list table names and row counts. They do not include the connection string, password, recipient, or row contents.
 
@@ -93,7 +112,13 @@ TO dkp_backup_reader;
 
 ## Artifact
 
-The uploaded file is `sql-backup-<utc>.tar.gz.age` (retention 7 days). After decrypting with the offline private key:
+Every successful run uploads `sql-backup-<utc>.tar.gz.age` with **retention 7 days** (about 7 daily copies). When this repository does not already have a non-expired `sql-backup-weekly-<YYYY-Www>` artifact, the same file is also uploaded under that name for **90 days**. The same rule creates `sql-backup-monthly-<YYYY-MM>` for **90 days**. `actions/upload-artifact` cannot keep a file longer than 90 days.
+
+Using the existing ~5 MB upper bound from the CSV size note, and not a new measurement of production, 7 daily copies plus about 13 weekly and 3 monthly copies are on the order of 100 MB. The SQL allowlist is a subset of the CSV export, so the encrypted file should be smaller. Do not run `estimate_backup_size.py` against production just to refresh that number; it calls the live REST API.
+
+Latest discovery selects only `sql-backup-<utc>`. Weekly and monthly names are restored by pasting their artifact id. The file inside the zip stays `sql-backup-<utc>.tar.gz.age`.
+
+After decrypting with the offline private key:
 
 ```bash
 age -d -i sql-backup-key.txt -o backup.tar.gz sql-backup-YYYYMMDDTHHMMSSZ.tar.gz.age

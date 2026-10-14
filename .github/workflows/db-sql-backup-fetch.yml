@@ -64,7 +64,8 @@ jobs:
 
       - name: Download and verify SQL backup artifact
         env:
-          GH_TOKEN: ${{ (inputs.source_repository == 'Current repository' || inputs.source_repository == github.repository) && github.token || secrets.BACKUP_ARTIFACT_READ_TOKEN }}
+          GH_TOKEN: ${{ (inputs.source_repository == 'Current repository' || inputs.source_repository == github.repository) && github.token || (inputs.source_repository == 'RimidalEQ/RimidalEQ-NAGD-DKP-backup' && secrets.BACKUP_ARTIFACT_READ_TOKEN_STAGING) || '' }}
+          BACKUP_ARTIFACT_TOKEN_SECRET: ${{ (inputs.source_repository == 'Current repository' || inputs.source_repository == github.repository) && 'GITHUB_TOKEN' || (inputs.source_repository == 'RimidalEQ/RimidalEQ-NAGD-DKP-backup' && 'BACKUP_ARTIFACT_READ_TOKEN_STAGING') || '' }}
           SQL_BACKUP_AGE_IDENTITY: ${{ secrets.SQL_BACKUP_AGE_IDENTITY }}
           SOURCE_REPOSITORY: ${{ inputs.source_repository }}
           CURRENT_REPOSITORY: ${{ github.repository }}

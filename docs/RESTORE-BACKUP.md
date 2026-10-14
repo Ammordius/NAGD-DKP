@@ -1,6 +1,8 @@
-# Restoring the database from backup (canonical guide)
+# Legacy CSV restore
 
-This guide covers **full restore** of DKP data from a backup (e.g. after a bad migration or to revert data). It does **not** cover incremental/diff apply of CSVs (see [CSV-DIFF-APPLY.md](CSV-DIFF-APPLY.md)).
+This guide reloads DKP data from a `supabase-backup-*` CSV artifact, or from a local `backup/` directory of those CSVs. It does **not** cover incremental/diff apply of CSVs (see [CSV-DIFF-APPLY.md](CSV-DIFF-APPLY.md)).
+
+An `sql-backup-*.tar.gz.age` file is not a CSV tree. Decrypting it does not produce this directory layout. Use [CI-DB-SQL-RESTORE.md](CI-DB-SQL-RESTORE.md) for that artifact. Keep this procedure until a SQL restore has been demonstrated against a realistic backup and an independent database; do not delete [scripts/restore_supabase_from_backup.py](../scripts/restore_supabase_from_backup.py) before that.
 
 **Authentication and profiles are never touched.** Only DKP data tables are cleared and reloaded (characters, accounts, character_account, raids, raid_events, raid_loot, raid_attendance, raid_event_attendance, and derived/cache tables).
 
