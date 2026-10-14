@@ -70,16 +70,14 @@ tr:hover { background: #18181b; }
 .profile-raid-admin h2 { margin: 0 0 0.4rem; font-size: 1rem; }
 .raid-admin-option {
   display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 0;
+  align-items: flex-start;
+  gap: 0.4rem;
   margin: 0 0 0.35rem;
   color: #e4e4e7;
   font-size: 0.8rem;
   line-height: 1.3;
   cursor: help;
 }
-.raid-admin-option-row { display: flex; align-items: flex-start; gap: 0.4rem; }
 .raid-admin-option input[type="checkbox"] {
   width: auto;
   max-width: none;
@@ -87,15 +85,10 @@ tr:hover { background: #18181b; }
   flex: 0 0 auto;
   cursor: help;
 }
-.raid-admin-tip {
-  display: none;
-  margin: 0.25rem 0 0.1rem 1.15rem;
-  color: #a1a1aa;
-  font-size: 0.72rem;
-  line-height: 1.35;
+.ItemTitleMid span {
+  color: var(--item-card-name, #fbbf24);
+  font-weight: 700;
 }
-.raid-admin-option:hover .raid-admin-tip,
-.raid-admin-option:focus-within .raid-admin-tip { display: block; }
 .profile-raid-admin .btn { margin-top: 0.15rem; padding: 0.3rem 0.6rem; font-size: 0.75rem; }
 .profile-raid-admin-status { font-size: 0.75rem; margin: 0.25rem 0; }
 .btn { display: inline-block; padding: 0.5rem 1rem; background: #7c3aed; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 0.875rem; }

@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { Link, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { loadAccountActivity } from '../lib/accountData'
@@ -14,6 +15,77 @@ const RAID_ADMIN_TIPS = {
   showTicCharacterPicker: 'Raid Admin, Add DKP tic. On: the full character list is shown so you can move people into Attending, in addition to pasting a channel list. Off: that list is hidden and attendance comes from the paste. Characters already in Attending stay selected and are still credited until you clear them.',
   useCharacterAdminSelectors: 'Site Admin, Raid Admin loot, and the raid page. On: pickers list every character and filter by character name. Off: pickers show one row per account and match an account, alt, or character. The account and the character that will be credited are both shown.',
   requireDiscordRaidName: 'Raid Admin, new raid. On: paste a Discord raid line. The name is the text after the colon, and the date is the text after the last dash. Off: enter a raid name. The date is today unless the text includes a Discord date.',
+}
+
+const TIP_DELAY_MS = 400
+const TIP_OFFSET = 8
+
+function RaidSettingTip({ label, tip, tipId, children }) {
+  const [open, setOpen] = useState(false)
+  const [ready, setReady] = useState(false)
+  const [position, setPosition] = useState({ top: 0, left: 0 })
+  const timerRef = useRef(null)
+  const anchorRef = useRef(null)
+
+  const show = () => {
+    if (timerRef.current) clearTimeout(timerRef.current)
+    timerRef.current = window.setTimeout(() => setOpen(true), TIP_DELAY_MS)
+  }
+
+  const hide = () => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current)
+      timerRef.current = null
+    }
+    setOpen(false)
+    setReady(false)
+  }
+
+  useEffect(() => () => {
+    if (timerRef.current) clearTimeout(timerRef.current)
+  }, [])
+
+  useEffect(() => {
+    if (!open || !anchorRef.current) return
+    const rect = anchorRef.current.getBoundingClientRect()
+    const cardWidth = 280
+    const cardHeight = 220
+    let left = rect.right + TIP_OFFSET
+    let top = rect.top
+    if (left + cardWidth > window.innerWidth - 12) left = rect.left - cardWidth - TIP_OFFSET
+    if (left < 12) left = 12
+    if (top + cardHeight > window.innerHeight - 12) top = Math.max(12, window.innerHeight - cardHeight - 12)
+    setPosition({ top, left })
+    setReady(true)
+  }, [open])
+
+  const popover = open && ready && createPortal(
+    <div className="item-card-popover" style={{ top: position.top, left: position.left }} role="tooltip" id={tipId}>
+      <div className="item-card">
+        <div className="ItemTitle">
+          <div className="ItemTitleLeft" />
+          <div className="ItemTitleMid"><span>{label}</span></div>
+          <div className="ItemTitleRight" />
+        </div>
+        <div className="ItemInner">{tip}</div>
+      </div>
+    </div>,
+    document.body
+  )
+
+  return (
+    <label
+      ref={anchorRef}
+      className="raid-admin-option"
+      onMouseEnter={show}
+      onMouseLeave={hide}
+      onFocus={show}
+      onBlur={hide}
+    >
+      {children}
+      {popover}
+    </label>
+  )
 }
 
 function normalizeProfileTab(raw) {
@@ -226,42 +298,33 @@ export default function Profile({ profile, onProfileUpdate }) {
         {(profile?.role === 'officer' || profile?.role === 'siteadmin') && (
           <div className="card profile-raid-admin">
             <h2>Raid Admin settings</h2>
-            <label className="raid-admin-option">
-              <span className="raid-admin-option-row">
-                <input
-                  type="checkbox"
-                  checked={uiPrefs.showTicCharacterPicker}
-                  aria-describedby="raid-admin-tip-attendance"
-                  onChange={(e) => setPreference('showTicCharacterPicker', e.target.checked)}
-                />
-                <span>Show full list for Attendance tics</span>
-              </span>
-              <span id="raid-admin-tip-attendance" className="raid-admin-tip" role="tooltip">{RAID_ADMIN_TIPS.showTicCharacterPicker}</span>
-            </label>
-            <label className="raid-admin-option">
-              <span className="raid-admin-option-row">
-                <input
-                  type="checkbox"
-                  checked={uiPrefs.useCharacterAdminSelectors}
-                  aria-describedby="raid-admin-tip-site-admin"
-                  onChange={(e) => setPreference('useCharacterAdminSelectors', e.target.checked)}
-                />
-                <span>Show full list for Site Admin</span>
-              </span>
-              <span id="raid-admin-tip-site-admin" className="raid-admin-tip" role="tooltip">{RAID_ADMIN_TIPS.useCharacterAdminSelectors}</span>
-            </label>
-            <label className="raid-admin-option">
-              <span className="raid-admin-option-row">
-                <input
-                  type="checkbox"
-                  checked={discordRaidNameRequired(uiPrefs)}
-                  aria-describedby="raid-admin-tip-discord"
-                  onChange={(e) => setPreference('raidNameOnly', !e.target.checked)}
-                />
-                <span>Require Discord raid_schedule raid names</span>
-              </span>
-              <span id="raid-admin-tip-discord" className="raid-admin-tip" role="tooltip">{RAID_ADMIN_TIPS.requireDiscordRaidName}</span>
-            </label>
+            <RaidSettingTip label="Show full list for Attendance tics" tip={RAID_ADMIN_TIPS.showTicCharacterPicker} tipId="raid-admin-tip-attendance">
+              <input
+                type="checkbox"
+                checked={uiPrefs.showTicCharacterPicker}
+                aria-describedby="raid-admin-tip-attendance"
+                onChange={(e) => setPreference('showTicCharacterPicker', e.target.checked)}
+              />
+              <span>Show full list for Attendance tics</span>
+            </RaidSettingTip>
+            <RaidSettingTip label="Show full list for Site Admin" tip={RAID_ADMIN_TIPS.useCharacterAdminSelectors} tipId="raid-admin-tip-site-admin">
+              <input
+                type="checkbox"
+                checked={uiPrefs.useCharacterAdminSelectors}
+                aria-describedby="raid-admin-tip-site-admin"
+                onChange={(e) => setPreference('useCharacterAdminSelectors', e.target.checked)}
+              />
+              <span>Show full list for Site Admin</span>
+            </RaidSettingTip>
+            <RaidSettingTip label="Require Discord raid_schedule raid names" tip={RAID_ADMIN_TIPS.requireDiscordRaidName} tipId="raid-admin-tip-discord">
+              <input
+                type="checkbox"
+                checked={discordRaidNameRequired(uiPrefs)}
+                aria-describedby="raid-admin-tip-discord"
+                onChange={(e) => setPreference('raidNameOnly', !e.target.checked)}
+              />
+              <span>Require Discord raid_schedule raid names</span>
+            </RaidSettingTip>
             {prefsError && <p className="profile-raid-admin-status" style={{ color: '#f87171' }}>{prefsError}</p>}
             {prefsSaved && <p className="profile-raid-admin-status" style={{ color: '#86efac' }}>Saved.</p>}
             <button type="button" className="btn" onClick={handleSavePreferences} disabled={prefsSaving}>
