@@ -571,6 +571,248 @@ def test_redirect_drops_authorization() -> None:
         blob_server.server_close()
 
 
+def _http_server(handler: type[BaseHTTPRequestHandler]) -> ThreadingHTTPServer:
+    server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return server
+
+
+def _stop_servers(*servers: ThreadingHTTPServer) -> None:
+    for server in servers:
+        server.shutdown()
+        server.server_close()
+
+
+def test_archive_redirect_chain_strips_token() -> None:
+    token = "github_pat_multihop_redirect_token"
+    signed = "sig=multihop-signed-value"
+    seen: dict[str, str | None] = {}
+
+    class FinalHandler(BaseHTTPRequestHandler):
+        def do_GET(self) -> None:  # noqa: N802
+            seen["final_auth"] = self.headers.get("Authorization")
+            seen["final_query"] = self.path
+            body = b"zip-bytes"
+            self.send_response(200)
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, fmt: str, *args) -> None:
+            return
+
+    class MidHandler(BaseHTTPRequestHandler):
+        final_port = 0
+
+        def do_GET(self) -> None:  # noqa: N802
+            seen["mid_auth"] = self.headers.get("Authorization")
+            self.send_response(302)
+            self.send_header("Location", f"http://127.0.0.1:{MidHandler.final_port}/file?{signed}")
+            self.end_headers()
+
+        def log_message(self, fmt: str, *args) -> None:
+            return
+
+    class ApiHandler(BaseHTTPRequestHandler):
+        mid_port = 0
+
+        def do_GET(self) -> None:  # noqa: N802
+            seen["api_auth"] = self.headers.get("Authorization")
+            self.send_response(302)
+            self.send_header("Location", f"http://127.0.0.1:{ApiHandler.mid_port}/mid?{signed}")
+            self.end_headers()
+
+        def log_message(self, fmt: str, *args) -> None:
+            return
+
+    final_server = _http_server(FinalHandler)
+    MidHandler.final_port = final_server.server_address[1]
+    mid_server = _http_server(MidHandler)
+    ApiHandler.mid_port = mid_server.server_address[1]
+    api_server = _http_server(ApiHandler)
+    try:
+        client = sql_backup_fetch.UrllibGitHub(token, base_url=f"http://127.0.0.1:{api_server.server_address[1]}")
+        payload = client.get_bytes("/repos/example/dkp/actions/artifacts/1/zip", 1024)
+        check(payload == b"zip-bytes", "multi-hop download returned the wrong body")
+        check(seen.get("api_auth") == "Bearer " + token, "API hop was not authenticated")
+        check(seen.get("mid_auth") is None, "token was sent to the intermediate storage host")
+        check(seen.get("final_auth") is None, "token was sent to the final storage host")
+        check(signed in str(seen.get("final_query")), "final storage host did not receive the signed location")
+        check(signed not in payload.decode("ascii"), "signed url was copied into the body")
+    finally:
+        _stop_servers(api_server, mid_server, final_server)
+
+
+def test_repository_redirect_keeps_authorization() -> None:
+    token = "github_pat_repository_redirect_token"
+    seen: list[tuple[str, str | None]] = []
+
+    class ApiHandler(BaseHTTPRequestHandler):
+        def do_GET(self) -> None:  # noqa: N802
+            seen.append((self.path.split("?", 1)[0], self.headers.get("Authorization")))
+            if self.path.startswith("/repos/"):
+                self.send_response(301)
+                self.send_header("Location", "/repositories/99/actions/artifacts/1")
+                self.end_headers()
+                return
+            body = b'{"id":1}'
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, fmt: str, *args) -> None:
+            return
+
+    server = _http_server(ApiHandler)
+    try:
+        client = sql_backup_fetch.UrllibGitHub(token, base_url=f"http://127.0.0.1:{server.server_address[1]}")
+        payload = client.get_json("/repos/OldOwner/old-name/actions/artifacts/1")
+        check(payload == {"id": 1}, "repository redirect returned the wrong JSON")
+        check(
+            seen == [
+                ("/repos/OldOwner/old-name/actions/artifacts/1", "Bearer " + token),
+                ("/repositories/99/actions/artifacts/1", "Bearer " + token),
+            ],
+            str(seen),
+        )
+        check(token not in json.dumps(payload), "token leaked in redirected metadata")
+    finally:
+        _stop_servers(server)
+
+
+def test_metadata_redirect_does_not_leave_api_host() -> None:
+    token = "github_pat_metadata_redirect_token"
+    signed = "metadata-signed-value"
+    hits = {"n": 0}
+
+    class OutsideHandler(BaseHTTPRequestHandler):
+        def do_GET(self) -> None:  # noqa: N802
+            hits["n"] += 1
+            self.send_response(200)
+            self.end_headers()
+
+        def log_message(self, fmt: str, *args) -> None:
+            return
+
+    class ApiHandler(BaseHTTPRequestHandler):
+        outside_port = 0
+
+        def do_GET(self) -> None:  # noqa: N802
+            self.send_response(302)
+            self.send_header("Location", f"http://127.0.0.1:{ApiHandler.outside_port}/secret?sig={signed}")
+            self.end_headers()
+
+        def log_message(self, fmt: str, *args) -> None:
+            return
+
+    outside = _http_server(OutsideHandler)
+    ApiHandler.outside_port = outside.server_address[1]
+    api_server = _http_server(ApiHandler)
+    try:
+        client = sql_backup_fetch.UrllibGitHub(token, base_url=f"http://127.0.0.1:{api_server.server_address[1]}")
+        try:
+            client.get_json("/repos/RimidalEQ/RimidalEQ-NAGD-DKP-backup/actions/artifacts/1")
+        except sql_backup_fetch.FetchError as exc:
+            message = str(exc)
+            check("API host" in message, message)
+            check(token not in message, "token leaked in a metadata redirect error")
+            check(signed not in message, "signed url leaked in a metadata redirect error")
+        else:
+            fail("metadata redirect to another host was followed")
+        check(hits["n"] == 0, "metadata redirect contacted another host")
+    finally:
+        _stop_servers(api_server, outside)
+
+
+def test_redirect_loop_is_bounded() -> None:
+    token = "github_pat_redirect_loop_token"
+    signed = "loop-signed-value"
+    hits = {"n": 0}
+
+    class ApiHandler(BaseHTTPRequestHandler):
+        def do_GET(self) -> None:  # noqa: N802
+            hits["n"] += 1
+            self.send_response(302)
+            self.send_header("Location", self.path if "sig=" in self.path else f"{self.path}?sig={signed}")
+            self.end_headers()
+
+        def log_message(self, fmt: str, *args) -> None:
+            return
+
+    server = _http_server(ApiHandler)
+    try:
+        client = sql_backup_fetch.UrllibGitHub(token, base_url=f"http://127.0.0.1:{server.server_address[1]}")
+        try:
+            client.get_bytes("/repos/example/dkp/actions/artifacts/1/zip", 1024)
+        except sql_backup_fetch.FetchError as exc:
+            message = str(exc)
+            check("not followed" in message, message)
+            check(token not in message, "token leaked in a redirect-loop error")
+            check(signed not in message, "signed url leaked in a redirect-loop error")
+        else:
+            fail("redirect loop was followed without a limit")
+        check(hits["n"] <= sql_backup_fetch.MAX_REDIRECTS + 1, f"redirect loop made {hits['n']} requests")
+        check(hits["n"] == sql_backup_fetch.MAX_REDIRECTS + 1, f"redirect loop stopped after {hits['n']} requests")
+    finally:
+        _stop_servers(server)
+
+
+def test_http_downgrade_is_not_requested() -> None:
+    token = "github_pat_downgrade_redirect_token"
+    signed = "downgrade-signed-value"
+    hits = {"n": 0}
+
+    class EvilHandler(BaseHTTPRequestHandler):
+        def do_GET(self) -> None:  # noqa: N802
+            hits["n"] += 1
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(b"should-not-be-read")
+
+        def log_message(self, fmt: str, *args) -> None:
+            return
+
+    class ApiHandler(BaseHTTPRequestHandler):
+        evil_port = 0
+
+        def do_GET(self) -> None:  # noqa: N802
+            self.send_response(302)
+            self.send_header("Location", f"http://localhost:{ApiHandler.evil_port}/file?sig={signed}")
+            self.end_headers()
+
+        def log_message(self, fmt: str, *args) -> None:
+            return
+
+    evil = _http_server(EvilHandler)
+    ApiHandler.evil_port = evil.server_address[1]
+    api_server = _http_server(ApiHandler)
+    try:
+        client = sql_backup_fetch.UrllibGitHub(token, base_url=f"http://127.0.0.1:{api_server.server_address[1]}")
+        try:
+            client.get_bytes("/repos/example/dkp/actions/artifacts/1/zip", 1024)
+        except sql_backup_fetch.FetchError as exc:
+            message = str(exc)
+            check("https" in message, message)
+            check(token not in message, "token leaked in a downgrade error")
+            check(signed not in message, "signed url leaked in a downgrade error")
+        else:
+            fail("http downgrade redirect was followed")
+        check(hits["n"] == 0, "http downgrade contacted the storage host")
+        official = sql_backup_fetch.UrllibGitHub(token)
+        try:
+            official.send_authorization("http://objects.githubusercontent.com/file?sig=" + signed)
+        except sql_backup_fetch.FetchError as exc:
+            message = str(exc)
+            check("https" in message, message)
+            check(signed not in message, "signed url leaked from an https client downgrade")
+        else:
+            fail("https client accepted an http storage redirect")
+    finally:
+        _stop_servers(api_server, evil)
+
+
 def test_token_secret_map() -> None:
     check(
         sql_backup_fetch.token_secret_name(OTHER, CURRENT) == "BACKUP_ARTIFACT_READ_TOKEN_STAGING",
@@ -710,6 +952,11 @@ def main() -> None:
     test_pagination_and_unverified_download()
     test_zip_path_traversal()
     test_redirect_drops_authorization()
+    test_archive_redirect_chain_strips_token()
+    test_repository_redirect_keeps_authorization()
+    test_metadata_redirect_does_not_leave_api_host()
+    test_redirect_loop_is_bounded()
+    test_http_downgrade_is_not_requested()
     test_token_secret_map()
     test_official_artifact_list_request()
     test_corrupt_checksum()

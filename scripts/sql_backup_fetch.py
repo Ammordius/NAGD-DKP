@@ -207,7 +207,7 @@ class UrllibGitHub:
         self._base_url = base_url.rstrip("/")
 
     def get_json(self, path: str) -> dict:
-        payload = self._read(path, MAX_JSON_BYTES, follow_redirects=False)
+        payload = self._read(path, MAX_JSON_BYTES, allow_external=False)
         try:
             parsed = json.loads(payload)
         except json.JSONDecodeError as exc:
@@ -217,7 +217,7 @@ class UrllibGitHub:
         return parsed
 
     def get_bytes(self, path: str, limit: int) -> bytes:
-        return self._read(path, limit, follow_redirects=True)
+        return self._read(path, limit, allow_external=True)
 
     def send_authorization(self, url: str) -> bool:
         parts = urlsplit(url)
@@ -228,7 +228,7 @@ class UrllibGitHub:
             raise FetchError("GitHub download redirect was not https.")
         return parts.scheme == origin.scheme and parts.netloc == origin.netloc
 
-    def _read(self, path: str, limit: int, follow_redirects: bool) -> bytes:
+    def _read(self, path: str, limit: int, allow_external: bool) -> bytes:
         url = self._base_url + path
         redirects = 0
         while True:
@@ -249,12 +249,16 @@ class UrllibGitHub:
             try:
                 status = getattr(response, "status", None) or response.getcode()
                 if status in (301, 302, 303, 307, 308):
-                    if not follow_redirects or redirects >= MAX_REDIRECTS:
+                    if redirects >= MAX_REDIRECTS:
                         raise FetchError("GitHub download redirect was not followed.")
                     location = response.headers.get("Location")
-                    if not location:
+                    if not location or not location.strip():
                         raise FetchError("GitHub download redirect was missing a location.")
-                    url = urljoin(url, location)
+                    next_url = urljoin(url, location.strip())
+                    same_origin = self.send_authorization(next_url)
+                    if not same_origin and not allow_external:
+                        raise FetchError("GitHub API redirect left the API host.")
+                    url = next_url
                     redirects += 1
                     continue
                 if status != 200:
