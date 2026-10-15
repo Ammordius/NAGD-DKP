@@ -62,7 +62,7 @@ Restore loads the allowlisted tables in one transaction, then calls `end_restore
 
 ## GitHub Actions
 
-Workflow: [`.github/workflows/db-sql-backup.yml`](../.github/workflows/db-sql-backup.yml).
+Workflow: [`.github/workflows/db-sql-backup.yml`](../.github/workflows/db-sql-backup.yml). Actions installs the PostgreSQL 17 client from apt.postgresql.org because `pg_dump` must be at least the server major version.
 
 - **Manual:** Actions → **DB SQL backup** → Run workflow, from `main`. This is the on-demand backup. It does not consult the `raid_loot` count. Check **force** to also upload this week’s and this month’s long-retention copies even when those names already exist. A run selected from another branch does not start the job.
 - **Daily:** `30 7 * * *`, thirty minutes after the CSV job. GitHub runs the schedule only from the default branch. The export runs only when that ref is `main` and the repository variable `SQL_BACKUP_SCHEDULE` is `enabled`, or when someone starts the workflow by hand from `main`. A push of this file does not read production. The schedule is not gated on the `raid_loot` row count, and it does not commit `.ci` marker files.

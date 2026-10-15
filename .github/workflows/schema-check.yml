@@ -26,13 +26,13 @@ jobs:
         env:
           DKP_PG_TEST: '1'
         run: npm test
+      - name: Install PostgreSQL 17 client and age
+        uses: ./.github/actions/setup-postgresql-17
+
       - name: SQL backup export test
         env:
           DKP_PG_TEST: '1'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y postgresql-client age
-          python3 scripts/test_sql_backup.py
+        run: python3 scripts/test_sql_backup.py
 
       - name: SQL backup fetch test
         env:

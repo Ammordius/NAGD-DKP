@@ -36,8 +36,8 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install PostgreSQL client and age
-        run: sudo apt-get update && sudo apt-get install -y postgresql-client age
+      - name: Install PostgreSQL 17 client and age
+        uses: ./.github/actions/setup-postgresql-17
 
       - name: Export encrypted backup
         id: export

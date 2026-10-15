@@ -63,8 +63,8 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install PostgreSQL client and age
-        run: sudo apt-get update && sudo apt-get install -y postgresql-client age
+      - name: Install PostgreSQL 17 client and age
+        uses: ./.github/actions/setup-postgresql-17
 
       - name: Dry-run SQL restore preflight
         env:
@@ -109,9 +109,6 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install PostgreSQL client and age
-        run: sudo apt-get update && sudo apt-get install -y postgresql-client age
-
       - name: Require restore confirmation
         env:
           EXECUTION: ${{ inputs.execution }}
@@ -132,6 +129,9 @@ jobs:
             echo "Confirmation does not match the destination."
             exit 1
           fi
+
+      - name: Install PostgreSQL 17 client and age
+        uses: ./.github/actions/setup-postgresql-17
 
       - name: Back up the destination before restore
         id: destination_backup
