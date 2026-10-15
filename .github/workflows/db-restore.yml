@@ -125,6 +125,29 @@ jobs:
       - name: Restore summary
         if: success()
         run: |
-          echo "Restore completed."
-          echo "- Run refresh_dkp_summary() and refresh_all_raid_attendance_totals() in Supabase SQL Editor if needed."
+          echo "Restore completed. end_restore_load() committed and restore_in_progress is clear."
           echo "- Loot assignments and bid facts reload from loot_assignment.csv and bid_portfolio_auction_fact.csv when the artifact includes them. Artifacts from before the next forced backup omit those files; truncate leaves them empty, so run **Actions → Loot-to-character assignment** for an older artifact. See docs/CI-DB-RESTORE.md."
+
+      - name: CSV restore did not finish
+        if: failure()
+        run: |
+          echo "::error::CSV restore did not finish. If the load already committed, restore_in_progress is still true, DKP triggers are off, and account_dkp_summary was not rebuilt. A later SQL restore that rolls back leaves that flag set."
+          {
+            echo "## CSV restore did not finish"
+            echo ""
+            echo "The CSV rows can commit before \`end_restore_load()\` returns. The HTTP API drops that call before its 600s database timeout. \`restore_in_progress\` then stays true."
+            echo ""
+            echo "DKP triggers no-op until the flag is false. \`account_dkp_summary\` is not in the CSV load, so it stays empty."
+            echo ""
+            echo "A SQL restore that rolls back does not clear a flag this job left set."
+            echo ""
+            echo "Finish in the Supabase SQL editor, on a direct session:"
+            echo '```sql'
+            echo "UPDATE restore_in_progress SET in_progress = false WHERE id = 1;"
+            echo "SELECT fix_serial_sequences_for_restore();"
+            echo "SELECT refresh_dkp_summary();"
+            echo "SELECT refresh_all_raid_attendance_totals();"
+            echo "SELECT refresh_account_dkp_summary();"
+            echo "SELECT refresh_character_dkp_spent();"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -97,6 +97,43 @@ TABLE_KEY_COLUMN: dict[str, str] = {
 }
 
 
+UNFINISHED_RESTORE = """
+CSV restore load committed, but end_restore_load() did not finish.
+restore_in_progress stays true, so DKP triggers stay off.
+account_dkp_summary is not loaded from the CSV, so it stays empty until that function commits.
+A later SQL restore that rolls back leaves this flag as the CSV restore left it.
+
+Finish in the Supabase SQL editor (direct session, not the HTTP API):
+  UPDATE restore_in_progress SET in_progress = false WHERE id = 1;
+  SELECT fix_serial_sequences_for_restore();
+  SELECT refresh_dkp_summary();
+  SELECT refresh_all_raid_attendance_totals();
+  SELECT refresh_account_dkp_summary();
+  SELECT refresh_character_dkp_spent();
+""".strip()
+
+
+def _report_unfinished_restore(detail: str) -> int:
+    """Print the stuck-restore failure and mirror it into the Actions summary."""
+    print(UNFINISHED_RESTORE, file=sys.stderr)
+    if detail:
+        print(detail, file=sys.stderr)
+    summary_path = (os.environ.get("GITHUB_STEP_SUMMARY") or "").strip()
+    if summary_path:
+        with open(summary_path, "a", encoding="utf-8") as summary:
+            summary.write("## CSV restore did not finish\n\n")
+            summary.write(UNFINISHED_RESTORE + "\n")
+            if detail:
+                summary.write("\n```\n" + detail + "\n```\n")
+    return 1
+
+
+def _restore_flag_is_clear(client) -> bool:
+    response = client.table("restore_in_progress").select("in_progress").eq("id", 1).limit(1).execute()
+    rows = response.data or []
+    return bool(rows) and rows[0].get("in_progress") is False
+
+
 def _is_statement_timeout(err: Exception) -> bool:
     s = str(err).lower()
     if "statement timeout" in s or "57014" in s:
@@ -272,6 +309,7 @@ def main() -> int:
             raise
 
     total = 0
+    load_error: Exception | None = None
     try:
         for table in RESTORE_TABLE_ORDER:
             if table in LOAD_SKIP_TRIGGER_POPULATED:
@@ -296,21 +334,37 @@ def main() -> int:
             except Exception as e:
                 print(f"{table}: error - {e}", file=sys.stderr)
                 raise
-    finally:
-        if fast_load_enabled:
-            print("Refreshing DKP summary and raid totals...", flush=True)
+    except Exception as e:
+        load_error = e
+
+    if fast_load_enabled:
+        print("Refreshing DKP summary and raid totals...", flush=True)
+        try:
             client.rpc("end_restore_load").execute()
-        else:
-            print("Refreshing DKP summary and raid totals (no fast-load RPC)...", flush=True)
-            try:
-                client.rpc("refresh_dkp_summary").execute()
-                client.rpc("refresh_all_raid_attendance_totals").execute()
-                try:
-                    client.rpc("refresh_account_dkp_summary").execute()
-                except Exception:
-                    pass
-            except Exception as e:
-                print(f"  Refresh warning: {e}", file=sys.stderr)
+        except Exception as e:
+            print(f"end_restore_load() failed: {e}", file=sys.stderr)
+            if load_error is not None:
+                print(f"CSV load also failed: {load_error}", file=sys.stderr)
+            return _report_unfinished_restore(str(e))
+        if not _restore_flag_is_clear(client):
+            if load_error is not None:
+                print(f"CSV load also failed: {load_error}", file=sys.stderr)
+            return _report_unfinished_restore("restore_in_progress is still true after end_restore_load().")
+    else:
+        print("Refreshing DKP summary and raid totals (no fast-load RPC)...", flush=True)
+        try:
+            client.rpc("refresh_dkp_summary").execute()
+            client.rpc("refresh_all_raid_attendance_totals").execute()
+            client.rpc("refresh_account_dkp_summary").execute()
+        except Exception as e:
+            print(f"Refresh failed: {e}", file=sys.stderr)
+            if load_error is not None:
+                print(f"CSV load also failed: {load_error}", file=sys.stderr)
+            return _report_unfinished_restore(str(e))
+
+    if load_error is not None:
+        print(f"CSV load failed: {load_error}", file=sys.stderr)
+        return 1
 
     print(f"Restore done. Total rows: {total}")
     return 0

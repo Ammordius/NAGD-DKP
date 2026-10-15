@@ -10,7 +10,7 @@ Usage:
   # Parse HTML -> save canonical JSON (one row per account).
   python parse_members_dkp_html.py parse "Current Member DKP - ... .html" -o data/members_dkp_snapshot.json
 
-  # Audit: compare snapshot to DB (account-level; DB sums dkp_summary by account).
+  # Audit: compare snapshot to DB (account-level; DB reads account_dkp_summary).
   python parse_members_dkp_html.py audit data/members_dkp_snapshot.json
   python parse_members_dkp_html.py audit "Current Member DKP - ... .html"
   python parse_members_dkp_html.py audit data/members_dkp_snapshot.json --json-out audit_result.json
@@ -336,7 +336,7 @@ def run_audit(
     json_out: Path | None = None,
     include_zero_dkp: bool = False,
 ) -> int:
-    """Load snapshot (from JSON or by parsing HTML), query DB once for all dkp_summary, compare."""
+    """Load snapshot (from JSON or by parsing HTML), query account_dkp_summary once, compare."""
     _log("audit_start")
     load_dotenv()
     if snapshot_path:
@@ -389,35 +389,26 @@ def run_audit(
     characters = fetch_all(client, "characters", "char_id, name")
     name_to_aid = build_name_to_account_id(accounts, ca_list, characters)
 
-    # DB totals per account: prefer account_dkp_summary when present; else sum dkp_summary by character_account
-    dkp_rows = fetch_all(client, "dkp_summary", "character_key, earned, spent")
-    account_summary: list[dict[str, Any]] = []
+    # Account totals come only from account_dkp_summary. An empty table means the
+    # restore refresh did not finish. Summing dkp_summary by character_key hides that
+    # and drops mains whose char_id is not in character_account.
     try:
         account_summary = fetch_all(client, "account_dkp_summary", "account_id, earned, spent")
-    except Exception:
-        pass
+    except Exception as exc:
+        _log(f"audit_error: account_dkp_summary fetch failed: {exc}")
+        print(f"Could not read account_dkp_summary: {exc}", file=sys.stderr)
+        return 1
+    if not account_summary:
+        _log("audit_error: account_dkp_summary is empty")
+        print("account summary is empty; run refresh_account_dkp_summary", file=sys.stderr)
+        return 1
     db_earned_by_account = {}
     db_spent_by_account = {}
-    if account_summary:
-        for r in account_summary:
-            aid = _norm(r.get("account_id", ""))
-            if aid:
-                db_earned_by_account[aid] = int(r.get("earned") or 0)
-                db_spent_by_account[aid] = int(r.get("spent") or 0)
-    else:
-        key_to_aid: dict[str, str] = dict(name_to_aid)
-        for r in ca_list:
-            cid = _norm(r.get("char_id", ""))
-            aid = _norm(r.get("account_id", ""))
-            if cid and aid:
-                key_to_aid[cid] = aid
-        for r in dkp_rows:
-            key = _norm(r.get("character_key", ""))
-            aid = key_to_aid.get(key)
-            if not aid:
-                continue
-            db_earned_by_account[aid] = db_earned_by_account.get(aid, 0) + int(r.get("earned") or 0)
-            db_spent_by_account[aid] = db_spent_by_account.get(aid, 0) + int(r.get("spent") or 0)
+    for r in account_summary:
+        aid = _norm(r.get("account_id", ""))
+        if aid:
+            db_earned_by_account[aid] = int(r.get("earned") or 0)
+            db_spent_by_account[aid] = int(r.get("spent") or 0)
 
     mismatches: list[dict[str, Any]] = []
     matched = 0
@@ -548,7 +539,7 @@ def main() -> int:
     p_parse.add_argument("--emit-sql", dest="out_sql", type=Path, default=None, help="Emit SQL to run in Supabase SQL Editor for instant audit")
 
     # audit: snapshot.json | html_file [--by-account]
-    p_audit = sub.add_parser("audit", help="Compare snapshot (or HTML) to Supabase dkp_summary in one query")
+    p_audit = sub.add_parser("audit", help="Compare snapshot (or HTML) to Supabase account_dkp_summary in one query")
     p_audit.add_argument("input", type=Path, nargs="?", default=None, help="Snapshot JSON or HTML file")
     p_audit.add_argument("--snapshot", type=Path, dest="snapshot", default=None, help="Snapshot JSON (alternative to positional)")
     p_audit.add_argument("--html", type=Path, dest="html_path", default=None, help="HTML file (alternative to positional)")
