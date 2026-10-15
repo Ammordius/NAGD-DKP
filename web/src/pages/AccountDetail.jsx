@@ -19,7 +19,7 @@ import { formatAccountCharacter, formatCharacterClassSpentLine } from '../lib/fo
 import { ACCOUNTS_LIST_CACHE_KEY } from '../lib/cache'
 import { usePersistedState } from '../lib/usePersistedState'
 import { fetchLootForAccountChars } from '../lib/accountData'
-import AccountLootHistoryTab from '../components/AccountLootHistoryTab'
+import { aggregateLootSpent, sumCharacterSpent } from '../lib/characterSpent'
 
 const MAGELO_BASE = 'https://www.takproject.net/magelo/character.php?char='
 
@@ -151,17 +151,7 @@ async function fetchAccountDetail(accountId) {
     const k = (row.character_key || '').trim()
     if (k) earnedByKey[k] = (earnedByKey[k] || 0) + parseFloat(row.dkp_earned || 0)
   })
-  const spentByKey = {}
-  ;(lootRes.data || []).forEach((row) => {
-    const k = (
-      row.assigned_character_name ||
-      row.assigned_char_id ||
-      row.character_name ||
-      row.char_id ||
-      ''
-    ).trim()
-    if (k) spentByKey[k] = (spentByKey[k] || 0) + parseFloat(row.cost || 0)
-  })
+  const spentByKey = aggregateLootSpent(lootRes.data || [])
   const dkpByCharacterKey = { earned: earnedByKey, spent: spentByKey }
   const ticEarnedByRaidEventSet = {}
   ;(eventAttResData || []).forEach((row) => {
@@ -247,23 +237,11 @@ async function fetchAccountDetail(accountId) {
 }
 
 function spentFromActivity(activityByRaid) {
-  const spent = {}
+  const rows = []
   for (const act of activityByRaid || []) {
-    for (const row of act.items || []) {
-      const key = (
-        row.assigned_char_id ||
-        row.assigned_character_name ||
-        row.char_id ||
-        row.character_name ||
-        ''
-      ).trim()
-      if (!key) continue
-      const cost = parseFloat(row.cost || 0)
-      if (!Number.isFinite(cost)) continue
-      spent[key] = (spent[key] || 0) + cost
-    }
+    for (const row of act.items || []) rows.push(row)
   }
-  return spent
+  return aggregateLootSpent(rows)
 }
 
 function patchLootAssignment(data, lootId, charId, charName) {
@@ -499,8 +477,7 @@ export default function AccountDetail({ isOfficer, profile, session, onProfileUp
 
   const sortedCharacters = useMemo(() => {
     const spentOf = (c) => {
-      const name = c.name || c.char_id
-      return Number(dkpByCharacterKey.spent[name] ?? dkpByCharacterKey.spent[c.char_id] ?? 0)
+      return sumCharacterSpent(dkpByCharacterKey.spent, c)
     }
     return [...characters].sort((a, b) => {
       const ds = spentOf(b) - spentOf(a)
@@ -838,7 +815,7 @@ export default function AccountDetail({ isOfficer, profile, session, onProfileUp
               {sortedCharacters.map((c) => {
                 const name = c.name || c.char_id
                 const mageloUrl = `${MAGELO_BASE}${encodeURIComponent(name)}`
-                const spent = dkpByCharacterKey.spent[name] ?? dkpByCharacterKey.spent[c.char_id] ?? 0
+                const spent = sumCharacterSpent(dkpByCharacterKey.spent, c)
                 const meta = formatCharacterClassSpentLine(c, spent)
                 return (
                   <li key={c.char_id || c.name} style={{ marginBottom: '0.5rem' }}>

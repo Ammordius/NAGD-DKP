@@ -27,7 +27,9 @@ import {
   floorNowEastern,
   formatRaidSchedule,
   formatStoredClock,
-  newTicTimestamp,
+  allocateUniqueTicTimestamp,
+  minuteClock,
+  mostRecentEvent,
   raidLocalCalendarDate,
   raidStartToStore,
 } from '../lib/ticDateTime'
@@ -45,6 +47,10 @@ function generateRaidId() {
 function ticOptionLabel(event, raidDateIso) {
   const order = event?.event_order != null && event.event_order !== '' ? `#${event.event_order} ` : ''
   return `${order}${displayTicEventName(event, raidDateIso)}`
+}
+
+function defaultLootEventId(events, raidDateIso) {
+  return mostRecentEvent(events, raidDateIso)?.event_id || ''
 }
 
 function ResultNames({ label, names, tone }) {
@@ -451,12 +457,13 @@ export default function Officer({ isOfficer, profile }) {
   }, [events, appendEventId, ticDestination])
 
   useEffect(() => {
+    const raidDateIso = raid?.date_iso || raid?.date || ''
     if (events.length > 0 && (!lootEventId || !events.some((e) => e.event_id === lootEventId))) {
-      setLootEventId(events[0].event_id)
+      setLootEventId(defaultLootEventId(events, raidDateIso))
     } else if (events.length === 0 && lootEventId) {
       setLootEventId('')
     }
-  }, [events, lootEventId])
+  }, [events, lootEventId, raid])
 
   const handleCreateAccount = async () => {
     setNewAccountError('')
@@ -564,7 +571,7 @@ export default function Officer({ isOfficer, profile }) {
     }
     let timestamp = null
     if (!appending) {
-      timestamp = newTicTimestamp(ticDate, ticTime)
+      timestamp = allocateUniqueTicTimestamp(ticDate, ticTime, events.map((event) => event.event_id))
       if (!timestamp.ok) {
         setError(timestamp.error)
         return
@@ -747,7 +754,7 @@ export default function Officer({ isOfficer, profile }) {
       return
     }
     if (events.length > 0) return
-    const timestamp = newTicTimestamp(ticDate, ticTime)
+    const timestamp = allocateUniqueTicTimestamp(ticDate, ticTime, events.map((event) => event.event_id))
     if (!timestamp.ok) {
       setError(timestamp.error)
       return
@@ -810,7 +817,7 @@ export default function Officer({ isOfficer, profile }) {
     setMutating(true)
     setLootResult(null)
     setError('')
-    const event_id = lootEventId || (events.length > 0 ? events[0].event_id : 'loot')
+    const event_id = lootEventId || defaultLootEventId(events, raid?.date_iso || raid?.date || '') || 'loot'
     const { error: err } = await supabase.from('raid_loot').insert({
       raid_id: selectedRaidId,
       event_id,
@@ -869,7 +876,7 @@ export default function Officer({ isOfficer, profile }) {
     setMutating(true)
     setLootResult(null)
     setError('')
-    const event_id = lootEventId || (events.length > 0 ? events[0].event_id : 'loot')
+    const event_id = lootEventId || defaultLootEventId(events, raid?.date_iso || raid?.date || '') || 'loot'
     const knownItemSet = new Set(allItemNamesForLootLog.map((n) => (n || '').trim().toLowerCase()))
     const itemNameByLower = {}
     allItemNamesForLootLog.forEach((n) => { if (n) itemNameByLower[n.trim().toLowerCase()] = n })
@@ -1326,7 +1333,7 @@ export default function Officer({ isOfficer, profile }) {
       setTicDestination('new')
       setTicDkpValue('1')
       setTicDate(defaults.date)
-      setTicTime(defaults.time)
+      setTicTime(minuteClock(defaults.time))
       setTicDateTimeTouched(false)
       setTicAttendingIds([])
     }
@@ -1594,25 +1601,27 @@ export default function Officer({ isOfficer, profile }) {
               </p>
             </details>
             <div className="officer-tic-choice" role="radiogroup" aria-label="Tic destination">
-              <label>
-                <input
-                  type="radio"
-                  name="tic-destination"
-                  checked={ticDestination === 'new'}
-                  onChange={() => { setTicDestination('new'); setTicResult(null) }}
-                />
-                New tic
-              </label>
-              <label>
-                <input
-                  type="radio"
-                  name="tic-destination"
-                  checked={ticDestination === 'existing'}
-                  disabled={events.length === 0}
-                  onChange={() => { setTicDestination('existing'); setTicResult(null) }}
-                />
-                Existing tic
-              </label>
+              <div className="officer-tic-choice-row">
+                <label className="officer-tic-option officer-tic-option--new">
+                  <input
+                    type="radio"
+                    name="tic-destination"
+                    checked={ticDestination === 'new'}
+                    onChange={() => { setTicDestination('new'); setTicResult(null) }}
+                  />
+                  New tic
+                </label>
+                <label className={`officer-tic-option officer-tic-option--existing${events.length === 0 ? ' is-disabled' : ''}`}>
+                  <input
+                    type="radio"
+                    name="tic-destination"
+                    checked={ticDestination === 'existing'}
+                    disabled={events.length === 0}
+                    onChange={() => { setTicDestination('existing'); setTicResult(null) }}
+                  />
+                  Existing tic
+                </label>
+              </div>
               {ticDestination === 'existing' && (
                 <select
                   value={appendEventId}
@@ -1663,13 +1672,15 @@ export default function Officer({ isOfficer, profile }) {
                 <div className="officer-field-row" style={{ marginTop: '0.5rem' }}>
                   <TicDateTimeFields
                     idPrefix="new-tic"
+                    stacked
+                    minutePrecision
                     date={ticDate}
                     time={ticTime}
                     onDateChange={(value) => { setTicDateTimeTouched(true); setTicDate(value) }}
                     onTimeChange={(value) => { setTicDateTimeTouched(true); setTicTime(value) }}
                   />
                 </div>
-                <p className="officer-hint">Date starts as this raid&apos;s date. Time starts as now, Eastern, to the second. A channel timestamp fills these until you edit them.</p>
+                <p className="officer-hint">Date starts as this raid&apos;s date. Time starts as now in Eastern time, to the minute. Pasting from EQ logs fills the clock until you edit it.</p>
               </>
             )}
             {ticDestination === 'existing' && appendEvent && (
@@ -1784,8 +1795,8 @@ export default function Officer({ isOfficer, profile }) {
             <h2 style={{ marginTop: 0 }}>Add loot</h2>
             <p className="officer-hint">
               {useCharacterAdminSelectors
-                ? 'Pick an item, a character on the DKP list, a tic, and a cost. New loot starts on the first tic unless you pick another.'
-                : 'Pick an item, an account, a tic, and a cost. The list shows the account and the character that will be credited. New loot starts on the first tic unless you pick another.'}
+                ? 'Pick an item, a character on the DKP list, a tic, and a cost. New loot starts on the most recent event unless you pick another.'
+                : 'Pick an item, an account, a tic, and a cost. The list shows the account and the character that will be credited. New loot starts on the most recent event unless you pick another.'}
             </p>
             <div className="officer-loot-fields">
               <div className="officer-suggest-wrap">
@@ -1894,19 +1905,22 @@ export default function Officer({ isOfficer, profile }) {
                 </div>
               </div>
               {events.length > 0 && (
-                <select
-                  value={lootEventId}
-                  onChange={(e) => setLootEventId(e.target.value)}
-                  aria-label="Tic for new loot"
-                >
-                  {events.map((e) => (
-                    <option key={e.event_id} value={e.event_id}>{ticOptionLabel(e, raidDateIso)}</option>
-                  ))}
-                </select>
+                <div className="officer-loot-event">
+                  <p className="officer-loot-event-heading">Choose the Event for adding loot</p>
+                  <select
+                    value={lootEventId}
+                    onChange={(e) => setLootEventId(e.target.value)}
+                    aria-label="Choose the Event for adding loot"
+                  >
+                    {events.map((e) => (
+                      <option key={e.event_id} value={e.event_id}>{ticOptionLabel(e, raidDateIso)}</option>
+                    ))}
+                  </select>
+                </div>
               )}
             </div>
             <hr className="officer-divider" />
-            <p className="officer-hint">Paste log award line here. The line must contain the full character name, a number, and the word &quot;DKP&quot;. A shorter name inside that name is not added, so deepmind does not also add mind. If the format does not match it will error. Refer to the example below.</p>
+            <p className="officer-hint">Paste log award line here. The line must contain the full character name, a number, and the word &quot;DKP&quot;. A shorter name inside that name is not added, so deepmind does not also add mind. If the format does not match it will error, but you can edit the line and try again. Refer to the example below.</p>
             <textarea
               className="officer-paste"
               value={lootLogPaste}

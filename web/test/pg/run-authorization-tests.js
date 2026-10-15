@@ -196,6 +196,7 @@ async function main() {
   await concurrentDemotion()
   await assertReapplyPreservesRows()
   await psql(readFileSync(join(here, 'dkp-calculation.sql'), 'utf8'))
+  await psql(readFileSync(join(here, 'character-spent.sql'), 'utf8'))
   console.log('PostgreSQL authorization and DKP calculation tests passed')
 }
 
