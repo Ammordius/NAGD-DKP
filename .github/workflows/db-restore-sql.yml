@@ -120,7 +120,7 @@ jobs:
           GH_TOKEN: ${{ (inputs.source_repository == 'Current repository' || inputs.source_repository == github.repository) && github.token || (inputs.source_repository == 'RimidalEQ/RimidalEQ-NAGD-DKP-backup' && secrets.BACKUP_ARTIFACT_READ_TOKEN_STAGING) || '' }}
           BACKUP_ARTIFACT_TOKEN_SECRET: ${{ (inputs.source_repository == 'Current repository' || inputs.source_repository == github.repository) && 'GITHUB_TOKEN' || (inputs.source_repository == 'RimidalEQ/RimidalEQ-NAGD-DKP-backup' && 'BACKUP_ARTIFACT_READ_TOKEN_STAGING') || '' }}
           SQL_BACKUP_AGE_IDENTITY: ${{ secrets.SQL_BACKUP_AGE_IDENTITY }}
-          SQL_RESTORE_DB_URL: ${{ secrets.SQL_RESTORE_DB_URL }}
+          SQL_RESTORE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
           SQL_RESTORE_DESTINATION_NAME: ${{ vars.SQL_RESTORE_DESTINATION_NAME }}
           SQL_RESTORE_DESTINATION_HOST: ${{ vars.SQL_RESTORE_DESTINATION_HOST }}
           SQL_RESTORE_DATABASE_NAME: ${{ vars.SQL_RESTORE_DATABASE_NAME }}
@@ -186,7 +186,7 @@ jobs:
       - name: Back up the destination before restore
         id: destination_backup
         env:
-          SUPABASE_DB_URL: ${{ secrets.SQL_RESTORE_DB_URL }}
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
           SQL_BACKUP_AGE_RECIPIENT: ${{ secrets.SQL_BACKUP_AGE_RECIPIENT }}
         run: python scripts/sql_backup.py --out-dir sql-restore-destination-backup
 
@@ -205,7 +205,7 @@ jobs:
           GH_TOKEN: ${{ (inputs.source_repository == 'Current repository' || inputs.source_repository == github.repository) && github.token || (inputs.source_repository == 'RimidalEQ/RimidalEQ-NAGD-DKP-backup' && secrets.BACKUP_ARTIFACT_READ_TOKEN_STAGING) || '' }}
           BACKUP_ARTIFACT_TOKEN_SECRET: ${{ (inputs.source_repository == 'Current repository' || inputs.source_repository == github.repository) && 'GITHUB_TOKEN' || (inputs.source_repository == 'RimidalEQ/RimidalEQ-NAGD-DKP-backup' && 'BACKUP_ARTIFACT_READ_TOKEN_STAGING') || '' }}
           SQL_BACKUP_AGE_IDENTITY: ${{ secrets.SQL_BACKUP_AGE_IDENTITY }}
-          SQL_RESTORE_DB_URL: ${{ secrets.SQL_RESTORE_DB_URL }}
+          SQL_RESTORE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
           SQL_RESTORE_DESTINATION_NAME: ${{ vars.SQL_RESTORE_DESTINATION_NAME }}
           SQL_RESTORE_DESTINATION_HOST: ${{ vars.SQL_RESTORE_DESTINATION_HOST }}
           SQL_RESTORE_DATABASE_NAME: ${{ vars.SQL_RESTORE_DATABASE_NAME }}
