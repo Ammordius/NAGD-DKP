@@ -9,6 +9,7 @@ This test never reads a production database URL.
 from __future__ import annotations
 
 import io
+import json
 import os
 import socket
 import subprocess
@@ -508,7 +509,7 @@ def free_port() -> int:
         return sock.getsockname()[1]
 
 
-def start_postgres(name: str) -> tuple[str, int]:
+def start_postgres(name: str, image: str = "postgres:16") -> tuple[str, int]:
     port = free_port()
     run_docker(["rm", "-f", name], timeout=60)
     started = run_docker(
@@ -523,7 +524,7 @@ def start_postgres(name: str) -> tuple[str, int]:
             "POSTGRES_PASSWORD=postgres",
             "-p",
             f"127.0.0.1:{port}:5432",
-            "postgres:16",
+            image,
         ],
         timeout=180,
     )
@@ -963,9 +964,301 @@ FROM public.account_dkp_summary;
     check(query(container, "SELECT count(*) FROM public.loot_assignment;") == "1", "loot assignment count was wrong")
 
 
+def quoted_copy(table: str, columns: list[str], body: list[str]) -> str:
+    column_sql = ", ".join(f'"{column}"' for column in columns)
+    header = f'COPY "public"."{table}" ({column_sql}) FROM stdin;'
+    if not body:
+        return header + "\n\\."
+    return header + "\n" + "\n".join(body) + "\n\\."
+
+
+def empty_copy_fixture() -> dict[str, tuple[list[str], list[str]]]:
+    """COPY bodies for the eight regression cases.
+
+    Zero-row tables have an empty body list. A real empty string is a body
+    line, including a completely blank line for a single-column table.
+    """
+    return {
+        "characters": (["char_id", "name"], ["char-linked\tLinkedToon", "char-blank\t"]),
+        "accounts": (["account_id", "display_name"], ["acct-linked\tLinked"]),
+        "character_account": (["char_id", "account_id"], ["char-linked\tacct-linked", "char-blank\tacct-linked"]),
+        "raids": (["raid_id", "date_iso", "url"], ["raid-recent\t2026-10-13\t"]),
+        "raid_events": (
+            ["id", "raid_id", "event_id", "event_order", "event_name", "dkp_value"],
+            ["1\traid-recent\t1\t1\tBoss\t10"],
+        ),
+        "raid_attendance": (
+            ["id", "raid_id", "char_id", "character_name"],
+            ["1\traid-recent\tchar-linked\tLinkedToon"],
+        ),
+        "raid_event_attendance": (
+            ["id", "raid_id", "event_id", "char_id", "character_name", "account_id"],
+            ["1\traid-recent\t1\tchar-linked\tLinkedToon\t\\N", "2\traid-recent\t1\t\\N\t\t\\N"],
+        ),
+        "raid_loot": (["id", "raid_id", "item_name", "cost"], []),
+        "loot_assignment": (["loot_id", "assigned_char_id", "assigned_character_name"], []),
+        "dkp_adjustments": (["character_name", "earned_delta", "spent_delta", "account_id"], []),
+        "raid_classifications": (["raid_id", "mob", "zone"], []),
+        "active_raiders": (["character_key"], [""]),
+        "active_accounts": (["account_id"], []),
+    }
+
+
+def empty_copy_sql() -> str:
+    fixture = empty_copy_fixture()
+    check(set(fixture) == set(sql_backup.INCLUDED_TABLES), "Empty COPY fixture drifted from the allowlist")
+    return "\n".join(quoted_copy(table, columns, body) for table, (columns, body) in fixture.items()) + "\n"
+
+
+def generated_copy(script: str, table: str) -> str:
+    marker = f"COPY pg_temp.stage_{table} ("
+    start = script.find(marker)
+    check(start >= 0, f"restore SQL omitted COPY for {table}")
+    end = script.find("\n\\.", start)
+    check(end >= 0, f"COPY for {table} has no terminator")
+    return script[start : end + 3]
+
+
+def copy_payload(script: str, table: str) -> str:
+    block = generated_copy(script, table)
+    marker = "FROM stdin;\n"
+    check(marker in block, f"{table} COPY header is malformed")
+    return block.split(marker, 1)[1]
+
+
+def test_empty_copy_serialization() -> None:
+    fixture = empty_copy_fixture()
+    sql_text = empty_copy_sql()
+    blocks = sql_backup.parse_copy_blocks(sql_text)
+    sql_backup.require_allowlist(blocks)
+    manifest = {"row_counts": {table: len(blocks[table]["rows"]) for table in sql_backup.INCLUDED_TABLES}}
+    for table, (_columns, body) in fixture.items():
+        check(len(blocks[table]["rows"]) == len(body), f"parser dropped a {table} row")
+    script = sql_restore.build_restore_sql(sql_text, blocks, {}, manifest=manifest, fail_before_commit=False)
+    bad_counts = dict(manifest["row_counts"])
+    bad_counts["active_accounts"] = 1
+    try:
+        sql_restore.build_restore_sql(
+            sql_text,
+            blocks,
+            {},
+            manifest={"row_counts": bad_counts},
+            fail_before_commit=False,
+        )
+        fail("manifest count mismatch was emitted as restore SQL")
+    except sql_restore.RestoreError as exc:
+        check("active_accounts" in str(exc), str(exc))
+
+    empty_single = copy_payload(script, "active_accounts")
+    check(empty_single == "\\.", "empty single-column COPY gained a blank data row: " + repr(empty_single))
+    empty_multi = copy_payload(script, "raid_classifications")
+    check(empty_multi == "\\.", "empty multi-column COPY gained a blank data row: " + repr(empty_multi))
+    for table, (_columns, body) in fixture.items():
+        payload = copy_payload(script, table)
+        if not body:
+            check(payload == "\\.", f"{table} zero-row COPY gained a data row")
+            continue
+        check(payload == "\n".join(body) + "\n\\.", f"{table} COPY body was rewritten: " + repr(payload))
+    characters = copy_payload(script, "characters")
+    check("char-linked\tLinkedToon\nchar-blank\t\n\\." == characters, "populated COPY body changed")
+    attendance = copy_payload(script, "raid_event_attendance")
+    check("\\N" in attendance and attendance.count("\\N") == 3, "NULL fields were rewritten")
+    check(copy_payload(script, "active_raiders") == "\n\\.", "empty-string data row was dropped")
+    check("char-blank\t\n" in characters, "empty-string field was dropped")
+    check("COPY pg_temp.stage_active_accounts " in script and "COPY pg_temp.stage_characters " in script, "mixed COPY script dropped a table")
+    count_at = script.find("staged active_accounts count does not match the backup")
+    delete_at = script.find("DELETE FROM")
+    check(count_at >= 0 and delete_at >= 0 and count_at < delete_at, "stage count check is not before DELETE")
+
+
+EMPTY_COPY_SOURCE_SQL = """
+INSERT INTO public.characters (char_id, name) VALUES
+  ('char-linked', 'LinkedToon'),
+  ('char-blank', '');
+INSERT INTO public.accounts (account_id, display_name) VALUES ('acct-linked', 'Linked');
+INSERT INTO public.character_account (char_id, account_id) VALUES
+  ('char-linked', 'acct-linked'),
+  ('char-blank', 'acct-linked');
+INSERT INTO public.raids (raid_id, raid_name, date_iso, url) VALUES
+  ('raid-recent', 'Recent', to_char(current_date - 1, 'YYYY-MM-DD'), '');
+INSERT INTO public.raid_events (raid_id, event_id, event_order, event_name, dkp_value) VALUES
+  ('raid-recent', '1', 1, 'Boss', '10');
+INSERT INTO public.raid_attendance (raid_id, char_id, character_name) VALUES
+  ('raid-recent', 'char-linked', 'LinkedToon');
+INSERT INTO public.raid_event_attendance (raid_id, event_id, char_id, character_name, account_id) VALUES
+  ('raid-recent', '1', 'char-linked', 'LinkedToon', NULL),
+  ('raid-recent', '1', NULL, '', NULL);
+INSERT INTO public.active_raiders (character_key) VALUES ('');
+"""
+
+EMPTY_COPY_SEED_SQL = """
+INSERT INTO public.accounts (account_id, display_name) VALUES ('acct-seed', 'Seed');
+INSERT INTO public.characters (char_id, name) VALUES ('char-seed', 'SeedToon');
+INSERT INTO public.raids (raid_id, raid_name, date_iso) VALUES ('raid-seed', 'Seed', '2020-01-01');
+"""
+
+
+def destination_guard(container: str) -> str:
+    return query(
+        container,
+        """
+SELECT
+  (SELECT count(*) FROM public.raids WHERE raid_id = 'raid-seed')::text || ':' ||
+  (SELECT count(*) FROM public.characters WHERE char_id = 'char-seed')::text || ':' ||
+  (SELECT count(*) FROM public.accounts WHERE account_id = 'acct-seed')::text || ':' ||
+  (SELECT in_progress::text FROM public.restore_in_progress WHERE id = 1) || ':' ||
+  (SELECT tgenabled::text FROM pg_trigger WHERE tgname = 'accounts_display_name_guard');
+""",
+    )
+
+
+def test_empty_copy_postgres() -> None:
+    missing = [
+        name
+        for name, present in (
+            ("docker", docker_ok()),
+            ("psql", command_exists("psql")),
+            ("pg_dump", command_exists("pg_dump")),
+            ("age", command_exists("age")),
+            ("age-keygen", command_exists("age-keygen")),
+        )
+        if not present
+    ]
+    if missing:
+        message = "Empty COPY database test was not run (missing: " + ", ".join(missing) + ")."
+        if REQUIRED:
+            fail(message)
+        print(message)
+        return
+
+    source_name = f"nagddkp-emptycopy-src-{os.getpid()}"
+    dest_name = f"nagddkp-emptycopy-dst-{os.getpid()}"
+    source = dest = None
+    try:
+        source, source_port = start_postgres(source_name, "postgres:17")
+        dest, dest_port = start_postgres(dest_name, "postgres:17")
+        apply_schema(source)
+        apply_schema(dest)
+        loaded = psql(source, EMPTY_COPY_SOURCE_SQL)
+        check(loaded.returncode == 0, "empty COPY source fixture failed:\n" + (loaded.stderr or loaded.stdout)[-4000:])
+        seeded = psql(dest, EMPTY_COPY_SEED_SQL)
+        check(seeded.returncode == 0, "empty COPY destination seed failed:\n" + (seeded.stderr or seeded.stdout)[-2000:])
+        before = destination_guard(dest)
+        check(before == "1:1:1:false:O", "destination seed was not ready: " + before)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            key_path = tmp_path / "age-key.txt"
+            generated = subprocess.run(
+                ["age-keygen", "-o", str(key_path)],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                check=False,
+            )
+            check(generated.returncode == 0, "age-keygen failed")
+            out_dir = tmp_path / "backup"
+            out_dir.mkdir()
+            backup_source(source_port, out_dir, age_public_key(key_path))
+            artifacts = list(out_dir.glob("sql-backup-*.tar.gz.age"))
+            check(len(artifacts) == 1, "expected one empty COPY backup")
+            extract_bundle(artifacts[0], key_path, tmp_path)
+            bundle = tmp_path / "bundle"
+            manifest = json.loads((bundle / "manifest.json").read_text(encoding="utf-8"))
+            check(manifest["row_counts"]["active_accounts"] == 0, "backup did not record active_accounts as empty")
+            check(manifest["row_counts"]["raid_classifications"] == 0, "backup did not record a multi-column table as empty")
+            check(manifest["row_counts"]["active_raiders"] == 1, "backup dropped the empty-string raider")
+            env = restore_env(dest_port)
+
+            failed_env = dict(env)
+            failed_env["DKP_SQL_RESTORE_TEST_FAIL"] = "1"
+            failed = run_restore(
+                failed_env,
+                [
+                    "--execute",
+                    "--fail-before-commit",
+                    "--bundle-dir",
+                    str(bundle),
+                    "--source",
+                    SOURCE_REPO,
+                    "--destination-name",
+                    "disposable-destination",
+                    "--confirm",
+                    "RESTORE disposable-destination",
+                ],
+            )
+            check(failed.returncode != 0, "intentional empty COPY failure exited 0")
+            check("intentional restore failure" in failed.stderr, failed.stderr[-2000:])
+            check(destination_guard(dest) == before, "intentional failure did not roll back")
+
+            sql_text = (bundle / "data.sql").read_text(encoding="utf-8")
+            blocks = sql_restore.parsed_blocks(sql_text)
+            sql_restore.require_parsed_counts(blocks, manifest)
+            as_of = date.fromisoformat(query(dest, "SELECT current_date::text;"))
+            totals = sql_restore.expected_account_totals(blocks, as_of)
+            script = sql_restore.build_restore_sql(
+                sql_text,
+                blocks,
+                totals,
+                manifest=manifest,
+                fail_before_commit=False,
+            )
+            count_at = script.find("staged active_accounts count does not match the backup")
+            delete_at = script.find("DELETE FROM")
+            check(count_at >= 0 and delete_at >= 0 and count_at < delete_at, "stage count check is not before DELETE")
+            tampered = script.replace(
+                "IS DISTINCT FROM 0 THEN\n  RAISE EXCEPTION 'staged active_accounts count does not match the backup';",
+                "IS DISTINCT FROM 1 THEN\n  RAISE EXCEPTION 'staged active_accounts count does not match the backup';",
+                1,
+            )
+            check(tampered != script, "could not inject a staged count mismatch")
+            mismatched = psql(dest, tampered, timeout=300)
+            check(mismatched.returncode != 0, "staged count mismatch was accepted")
+            check("staged active_accounts count does not match the backup" in (mismatched.stderr or ""), mismatched.stderr[-2000:])
+            check(destination_guard(dest) == before, "count mismatch deleted destination rows")
+
+            restored = run_restore(
+                env,
+                [
+                    "--execute",
+                    "--bundle-dir",
+                    str(bundle),
+                    "--source",
+                    SOURCE_REPO,
+                    "--destination-name",
+                    "disposable-destination",
+                    "--confirm",
+                    "RESTORE disposable-destination",
+                ],
+            )
+            check(restored.returncode == 0, "empty COPY restore failed:\n" + (restored.stderr or restored.stdout)[-4000:])
+            for table in sql_backup.INCLUDED_TABLES:
+                got = query(dest, f"SELECT count(*) FROM public.{table};")
+                check(got == str(manifest["row_counts"][table]), f"{table} loaded {got} rows, manifest has {manifest['row_counts'][table]}")
+            check(query(dest, "SELECT count(*) FROM public.raids WHERE url = '';") == "1", "empty-string field was not loaded")
+            check(query(dest, "SELECT count(*) FROM public.raids WHERE url IS NULL;") == "0", "empty string was stored as NULL")
+            check(
+                query(dest, "SELECT count(*) FROM public.raid_event_attendance WHERE account_id IS NULL;") == "2",
+                "NULL account_id was not loaded",
+            )
+            check(query(dest, "SELECT count(*) FROM public.active_raiders WHERE character_key = '';") == "1", "empty-string row was not loaded")
+            check(query(dest, "SELECT count(*) FROM public.active_accounts;") == "0", "zero-row active_accounts gained a row")
+            check(query(dest, "SELECT count(*) FROM public.raid_classifications;") == "0", "zero-row multi-column table gained a row")
+            check(destination_guard(dest).endswith(":false:O"), "restore flag or display-name guard was left wrong")
+            check(query(dest, "SELECT count(*) FROM public.raids WHERE raid_id = 'raid-seed';") == "0", "seed raid survived the committed restore")
+    finally:
+        if source:
+            run_docker(["rm", "-f", source], timeout=60)
+        if dest:
+            run_docker(["rm", "-f", dest], timeout=60)
+
+
 def main() -> None:
     test_policy_and_totals()
     test_cli_refuses_unsafe_requests()
+    test_empty_copy_serialization()
+    test_empty_copy_postgres()
     test_two_databases()
     print("SQL restore tests passed")
 
