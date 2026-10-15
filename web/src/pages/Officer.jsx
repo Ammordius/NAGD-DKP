@@ -27,6 +27,7 @@ import {
   floorNowEastern,
   formatRaidSchedule,
   formatStoredClock,
+  minuteClock,
   mostRecentEvent,
   newTicTimestamp,
   raidLocalCalendarDate,
@@ -1322,7 +1323,7 @@ export default function Officer({ isOfficer, profile }) {
       setTicDestination(draft.ticDestination)
       setTicDkpValue(draft.ticDkpValue)
       setTicDate(draft.ticDate)
-      setTicTime(draft.ticTime)
+      setTicTime(minuteClock(draft.ticTime) || draft.ticTime)
       setTicDateTimeTouched(draft.ticDateTimeTouched)
     } else {
       const defaults = defaultTicFields(raid?.date_iso || raid?.date || '', new Date())
@@ -1332,7 +1333,7 @@ export default function Officer({ isOfficer, profile }) {
       setTicDestination('new')
       setTicDkpValue('1')
       setTicDate(defaults.date)
-      setTicTime(defaults.time)
+      setTicTime(minuteClock(defaults.time))
       setTicDateTimeTouched(false)
       setTicAttendingIds([])
     }
@@ -1374,7 +1375,7 @@ export default function Officer({ isOfficer, profile }) {
     const stamp = firstEqStampInPaste(ticPaste)
     if (!stamp) return
     setTicDate(stamp.date)
-    setTicTime(stamp.time)
+    setTicTime(minuteClock(stamp.time))
   }, [ticPaste, ticDateTimeTouched])
 
   useEffect(() => {
@@ -1671,13 +1672,15 @@ export default function Officer({ isOfficer, profile }) {
                 <div className="officer-field-row" style={{ marginTop: '0.5rem' }}>
                   <TicDateTimeFields
                     idPrefix="new-tic"
+                    stacked
+                    minutePrecision
                     date={ticDate}
                     time={ticTime}
                     onDateChange={(value) => { setTicDateTimeTouched(true); setTicDate(value) }}
                     onTimeChange={(value) => { setTicDateTimeTouched(true); setTicTime(value) }}
                   />
                 </div>
-                <p className="officer-hint">Date starts as this raid&apos;s date. Time starts as now, Eastern, to the second. A channel timestamp fills these until you edit them.</p>
+                <p className="officer-hint">Date and time are based on current time, EST timezone. Pasting from EQ logs autofills it, you can modify it after.</p>
               </>
             )}
             {ticDestination === 'existing' && appendEvent && (
@@ -1884,6 +1887,23 @@ export default function Officer({ isOfficer, profile }) {
                   </ul>
                 )}
               </div>
+              <div className="officer-loot-price">
+                <label className="officer-price-label" htmlFor="loot-item-price">Item price (DKP)</label>
+                <div className="officer-loot-actions">
+                  <input
+                    id="loot-item-price"
+                    className="officer-cost"
+                    type="number"
+                    min={0}
+                    value={lootCost}
+                    onChange={(e) => setLootCost(e.target.value)}
+                    aria-label="Item price (DKP)"
+                  />
+                  <button type="button" className="btn" onClick={handleAddLootManual} disabled={mutating || !lootItemQuery.trim()}>
+                    Add
+                  </button>
+                </div>
+              </div>
               {events.length > 0 && (
                 <div className="officer-loot-event">
                   <p className="officer-loot-event-heading">Choose the Event for adding loot</p>
@@ -1898,23 +1918,9 @@ export default function Officer({ isOfficer, profile }) {
                   </select>
                 </div>
               )}
-              <div className="officer-loot-actions">
-                <input
-                  className="officer-cost"
-                  type="number"
-                  min={0}
-                  value={lootCost}
-                  onChange={(e) => setLootCost(e.target.value)}
-                  placeholder="Cost"
-                  aria-label="Loot cost"
-                />
-                <button type="button" className="btn" onClick={handleAddLootManual} disabled={mutating || !lootItemQuery.trim()}>
-                  Add
-                </button>
-              </div>
             </div>
             <hr className="officer-divider" />
-            <p className="officer-hint">Paste log award line here. The line must contain the full character name, a number, and the word &quot;DKP&quot;. A shorter name inside that name is not added, so deepmind does not also add mind. If the format does not match it will error. Refer to the example below.</p>
+            <p className="officer-hint">Paste log award line here. The line must contain the full character name, a number, and the word &quot;DKP&quot;. If the format does not match it will error, but you can just edit and fix it manually and try again. Refer to the example below.</p>
             <textarea
               className="officer-paste"
               value={lootLogPaste}

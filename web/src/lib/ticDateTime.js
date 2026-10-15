@@ -65,6 +65,12 @@ function formatClock(hour, minute, second) {
   return `${pad(hour)}:${pad(minute)}:${pad(second)}`
 }
 
+/** Hours and minutes for the tic time control. Seconds are not shown or stored from that control. */
+export function minuteClock(time) {
+  const match = String(time ?? '').trim().match(/^(\d{2}):(\d{2})/)
+  return match ? `${match[1]}:${match[2]}` : ''
+}
+
 function isRealCalendarDate(year, month, day) {
   if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) return false
   if (month < 1 || month > 12 || day < 1 || day > 31) return false

@@ -10,6 +10,7 @@ import {
   firstEqStampInPaste,
   floorNowEastern,
   formatRaidSchedule,
+  minuteClock,
   newTicTimestamp,
   raidCalendarDate,
   validateTicDateTime,
@@ -194,11 +195,26 @@ describe('firstEqStampInPaste', () => {
   })
 })
 
+describe('minuteClock', () => {
+  it('keeps hours and minutes and drops seconds', () => {
+    assert.equal(minuteClock('08:15:32'), '08:15')
+    assert.equal(minuteClock('21:35:20'), '21:35')
+    assert.equal(minuteClock('09:08'), '09:08')
+    assert.equal(minuteClock(''), '')
+  })
+})
+
 describe('newTicTimestamp', () => {
   it('builds an event id from the Eastern instant', () => {
     const result = newTicTimestamp('2026-10-10', '00:30:00')
     assert.equal(result.stored, '2026-10-10T00:30:00-04:00')
     assert.equal(result.eventId, `tic-${result.epochMs}`)
+  })
+
+  it('stores a minute-only clock with zero seconds', () => {
+    const result = newTicTimestamp('2026-10-10', '00:30')
+    assert.equal(result.ok, true)
+    assert.equal(result.stored, '2026-10-10T00:30:00-04:00')
   })
 })
 

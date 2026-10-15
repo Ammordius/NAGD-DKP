@@ -357,7 +357,15 @@ label { display: block; margin-bottom: 0.25rem; font-size: 0.875rem; color: #a1a
 .officer-field-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
 .officer-inline-label { font-size: 0.875rem; color: #a1a1aa; }
 .tic-datetime-fields { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0.35rem; }
-.tic-datetime-fields label { display: inline; margin: 0; }
+.tic-datetime-fields--stacked {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.5rem;
+  width: 100%;
+}
+.tic-datetime-line { display: inline-flex; align-items: center; gap: 0.35rem; flex-wrap: nowrap; }
+.tic-datetime-fields label { display: inline; margin: 0; white-space: nowrap; }
 .tic-datetime-fields input[type="date"],
 .tic-datetime-fields input[type="time"] { width: auto; max-width: none; padding: 0.2rem 0.35rem; color-scheme: dark; }
 .officer-dkp-input { width: 4.5rem; max-width: 4.5rem; }
@@ -539,7 +547,16 @@ label { display: block; margin-bottom: 0.25rem; font-size: 0.875rem; color: #a1a
 .officer-suggest li { padding: 0.4rem 0.6rem; cursor: pointer; }
 .officer-suggest li:hover { background: #27272a; }
 .officer-loot-fields { display: flex; flex-direction: column; gap: 0.5rem; }
-.officer-loot-actions { display: flex; gap: 0.5rem; align-items: flex-start; }
+.officer-loot-price { display: flex; flex-direction: column; align-items: flex-start; gap: 0.35rem; }
+.officer-loot-actions { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
+.officer-price-label {
+  display: block;
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #e4e4e7;
+  white-space: nowrap;
+}
 .officer-cost { width: 5rem; max-width: 5rem; flex: 0 0 5rem; }
 .officer-table-scroll { overflow-x: auto; }
 .officer-delete { margin-top: 1.25rem; border-top: 1px solid #3f1d1d; padding-top: 0.75rem; }
