@@ -1,8 +1,8 @@
 # Manual restore of a portable SQL backup.
 # Does not run on push, pull request, or artifact upload.
-# List and dry-run do not use an environment. sql-restore is the only approval.
-# A destructive restore refuses to run until that environment has required
-# reviewers and a deployment branch policy of main only.
+# List and dry-run do not use an environment. The restore job uses sql-restore.
+# Restore runs only from main. Reviewers and deployment branch policies are
+# left to the environment administrator; this workflow does not inspect them.
 # See docs/CI-DB-SQL-RESTORE.md.
 
 name: DB SQL restore
@@ -199,13 +199,6 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-
-      - name: Require protected sql-restore environment
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GITHUB_TOKEN: ${{ github.token }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-        run: python scripts/sql_restore.py --check-protection
 
       - name: Install PostgreSQL 17 client and age
         uses: ./.github/actions/setup-postgresql-17

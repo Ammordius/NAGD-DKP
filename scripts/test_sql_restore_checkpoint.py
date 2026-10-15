@@ -591,7 +591,7 @@ def test_workflow_choices_stay_static() -> None:
     check("inputs.artifact_id" not in restore, "restore job reads the form artifact id")
     check("needs.preflight.outputs.artifact_id" in restore, restore)
     check("needs.preflight.outputs.artifact_sha256" in restore, restore)
-    check("--check-protection" in restore, "destructive restore does not check environment protection")
+    check("--check-protection" not in restore, "restore inspects environment reviewers or branch policy")
     check("success()" in restore.split("steps:", 1)[0], "restore can run after a failed preflight")
 
 

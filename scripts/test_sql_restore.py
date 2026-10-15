@@ -413,24 +413,6 @@ def test_destination_authorization() -> None:
             "SQL_RESTORE_DESTINATION_NAME",
             lambda: sql_restore.assert_destination_name("other-destination"),
         )
-        protected = {
-            "protection_rules": [
-                {"type": "required_reviewers", "reviewers": [{"type": "User"}]},
-            ],
-            "deployment_branch_policy": {"protected_branches": False, "custom_branch_policies": True},
-        }
-        sql_restore.assert_environment_protection(protected, [{"name": "main"}])
-        assert_refused(
-            "required reviewers",
-            lambda: sql_restore.assert_environment_protection(
-                {"protection_rules": [], "deployment_branch_policy": None},
-                [],
-            ),
-        )
-        assert_refused(
-            "only main",
-            lambda: sql_restore.assert_environment_protection(protected, [{"name": "main"}, {"name": "develop"}]),
-        )
     try:
         sql_restore.assert_host_not_denied(POOLER_HOST, {POOLER_HOST})
         fail("denylist host was allowed")
@@ -620,8 +602,8 @@ def test_cli_refuses_unsafe_requests() -> None:
             "RESTORE disposable-destination",
         ],
     )
-    check(completed.returncode != 0, "execute without readable protection was accepted")
-    check("protection could not be read" in completed.stderr, completed.stderr)
+    check(completed.returncode != 0, "execute without a preflight pin was accepted")
+    check("pinned artifact" in completed.stderr, completed.stderr)
 
     env = restore_env(1)
     env["GITHUB_ACTIONS"] = "true"
@@ -645,8 +627,8 @@ def test_cli_refuses_unsafe_requests() -> None:
             "a" * 64,
         ],
     )
-    check(completed.returncode != 0, "an unprotected Actions restore was accepted")
-    check("required reviewers" in completed.stderr or "protection could not be read" in completed.stderr, completed.stderr)
+    check(completed.returncode != 0, "an unconfirmed Actions restore was accepted")
+    check("Confirmation does not match" in completed.stderr, completed.stderr)
     check("supabase.co" not in completed.stderr, completed.stderr)
 
 

@@ -630,6 +630,15 @@ def github_status_message(status: int) -> str:
     return f"GitHub API returned {status}."
 
 
+class GitHubStatusError(FetchError):
+    """HTTP status for one API path. The message stays the artifact status text."""
+
+    def __init__(self, status: int, path: str) -> None:
+        self.status = status
+        self.path = path
+        super().__init__(github_status_message(status))
+
+
 def _parse_time(value: str) -> datetime:
     text = value.strip()
     if text.endswith("Z"):
@@ -706,14 +715,14 @@ class UrllibGitHub:
         except HTTPError as exc:
             error_body = exc.read(4096)
             exc.close()
-            self._raise_status(exc.code, error_body)
+            self._raise_status(exc.code, error_body, path)
         except URLError as exc:
             raise FetchError("GitHub could not be reached.") from exc
         try:
             status = getattr(response, "status", None) or response.getcode()
             raw = _read_capped(response, MAX_JSON_BYTES)
             if status != 200:
-                self._raise_status(status, raw[:4096])
+                self._raise_status(status, raw[:4096], path)
         finally:
             response.close()
         try:
@@ -751,7 +760,7 @@ class UrllibGitHub:
             except HTTPError as exc:
                 body = exc.read(4096)
                 exc.close()
-                self._raise_status(exc.code, body)
+                self._raise_status(exc.code, body, path)
             except URLError as exc:
                 raise FetchError("GitHub could not be reached.") from exc
             try:
@@ -770,18 +779,18 @@ class UrllibGitHub:
                     redirects += 1
                     continue
                 if status != 200:
-                    self._raise_status(status, response.read(4096))
+                    self._raise_status(status, response.read(4096), path)
                 return _read_capped(response, limit)
             finally:
                 response.close()
 
-    def _raise_status(self, status: int, body: bytes) -> None:
+    def _raise_status(self, status: int, body: bytes, path: str) -> None:
         text = body.decode("utf-8", errors="replace")
         if self._token and len(self._token) >= 8 and self._token in text:
             text = text.replace(self._token, "[redacted]")
         if "rate limit" in text.lower():
             raise FetchError("GitHub API rate limit exceeded.")
-        raise FetchError(github_status_message(status))
+        raise GitHubStatusError(status, path)
 
 
 class _KeepRedirect(HTTPErrorProcessor):

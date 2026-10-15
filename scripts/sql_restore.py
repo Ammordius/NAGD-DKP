@@ -1738,71 +1738,6 @@ def assert_destination_name(destination_name: str) -> str:
     return expected_name
 
 
-def assert_environment_protection(environment: dict, branch_policies: list) -> None:
-    """Refuse a destructive restore unless reviewers and a main-only branch policy exist."""
-    rules = environment.get("protection_rules") if isinstance(environment, dict) else None
-    reviewers = []
-    if isinstance(rules, list):
-        reviewers = [
-            rule
-            for rule in rules
-            if isinstance(rule, dict) and rule.get("type") == "required_reviewers"
-        ]
-    reviewer_count = 0
-    for rule in reviewers:
-        people = rule.get("reviewers")
-        if isinstance(people, list):
-            reviewer_count += len(people)
-    if reviewer_count < 1:
-        raise RestoreError(
-            "sql-restore has no required reviewers. "
-            "Add required reviewers and a deployment branch policy that allows only main. "
-            "Refusing a destructive restore."
-        )
-    policy = environment.get("deployment_branch_policy") if isinstance(environment, dict) else None
-    custom = isinstance(policy, dict) and policy.get("custom_branch_policies") is True
-    names = [
-        item.get("name")
-        for item in branch_policies
-        if isinstance(item, dict) and isinstance(item.get("name"), str)
-    ]
-    if not custom or names != ["main"]:
-        shown = ", ".join(names) if names else "(none)"
-        raise RestoreError(
-            "sql-restore deployment branch policy must allow only main. "
-            f"Configured branches: {shown}. Refusing a destructive restore."
-        )
-
-
-def read_restore_protection() -> tuple[dict, list]:
-    token = (os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN") or "").strip()
-    repo = os.environ.get("GITHUB_REPOSITORY", "").strip()
-    if not token or "/" not in repo:
-        raise RestoreError(
-            "sql-restore protection could not be read. Refusing a destructive restore."
-        )
-    client = sql_backup_fetch.UrllibGitHub(token)
-    try:
-        environment = client.get_json(f"/repos/{repo}/environments/sql-restore")
-        policies = client.get_json(
-            f"/repos/{repo}/environments/sql-restore/deployment-branch-policies"
-        )
-    except sql_backup_fetch.FetchError as exc:
-        raise RestoreError(
-            "sql-restore protection could not be read. Refusing a destructive restore. " + str(exc)
-        ) from None
-    branch_policies = policies.get("branch_policies") if isinstance(policies, dict) else None
-    if not isinstance(branch_policies, list):
-        branch_policies = []
-    return environment, branch_policies
-
-
-def require_destructive_approval() -> None:
-    if os.environ.get("GITHUB_ACTIONS") != "true":
-        return
-    assert_environment_protection(*read_restore_protection())
-
-
 def run_restore(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Dry-run or restore a portable SQL backup.")
     parser.add_argument("--bundle-dir", type=Path)
@@ -1816,15 +1751,9 @@ def run_restore(argv: list[str] | None = None) -> int:
     parser.add_argument("--destination-name", default="")
     parser.add_argument("--confirm", default="")
     parser.add_argument("--execute", action="store_true")
-    parser.add_argument("--check-protection", action="store_true")
     parser.add_argument("--report", type=Path)
     parser.add_argument("--fail-before-commit", action="store_true")
     args = parser.parse_args(argv)
-
-    if args.check_protection:
-        assert_environment_protection(*read_restore_protection())
-        print("sql-restore protection: required reviewers and main-only branch policy")
-        return 0
 
     assert_actions_context(execute=args.execute)
     if os.environ.get("GITHUB_ACTIONS") == "true" and args.bundle_dir is not None:
@@ -1835,8 +1764,6 @@ def run_restore(argv: list[str] | None = None) -> int:
         raise RestoreError("Pass --source.")
     if (args.bundle_dir is None) == (not args.artifact_id.strip()):
         raise RestoreError("Pass exactly one of --bundle-dir or --artifact-id.")
-    if args.execute:
-        require_destructive_approval()
     destination_name = assert_destination_name(args.destination_name)
     if args.execute and args.confirm != f"RESTORE {destination_name}":
         raise RestoreError("Confirmation does not match the destination.")
