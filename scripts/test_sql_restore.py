@@ -260,53 +260,170 @@ def sample_blocks() -> dict[str, dict]:
     return tables
 
 
-def test_policy_and_totals() -> None:
-    check(sql_restore.PRODUCTION_RESTORE_ENABLED is False, "Production restore is enabled")
-    check(sql_restore.production_name("production"), "production name was accepted")
-    check(sql_restore.production_name("nagd-prod"), "prod suffix was accepted")
-    check(not sql_restore.production_name("disposable-destination"), "disposable name was refused")
-    check(not sql_restore.production_name("reproducer"), "reproducer was treated as production")
+LIVE_PROJECT_REF = "ynvwtvphqsevhpytcugj"
+POOLER_HOST = "aws-0-us-west-2.pooler.supabase.com"
+DESTINATION_NAME = "nagd-dkp"
+
+
+def hosted_identity_env(**overrides: str) -> dict[str, str]:
+    env = {
+        "SQL_RESTORE_DESTINATION_NAME": DESTINATION_NAME,
+        "SQL_RESTORE_DESTINATION_HOST": POOLER_HOST,
+        "SQL_RESTORE_DATABASE_NAME": "postgres",
+        "SQL_RESTORE_PROJECT_REF": LIVE_PROJECT_REF,
+    }
+    env.update(overrides)
+    return env
+
+
+def assert_refused(message: str, call) -> None:
     try:
-        sql_restore.assert_production_locked("production", "127.0.0.1", set())
-        fail("production destination was allowed")
+        call()
     except sql_restore.RestoreError as exc:
-        check("disabled" in str(exc), "production refusal was unclear")
-    previous = os.environ.get("SQL_RESTORE_ALLOW_PRODUCTION")
-    os.environ["SQL_RESTORE_ALLOW_PRODUCTION"] = "true"
-    try:
-        sql_restore.assert_production_locked("staging-prod", "db.example.test", {"db.example.test"})
-        fail("denylist host was allowed")
-    except sql_restore.RestoreError:
-        pass
-    finally:
-        if previous is None:
-            os.environ.pop("SQL_RESTORE_ALLOW_PRODUCTION", None)
-        else:
-            os.environ["SQL_RESTORE_ALLOW_PRODUCTION"] = previous
-    with patch.dict(os.environ):
+        check(message in str(exc), str(exc))
+        return
+    fail(f"expected refusal containing {message}")
+
+
+def test_destination_authorization() -> None:
+    pooler_user = f"postgres.{LIVE_PROJECT_REF}"
+    with patch.dict(os.environ, hosted_identity_env(), clear=False):
+        os.environ.pop("GITHUB_ACTIONS", None)
+        os.environ.pop("SQL_RESTORE_ALLOW_PRODUCTION", None)
+        sql_restore.assert_destination_identity(
+            DESTINATION_NAME,
+            POOLER_HOST,
+            "postgres",
+            pooler_user,
+            port=5432,
+            sslmode="require",
+        )
+        os.environ["SQL_RESTORE_DESTINATION_HOST"] = f"db.{LIVE_PROJECT_REF}.supabase.co"
+        sql_restore.assert_destination_identity(
+            DESTINATION_NAME,
+            f"db.{LIVE_PROJECT_REF}.supabase.co",
+            "postgres",
+            "postgres",
+            port=5432,
+            sslmode="require",
+        )
+        os.environ["SQL_RESTORE_DESTINATION_HOST"] = POOLER_HOST
+    with patch.dict(os.environ, {**hosted_identity_env(), "GITHUB_ACTIONS": "true"}, clear=False):
+        sql_restore.assert_destination_identity(
+            DESTINATION_NAME,
+            POOLER_HOST,
+            "postgres",
+            pooler_user,
+            port=5432,
+            sslmode="require",
+        )
+        assert_refused(
+            "approved",
+            lambda: sql_restore.assert_destination_identity("disposable-destination", "127.0.0.1", "postgres"),
+        )
+    with patch.dict(os.environ, hosted_identity_env(), clear=False):
         os.environ.pop("GITHUB_ACTIONS", None)
         sql_restore.assert_destination_identity("disposable-destination", "127.0.0.1", "postgres")
-        try:
-            sql_restore.assert_destination_identity("staging", "db.example.supabase.co", "postgres")
-            fail("non-local host was allowed without an allowlist entry")
-        except sql_restore.RestoreError as exc:
-            check("approved" in str(exc), str(exc))
-        try:
-            sql_restore.assert_destination_identity("production", "127.0.0.1", "postgres")
-            fail("production name was allowed on localhost")
-        except sql_restore.RestoreError as exc:
-            check("disabled" in str(exc), str(exc))
-    with patch.dict(os.environ, {"GITHUB_ACTIONS": "true"}):
-        try:
-            sql_restore.assert_destination_identity("disposable-destination", "127.0.0.1", "postgres")
-            fail("GitHub Actions accepted an unlisted destination")
-        except sql_restore.RestoreError as exc:
-            check("approved" in str(exc), str(exc))
-        try:
-            sql_restore.assert_destination_identity("production", "127.0.0.1", "postgres")
-            fail("production name was allowed on localhost")
-        except sql_restore.RestoreError as exc:
-            check("disabled" in str(exc), str(exc))
+        assert_refused(
+            "SQL_RESTORE_PROJECT_REF",
+            lambda: sql_restore.assert_destination_identity(
+                DESTINATION_NAME,
+                POOLER_HOST,
+                "postgres",
+                "postgres.otherprojectref0001",
+                port=5432,
+                sslmode="require",
+            ),
+        )
+        os.environ["SQL_RESTORE_PROJECT_REF"] = "otherprojectref0001"
+        assert_refused(
+            "SQL_RESTORE_PROJECT_REF",
+            lambda: sql_restore.assert_destination_identity(
+                DESTINATION_NAME,
+                POOLER_HOST,
+                "postgres",
+                pooler_user,
+                port=5432,
+                sslmode="require",
+            ),
+        )
+        os.environ["SQL_RESTORE_PROJECT_REF"] = LIVE_PROJECT_REF
+        assert_refused(
+            "SQL_RESTORE_DESTINATION_HOST",
+            lambda: sql_restore.assert_destination_identity(
+                DESTINATION_NAME,
+                "aws-1-us-east-1.pooler.supabase.com",
+                "postgres",
+                pooler_user,
+                port=5432,
+                sslmode="require",
+            ),
+        )
+        assert_refused(
+            "SQL_RESTORE_DATABASE_NAME",
+            lambda: sql_restore.assert_destination_identity(
+                DESTINATION_NAME,
+                POOLER_HOST,
+                "template1",
+                pooler_user,
+                port=5432,
+                sslmode="require",
+            ),
+        )
+        os.environ.pop("SQL_RESTORE_PROJECT_REF", None)
+        assert_refused(
+            "SQL_RESTORE_PROJECT_REF",
+            lambda: sql_restore.assert_destination_identity(
+                DESTINATION_NAME,
+                POOLER_HOST,
+                "postgres",
+                pooler_user,
+                port=5432,
+                sslmode="require",
+            ),
+        )
+        os.environ["SQL_RESTORE_PROJECT_REF"] = LIVE_PROJECT_REF
+        assert_refused(
+            "project reference",
+            lambda: sql_restore.assert_destination_identity(
+                DESTINATION_NAME,
+                POOLER_HOST,
+                "postgres",
+                "postgres",
+                port=5432,
+                sslmode="require",
+            ),
+        )
+        os.environ["SQL_RESTORE_ALLOW_PRODUCTION"] = "true"
+        os.environ["SQL_RESTORE_DESTINATION_HOST"] = "evil.example.com"
+        assert_refused(
+            "approved",
+            lambda: sql_restore.assert_destination_identity(
+                DESTINATION_NAME,
+                "evil.example.com",
+                "postgres",
+                pooler_user,
+                port=5432,
+                sslmode="require",
+            ),
+        )
+        sql_restore.assert_execute_request(DESTINATION_NAME, f"RESTORE {DESTINATION_NAME}")
+        assert_refused(
+            "Confirmation",
+            lambda: sql_restore.assert_execute_request(DESTINATION_NAME, "RESTORE other-destination"),
+        )
+        assert_refused(
+            "SQL_RESTORE_DESTINATION_NAME",
+            lambda: sql_restore.assert_execute_request("other-destination", "RESTORE other-destination"),
+        )
+    try:
+        sql_restore.assert_host_not_denied(POOLER_HOST, {POOLER_HOST})
+        fail("denylist host was allowed")
+    except sql_restore.RestoreError as exc:
+        check("refused" in str(exc), str(exc))
+
+
+def test_policy_and_totals() -> None:
     incompatible = {
         "live_schema_status": "incompatible",
         "live_schema_fingerprint": "sha256:" + ("ab" * 32),
@@ -372,6 +489,7 @@ def restore_env(port: int) -> dict[str, str]:
         "PGOPTIONS",
         "GITHUB_ACTIONS",
         "SQL_RESTORE_ALLOW_PRODUCTION",
+        "SQL_RESTORE_PROJECT_REF",
     ):
         env.pop(key, None)
     env["SQL_RESTORE_DB_URL"] = f"postgresql://postgres:{PASSWORD}@127.0.0.1:{port}/postgres?sslmode=disable"
@@ -389,27 +507,53 @@ def test_cli_refuses_unsafe_requests() -> None:
     check(PASSWORD not in completed.stderr, "password was printed")
 
     env = restore_env(5432)
-    env["SQL_RESTORE_DB_URL"] = "postgresql://postgres:postgres@db.example.supabase.co:5432/postgres?sslmode=require"
-    env["SQL_RESTORE_DESTINATION_HOST"] = "db.example.supabase.co"
-    env["SQL_RESTORE_DESTINATION_NAME"] = "staging"
-    completed = run_restore(
-        env,
-        ["--bundle-dir", "missing", "--source", "example/dkp", "--destination-name", "staging"],
+    env["SQL_RESTORE_DB_URL"] = (
+        "postgresql://postgres.otherprojectref0001:secret@aws-0-us-west-2.pooler.supabase.com:5432/postgres?sslmode=require"
     )
-    check(completed.returncode != 0, "unlisted destination host was accepted")
-    check("approved" in completed.stderr, completed.stderr)
-    check(PASSWORD not in completed.stderr, "password was printed")
-
-    env = restore_env(5432)
-    env["SQL_RESTORE_DESTINATION_NAME"] = "production"
+    env["SQL_RESTORE_DESTINATION_HOST"] = "aws-0-us-west-2.pooler.supabase.com"
+    env["SQL_RESTORE_DESTINATION_NAME"] = DESTINATION_NAME
+    env["SQL_RESTORE_DATABASE_NAME"] = "postgres"
+    env["SQL_RESTORE_PROJECT_REF"] = LIVE_PROJECT_REF
     env["SQL_RESTORE_ALLOW_PRODUCTION"] = "true"
     completed = run_restore(
         env,
-        ["--bundle-dir", "missing", "--source", "example/dkp", "--destination-name", "production", "--execute", "--confirm", "RESTORE production"],
+        ["--bundle-dir", "missing", "--source", "example/dkp", "--destination-name", DESTINATION_NAME],
     )
-    check(completed.returncode != 0, "production restore was accepted")
-    check("disabled" in completed.stderr, completed.stderr)
-    check(PASSWORD not in completed.stderr, "password was printed")
+    check(completed.returncode != 0, "wrong project reference was accepted")
+    check("SQL_RESTORE_PROJECT_REF" in completed.stderr, completed.stderr)
+    check("secret" not in completed.stderr, "password was printed")
+
+    env = restore_env(5432)
+    env["SQL_RESTORE_DB_URL"] = (
+        f"postgresql://postgres.{LIVE_PROJECT_REF}:secret@aws-1-us-east-1.pooler.supabase.com:5432/postgres?sslmode=require"
+    )
+    env["SQL_RESTORE_DESTINATION_HOST"] = POOLER_HOST
+    env["SQL_RESTORE_DESTINATION_NAME"] = DESTINATION_NAME
+    env["SQL_RESTORE_DATABASE_NAME"] = "postgres"
+    env["SQL_RESTORE_PROJECT_REF"] = LIVE_PROJECT_REF
+    completed = run_restore(
+        env,
+        ["--bundle-dir", "missing", "--source", "example/dkp", "--destination-name", DESTINATION_NAME],
+    )
+    check(completed.returncode != 0, "wrong hostname was accepted")
+    check("SQL_RESTORE_DESTINATION_HOST" in completed.stderr, completed.stderr)
+    check("secret" not in completed.stderr, "password was printed")
+
+    env = restore_env(5432)
+    env["SQL_RESTORE_DB_URL"] = (
+        f"postgresql://postgres.{LIVE_PROJECT_REF}:secret@{POOLER_HOST}:5432/template1?sslmode=require"
+    )
+    env["SQL_RESTORE_DESTINATION_HOST"] = POOLER_HOST
+    env["SQL_RESTORE_DESTINATION_NAME"] = DESTINATION_NAME
+    env["SQL_RESTORE_DATABASE_NAME"] = "postgres"
+    env["SQL_RESTORE_PROJECT_REF"] = LIVE_PROJECT_REF
+    completed = run_restore(
+        env,
+        ["--bundle-dir", "missing", "--source", "example/dkp", "--destination-name", DESTINATION_NAME],
+    )
+    check(completed.returncode != 0, "wrong database was accepted")
+    check("SQL_RESTORE_DATABASE_NAME" in completed.stderr, completed.stderr)
+    check("secret" not in completed.stderr, "password was printed")
 
     env = restore_env(1)
     completed = run_restore(
@@ -443,6 +587,25 @@ def test_cli_refuses_unsafe_requests() -> None:
         ],
     )
     check(completed.returncode != 0, "bad confirmation was accepted")
+    check("Confirmation" in completed.stderr, completed.stderr)
+
+    env = restore_env(1)
+    env["SQL_RESTORE_DESTINATION_NAME"] = DESTINATION_NAME
+    completed = run_restore(
+        env,
+        [
+            "--bundle-dir",
+            "missing",
+            "--source",
+            "example/dkp",
+            "--destination-name",
+            DESTINATION_NAME,
+            "--execute",
+            "--confirm",
+            "RESTORE other-destination",
+        ],
+    )
+    check(completed.returncode != 0, "mismatched confirmation was accepted")
     check("Confirmation" in completed.stderr, completed.stderr)
 
 
@@ -1255,6 +1418,7 @@ def test_empty_copy_postgres() -> None:
 
 
 def main() -> None:
+    test_destination_authorization()
     test_policy_and_totals()
     test_cli_refuses_unsafe_requests()
     test_empty_copy_serialization()
