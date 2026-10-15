@@ -492,7 +492,16 @@ label { display: block; margin-bottom: 0.25rem; font-size: 0.875rem; color: #a1a
 .officer-suggest li { padding: 0.4rem 0.6rem; cursor: pointer; }
 .officer-suggest li:hover { background: #27272a; }
 .officer-loot-fields { display: flex; flex-direction: column; gap: 0.5rem; }
-.officer-loot-actions { display: flex; gap: 0.5rem; align-items: flex-start; }
+.officer-loot-price { display: flex; flex-direction: column; align-items: flex-start; gap: 0.35rem; }
+.officer-loot-actions { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
+.officer-price-label {
+  display: block;
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #e4e4e7;
+  white-space: nowrap;
+}
 .officer-cost { width: 5rem; max-width: 5rem; flex: 0 0 5rem; }
 .officer-table-scroll { overflow-x: auto; }
 .officer-delete { margin-top: 1.25rem; border-top: 1px solid #3f1d1d; padding-top: 0.75rem; }
@@ -575,9 +584,48 @@ label { display: block; margin-bottom: 0.25rem; font-size: 0.875rem; color: #a1a
 .site-profile-claim-panel {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
-  gap: 0.4rem;
+  align-items: flex-end;
+  gap: 0.5rem;
   margin-top: 0.4rem;
+}
+.site-profile-claim-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  width: min(22rem, 100%);
+}
+.site-profile-claim-picker input {
+  width: 100%;
+  max-width: none;
+  font-size: inherit;
+  padding: 0.3rem 0.45rem;
+}
+.site-profile-claim-list { height: 11rem; }
+.site-profile-claim-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; }
+.loot-assign-field { position: relative; display: inline-flex; align-items: center; vertical-align: middle; }
+.loot-assign-status {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 0.35rem);
+  z-index: 5;
+  pointer-events: none;
+  background: #fef3c7;
+  color: #422006;
+  border-radius: 6px;
+  padding: 0.2rem 0.5rem;
+  font-size: 0.75rem;
+  line-height: 1.2;
+  font-weight: 600;
+  white-space: nowrap;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+.loot-assign-status::after {
+  content: '';
+  position: absolute;
+  left: 0.75rem;
+  top: 100%;
+  border: 5px solid transparent;
+  border-top-color: #fef3c7;
 }
 .site-profile-block { margin: 0; font-size: 0.75rem; white-space: nowrap; }
 .officer-btn-danger { background: #7f1d1d; color: #fff; }

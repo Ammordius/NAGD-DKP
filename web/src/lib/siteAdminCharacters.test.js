@@ -6,8 +6,10 @@ import {
   buildAccountColumnRows,
   buildCharacterRows,
   characterMatchesQuery,
+  claimAccountChoices,
   filterAccountAdminRows,
   resolveAdminCharacter,
+  sortClaimAccounts,
 } from './siteAdminCharacters.js'
 
 const accounts = [
@@ -169,5 +171,30 @@ describe('resolveAdminCharacter', () => {
       { display_name: 'Missing' },
       '',
     ).char_id, '3')
+  })
+})
+
+describe('sortClaimAccounts', () => {
+  it('sorts by display name and leaves unnamed accounts last', () => {
+    const sorted = sortClaimAccounts([
+      { account_id: '30', display_name: 'Sexy' },
+      { account_id: '10', display_name: '' },
+      { account_id: '20', display_name: 'bees' },
+      { account_id: '40', display_name: 'Vegan' },
+    ])
+    assert.deepEqual(sorted.map((account) => account.account_id), ['20', '30', '40', '10'])
+  })
+
+  it('filters by typed display name and marks duplicate names', () => {
+    const choices = claimAccountChoices([
+      { account_id: '2', display_name: 'Sexy' },
+      { account_id: '1', display_name: 'Bees' },
+      { account_id: '3', display_name: 'sexy' },
+    ], 'sex')
+    assert.deepEqual(choices.map((row) => row.label), ['Sexy (2)', 'sexy (3)'])
+    assert.deepEqual(claimAccountChoices([
+      { account_id: '2', display_name: 'Sexy' },
+      { account_id: '1', display_name: 'Bees' },
+    ], '').map((row) => row.label), ['Bees', 'Sexy'])
   })
 })
