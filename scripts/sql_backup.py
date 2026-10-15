@@ -512,6 +512,11 @@ def write_summary(path: Path, manifest: dict) -> None:
         f"created_at: {manifest['created_at']}",
         f"source_repository: {manifest['source_repository']}",
         f"workflow_run_id: {manifest['workflow_run_id']}",
+        *(
+            [f"source_repository_id: {manifest['source_repository_id']}"]
+            if manifest.get("source_repository_id")
+            else []
+        ),
         f"source_commit_sha: {manifest['source_commit_sha']}",
         f"canonical_schema_source: {manifest['canonical_schema_source']}",
         f"source_schema_fingerprint: {manifest['canonical_schema_sha256']}",
@@ -541,6 +546,7 @@ def build_bundle(
     source_commit_sha: str,
     created_at: str,
     live_schema: dict | None = None,
+    source_repository_id: str = "",
 ) -> dict:
     if _CREATE_TABLE.search(sql_text):
         raise BackupError("Refusing to package a dump that contains CREATE TABLE.")
@@ -574,6 +580,8 @@ def build_bundle(
         "row_counts": row_counts,
         "checksums": {"data.sql": "sha256:" + sha256_file(data_path)},
     }
+    if re.fullmatch(r"[1-9][0-9]*", source_repository_id or ""):
+        manifest["source_repository_id"] = source_repository_id
     manifest_path = bundle / "manifest.json"
     manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8", newline="\n")
     sums = bundle / "SHA256SUMS"
@@ -670,6 +678,7 @@ def run_backup(out_path: Path) -> dict:
             source_commit_sha=_git_sha(root),
             created_at=created_at,
             live_schema=live_schema,
+            source_repository_id=os.environ.get("GITHUB_REPOSITORY_ID", "").strip(),
         )
         encrypt_archive(bundle, recipient, out_path)
         return manifest
@@ -714,6 +723,11 @@ def main(argv: list[str] | None = None) -> int:
         f"created_at: {manifest['created_at']}",
         f"source_repository: {manifest['source_repository']}",
         f"workflow_run_id: {manifest['workflow_run_id']}",
+        *(
+            [f"source_repository_id: {manifest['source_repository_id']}"]
+            if manifest.get("source_repository_id")
+            else []
+        ),
         f"source_commit_sha: {manifest['source_commit_sha']}",
         f"source_schema_fingerprint: {manifest['canonical_schema_sha256']}",
         f"canonical_schema_sha256: {manifest['canonical_schema_sha256']}",

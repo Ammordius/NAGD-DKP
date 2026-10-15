@@ -8,14 +8,9 @@ on:
   workflow_dispatch:
     inputs:
       source_repository:
-        description: Repository that produced the SQL backup
+        description: Discovered owner/name. Current repository uses this repository.
         required: true
-        type: choice
-        default: Current repository
-        options:
-          - Current repository
-          - Ammordius/NAGD-DKP
-          - RimidalEQ/RimidalEQ-NAGD-DKP-backup
+        type: string
       workflow_run_id:
         description: Optional workflow run id. Leave empty for the latest eligible backup.
         required: false
@@ -64,8 +59,13 @@ jobs:
 
       - name: Download and verify SQL backup artifact
         env:
-          GH_TOKEN: ${{ (inputs.source_repository == 'Current repository' || inputs.source_repository == github.repository) && github.token || (inputs.source_repository == 'RimidalEQ/RimidalEQ-NAGD-DKP-backup' && secrets.BACKUP_ARTIFACT_READ_TOKEN_STAGING) || '' }}
-          BACKUP_ARTIFACT_TOKEN_SECRET: ${{ (inputs.source_repository == 'Current repository' || inputs.source_repository == github.repository) && 'GITHUB_TOKEN' || (inputs.source_repository == 'RimidalEQ/RimidalEQ-NAGD-DKP-backup' && 'BACKUP_ARTIFACT_READ_TOKEN_STAGING') || '' }}
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
+          BACKUP_ARTIFACT_READ_TOKEN_STAGING: ${{ secrets.BACKUP_ARTIFACT_READ_TOKEN_STAGING }}
+          BACKUP_FORK_READ_TOKEN: ${{ secrets.BACKUP_FORK_READ_TOKEN }}
+          BACKUP_FORK_READ_TOKEN_2: ${{ secrets.BACKUP_FORK_READ_TOKEN_2 }}
+          BACKUP_FORK_READ_TOKEN_3: ${{ secrets.BACKUP_FORK_READ_TOKEN_3 }}
+          BACKUP_FORK_READ_TOKEN_4: ${{ secrets.BACKUP_FORK_READ_TOKEN_4 }}
           SQL_BACKUP_AGE_IDENTITY: ${{ secrets.SQL_BACKUP_AGE_IDENTITY }}
           SOURCE_REPOSITORY: ${{ inputs.source_repository }}
           CURRENT_REPOSITORY: ${{ github.repository }}

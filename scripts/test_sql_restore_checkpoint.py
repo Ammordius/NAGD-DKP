@@ -383,14 +383,14 @@ def test_numeric_id_and_conflict() -> None:
 def test_wrong_source_and_permission() -> None:
     try:
         sql_backup_fetch.resolve_checkpoint(
-            Boom(),
+            FakeGitHub(),
             source="evil/fork",
             current_repository=CURRENT,
             checkpoint=sql_backup_fetch.CHECKPOINT_LATEST,
             now=NOW,
         )
     except sql_backup_fetch.FetchError as exc:
-        check("not approved" in str(exc), str(exc))
+        check("not a fork" in str(exc), str(exc))
     else:
         fail("unapproved source was accepted")
 
@@ -413,20 +413,31 @@ def test_wrong_source_and_permission() -> None:
     check(all(REPO in path for path in forbidden.calls), str(forbidden.calls))
     check(all(CURRENT not in path for path in forbidden.calls), str(forbidden.calls))
 
+    token_names = ("GH_TOKEN", "GITHUB_TOKEN", *sql_backup_fetch.FORK_READ_TOKEN_ENVS)
+    saved_tokens = {key: os.environ.get(key) for key in token_names}
+    for key in token_names:
+        os.environ.pop(key, None)
     captured = io.StringIO()
-    with redirect_stderr(captured):
-        code = sql_restore_checkpoint.main(
-            [
-                "--source",
-                SOURCE,
-                "--current-repository",
-                CURRENT,
-                "--checkpoint",
-                sql_backup_fetch.CHECKPOINT_LATEST,
-            ]
-        )
-    check(code == 1, "unmapped cross-repository source was accepted")
-    check("mapped" in captured.getvalue(), captured.getvalue())
+    try:
+        with redirect_stderr(captured):
+            code = sql_restore_checkpoint.main(
+                [
+                    "--source",
+                    SOURCE,
+                    "--current-repository",
+                    CURRENT,
+                    "--checkpoint",
+                    sql_backup_fetch.CHECKPOINT_LATEST,
+                ]
+            )
+    finally:
+        for key, previous in saved_tokens.items():
+            if previous is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = previous
+    check(code == 1, "a source without a read token was accepted")
+    check("No configured token" in captured.getvalue(), captured.getvalue())
     check("github_pat_" not in captured.getvalue(), "token leaked in a permission error")
 
 
@@ -529,8 +540,6 @@ def test_execute_rechecks_the_pin() -> None:
                 "123",
                 "--destination-name",
                 "nagd-dkp",
-                "--confirm",
-                "RESTORE nagd-dkp",
             ]
         )
     except sql_restore.RestoreError as exc:
@@ -552,14 +561,21 @@ def test_workflow_choices_stay_static() -> None:
     block = text.split("      checkpoint:\n", 1)[1].split("      checkpoint_name:\n", 1)[0]
     options = [line.strip()[2:] for line in block.splitlines() if line.strip().startswith("- ")]
     check(options == list(sql_backup_fetch.CHECKPOINT_CHOICES), str(options))
-    artifact_input = text.split("      artifact_id:\n", 1)[1].split("      destination_name:\n", 1)[0]
+    artifact_input = text.split("      artifact_id:\n", 1)[1].split("permissions:", 1)[0]
     check("required: false" in artifact_input, artifact_input)
+    check("destination_name:" not in text, "destination name is still a workflow input")
+    check("confirm:" not in text, "typed confirmation is still a workflow input")
+    check("environment: sql-restore" in text, text)
+    check(text.count("environment: sql-restore") == 1, "restore asks for environment approval more than once")
+    inventory = text.split("\n  inventory:", 1)[1].split("\n  restore:", 1)[0]
+    check("environment:" not in inventory, "inventory waits for restore approval")
     restore = text.split("\n  restore:", 1)[1]
     check("inputs.checkpoint" not in restore, "restore job resolves the checkpoint again")
     check("inputs.artifact_id" not in restore, "restore job reads the form artifact id")
-    check("needs.preflight.outputs.artifact_id" in restore, restore)
-    check("needs.preflight.outputs.artifact_sha256" in restore, restore)
-    check("success()" in restore.split("steps:", 1)[0], "restore can run after a failed preflight")
+    check("needs.inventory.outputs.artifact_id" in restore, restore)
+    check("steps.dryrun.outputs.artifact_sha256" in restore, restore)
+    check("--check-protection" in restore, "destructive restore does not check environment protection")
+    check("success()" in restore.split("steps:", 1)[0], "restore can run after a failed inventory")
 
 
 def main() -> None:

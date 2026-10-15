@@ -2,19 +2,15 @@
 
 This workflow discovers and downloads a SQL backup artifact produced by [DB SQL backup](CI-DB-SQL-BACKUP.md). It does not restore a database, and it does not need `SUPABASE_DB_URL`, `SUPABASE_URL`, or `SUPABASE_SERVICE_ROLE_KEY`.
 
-The job prints a summary and leaves the downloaded file on the runner only. It does not upload a new artifact. A git fork relationship does not grant access to another repository's Actions artifacts. Access is an explicit allowlist plus a token that can read the source repository.
+The job prints a summary and leaves the downloaded file on the runner only. It does not upload a new artifact. A git fork relationship does not by itself grant access to another repository's Actions artifacts. The script accepts a repository only when GitHub says it is `Ammordius/NAGD-DKP` or a fork of that repository, identified by node id `R_kgDORQRiNA`, and the repository has `db-sql-backup.yml`.
 
-Workflow: [`.github/workflows/db-sql-backup-fetch.yml`](../.github/workflows/db-sql-backup-fetch.yml). Script: [`scripts/sql_backup_fetch.py`](../scripts/sql_backup_fetch.py).
+Workflow: [`.github/workflows/db-sql-backup-fetch.yml`](../.github/workflows/db-sql-backup-fetch.yml). Discovery: [`.github/workflows/db-sql-backup-discover.yml`](../.github/workflows/db-sql-backup-discover.yml). Script: [`scripts/sql_backup_fetch.py`](../scripts/sql_backup_fetch.py).
 
-## Allowlist
+## Fork network
 
-The script accepts only:
+Run **DB SQL backup discovery** to list the root and every accessible fork, including forks of forks. The summary shows checkpoints, timestamps, and whether artifacts are readable. A repository the tokens can see but not read stays in the summary with the reason. A private fork the tokens cannot see is omitted and is not authorized. Typing an unrelated `owner/name` does not make it a source.
 
-- The repository running the workflow (`github.repository`), which covers a same-repository backup.
-- `Ammordius/NAGD-DKP`
-- `RimidalEQ/RimidalEQ-NAGD-DKP-backup`
-
-The workflow offers those as a choice. The script checks the choice again, so a manually dispatched run cannot substitute an arbitrary owner/name. Adding another fork means editing `APPROVED_SOURCE_REPOSITORIES` in `scripts/sql_backup_fetch.py`. It is not a workflow input.
+A renamed repository stays the same source. GitHub resolves the old name and the current name to one repository id. The manifest's `source_repository` must resolve to the repository that actually stored the artifact. When `source_repository_id` is present it must be that repository's numeric id. Older artifacts omit that field and remain valid. A copied archive, whose manifest names a different repository, is refused. The manifest is not rewritten. The error tells the operator to generate a new backup in the selected repository.
 
 Eligible runs must be on `main`. A successful run on any other ref is rejected, including when you pass its artifact id.
 
@@ -42,18 +38,18 @@ When the source is the repository running the job, the job uses that repository'
 
 ### Another repository
 
-`GITHUB_TOKEN` from the destination cannot read Actions artifacts in `Ammordius/NAGD-DKP`, `RimidalEQ/RimidalEQ-NAGD-DKP-backup`, or any other repository. Forking the source does not change that, whether the source is public or private.
+`GITHUB_TOKEN` from the destination cannot read Actions artifacts in another owner's repository. Forking the source does not change that, whether the source is public or private.
 
-For another repository, the job selects one mapped secret. `RimidalEQ/RimidalEQ-NAGD-DKP-backup` uses the existing secret `BACKUP_ARTIFACT_READ_TOKEN_STAGING`. The repository running the job uses `GITHUB_TOKEN`. `Ammordius/NAGD-DKP` is on the allowlist and has no token secret yet, so that choice fails closed. Adding a production source means one new map entry in `SOURCE_READ_TOKEN_SECRETS` and one new arm in the workflow expression. Do not rename `BACKUP_ARTIFACT_READ_TOKEN_STAGING`.
+For another repository, the job tries unlabeled token slots and uses the first one that can read that repository. The slots are `BACKUP_ARTIFACT_READ_TOKEN_STAGING`, `BACKUP_FORK_READ_TOKEN`, and `BACKUP_FORK_READ_TOKEN_2` through `BACKUP_FORK_READ_TOKEN_4`. The current repository uses `GITHUB_TOKEN`. Do not rename `BACKUP_ARTIFACT_READ_TOKEN_STAGING`. A new fork owned by an account that an existing token can already read needs no workflow change. A new owner needs a token in the next empty slot.
 
 For the initial version, create a fine-grained personal access token and store it under the mapped secret name on the **destination** repository:
 
 1. Open GitHub → Settings → Developer settings → Personal access tokens → Fine-grained tokens → Generate new token.
-2. Resource owner: the account that owns the source you need to read. A fine-grained token has one resource owner, so one token cannot cover both `Ammordius` and `RimidalEQ`. Each run reads one source. The secret must be a token for that source's owner. A second owner needs its own secret name in `SOURCE_READ_TOKEN_SECRETS`. A 403 is a failed read. The script does not try a different repository or a different token.
+2. Resource owner: the account that owns the source you need to read. A fine-grained token has one resource owner. A second owner uses the next empty `BACKUP_FORK_READ_TOKEN` slot. A 403 on one token makes the script try the next slot. It does not try a different repository.
 3. Repository access: Only select repositories → that source repository.
 4. Repository permissions: **Actions → Read-only**. Leave Contents, Administration, and every other permission at **No access**. Actions write is not required.
 5. Generate the token and copy it once. Do not commit it, and do not paste it into the workflow file.
-6. On the destination repository: Settings → Secrets and variables → Actions → New repository secret. For `RimidalEQ/RimidalEQ-NAGD-DKP-backup`, the name is `BACKUP_ARTIFACT_READ_TOKEN_STAGING`.
+6. On the destination repository: Settings → Secrets and variables → Actions → New repository secret. Use `BACKUP_ARTIFACT_READ_TOKEN_STAGING` or the next empty `BACKUP_FORK_READ_TOKEN` slot. The secret name is not the repository name.
 
 If the source account is an organization, an owner may have to approve the token before it can read that repository.
 
@@ -78,7 +74,7 @@ A public source may expose workflow run metadata more widely. This job still sen
 Put the token in an environment variable. Do not pass it as a command-line argument, and do not echo it. `gh` reads `GH_TOKEN` from the environment.
 
 ```bash
-GH_TOKEN="$BACKUP_ARTIFACT_READ_TOKEN_STAGING" gh api repos/RimidalEQ/RimidalEQ-NAGD-DKP-backup/actions/artifacts?per_page=1 >/dev/null
+GH_TOKEN="$BACKUP_ARTIFACT_READ_TOKEN_STAGING" gh api repos/OWNER/REPO/actions/artifacts?per_page=1 >/dev/null
 echo "exit:$?"
 ```
 
@@ -86,7 +82,7 @@ On PowerShell, set `$env:GH_TOKEN` from the existing variable and do not write t
 
 ```powershell
 $env:GH_TOKEN = $env:BACKUP_ARTIFACT_READ_TOKEN_STAGING
-gh api "repos/RimidalEQ/RimidalEQ-NAGD-DKP-backup/actions/artifacts?per_page=1" > $null
+gh api "repos/OWNER/REPO/actions/artifacts?per_page=1" > $null
 Write-Output "exit:$LASTEXITCODE"
 ```
 
@@ -112,7 +108,7 @@ When the identity is present the script also checks:
 - `format_version` and `included_tables` match `scripts/sql_backup.py`.
 - `canonical_schema_sha256` matches the checked-out `docs/supabase-schema-full.sql`. That is the source-code fingerprint. It does not mark the live catalog as verified.
 - `live_schema_status` is `not_assessed`, `compatible`, or `incompatible`. `live_schema_compared_to_repository_file` must be false. A missing block is `not_assessed`, not compatible.
-- `source_repository` is the selected repository, and `workflow_run_id` is the resolved run.
+- `source_repository` resolves to the same GitHub repository as the artifact, and `workflow_run_id` is the resolved run. A different name for that same repository is accepted. A different repository is not.
 - `SHA256SUMS` matches `data.sql` and `manifest.json`, and the manifest checksum matches `data.sql`.
 
 The script does not execute anything from the archive and does not run `psql`.
@@ -121,7 +117,7 @@ The script does not execute anything from the archive and does not run `psql`.
 
 Actions → **DB SQL backup fetch** → Run workflow.
 
-- Source repository: Current repository, `Ammordius/NAGD-DKP`, or `RimidalEQ/RimidalEQ-NAGD-DKP-backup`.
+- Source repository: a repository printed by **DB SQL backup discovery**, or `Current repository`.
 - Workflow run id: optional. Empty means the latest eligible run when the artifact id is also empty.
 - Artifact id: optional. When set, this exact artifact is resolved and checked.
 
@@ -135,14 +131,13 @@ Discovery tests mock the GitHub API. They do not need a token. Decrypt tests nee
 python scripts/test_sql_backup_fetch.py
 ```
 
-A live read against GitHub is off unless `BACKUP_ARTIFACT_LIVE_TEST=1`. The token must already be in the secret named for that source, `BACKUP_ARTIFACT_READ_TOKEN_STAGING` for `RimidalEQ/RimidalEQ-NAGD-DKP-backup`. The test prints neither the token nor the artifact body. A mocked request does not establish that the real secret is authorized. Schema check does not set these variables.
+A live read against GitHub is off unless `BACKUP_ARTIFACT_LIVE_TEST=1`. Put the read token in `BACKUP_FORK_READ_TOKEN` or `BACKUP_ARTIFACT_READ_TOKEN_STAGING`. The test prints neither the token nor the artifact body. A mocked request does not establish that the real secret is authorized. Schema check does not set these variables.
 
 ```bash
 BACKUP_ARTIFACT_LIVE_TEST=1 \
-BACKUP_ARTIFACT_LIVE_REPO=RimidalEQ/RimidalEQ-NAGD-DKP-backup \
+BACKUP_ARTIFACT_LIVE_REPO=owner/name \
 BACKUP_ARTIFACT_LIVE_ARTIFACT_ID=123456789 \
-BACKUP_ARTIFACT_TOKEN_SECRET=BACKUP_ARTIFACT_READ_TOKEN_STAGING \
 python scripts/test_sql_backup_fetch.py
 ```
 
-`BACKUP_ARTIFACT_LIVE_REPO` must be on the allowlist above. The live check requests that artifact's metadata only.
+`BACKUP_ARTIFACT_LIVE_REPO` must be the NAGD-DKP root or a fork of it. The live check requests that artifact's metadata only.

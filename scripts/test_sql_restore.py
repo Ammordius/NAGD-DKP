@@ -25,7 +25,7 @@ from unittest.mock import patch
 import sql_backup
 import sql_backup_fetch
 import sql_restore
-from test_sql_backup_fetch import FakeGitHub
+from test_sql_backup_fetch import ROOT_NUMERIC, FakeGitHub
 
 ROOT = Path(__file__).resolve().parents[1]
 BACKUP_SCRIPT = ROOT / "scripts" / "sql_backup.py"
@@ -407,14 +407,29 @@ def test_destination_authorization() -> None:
                 sslmode="require",
             ),
         )
-        sql_restore.assert_execute_request(DESTINATION_NAME, f"RESTORE {DESTINATION_NAME}")
-        assert_refused(
-            "Confirmation",
-            lambda: sql_restore.assert_execute_request(DESTINATION_NAME, "RESTORE other-destination"),
-        )
+        check(sql_restore.assert_destination_name(DESTINATION_NAME) == DESTINATION_NAME, "destination label was not read")
+        check(sql_restore.assert_destination_name("") == DESTINATION_NAME, "an empty typed name was not replaced by the environment")
         assert_refused(
             "SQL_RESTORE_DESTINATION_NAME",
-            lambda: sql_restore.assert_execute_request("other-destination", "RESTORE other-destination"),
+            lambda: sql_restore.assert_destination_name("other-destination"),
+        )
+        protected = {
+            "protection_rules": [
+                {"type": "required_reviewers", "reviewers": [{"type": "User"}]},
+            ],
+            "deployment_branch_policy": {"protected_branches": False, "custom_branch_policies": True},
+        }
+        sql_restore.assert_environment_protection(protected, [{"name": "main"}])
+        assert_refused(
+            "required reviewers",
+            lambda: sql_restore.assert_environment_protection(
+                {"protection_rules": [], "deployment_branch_policy": None},
+                [],
+            ),
+        )
+        assert_refused(
+            "only main",
+            lambda: sql_restore.assert_environment_protection(protected, [{"name": "main"}, {"name": "develop"}]),
         )
     try:
         sql_restore.assert_host_not_denied(POOLER_HOST, {POOLER_HOST})
@@ -572,41 +587,54 @@ def test_cli_refuses_unsafe_requests() -> None:
     check("injected" in completed.stderr, completed.stderr)
 
     env = restore_env(1)
+    env["GITHUB_ACTIONS"] = "true"
+    env["GITHUB_EVENT_NAME"] = "workflow_dispatch"
+    env["GITHUB_REF"] = "refs/heads/main"
+    env["GH_TOKEN"] = ""
+    env["GITHUB_TOKEN"] = ""
     completed = run_restore(
         env,
         [
+            "--execute",
             "--bundle-dir",
             "missing",
             "--source",
             "example/dkp",
             "--destination-name",
             "disposable-destination",
-            "--execute",
             "--confirm",
-            "please",
+            "RESTORE disposable-destination",
         ],
     )
-    check(completed.returncode != 0, "bad confirmation was accepted")
-    check("Confirmation" in completed.stderr, completed.stderr)
+    check(completed.returncode != 0, "a typed confirmation was accepted")
+    check("unrecognized arguments" in completed.stderr, completed.stderr)
+    check("RESTORE" not in completed.stderr or "unrecognized" in completed.stderr, completed.stderr)
 
     env = restore_env(1)
-    env["SQL_RESTORE_DESTINATION_NAME"] = DESTINATION_NAME
+    env["GITHUB_ACTIONS"] = "true"
+    env["GITHUB_EVENT_NAME"] = "workflow_dispatch"
+    env["GITHUB_REF"] = "refs/heads/main"
+    env.pop("GH_TOKEN", None)
+    env.pop("GITHUB_TOKEN", None)
     completed = run_restore(
         env,
         [
-            "--bundle-dir",
-            "missing",
+            "--execute",
             "--source",
             "example/dkp",
-            "--destination-name",
-            DESTINATION_NAME,
-            "--execute",
-            "--confirm",
-            "RESTORE other-destination",
+            "--artifact-id",
+            "1",
+            "--expect-artifact-name",
+            "sql-backup-20261014T150405Z",
+            "--expect-workflow-run-id",
+            "9",
+            "--expect-sha256",
+            "a" * 64,
         ],
     )
-    check(completed.returncode != 0, "mismatched confirmation was accepted")
-    check("Confirmation" in completed.stderr, completed.stderr)
+    check(completed.returncode != 0, "an unprotected Actions restore was accepted")
+    check("required reviewers" in completed.stderr or "protection could not be read" in completed.stderr, completed.stderr)
+    check("supabase.co" not in completed.stderr, completed.stderr)
 
 
 def run_restore(env: dict[str, str], args: list[str]) -> subprocess.CompletedProcess[str]:
@@ -729,6 +757,7 @@ def backup_source(port: int, out_dir: Path, recipient: str) -> None:
     env["SUPABASE_DB_URL"] = f"postgresql://postgres:{PASSWORD}@127.0.0.1:{port}/postgres?sslmode=disable"
     env["SQL_BACKUP_AGE_RECIPIENT"] = recipient
     env["GITHUB_REPOSITORY"] = SOURCE_REPO
+    env["GITHUB_REPOSITORY_ID"] = str(ROOT_NUMERIC)
     env["GITHUB_RUN_ID"] = str(WORKFLOW_RUN_ID)
     env["GITHUB_SHA"] = "abc123deadbeef"
     completed = subprocess.run(
@@ -958,8 +987,6 @@ def test_two_databases() -> None:
                     SOURCE_REPO,
                     "--destination-name",
                     "disposable-destination",
-                    "--confirm",
-                    "RESTORE disposable-destination",
                 ],
             )
             assert_clean_output(failed)
@@ -978,8 +1005,6 @@ def test_two_databases() -> None:
                     SOURCE_REPO,
                     "--destination-name",
                     "disposable-destination",
-                    "--confirm",
-                    "RESTORE disposable-destination",
                 ],
             )
             assert_clean_output(restored)
@@ -1043,8 +1068,6 @@ ROLLBACK;
                     SOURCE_REPO,
                     "--destination-name",
                     "disposable-destination",
-                    "--confirm",
-                    "RESTORE disposable-destination",
                 ],
             )
             assert_clean_output(again)
@@ -1347,8 +1370,6 @@ def test_empty_copy_postgres() -> None:
                     SOURCE_REPO,
                     "--destination-name",
                     "disposable-destination",
-                    "--confirm",
-                    "RESTORE disposable-destination",
                 ],
             )
             check(failed.returncode != 0, "intentional empty COPY failure exited 0")
@@ -1391,8 +1412,6 @@ def test_empty_copy_postgres() -> None:
                     SOURCE_REPO,
                     "--destination-name",
                     "disposable-destination",
-                    "--confirm",
-                    "RESTORE disposable-destination",
                 ],
             )
             check(restored.returncode == 0, "empty COPY restore failed:\n" + (restored.stderr or restored.stdout)[-4000:])

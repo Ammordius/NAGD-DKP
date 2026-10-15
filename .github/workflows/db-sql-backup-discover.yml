@@ -1,0 +1,41 @@
+# Read-only inventory of NAGD-DKP fork backups.
+# Does not restore a database and does not upload an artifact.
+# workflow_dispatch choices cannot be filled from the API, so this summary
+# is the source list. A separate picker UI is optional later.
+
+name: DB SQL backup discovery
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: db-sql-backup-discover
+  cancel-in-progress: false
+
+jobs:
+  discover:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: List fork backups
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
+          BACKUP_ARTIFACT_READ_TOKEN_STAGING: ${{ secrets.BACKUP_ARTIFACT_READ_TOKEN_STAGING }}
+          BACKUP_FORK_READ_TOKEN: ${{ secrets.BACKUP_FORK_READ_TOKEN }}
+          BACKUP_FORK_READ_TOKEN_2: ${{ secrets.BACKUP_FORK_READ_TOKEN_2 }}
+          BACKUP_FORK_READ_TOKEN_3: ${{ secrets.BACKUP_FORK_READ_TOKEN_3 }}
+          BACKUP_FORK_READ_TOKEN_4: ${{ secrets.BACKUP_FORK_READ_TOKEN_4 }}
+        run: python scripts/sql_backup_fetch.py --discover

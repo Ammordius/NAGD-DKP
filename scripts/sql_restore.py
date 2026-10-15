@@ -361,7 +361,15 @@ def _read_bundle_files(directory: Path) -> dict[str, bytes]:
     return found
 
 
-def verify_bundle_bytes(files: dict[str, bytes], *, source: str, schema_path: Path) -> tuple[str, dict]:
+def verify_bundle_bytes(
+    files: dict[str, bytes],
+    *,
+    source: str,
+    schema_path: Path,
+    origin: sql_backup_fetch.RepositoryIdentity | None = None,
+    client=None,
+    run_id: str = "",
+) -> tuple[str, dict]:
     if len(files["data.sql"]) > MAX_DATA_SQL_BYTES:
         raise RestoreError("data.sql exceeds the restore size limit.")
     try:
@@ -389,10 +397,22 @@ def verify_bundle_bytes(files: dict[str, bytes], *, source: str, schema_path: Pa
         manifest_source = sql_backup_fetch._require_text(
             manifest.get("source_repository"), "source_repository", sql_backup_fetch._REPO
         )
+        if origin is not None and client is not None:
+            sql_backup_fetch.assert_manifest_origin(
+                manifest,
+                origin=origin,
+                selected_name=source,
+                client=client,
+                run_id=run_id or str(manifest.get("workflow_run_id") or ""),
+            )
+        elif manifest_source != source:
+            raise sql_backup_fetch.FetchError(
+                "Manifest source_repository does not match the selected repository.\n"
+                f"selected_repository: {source}\n"
+                f"manifest_source_repository: {manifest_source}"
+            )
     except sql_backup_fetch.FetchError as exc:
         raise RestoreError(str(exc)) from None
-    if manifest_source != source:
-        raise RestoreError("Manifest source_repository does not match the selected repository.")
     try:
         sql_backup_fetch._require_text(manifest.get("workflow_run_id"), "workflow_run_id", sql_backup_fetch._DIGITS)
         sql_backup_fetch._require_text(manifest.get("source_commit_sha"), "source_commit_sha", sql_backup_fetch._COMMIT)
@@ -443,9 +463,23 @@ def require_restorable_live_schema(manifest: dict) -> dict:
     return live
 
 
-def load_bundle_dir(directory: Path, source: str) -> tuple[str, dict]:
+def load_bundle_dir(
+    directory: Path,
+    source: str,
+    *,
+    origin: sql_backup_fetch.RepositoryIdentity | None = None,
+    client=None,
+    run_id: str = "",
+) -> tuple[str, dict]:
     files = _read_bundle_files(directory)
-    return verify_bundle_bytes(files, source=source, schema_path=repo_root() / sql_backup.CANONICAL_SCHEMA)
+    return verify_bundle_bytes(
+        files,
+        source=source,
+        schema_path=repo_root() / sql_backup.CANONICAL_SCHEMA,
+        origin=origin,
+        client=client,
+        run_id=run_id,
+    )
 
 
 def pin_from_summary(summary: str) -> dict[str, str]:
@@ -465,7 +499,12 @@ def pin_from_summary(summary: str) -> dict[str, str]:
         raise RestoreError("Verified artifact is missing its workflow run.")
     if not re.fullmatch(r"[0-9a-f]{64}", fields["artifact_sha256"]):
         raise RestoreError("Verified artifact digest is invalid.")
-    return {key: fields[key] for key in required}
+    pin = {key: fields[key] for key in required}
+    if fields.get("selected_repository"):
+        pin["selected_repository"] = fields["selected_repository"]
+    if fields.get("repository_id"):
+        pin["repository_id"] = fields["repository_id"]
+    return pin
 
 
 def require_execution_pin(name: str, run_id: str, digest: str) -> None:
@@ -493,10 +532,13 @@ def assert_pinned_artifact(
         raise RestoreError(
             "Fetched artifact id does not match the pinned checkpoint. Refusing to restore a different backup."
         )
-    if pin["source_repository"] != source:
+    selected = pin.get("selected_repository", "")
+    if pin["source_repository"] != source and selected != source:
         raise RestoreError(
             "Fetched artifact repository does not match the pinned checkpoint. "
-            "Refusing to restore a different backup."
+            "Refusing to restore a different backup.\n"
+            f"selected_repository: {source}\n"
+            f"artifact_repository: {pin['source_repository']}"
         )
     if expect_name and pin["artifact_name"] != expect_name:
         raise RestoreError(
@@ -528,7 +570,10 @@ def load_from_fetch(source: str, current_repository: str, artifact_id: str) -> t
     identity = sql_backup_fetch._identity_from_env()
     if not identity:
         raise RestoreError("Set SQL_BACKUP_AGE_IDENTITY to verify the backup.")
-    token = sql_backup_fetch.token_for_source(source, current_repository)
+    try:
+        _secret_name, token, client, origin = sql_backup_fetch.open_source(source, current_repository)
+    except sql_backup_fetch.FetchError as exc:
+        raise RestoreError(str(exc)) from None
     work = Path(tempfile.mkdtemp(prefix="sql-restore-fetch-"))
     try:
         try:
@@ -536,7 +581,7 @@ def load_from_fetch(source: str, current_repository: str, artifact_id: str) -> t
                 source=source,
                 current_repository=current_repository,
                 token=token,
-                client=sql_backup_fetch.UrllibGitHub(token),
+                client=client,
                 out_dir=work,
                 artifact_id=artifact_id,
                 identity=identity,
@@ -557,9 +602,12 @@ def load_from_fetch(source: str, current_repository: str, artifact_id: str) -> t
             sql_backup_fetch.decrypt_age(age_files[0], identity, tar_path)
             sql_backup_fetch.verify_plaintext(
                 tar_path,
-                source=sql_backup_fetch.require_source(source, current_repository),
+                source=origin.full_name,
                 run_id=match.group(1),
                 schema_path=repo_root() / sql_backup.CANONICAL_SCHEMA,
+                origin=origin,
+                client=client,
+                selected_name=source,
             )
         except sql_backup_fetch.FetchError as exc:
             raise RestoreError(str(exc)) from None
@@ -572,7 +620,10 @@ def load_from_fetch(source: str, current_repository: str, artifact_id: str) -> t
             raise RestoreError("Archive is malformed.") from exc
         sql_text, manifest = load_bundle_dir(
             extract,
-            sql_backup_fetch.require_source(source, current_repository),
+            source,
+            origin=origin,
+            client=client,
+            run_id=match.group(1),
         )
         return sql_text, manifest, pin
     finally:
@@ -1594,49 +1645,118 @@ def write_pin_outputs(pin: dict[str, str], manifest: dict) -> None:
         raise RestoreError(str(exc)) from None
 
 
-def assert_execute_request(destination_name: str, confirm: str) -> None:
+def assert_destination_name(destination_name: str) -> str:
+    """The destination label comes from the protected environment, not the operator."""
     expected_name, _, _ = destination_settings()
-    if destination_name != expected_name:
+    if destination_name and destination_name != expected_name:
         raise RestoreError("Destination name does not match SQL_RESTORE_DESTINATION_NAME.")
-    if confirm != f"RESTORE {destination_name}":
-        raise RestoreError("Confirmation does not match the destination.")
+    return expected_name
+
+
+def assert_environment_protection(environment: dict, branch_policies: list) -> None:
+    """Refuse a destructive restore unless reviewers and a main-only branch policy exist."""
+    rules = environment.get("protection_rules") if isinstance(environment, dict) else None
+    reviewers = []
+    if isinstance(rules, list):
+        reviewers = [
+            rule
+            for rule in rules
+            if isinstance(rule, dict) and rule.get("type") == "required_reviewers"
+        ]
+    reviewer_count = 0
+    for rule in reviewers:
+        people = rule.get("reviewers")
+        if isinstance(people, list):
+            reviewer_count += len(people)
+    if reviewer_count < 1:
+        raise RestoreError(
+            "sql-restore has no required reviewers. "
+            "Add required reviewers and a deployment branch policy that allows only main. "
+            "Refusing a destructive restore."
+        )
+    policy = environment.get("deployment_branch_policy") if isinstance(environment, dict) else None
+    custom = isinstance(policy, dict) and policy.get("custom_branch_policies") is True
+    names = [
+        item.get("name")
+        for item in branch_policies
+        if isinstance(item, dict) and isinstance(item.get("name"), str)
+    ]
+    if not custom or names != ["main"]:
+        shown = ", ".join(names) if names else "(none)"
+        raise RestoreError(
+            "sql-restore deployment branch policy must allow only main. "
+            f"Configured branches: {shown}. Refusing a destructive restore."
+        )
+
+
+def read_restore_protection() -> tuple[dict, list]:
+    token = (os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN") or "").strip()
+    repo = os.environ.get("GITHUB_REPOSITORY", "").strip()
+    if not token or "/" not in repo:
+        raise RestoreError(
+            "sql-restore protection could not be read. Refusing a destructive restore."
+        )
+    client = sql_backup_fetch.UrllibGitHub(token)
+    try:
+        environment = client.get_json(f"/repos/{repo}/environments/sql-restore")
+        policies = client.get_json(
+            f"/repos/{repo}/environments/sql-restore/deployment-branch-policies"
+        )
+    except sql_backup_fetch.FetchError as exc:
+        raise RestoreError(
+            "sql-restore protection could not be read. Refusing a destructive restore. " + str(exc)
+        ) from None
+    branch_policies = policies.get("branch_policies") if isinstance(policies, dict) else None
+    if not isinstance(branch_policies, list):
+        branch_policies = []
+    return environment, branch_policies
+
+
+def require_destructive_approval() -> None:
+    if os.environ.get("GITHUB_ACTIONS") != "true":
+        return
+    assert_environment_protection(*read_restore_protection())
 
 
 def run_restore(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Dry-run or restore a portable SQL backup.")
     parser.add_argument("--bundle-dir", type=Path)
-    parser.add_argument("--source", required=True)
+    parser.add_argument("--source", default="")
     parser.add_argument("--current-repository", default=os.environ.get("GITHUB_REPOSITORY", ""))
     parser.add_argument("--artifact-id", default="")
     parser.add_argument("--expect-artifact-name", default="")
     parser.add_argument("--expect-workflow-run-id", default="")
     parser.add_argument("--expect-sha256", default="")
-    parser.add_argument("--destination-name", required=True)
-    parser.add_argument("--confirm", default="")
+    parser.add_argument("--destination-name", default="")
     parser.add_argument("--execute", action="store_true")
+    parser.add_argument("--check-protection", action="store_true")
     parser.add_argument("--report", type=Path)
     parser.add_argument("--fail-before-commit", action="store_true")
     args = parser.parse_args(argv)
+
+    if args.check_protection:
+        assert_environment_protection(*read_restore_protection())
+        print("sql-restore protection: required reviewers and main-only branch policy")
+        return 0
 
     assert_actions_context()
     if os.environ.get("GITHUB_ACTIONS") == "true" and args.bundle_dir is not None:
         raise RestoreError("GitHub Actions must select an artifact id.")
     if args.fail_before_commit and os.environ.get("DKP_SQL_RESTORE_TEST_FAIL") != "1":
         raise RestoreError("Refusing an injected failure outside the restore test.")
+    if not args.source.strip():
+        raise RestoreError("Pass --source.")
     if (args.bundle_dir is None) == (not args.artifact_id.strip()):
         raise RestoreError("Pass exactly one of --bundle-dir or --artifact-id.")
     if args.execute:
-        assert_execute_request(args.destination_name, args.confirm)
-        if args.artifact_id.strip():
-            require_execution_pin(
-                args.expect_artifact_name,
-                args.expect_workflow_run_id,
-                args.expect_sha256,
-            )
-    else:
-        expected_name, _, _ = destination_settings()
-        if args.destination_name != expected_name:
-            raise RestoreError("Destination name does not match SQL_RESTORE_DESTINATION_NAME.")
+        require_destructive_approval()
+    destination_name = assert_destination_name(args.destination_name)
+    if args.execute and args.artifact_id.strip():
+        require_execution_pin(
+            args.expect_artifact_name,
+            args.expect_workflow_run_id,
+            args.expect_sha256,
+        )
 
     denied = load_denylist()
     conn = connect_destination()
@@ -1653,7 +1773,7 @@ def run_restore(argv: list[str] | None = None) -> int:
         pin = None
     else:
         try:
-            source = sql_backup_fetch.require_source(args.source, args.current_repository)
+            source = sql_backup_fetch.normalize_repo(args.source)
         except sql_backup_fetch.FetchError as exc:
             raise RestoreError(str(exc)) from None
         artifact_id = args.artifact_id.strip()
@@ -1688,7 +1808,7 @@ def run_restore(argv: list[str] | None = None) -> int:
         absent_claims=absent,
         present_claims=present,
         totals=totals,
-        destination_name=args.destination_name,
+        destination_name=destination_name,
         artifact_name=artifact_name,
         artifact_sha256=artifact_sha256,
     )

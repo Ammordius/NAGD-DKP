@@ -29,17 +29,20 @@ from urllib.request import HTTPErrorProcessor, Request, build_opener
 
 import sql_backup
 
-APPROVED_SOURCE_REPOSITORIES = (
-    "Ammordius/NAGD-DKP",
-    "RimidalEQ/RimidalEQ-NAGD-DKP-backup",
-)
-# Secret names only. The current repository uses the job token. An approved
-# repository with no entry fails closed. Add a production source by naming
-# its secret here and in the workflow expressions. Do not store token values.
+# Stable GitHub node id of Ammordius/NAGD-DKP. A rename keeps this id.
+# Forks are authorized by parentage to this id, not by a name allowlist.
+NETWORK_ROOT_NAME = "Ammordius/NAGD-DKP"
+NETWORK_ROOT_NODE_ID = "R_kgDORQRiNA"
 CURRENT_REPOSITORY_TOKEN_SECRET = "GITHUB_TOKEN"
-SOURCE_READ_TOKEN_SECRETS = {
-    "RimidalEQ/RimidalEQ-NAGD-DKP-backup": "BACKUP_ARTIFACT_READ_TOKEN_STAGING",
-}
+# Unlabeled slots. A new fork needs no workflow edit. An empty slot is skipped.
+# The staging secret remains one slot so the existing credential keeps working.
+FORK_READ_TOKEN_ENVS = (
+    "BACKUP_ARTIFACT_READ_TOKEN_STAGING",
+    "BACKUP_FORK_READ_TOKEN",
+    "BACKUP_FORK_READ_TOKEN_2",
+    "BACKUP_FORK_READ_TOKEN_3",
+    "BACKUP_FORK_READ_TOKEN_4",
+)
 APPROVED_HEAD_BRANCHES = ("main",)
 WORKFLOW_FILE = "db-sql-backup.yml"
 LEGACY_WORKFLOW_FILE = "db-backup.yml"
@@ -84,17 +87,31 @@ _SHA256 = re.compile(r"sha256:[0-9a-f]{64}")
 _SUM_LINE = re.compile(r"([0-9a-f]{64})  (\S+)")
 _CREATED = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z")
 _COMMIT = re.compile(r"[0-9a-fA-F]{7,64}")
+_NODE_ID = re.compile(r"R_[A-Za-z0-9_-]+")
 
 
 class FetchError(Exception):
     """Fail-closed fetch error. The message must not contain secrets."""
 
 
-def approved_repositories(current_repository: str) -> set[str]:
-    repos = set(APPROVED_SOURCE_REPOSITORIES)
-    if current_repository:
-        repos.add(normalize_repo(current_repository))
-    return repos
+class RepositoryIdentity:
+    """GitHub repository identity. Names can change; node_id does not."""
+
+    def __init__(
+        self,
+        numeric_id: str,
+        node_id: str,
+        full_name: str,
+        fork: bool,
+        parent_full_name: str = "",
+        parent_node_id: str = "",
+    ) -> None:
+        self.numeric_id = numeric_id
+        self.node_id = node_id
+        self.full_name = full_name
+        self.fork = fork
+        self.parent_full_name = parent_full_name
+        self.parent_node_id = parent_node_id
 
 
 def normalize_repo(value: str) -> str:
@@ -104,43 +121,386 @@ def normalize_repo(value: str) -> str:
     return text
 
 
-def require_source(source: str, current_repository: str) -> str:
-    repo = normalize_repo(source)
-    if repo not in approved_repositories(current_repository):
-        raise FetchError(
-            "Repository is not approved for SQL backup reads. "
-            "A fork relationship does not grant artifact access."
-        )
-    return repo
-
-
-def token_secret_name(source: str, current_repository: str) -> str:
-    """Return the Actions secret name for this source. Never returns a token value."""
-    repo = require_source(source, current_repository)
-    current = normalize_repo(current_repository) if (current_repository or "").strip() else ""
-    if current and repo == current:
-        return CURRENT_REPOSITORY_TOKEN_SECRET
-    mapped = SOURCE_READ_TOKEN_SECRETS.get(repo)
-    if not mapped:
-        raise FetchError("No artifact-read token is mapped for that repository.")
-    return mapped
+def configured_token_slots() -> list[tuple[str, str]]:
+    """Secret names and values that are actually set. Never logs the values."""
+    slots: list[tuple[str, str]] = []
+    seen: set[str] = set()
+    job = (os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN") or "").strip()
+    if job:
+        slots.append((CURRENT_REPOSITORY_TOKEN_SECRET, job))
+        seen.add(job)
+    for name in FORK_READ_TOKEN_ENVS:
+        value = os.environ.get(name, "").strip()
+        if value and value not in seen:
+            slots.append((name, value))
+            seen.add(value)
+    return slots
 
 
 def token_for_source(source: str, current_repository: str) -> str:
-    """Read the token selected for this source. The value is not included in errors."""
-    expected = token_secret_name(source, current_repository)
-    declared = os.environ.get("BACKUP_ARTIFACT_TOKEN_SECRET", "").strip()
-    if declared and declared != expected:
-        raise FetchError("Artifact-read token secret does not match the source repository.")
-    if expected == CURRENT_REPOSITORY_TOKEN_SECRET:
-        value = (os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN") or "").strip()
+    """Return a token that can read this source. The value is not included in errors."""
+    _secret_name, token, _client, _identity = open_source(source, current_repository)
+    return token
+
+
+def parse_repository(payload: dict) -> RepositoryIdentity:
+    full_name = payload.get("full_name")
+    if not isinstance(full_name, str):
+        raise FetchError("GitHub repository name could not be read.")
+    node_id = payload.get("node_id")
+    if not isinstance(node_id, str) or _NODE_ID.fullmatch(node_id) is None:
+        raise FetchError("GitHub repository id could not be read.")
+    numeric = payload.get("id")
+    if isinstance(numeric, bool) or not isinstance(numeric, int) or numeric <= 0:
+        raise FetchError("GitHub repository id could not be read.")
+    parent = payload.get("parent")
+    parent_name = ""
+    parent_node = ""
+    if isinstance(parent, dict):
+        raw_name = parent.get("full_name")
+        raw_node = parent.get("node_id")
+        if isinstance(raw_name, str) and raw_name.strip():
+            parent_name = normalize_repo(raw_name)
+        if isinstance(raw_node, str) and _NODE_ID.fullmatch(raw_node):
+            parent_node = raw_node
+    return RepositoryIdentity(
+        str(numeric),
+        node_id,
+        normalize_repo(full_name),
+        payload.get("fork") is True,
+        parent_name,
+        parent_node,
+    )
+
+
+def _json_value(client, path: str):
+    reader = getattr(client, "get_json_value", None)
+    if reader is not None:
+        return reader(path)
+    return client.get_json(path)
+
+
+def resolve_repository(client, name: str) -> RepositoryIdentity:
+    repo = normalize_repo(name)
+    payload = client.get_json(f"/repos/{repo}")
+    if not isinstance(payload, dict):
+        raise FetchError("GitHub repository metadata could not be read.")
+    return parse_repository(payload)
+
+
+def list_forks(client, full_name: str, per_page: int = PER_PAGE) -> list[dict]:
+    items: list[dict] = []
+    repo = normalize_repo(full_name)
+    for page in range(1, MAX_PAGES + 1):
+        payload = _json_value(client, _query(f"/repos/{repo}/forks", per_page, page))
+        if isinstance(payload, list):
+            batch = payload
+        elif isinstance(payload, dict):
+            batch = payload.get("forks")
+        else:
+            raise FetchError("GitHub returned an unexpected fork list.")
+        if not isinstance(batch, list):
+            raise FetchError("GitHub returned an unexpected fork list.")
+        for item in batch:
+            if not isinstance(item, dict):
+                raise FetchError("GitHub returned an unexpected fork list.")
+            items.append(item)
+        if len(batch) < per_page:
+            return items
+    raise FetchError("GitHub fork list exceeded the page cap.")
+
+
+def belongs_to_network(client, identity: RepositoryIdentity) -> bool:
+    """True when this repository is the network root or a fork of it."""
+    current = identity
+    seen: set[str] = set()
+    while True:
+        if current.node_id == NETWORK_ROOT_NODE_ID:
+            return True
+        if current.node_id in seen or not current.parent_full_name:
+            return False
+        seen.add(current.node_id)
+        current = resolve_repository(client, current.parent_full_name)
+
+
+def workflow_status(client, full_name: str) -> str:
+    """present, absent, or an explanation that the workflow could not be read."""
+    repo = normalize_repo(full_name)
+    try:
+        payload = client.get_json(f"/repos/{repo}/actions/workflows/{WORKFLOW_FILE}")
+    except FetchError as exc:
+        message = str(exc)
+        if "404" in message:
+            return "absent"
+        return "unreadable: " + message
+    path = payload.get("path") if isinstance(payload, dict) else ""
+    if isinstance(path, str) and path.replace("\\", "/").endswith(WORKFLOW_FILE):
+        return "present"
+    return "absent"
+
+
+def artifact_access_status(client, full_name: str) -> str:
+    repo = normalize_repo(full_name)
+    try:
+        client.get_json(f"/repos/{repo}/actions/artifacts?per_page=1")
+    except FetchError as exc:
+        return "unreadable: " + str(exc)
+    return "readable"
+
+
+def require_network_root(client) -> RepositoryIdentity:
+    root = resolve_repository(client, NETWORK_ROOT_NAME)
+    if root.node_id != NETWORK_ROOT_NODE_ID:
+        raise FetchError(
+            f"Resolved {NETWORK_ROOT_NAME} as {root.full_name} id {root.node_id}, "
+            f"expected {NETWORK_ROOT_NODE_ID}."
+        )
+    return root
+
+
+def authorize_source(client, source: str, current_repository: str) -> RepositoryIdentity:
+    """Accept the network root and its forks. A typed name is not enough."""
+    del current_repository  # membership comes from GitHub parentage, not the caller name
+    identity = resolve_repository(client, source)
+    require_network_root(client)
+    if not belongs_to_network(client, identity):
+        raise FetchError(
+            f"Repository {identity.full_name} (id {identity.node_id}) is not a fork of "
+            f"{NETWORK_ROOT_NAME} (id {NETWORK_ROOT_NODE_ID}). "
+            "An entered name is not an authorized source."
+        )
+    status = workflow_status(client, identity.full_name)
+    if status != "present":
+        raise FetchError(
+            f"Repository {identity.full_name} has no compatible SQL backup workflow ({status})."
+        )
+    return identity
+
+
+def open_source(source: str, current_repository: str) -> tuple[str, str, "UrllibGitHub", RepositoryIdentity]:
+    """Pick the first configured token that can read this repository's artifacts."""
+    slots = configured_token_slots()
+    if not slots:
+        raise FetchError("No configured token can read that repository.")
+    failures: list[str] = []
+    for secret_name, token in slots:
+        client = UrllibGitHub(token)
+        try:
+            identity = authorize_source(client, source, current_repository)
+        except FetchError as exc:
+            failures.append(f"{secret_name}: {exc}")
+            continue
+        status = artifact_access_status(client, identity.full_name)
+        if status == "readable":
+            return secret_name, token, client, identity
+        failures.append(f"{secret_name}: {status}")
+    detail = "; ".join(failures)
+    raise FetchError("No configured token can read that repository. " + detail)
+
+
+def walk_forks(client, root: RepositoryIdentity) -> tuple[list[RepositoryIdentity], list[str]]:
+    found: list[RepositoryIdentity] = []
+    problems: list[str] = []
+    queue = [root]
+    seen: set[str] = set()
+    while queue:
+        repo = queue.pop(0)
+        if repo.node_id in seen:
+            continue
+        seen.add(repo.node_id)
+        if not belongs_to_network(client, repo):
+            problems.append(
+                f"{repo.full_name} (id {repo.node_id}) was listed but is not in the fork network."
+            )
+            continue
+        found.append(repo)
+        try:
+            children = list_forks(client, repo.full_name)
+        except FetchError as exc:
+            problems.append(f"{repo.full_name}: fork list could not be read ({exc}).")
+            continue
+        for item in children:
+            raw_name = item.get("full_name")
+            if not isinstance(raw_name, str):
+                problems.append(f"A fork of {repo.full_name} had no repository name.")
+                continue
+            try:
+                child = resolve_repository(client, raw_name)
+            except FetchError as exc:
+                problems.append(f"{raw_name}: repository metadata could not be read ({exc}).")
+                continue
+            queue.append(child)
+    return found, problems
+
+
+def _checkpoint_lines(snapshots: list["CheckpointSnapshot"]) -> list[str]:
+    shown = _available_snapshots(snapshots)[:5]
+    if not shown:
+        return ["  checkpoints: none"]
+    lines = ["  checkpoints:"]
+    for snapshot in shown:
+        for copy in snapshot.artifacts:
+            lines.append(
+                "    "
+                f"{snapshot.timestamp_label} {copy.name} id {copy.artifact_id} "
+                f"tier {copy.tier} available {'yes' if copy.available else 'no'} "
+                f"run {snapshot.workflow_run_id}"
+            )
+    return lines
+
+
+def discover_sources(clients: list[tuple[str, object]]) -> str:
+    """Inventory the fork network. Unreadable forks stay visible and unauthorized."""
+    if not clients:
+        raise FetchError("No configured token can list the fork network.")
+    root = None
+    root_client = None
+    failures: list[str] = []
+    for secret_name, client in clients:
+        try:
+            candidate = require_network_root(client)
+        except FetchError as exc:
+            failures.append(f"{secret_name}: {exc}")
+            continue
+        root = candidate
+        root_client = client
+        break
+    if root is None or root_client is None:
+        raise FetchError(
+            "No configured token can read the NAGD-DKP network root. " + "; ".join(failures)
+        )
+    repos, problems = walk_forks(root_client, root)
+    lines = [
+        f"network_root: {root.full_name}",
+        f"network_root_id: {root.node_id}",
+        "repositories:",
+    ]
+    for repo in repos:
+        workflow = workflow_status(root_client, repo.full_name)
+        access = "unreadable: no token was tried"
+        secret_used = ""
+        for secret_name, client in clients:
+            status = artifact_access_status(client, repo.full_name)
+            if status == "readable":
+                access = "readable"
+                secret_used = secret_name
+                break
+            access = status
+        eligible = workflow == "present" and access == "readable"
+        lines.extend(
+            [
+                f"  repository: {repo.full_name}",
+                f"  repository_id: {repo.node_id}",
+                f"  numeric_id: {repo.numeric_id}",
+                f"  fork: {'yes' if repo.fork else 'no'}",
+                f"  workflow: {workflow}",
+                f"  artifacts: {access}",
+                f"  eligible: {'yes' if eligible else 'no'}",
+            ]
+        )
+        if secret_used:
+            lines.append(f"  read_token: {secret_used}")
+        if access != "readable":
+            lines.append(
+                "  explanation: No configured token can read Actions artifacts for this repository."
+            )
+        elif workflow != "present":
+            lines.append(
+                "  explanation: This repository has no db-sql-backup.yml workflow, so it is not a backup source."
+            )
+        else:
+            try:
+                snapshots = discover_snapshots(
+                    next(client for name, client in clients if name == secret_used),
+                    repo.full_name,
+                    now=datetime.now(timezone.utc),
+                )
+            except FetchError as exc:
+                lines.append(f"  explanation: Checkpoints could not be listed ({exc}).")
+            else:
+                lines.extend(_checkpoint_lines(snapshots))
+    if problems:
+        lines.append("fork_list_errors:")
+        lines.extend(f"  {item}" for item in problems)
     else:
-        named = os.environ.get(expected, "").strip()
-        job_token = os.environ.get("GH_TOKEN", "").strip()
-        value = job_token or named if declared == expected else named or job_token
-    if not value:
-        raise FetchError("Set the mapped artifact-read token to read that repository.")
-    return value
+        lines.append("fork_list_errors: none")
+    lines.append(
+        "unlisted: Private forks the tokens cannot see are omitted. They are not authorized sources."
+    )
+    return "\n".join(lines)
+
+
+def provenance_conflict(
+    *,
+    selected_name: str,
+    origin: RepositoryIdentity,
+    manifest_name: str,
+    manifest_node_id: str,
+    manifest_numeric_id: str,
+    run_id: str,
+) -> str:
+    """Identifiers only. No SQL, credentials, or download URLs."""
+    return "\n".join(
+        [
+            "Manifest source_repository does not match the artifact repository.",
+            f"selected_repository: {selected_name}",
+            f"selected_repository_id: {origin.node_id}",
+            f"canonical_repository: {origin.full_name}",
+            f"manifest_source_repository: {manifest_name}",
+            f"manifest_repository_id: {manifest_node_id or 'unresolved'}",
+            f"manifest_numeric_id: {manifest_numeric_id or 'unresolved'}",
+            f"artifact_repository: {origin.full_name}",
+            f"artifact_repository_id: {origin.node_id}",
+            f"workflow_run_id: {run_id}",
+            "The archive was produced for a different repository. "
+            "Generate a new backup in the selected repository. The manifest was not rewritten.",
+        ]
+    )
+
+
+def assert_manifest_origin(
+    manifest: dict,
+    *,
+    origin: RepositoryIdentity,
+    selected_name: str,
+    client,
+    run_id: str,
+) -> None:
+    """Accept a renamed repository. Reject a copied archive."""
+    manifest_name = _require_text(manifest.get("source_repository"), "source_repository", _REPO)
+    try:
+        manifest_identity = resolve_repository(client, manifest_name)
+    except FetchError as exc:
+        raise FetchError(
+            provenance_conflict(
+                selected_name=selected_name,
+                origin=origin,
+                manifest_name=manifest_name,
+                manifest_node_id="",
+                manifest_numeric_id="",
+                run_id=run_id,
+            )
+            + f"\nmanifest_lookup: {exc}"
+        ) from None
+    embedded = manifest.get("source_repository_id")
+    embedded_id = ""
+    if embedded is not None and embedded != "":
+        embedded_id = _require_text(embedded, "source_repository_id", _DIGITS)
+    conflict = (
+        manifest_identity.node_id != origin.node_id or (embedded_id != "" and embedded_id != origin.numeric_id)
+    )
+    if conflict:
+        message = provenance_conflict(
+            selected_name=selected_name,
+            origin=origin,
+            manifest_name=manifest_name,
+            manifest_node_id=manifest_identity.node_id,
+            manifest_numeric_id=manifest_identity.numeric_id,
+            run_id=run_id,
+        )
+        if embedded_id and embedded_id != origin.numeric_id:
+            message += f"\nembedded_repository_id: {embedded_id}"
+        raise FetchError(message)
 
 
 def _redact(text: str, secrets: list[str]) -> str:
@@ -206,12 +566,18 @@ class UrllibGitHub:
         self._token = token
         self._base_url = base_url.rstrip("/")
 
-    def get_json(self, path: str) -> dict:
+    def get_json_value(self, path: str):
         payload = self._read(path, MAX_JSON_BYTES, allow_external=False)
         try:
             parsed = json.loads(payload)
         except json.JSONDecodeError as exc:
             raise FetchError("GitHub returned a response that is not JSON.") from exc
+        if not isinstance(parsed, (dict, list)):
+            raise FetchError("GitHub returned an unexpected response.")
+        return parsed
+
+    def get_json(self, path: str) -> dict:
+        parsed = self.get_json_value(path)
         if not isinstance(parsed, dict):
             raise FetchError("GitHub returned an unexpected response.")
         return parsed
@@ -944,7 +1310,9 @@ def resolve_checkpoint(
     now: datetime | None = None,
     per_page: int = PER_PAGE,
 ) -> tuple[str, CheckpointSelection]:
-    repo = require_source(source, current_repository)
+    selected_name = normalize_repo(source)
+    identity = authorize_source(client, selected_name, current_repository)
+    repo = identity.full_name
     moment = now or datetime.now(timezone.utc)
     snapshots = discover_snapshots(client, repo, now=moment, per_page=per_page)
     selection = select_checkpoint(
@@ -958,7 +1326,12 @@ def resolve_checkpoint(
         per_page=per_page,
     )
     inventory = format_checkpoint_inventory(snapshots, selection, checkpoint=checkpoint, source=repo)
-    return inventory, selection
+    prefix = [
+        f"selected_repository: {selected_name}",
+        f"canonical_repository: {repo}",
+        f"repository_id: {identity.node_id}",
+    ]
+    return "\n".join(prefix) + "\n" + inventory, selection
 
 
 def write_github_output(fields: dict[str, str]) -> None:
@@ -1089,7 +1462,16 @@ def _require_text(value: object, label: str, pattern: re.Pattern[str]) -> str:
     return value
 
 
-def verify_plaintext(tar_path: Path, *, source: str, run_id: str, schema_path: Path) -> dict:
+def verify_plaintext(
+    tar_path: Path,
+    *,
+    source: str,
+    run_id: str,
+    schema_path: Path,
+    origin: RepositoryIdentity | None = None,
+    client=None,
+    selected_name: str = "",
+) -> dict:
     if not schema_path.is_file():
         raise FetchError(f"Missing canonical schema file {sql_backup.CANONICAL_SCHEMA}.")
     try:
@@ -1121,8 +1503,21 @@ def verify_plaintext(tar_path: Path, *, source: str, run_id: str, schema_path: P
     checksums = manifest.get("checksums")
     if not isinstance(checksums, dict) or checksums.get("data.sql") != "sha256:" + data_hex:
         raise FetchError("Manifest checksum does not match data.sql.")
-    if _require_text(manifest.get("source_repository"), "source_repository", _REPO) != source:
-        raise FetchError("Manifest source_repository does not match the selected repository.")
+    manifest_source = _require_text(manifest.get("source_repository"), "source_repository", _REPO)
+    if origin is not None and client is not None:
+        assert_manifest_origin(
+            manifest,
+            origin=origin,
+            selected_name=selected_name or source,
+            client=client,
+            run_id=str(run_id),
+        )
+    elif manifest_source != source:
+        raise FetchError(
+            "Manifest source_repository does not match the selected repository.\n"
+            f"selected_repository: {source}\n"
+            f"manifest_source_repository: {manifest_source}"
+        )
     if _require_text(manifest.get("workflow_run_id"), "workflow_run_id", _DIGITS) != str(run_id):
         raise FetchError("Manifest workflow_run_id does not match the workflow run.")
     _require_text(manifest.get("source_commit_sha"), "source_commit_sha", _COMMIT)
@@ -1153,6 +1548,9 @@ def _summary(artifact: dict, run: dict, manifest: dict | None, artifact_sha256: 
         raise FetchError("Artifact digest is invalid.")
     lines = [
         f"source_repository: {run.get('_source_repository', '')}",
+        f"selected_repository: {run.get('_selected_repository', '')}",
+        f"canonical_repository: {run.get('_source_repository', '')}",
+        f"repository_id: {run.get('_repository_id', '')}",
         f"workflow_run_id: {run.get('id')}",
         f"artifact_id: {artifact.get('id')}",
         f"artifact_name: {artifact.get('name')}",
@@ -1168,6 +1566,7 @@ def _summary(artifact: dict, run: dict, manifest: dict | None, artifact_sha256: 
     lines.extend(
         [
             "inner_verified: true",
+            f"manifest_source_repository: {manifest.get('source_repository', '')}",
             f"format_version: {manifest['format_version']}",
             f"created_at: {manifest['created_at']}",
             f"source_commit_sha: {manifest['source_commit_sha']}",
@@ -1232,8 +1631,10 @@ def _fetch(
     per_page: int,
 ) -> str:
     if not (token or "").strip():
-        raise FetchError("Set the mapped artifact-read token to read that repository.")
-    repo = require_source(source, current_repository)
+        raise FetchError("No configured token can read that repository.")
+    selected_name = normalize_repo(source)
+    origin = authorize_source(client, selected_name, current_repository)
+    repo = origin.full_name
     run_id = _require_id(run_id, "Workflow run id")
     artifact_id = _require_id(artifact_id, "Artifact id")
     artifact, run = resolve_artifact(
@@ -1255,6 +1656,8 @@ def _fetch(
     age_path.write_bytes(age_bytes)
     run = dict(run)
     run["_source_repository"] = repo
+    run["_selected_repository"] = selected_name
+    run["_repository_id"] = origin.node_id
     manifest = None
     if identity and identity.strip():
         if "AGE-SECRET-KEY-" not in identity:
@@ -1263,7 +1666,15 @@ def _fetch(
         tar_path = out_dir / "backup.tar.gz"
         try:
             decrypt_age(age_path, identity, tar_path)
-            manifest = verify_plaintext(tar_path, source=repo, run_id=str(run.get("id")), schema_path=schema)
+            manifest = verify_plaintext(
+                tar_path,
+                source=repo,
+                run_id=str(run.get("id")),
+                schema_path=schema,
+                origin=origin,
+                client=client,
+                selected_name=selected_name,
+            )
         finally:
             tar_path.unlink(missing_ok=True)
     return _redact(_summary(artifact, run, manifest, digest), [token, identity or ""])
@@ -1275,26 +1686,39 @@ def _identity_from_env() -> str | None:
     return text or None
 
 
+def _clients_from_env() -> list[tuple[str, UrllibGitHub]]:
+    return [(name, UrllibGitHub(token)) for name, token in configured_token_slots()]
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Download and verify a portable SQL backup artifact.")
-    parser.add_argument("--source", required=True, help="Approved source repository (owner/name)")
+    parser.add_argument("--discover", action="store_true", help="List fork backups. Does not download SQL.")
+    parser.add_argument("--source", default="", help="Discovered source repository (owner/name)")
     parser.add_argument("--current-repository", default=os.environ.get("GITHUB_REPOSITORY", ""))
     parser.add_argument("--run-id", default="")
     parser.add_argument("--artifact-id", default="")
     parser.add_argument("--out-dir", type=Path, default=Path("sql-backup-fetch-out"))
     args = parser.parse_args(argv)
     try:
-        token = token_for_source(args.source, args.current_repository)
-        summary = fetch(
-            source=args.source,
-            current_repository=args.current_repository,
-            token=token,
-            client=UrllibGitHub(token),
-            out_dir=args.out_dir,
-            run_id=args.run_id,
-            artifact_id=args.artifact_id,
-            identity=_identity_from_env(),
-        )
+        if args.discover:
+            summary = discover_sources(_clients_from_env())
+            heading = "SQL backup sources"
+        else:
+            if not args.source.strip():
+                raise FetchError("Pass --source, or pass --discover to list sources.")
+            secret_name, token, client, identity = open_source(args.source, args.current_repository)
+            del secret_name, identity
+            summary = fetch(
+                source=args.source,
+                current_repository=args.current_repository,
+                token=token,
+                client=client,
+                out_dir=args.out_dir,
+                run_id=args.run_id,
+                artifact_id=args.artifact_id,
+                identity=_identity_from_env(),
+            )
+            heading = "SQL backup fetch"
     except FetchError as exc:
         print(str(exc), file=sys.stderr)
         return 1
@@ -1302,7 +1726,7 @@ def main(argv: list[str] | None = None) -> int:
     step_summary = os.environ.get("GITHUB_STEP_SUMMARY", "").strip()
     if step_summary:
         with open(step_summary, "a", encoding="utf-8", newline="\n") as handle:
-            handle.write("## SQL backup fetch\n\n```\n" + summary + "\n```\n")
+            handle.write(f"## {heading}\n\n```\n" + summary + "\n```\n")
     return 0
 
 
