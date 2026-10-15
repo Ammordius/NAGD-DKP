@@ -33,6 +33,11 @@ import sql_backup
 # Forks are authorized by parentage to this id, not by a name allowlist.
 NETWORK_ROOT_NAME = "Ammordius/NAGD-DKP"
 NETWORK_ROOT_NODE_ID = "R_kgDORQRiNA"
+# Stable node id of Rimi's deployment. The repository name has already changed.
+RIMI_REPOSITORY_NODE_ID = "R_kgDORnePRA"
+ALIAS_CURRENT = "current repository"
+ALIAS_RIMI = "rimi staging"
+ALIAS_OTHER = "other discovered fork"
 CURRENT_REPOSITORY_TOKEN_SECRET = "GITHUB_TOKEN"
 # Unlabeled slots. A new fork needs no workflow edit. An empty slot is skipped.
 # The staging secret remains one slot so the existing credential keeps working.
@@ -121,6 +126,60 @@ def normalize_repo(value: str) -> str:
     return text
 
 
+class SourceSelection:
+    """A source choice after alias parsing and before any token is used."""
+
+    def __init__(self, kind: str, value: str, role: str) -> None:
+        self.kind = kind
+        self.value = value
+        self.role = role
+
+
+def selection_target(source: str, other_name: str, current_repository: str) -> SourceSelection:
+    """Resolve aliases. This does not contact GitHub and is not an authentication result."""
+    text = (source or "").strip()
+    folded = text.casefold()
+    other = (other_name or "").strip()
+    current = (current_repository or "").strip()
+    if folded == ALIAS_CURRENT:
+        if not _REPO.fullmatch(current):
+            raise FetchError("Current repository is not set to owner/name.")
+        return SourceSelection("name", current, "current")
+    if folded == ALIAS_RIMI:
+        return SourceSelection("node", RIMI_REPOSITORY_NODE_ID, "rimi")
+    if folded == ALIAS_OTHER:
+        if not other:
+            raise FetchError("Other discovered fork requires an owner/name.")
+        if not _REPO.fullmatch(other):
+            raise FetchError("Other discovered fork owner/name is invalid.")
+        return SourceSelection("name", other, "other")
+    if _REPO.fullmatch(text):
+        return SourceSelection("name", text, "name")
+    raise FetchError(
+        "Repository selection is invalid. "
+        "Choose Current repository, Rimi staging, Other discovered fork, or owner/name."
+    )
+
+
+def tokens_for_selection(selection: SourceSelection) -> list[tuple[str, str]]:
+    """Current repository uses only the job token. Other sources may use a fork token."""
+    if selection.role == "current":
+        job = (os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN") or "").strip()
+        return [(CURRENT_REPOSITORY_TOKEN_SECRET, job)] if job else []
+    return configured_token_slots()
+
+
+def deployment_label(identity: "RepositoryIdentity", current_repository: str = "") -> str:
+    if identity.node_id == RIMI_REPOSITORY_NODE_ID:
+        return "Rimi staging"
+    if identity.node_id == NETWORK_ROOT_NODE_ID:
+        return "NAGD-DKP"
+    current = (current_repository or os.environ.get("GITHUB_REPOSITORY", "")).strip()
+    if current and identity.full_name.casefold() == current.casefold():
+        return "Current repository"
+    return "fork"
+
+
 def configured_token_slots() -> list[tuple[str, str]]:
     """Secret names and values that are actually set. Never logs the values."""
     slots: list[tuple[str, str]] = []
@@ -186,6 +245,37 @@ def resolve_repository(client, name: str) -> RepositoryIdentity:
     if not isinstance(payload, dict):
         raise FetchError("GitHub repository metadata could not be read.")
     return parse_repository(payload)
+
+
+def resolve_node_repository(client, node_id: str) -> str:
+    """Return the canonical owner/name for a stable repository node id."""
+    if _NODE_ID.fullmatch(node_id or "") is None:
+        raise FetchError("Repository node id is invalid.")
+    named = getattr(client, "repository_name_for_node", None)
+    if named is not None:
+        name = named(node_id)
+        if not isinstance(name, str) or not _REPO.fullmatch(name.strip()):
+            raise FetchError("GitHub could not find that repository (404).")
+        return name.strip()
+    payload = client.post_json(
+        "/graphql",
+        {
+            "query": "query($id:ID!){ node(id:$id){ ... on Repository { nameWithOwner } } }",
+            "variables": {"id": node_id},
+        },
+    )
+    data = payload.get("data") if isinstance(payload, dict) else None
+    node = data.get("node") if isinstance(data, dict) else None
+    full_name = node.get("nameWithOwner") if isinstance(node, dict) else None
+    if not isinstance(full_name, str) or not _REPO.fullmatch(full_name.strip()):
+        raise FetchError("GitHub could not find that repository (404).")
+    return full_name.strip()
+
+
+def materialize_selection(selection: SourceSelection, client) -> str:
+    if selection.kind == "node":
+        return resolve_node_repository(client, selection.value)
+    return selection.value
 
 
 def list_forks(client, full_name: str, per_page: int = PER_PAGE) -> list[dict]:
@@ -277,18 +367,35 @@ def authorize_source(client, source: str, current_repository: str) -> Repository
     return identity
 
 
-def open_source(source: str, current_repository: str) -> tuple[str, str, "UrllibGitHub", RepositoryIdentity]:
-    """Pick the first configured token that can read this repository's artifacts."""
-    slots = configured_token_slots()
+def open_source(
+    source: str,
+    current_repository: str,
+    other_name: str = "",
+) -> tuple[str, str, "UrllibGitHub", RepositoryIdentity]:
+    """Pick the first configured token that can read this repository's artifacts.
+
+    Alias and syntax errors are raised before a token is tried. They are not
+    reported as authentication failures.
+    """
+    selection = selection_target(source, other_name, current_repository)
+    slots = tokens_for_selection(selection)
     if not slots:
         raise FetchError("No configured token can read that repository.")
     failures: list[str] = []
     for secret_name, token in slots:
         client = UrllibGitHub(token)
         try:
-            identity = authorize_source(client, source, current_repository)
+            name = materialize_selection(selection, client)
         except FetchError as exc:
             failures.append(f"{secret_name}: {exc}")
+            continue
+        try:
+            identity = authorize_source(client, name, current_repository)
+        except FetchError as exc:
+            message = str(exc)
+            if "not a fork" in message or "no compatible SQL backup workflow" in message:
+                raise FetchError(message) from None
+            failures.append(f"{secret_name}: {message}")
             continue
         status = artifact_access_status(client, identity.full_name)
         if status == "readable":
@@ -390,9 +497,11 @@ def discover_sources(clients: list[tuple[str, object]]) -> str:
         lines.extend(
             [
                 f"  repository: {repo.full_name}",
+                f"  deployment: {deployment_label(repo)}",
                 f"  repository_id: {repo.node_id}",
                 f"  numeric_id: {repo.numeric_id}",
                 f"  fork: {'yes' if repo.fork else 'no'}",
+                f"  eligible_fork: yes",
                 f"  workflow: {workflow}",
                 f"  artifacts: {access}",
                 f"  eligible: {'yes' if eligible else 'no'}",
@@ -578,6 +687,39 @@ class UrllibGitHub:
 
     def get_json(self, path: str) -> dict:
         parsed = self.get_json_value(path)
+        if not isinstance(parsed, dict):
+            raise FetchError("GitHub returned an unexpected response.")
+        return parsed
+
+    def post_json(self, path: str, payload: dict) -> dict:
+        url = self._base_url + path
+        body = json.dumps(payload).encode("utf-8")
+        request = Request(url, data=body, method="POST")
+        request.add_header("Accept", "application/vnd.github+json")
+        request.add_header("Content-Type", "application/json")
+        request.add_header("X-GitHub-Api-Version", API_VERSION)
+        request.add_header("User-Agent", USER_AGENT)
+        if self.send_authorization(url):
+            request.add_header("Authorization", "Bearer " + self._token)
+        try:
+            response = build_opener(_KeepRedirect()).open(request, timeout=60)
+        except HTTPError as exc:
+            error_body = exc.read(4096)
+            exc.close()
+            self._raise_status(exc.code, error_body)
+        except URLError as exc:
+            raise FetchError("GitHub could not be reached.") from exc
+        try:
+            status = getattr(response, "status", None) or response.getcode()
+            raw = _read_capped(response, MAX_JSON_BYTES)
+            if status != 200:
+                self._raise_status(status, raw[:4096])
+        finally:
+            response.close()
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            raise FetchError("GitHub returned a response that is not JSON.") from exc
         if not isinstance(parsed, dict):
             raise FetchError("GitHub returned an unexpected response.")
         return parsed
@@ -1307,10 +1449,12 @@ def resolve_checkpoint(
     checkpoint: str,
     checkpoint_name: str = "",
     artifact_id: str = "",
+    other_name: str = "",
     now: datetime | None = None,
     per_page: int = PER_PAGE,
 ) -> tuple[str, CheckpointSelection]:
-    selected_name = normalize_repo(source)
+    selection = selection_target(source, other_name, current_repository)
+    selected_name = materialize_selection(selection, client)
     identity = authorize_source(client, selected_name, current_repository)
     repo = identity.full_name
     moment = now or datetime.now(timezone.utc)
@@ -1329,7 +1473,10 @@ def resolve_checkpoint(
     prefix = [
         f"selected_repository: {selected_name}",
         f"canonical_repository: {repo}",
+        f"deployment: {deployment_label(identity, current_repository)}",
         f"repository_id: {identity.node_id}",
+        f"numeric_id: {identity.numeric_id}",
+        f"eligible_fork: yes",
     ]
     return "\n".join(prefix) + "\n" + inventory, selection
 
@@ -1462,6 +1609,72 @@ def _require_text(value: object, label: str, pattern: re.Pattern[str]) -> str:
     return value
 
 
+def assess_schema_compatibility(manifest: dict, schema_path: Path, client, source: str) -> None:
+    """Record the schema class. Fail closed on a potential or definite incompatibility."""
+    fingerprint = _require_text(manifest.get("canonical_schema_sha256"), "canonical_schema_sha256", _SHA256)
+    destination_fingerprint = sql_backup.schema_fingerprint(schema_path)
+    manifest["_destination_schema_sha256"] = destination_fingerprint
+    if fingerprint == destination_fingerprint:
+        assessed = {
+            "classification": sql_backup.SCHEMA_CLASS_FORMAT,
+            "compatible": True,
+            "reasons": ["Schema file bytes match."],
+        }
+    else:
+        commit = _require_text(manifest.get("source_commit_sha"), "source_commit_sha", _COMMIT)
+        source_text = read_source_schema_text(client, source, commit)
+        if not source_text:
+            raise FetchError(
+                "Schema compatibility could not be classified because the source schema text could not be read."
+            )
+        assessed = sql_backup.classify_schema_texts(source_text, schema_path.read_text(encoding="utf-8"))
+    manifest["_schema_compatibility"] = assessed["classification"]
+    manifest["_schema_compatibility_reasons"] = list(assessed["reasons"])
+    if not assessed["compatible"]:
+        detail = "; ".join(assessed["reasons"]) or assessed["classification"]
+        raise FetchError(f"Schema compatibility is {assessed['classification']}. {detail}")
+
+
+def read_source_schema_text(client, repo: str, commit: str) -> str:
+    """Read the source canonical schema at the backup commit. Empty when it cannot be read."""
+    if client is None:
+        return ""
+    path = f"/repos/{normalize_repo(repo)}/contents/{sql_backup.CANONICAL_SCHEMA}?ref={commit}"
+    try:
+        reader = getattr(client, "get_text", None)
+        if reader is not None:
+            text = reader(path)
+        else:
+            payload = client.get_bytes(path, 2 * 1024 * 1024)
+            text = _decode_schema_payload(payload)
+    except FetchError:
+        return ""
+    if not isinstance(text, str):
+        return ""
+    return text
+
+
+def _decode_schema_payload(payload: bytes) -> str:
+    if payload[:1] in (b"{", b"["):
+        try:
+            document = json.loads(payload)
+        except json.JSONDecodeError as exc:
+            raise FetchError("Source schema text could not be read.") from exc
+        content = document.get("content") if isinstance(document, dict) else None
+        encoding = document.get("encoding") if isinstance(document, dict) else ""
+        if isinstance(content, str) and encoding == "base64":
+            import base64
+
+            try:
+                return base64.b64decode(content).decode("utf-8")
+            except (ValueError, UnicodeError) as exc:
+                raise FetchError("Source schema text could not be read.") from exc
+    try:
+        return payload.decode("utf-8")
+    except UnicodeError as exc:
+        raise FetchError("Source schema text could not be read.") from exc
+
+
 def verify_plaintext(
     tar_path: Path,
     *,
@@ -1524,9 +1737,7 @@ def verify_plaintext(
     _require_text(manifest.get("created_at"), "created_at", _CREATED)
     if manifest.get("canonical_schema_source") != sql_backup.CANONICAL_SCHEMA:
         raise FetchError("Manifest schema source is invalid.")
-    fingerprint = _require_text(manifest.get("canonical_schema_sha256"), "canonical_schema_sha256", _SHA256)
-    if fingerprint != sql_backup.schema_fingerprint(schema_path):
-        raise FetchError("Schema fingerprint does not match docs/supabase-schema-full.sql.")
+    assess_schema_compatibility(manifest, schema_path, client, source)
     try:
         sql_backup.live_schema_record(manifest)
     except sql_backup.BackupError as exc:
@@ -1571,6 +1782,8 @@ def _summary(artifact: dict, run: dict, manifest: dict | None, artifact_sha256: 
             f"created_at: {manifest['created_at']}",
             f"source_commit_sha: {manifest['source_commit_sha']}",
             f"source_schema_fingerprint: {manifest['canonical_schema_sha256']}",
+            f"destination_schema_fingerprint: {manifest.get('_destination_schema_sha256', '')}",
+            f"schema_compatibility: {manifest.get('_schema_compatibility', '')}",
             f"canonical_schema_sha256: {manifest['canonical_schema_sha256']}",
             f"live_schema_status: {sql_backup.live_schema_record(manifest)['status']}",
             "live_schema_compared_to_repository_file: false",
@@ -1632,7 +1845,8 @@ def _fetch(
 ) -> str:
     if not (token or "").strip():
         raise FetchError("No configured token can read that repository.")
-    selected_name = normalize_repo(source)
+    selection = selection_target(source, "", current_repository)
+    selected_name = materialize_selection(selection, client)
     origin = authorize_source(client, selected_name, current_repository)
     repo = origin.full_name
     run_id = _require_id(run_id, "Workflow run id")

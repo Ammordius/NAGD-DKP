@@ -2,7 +2,7 @@
 
 This restores a portable SQL backup into an independent database. The backup contains guild DKP rows, not authentication. The destination keeps its own `auth.users`, `profiles`, local sign-in identities, site-admin and officer roles, profile preferences, and officer audit log.
 
-The CSV restore in [CI-DB-RESTORE.md](CI-DB-RESTORE.md) is a different path. Do not use it for a cross-project SQL artifact. This workflow does not apply `docs/supabase-schema-full.sql`. The destination must already be on that canonical schema.
+The CSV restore in [CI-DB-RESTORE.md](CI-DB-RESTORE.md) remains available for historical plaintext artifacts. The scheduled CSV backup stays because [SQL-LEDGER.md](SQL-LEDGER.md) diffs those artifacts. This workflow does not apply `docs/supabase-schema-full.sql`. The destination must already be able to load the snapshot. Byte-identical schema files are not required when the restore tables, columns, types, constraints, foreign keys, and restore functions are compatible.
 
 This is the supported historical restore for the live site. Anyone who can run **DB SQL restore** on `main` and pass the `sql-restore` environment can use it. A new artifact does not require a source change.
 
@@ -47,37 +47,39 @@ A failed statement rolls the transaction back, including derived totals and the 
 
 Workflow: [`.github/workflows/db-restore-sql.yml`](../.github/workflows/db-restore-sql.yml).
 
-It starts only from **Actions → DB SQL restore → Run workflow**, and only from `main`. It does not run on push, pull request, or when an artifact is uploaded. A fork pull request cannot run this workflow with this repository's secrets.
+It starts only from **Actions → DB SQL restore → Run workflow**. **List available backups** and **Dry-run restore** can run from a branch. **Restore** runs only from `main`. It does not run on push, pull request, or when an artifact is uploaded. A fork pull request cannot run this workflow with this repository's secrets.
 
 Create a GitHub Environment named `sql-restore` before the first run. Give it required reviewers and a deployment branch policy that allows only `main`. Store these on that environment:
 
 | Name | Kind | Value |
 | --- | --- | --- |
 | `SQL_RESTORE_DB_URL` | Secret | Session-pooler URI for Supabase project `ynvwtvphqsevhpytcugj`, port 5432, `sslmode=require`. This is the same database `SUPABASE_DB_URL` reads. Do not commit the password. Do not use port 6543. |
-| `SQL_RESTORE_DESTINATION_NAME` | Variable | `nagd-dkp`. The workflow reads this variable. Operators do not type it. |
+| `SQL_RESTORE_DESTINATION_NAME` | Variable | `nagd-dkp`. The workflow reads this variable. Dry-run and restore also require the operator to type the same name. |
 | `SQL_RESTORE_DESTINATION_HOST` | Variable | Host of `SQL_RESTORE_DB_URL`, without the user or password. Copy the session-pooler hostname from Supabase → Project Settings → Database. |
 | `SQL_RESTORE_DATABASE_NAME` | Variable | `postgres` |
 | `SQL_RESTORE_PROJECT_REF` | Variable | `ynvwtvphqsevhpytcugj` |
 
 The workflow also reads `SQL_BACKUP_AGE_IDENTITY` and `SQL_BACKUP_AGE_RECIPIENT`. The current repository uses `GITHUB_TOKEN`. Other forks are read with the first configured slot that can see that repository's Actions artifacts: `BACKUP_ARTIFACT_READ_TOKEN_STAGING`, `BACKUP_FORK_READ_TOKEN`, and `BACKUP_FORK_READ_TOKEN_2` through `BACKUP_FORK_READ_TOKEN_4`. Empty slots are skipped. A new fork does not require a workflow edit. A fork with no working token is listed and cannot be restored.
 
-`workflow_dispatch` cannot fill a dropdown from the API. Run **DB SQL backup discovery** first. It prints repositories, checkpoints, timestamps, and whether artifacts are readable. Paste one `owner/name` from that summary into the restore source field. A separate picker UI is optional later and is not required for this workflow.
+`workflow_dispatch` choices are static. **Current repository**, **Rimi staging**, and **Other discovered fork** are shortcuts. **List available backups** still discovers every accessible fork, including a future deployment, without a hardcoded source allowlist. **Rimi staging** is node id `R_kgDORnePRA`.
 
 Inputs:
 
-- **execution** defaults to `dry-run`.
-- **source repository** is the discovered `owner/name`. `Current repository` means the repository running the workflow. A name that is not the NAGD-DKP root or a fork of it is rejected. Membership uses GitHub's repository id `R_kgDORQRiNA`, so a rename still matches and an unrelated repository does not.
+- **operation** defaults to `List available backups`. That operation does not select a source and does not open the database.
+- **source** is used for dry-run and restore. `Current repository` is this repository. `Other discovered fork` requires the optional `owner/name` field. A name that is not the NAGD-DKP root or a fork of it is rejected. Membership uses GitHub's repository id `R_kgDORQRiNA`, so a rename still matches and an unrelated repository does not.
 - **checkpoint** defaults to `Latest available backup`. The normal choices are the previous distinct snapshot, the latest weekly backup, and the latest monthly backup. Previous weekly and a specific artifact name stay available for an older backup.
 - **checkpoint name** is only for `Specific checkpoint by artifact name`.
 - **artifact id** is optional. Leave it empty for a normal run.
+- **destination name** must match `SQL_RESTORE_DESTINATION_NAME` for dry-run and restore.
+- **confirm** is empty for list and dry-run. A restore requires `RESTORE <destination name>`.
 
-The destination name is `SQL_RESTORE_DESTINATION_NAME` on the `sql-restore` environment. For this deployment that value is `nagd-dkp`. Discovering a fork does not authorize a write to that fork's database. There is no typed `RESTORE nagd-dkp` field. A destructive restore instead requires the environment's required reviewers and a deployment branch policy that allows only `main`. If either is missing, the restore stops before the destination backup. It does not fall back to a typed phrase.
+The destination name is `SQL_RESTORE_DESTINATION_NAME` on the `sql-restore` environment. For this deployment that value is `nagd-dkp`. Discovering a fork does not authorize a write to that fork's database. A destructive restore also requires the operator to type `RESTORE <destination name>`. It requires the environment's required reviewers and a deployment branch policy that allows only `main`. If either protection is missing, the restore stops before the destination backup.
 
 A renamed repository is the same source when GitHub resolves both names to one repository id. The manifest is not rewritten. An artifact whose manifest names a different repository id is refused, and the error says to generate a new backup in the selected repository. The error prints the selected name, the canonical name, the repository ids, and the workflow run. It does not print SQL, credentials, or download URLs.
 
 Daily, weekly, and monthly artifacts from the same backup run are one snapshot when their sizes match. Latest and previous choose distinct snapshots. A weekly or monthly choice uses that retention copy. The preflight prints the five newest available snapshots, plus the selected snapshot if it is older, with the UTC time, repository, artifact name, artifact id, created and expiration times, tier, size, and whether it is still available.
 
-The inventory job has no environment. It lists fork backups and resolves the checkpoint once. The reviewer can read that summary before the approval prompt. The `sql-restore` job is the only environment approval. It downloads that same artifact. It does not look up Latest a second time. A backup uploaded while the workflow is running is not the one restored. The preflight summary names the snapshot, the canonical source, the workflow run, the artifact id, and the destination `nagd-dkp`. Destination auth, profiles, claims, and the officer audit log stay in place.
+The list job has no environment and no database credential. Dry-run resolves the chosen source and checkpoint, then reads the destination. It does not use the `sql-restore` environment. The restore job is the only environment approval, and it runs only from `main`. It downloads the pinned artifact again. It does not look up Latest a second time. A backup uploaded while the workflow is running is not the one restored. The preflight summary names the snapshot, the canonical source, the workflow run, the artifact id, the schema compatibility class, and the destination. Destination auth, profiles, claims, and the officer audit log stay in place.
 
 Dry-run stops after that preflight. A restore, in the same job and the same approval, checks the environment protection, takes an encrypted backup of the destination, and uploads that artifact before any mutation. That backup is kept for 90 days. If that backup or the protection check fails, the restore does not start. Only one restore workflow runs at a time.
 
@@ -89,10 +91,10 @@ Create the `sql-restore` environment, with at least one required reviewer and a 
 
 1. On the source repository, set `SUPABASE_DB_URL` to the session-pooler URI (port 5432, `sslmode=require`) and `SQL_BACKUP_AGE_RECIPIENT` to the age public key. Generate the key pair with `age-keygen` on a machine you control. Keep the identity file offline. Put that identity only in the destination secret `SQL_BACKUP_AGE_IDENTITY`. The backup workflow must not have the private key.
 2. To read artifacts from another owner's fork, store a fine-grained token with Actions read as one of the unlabeled slots. `BACKUP_ARTIFACT_READ_TOKEN_STAGING` remains the existing slot. Further owners use `BACKUP_FORK_READ_TOKEN` and `BACKUP_FORK_READ_TOKEN_2` through `_4`. One token has one owner. A fork the tokens cannot read stays in the discovery summary with the reason. It is not a restore source. Do not rename the staging secret.
-3. Open **Actions → DB SQL backup discovery** on `main` and read the summary. Then open **Actions → DB SQL restore → Run workflow** on `main`. Paste the discovered repository and choose a checkpoint. Use `Latest available backup` or `Previous backup (previous distinct snapshot)` for a normal restore. Choose a weekly or monthly checkpoint when you want that retention copy. For one named artifact, choose `Specific checkpoint by artifact name`. Leave the artifact id empty unless you already have a numeric id.
-4. Run it with execution `dry-run`. The inventory names the selected artifact before approval. After approval, the preflight should show `writes: none`, the pinned snapshot, the canonical source, source and destination row counts, preserved claims, and expected DKP. A fetch that reports `inner_verified: false` has not done this check.
-5. Approve the `sql-restore` environment once. Required reviewers and a `main`-only branch policy are the approval. The workflow then uploads `sql-restore-destination-backup-*` before it writes. A restore run does not ask for a second environment approval.
-6. After a committed restore, read the step summary again: counts, claim anchors, and DKP totals. `source_schema_fingerprint: match` means the artifact matches the checked-out `docs/supabase-schema-full.sql`. `live_schema_status` is the source catalog probe and is not that file hash. `restore_compatibility: compatible` means the destination preflight passed. `schema_apply: false` means this workflow did not apply schema. `not_assessed` is not a live-schema verification.
+3. Open **Actions → DB SQL restore → Run workflow**. Choose **List available backups** to see forks and checkpoints. For a restore, choose **Dry-run restore**, the source, and a checkpoint. Use `Latest available backup` or `Previous backup (previous distinct snapshot)` for a normal restore. Choose a weekly or monthly checkpoint when you want that retention copy. For one named artifact, choose `Specific checkpoint by artifact name`. Leave the artifact id empty unless you already have a numeric id. Type the destination name.
+4. Run dry-run. The checkpoint summary names the selected artifact before any write. The preflight should show `writes: none`, the pinned snapshot, the canonical source, `schema_compatibility`, source and destination row counts, preserved claims, and expected DKP. `schema_compatibility` may be `formatting/comment-only` or `additive and compatible`. `potentially incompatible` and `definitely incompatible` stop the run. `schema_apply: false` means this workflow did not apply schema.
+5. Approve the `sql-restore` environment once by running the operation **Restore** from `main`. Required reviewers and a `main`-only branch policy are the approval. Type `RESTORE <destination name>` in confirm. The workflow then uploads `sql-restore-destination-backup-*` before it writes. A restore run does not ask for a second environment approval.
+6. After a committed restore, read the step summary again: counts, claim anchors, and DKP totals. `source_schema_fingerprint` is the hash stored in the artifact. `destination_schema_fingerprint` is the checked-out file. They do not have to match. `live_schema_status` is the source catalog probe and is not that file hash. `restore_compatibility: compatible` means the destination preflight passed. `not_assessed` is not a live-schema verification.
 7. A failed statement rolls the transaction back, including derived totals and the restore flag. If the destination backup fails, the restore does not start. If a committed restore is wrong, run this workflow again and select the earlier guild checkpoint. `sql-restore-destination-backup-*` is the encrypted destination backup taken before the write. It is not a source checkpoint. `end_restore_load()` rebuilds derived DKP in the transaction. `bid_portfolio_auction_fact` is cleared and must be filled again with the existing bidding backfill. Reload the site so browser caches refresh.
 
 Set `SQL_BACKUP_SCHEDULE` to `enabled` only after a manual backup has succeeded and an officer has authorized the scheduled read of production. This repository does not set that variable by itself.

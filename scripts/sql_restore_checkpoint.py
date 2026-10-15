@@ -26,6 +26,7 @@ def write_step_summary(title: str, body: str) -> None:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Resolve a SQL restore checkpoint to one artifact.")
     parser.add_argument("--source", required=True)
+    parser.add_argument("--source-name", default="")
     parser.add_argument("--current-repository", default=os.environ.get("GITHUB_REPOSITORY", ""))
     parser.add_argument("--checkpoint", required=True)
     parser.add_argument("--checkpoint-name", default="")
@@ -35,15 +36,17 @@ def main(argv: list[str] | None = None) -> int:
     token = ""
     try:
         _secret_name, token, client, identity = sql_backup_fetch.open_source(
-            args.source, args.current_repository
+            args.source, args.current_repository, args.source_name
         )
-        selected_name = sql_backup_fetch.normalize_repo(args.source)
         repo = identity.full_name
         identity_lines = "\n".join(
             [
-                f"selected_repository: {selected_name}",
+                f"selected_repository: {repo}",
                 f"canonical_repository: {repo}",
+                f"deployment: {sql_backup_fetch.deployment_label(identity, args.current_repository)}",
                 f"repository_id: {identity.node_id}",
+                f"numeric_id: {identity.numeric_id}",
+                f"eligible_fork: yes",
             ]
         )
         now = datetime.now(timezone.utc)
