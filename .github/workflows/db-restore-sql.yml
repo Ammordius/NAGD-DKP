@@ -1,0 +1,180 @@
+# Manual restore of a portable SQL backup. Dry-run is the default.
+# Does not run on push, pull request, or artifact upload.
+# Production restore is disabled in scripts/sql_restore.py.
+# See docs/CI-DB-SQL-RESTORE.md.
+
+name: DB SQL restore
+
+on:
+  workflow_dispatch:
+    inputs:
+      execution:
+        description: dry-run performs no writes. restore mutates the destination.
+        required: true
+        type: choice
+        default: dry-run
+        options:
+          - dry-run
+          - restore
+      source_repository:
+        description: Repository that produced the SQL backup
+        required: true
+        type: choice
+        default: Current repository
+        options:
+          - Current repository
+          - Ammordius/NAGD-DKP
+          - RimidalEQ/RimidalEQ-NAGD-DKP-backup
+      artifact_id:
+        description: Exact SQL backup artifact id
+        required: true
+        type: string
+      destination_name:
+        description: Must match the SQL_RESTORE_DESTINATION_NAME variable
+        required: true
+        type: string
+      confirm:
+        description: For a restore, type RESTORE and the destination name. Leave empty for dry-run.
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: db-sql-restore
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: sql-restore
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install PostgreSQL client and age
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client age
+
+      - name: Dry-run SQL restore preflight
+        env:
+          GH_TOKEN: ${{ (inputs.source_repository == 'Current repository' || inputs.source_repository == github.repository) && github.token || (inputs.source_repository == 'RimidalEQ/RimidalEQ-NAGD-DKP-backup' && secrets.BACKUP_ARTIFACT_READ_TOKEN_STAGING) || '' }}
+          BACKUP_ARTIFACT_TOKEN_SECRET: ${{ (inputs.source_repository == 'Current repository' || inputs.source_repository == github.repository) && 'GITHUB_TOKEN' || (inputs.source_repository == 'RimidalEQ/RimidalEQ-NAGD-DKP-backup' && 'BACKUP_ARTIFACT_READ_TOKEN_STAGING') || '' }}
+          SQL_BACKUP_AGE_IDENTITY: ${{ secrets.SQL_BACKUP_AGE_IDENTITY }}
+          SQL_RESTORE_DB_URL: ${{ secrets.SQL_RESTORE_DB_URL }}
+          SQL_RESTORE_DESTINATION_NAME: ${{ vars.SQL_RESTORE_DESTINATION_NAME }}
+          SQL_RESTORE_DESTINATION_HOST: ${{ vars.SQL_RESTORE_DESTINATION_HOST }}
+          SQL_RESTORE_DATABASE_NAME: ${{ vars.SQL_RESTORE_DATABASE_NAME }}
+          SOURCE_REPOSITORY: ${{ inputs.source_repository }}
+          CURRENT_REPOSITORY: ${{ github.repository }}
+          ARTIFACT_ID: ${{ inputs.artifact_id }}
+          DESTINATION_NAME: ${{ inputs.destination_name }}
+        run: |
+          set -euo pipefail
+          SOURCE="$SOURCE_REPOSITORY"
+          if [ "$SOURCE" = "Current repository" ]; then
+            SOURCE="$CURRENT_REPOSITORY"
+          fi
+          python scripts/sql_restore.py \
+            --source "$SOURCE" \
+            --current-repository "$CURRENT_REPOSITORY" \
+            --artifact-id "$ARTIFACT_ID" \
+            --destination-name "$DESTINATION_NAME" \
+            --report sql-restore-preflight.txt
+
+  restore:
+    needs: preflight
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.execution == 'restore'
+    runs-on: ubuntu-latest
+    environment: sql-restore
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install PostgreSQL client and age
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client age
+
+      - name: Require restore confirmation
+        env:
+          EXECUTION: ${{ inputs.execution }}
+          CONFIRM: ${{ inputs.confirm }}
+          DESTINATION_NAME: ${{ inputs.destination_name }}
+          EXPECTED_NAME: ${{ vars.SQL_RESTORE_DESTINATION_NAME }}
+        run: |
+          set -euo pipefail
+          if [ "$EXECUTION" != "restore" ]; then
+            echo "Restore job refused a non-restore execution."
+            exit 1
+          fi
+          if [ -z "$EXPECTED_NAME" ] || [ "$DESTINATION_NAME" != "$EXPECTED_NAME" ]; then
+            echo "Destination name does not match SQL_RESTORE_DESTINATION_NAME."
+            exit 1
+          fi
+          if [ "$CONFIRM" != "RESTORE $DESTINATION_NAME" ]; then
+            echo "Confirmation does not match the destination."
+            exit 1
+          fi
+
+      - name: Back up the destination before restore
+        id: destination_backup
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SQL_RESTORE_DB_URL }}
+          SQL_BACKUP_AGE_RECIPIENT: ${{ secrets.SQL_BACKUP_AGE_RECIPIENT }}
+        run: python scripts/sql_backup.py --out-dir sql-restore-destination-backup
+
+      - name: Upload destination backup
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sql-restore-destination-backup-${{ steps.destination_backup.outputs.stamp }}
+          path: sql-restore-destination-backup/*.tar.gz.age
+          retention-days: 7
+          if-no-files-found: error
+
+      - name: Restore SQL backup
+        if: success()
+        env:
+          GH_TOKEN: ${{ (inputs.source_repository == 'Current repository' || inputs.source_repository == github.repository) && github.token || (inputs.source_repository == 'RimidalEQ/RimidalEQ-NAGD-DKP-backup' && secrets.BACKUP_ARTIFACT_READ_TOKEN_STAGING) || '' }}
+          BACKUP_ARTIFACT_TOKEN_SECRET: ${{ (inputs.source_repository == 'Current repository' || inputs.source_repository == github.repository) && 'GITHUB_TOKEN' || (inputs.source_repository == 'RimidalEQ/RimidalEQ-NAGD-DKP-backup' && 'BACKUP_ARTIFACT_READ_TOKEN_STAGING') || '' }}
+          SQL_BACKUP_AGE_IDENTITY: ${{ secrets.SQL_BACKUP_AGE_IDENTITY }}
+          SQL_RESTORE_DB_URL: ${{ secrets.SQL_RESTORE_DB_URL }}
+          SQL_RESTORE_DESTINATION_NAME: ${{ vars.SQL_RESTORE_DESTINATION_NAME }}
+          SQL_RESTORE_DESTINATION_HOST: ${{ vars.SQL_RESTORE_DESTINATION_HOST }}
+          SQL_RESTORE_DATABASE_NAME: ${{ vars.SQL_RESTORE_DATABASE_NAME }}
+          SOURCE_REPOSITORY: ${{ inputs.source_repository }}
+          CURRENT_REPOSITORY: ${{ github.repository }}
+          ARTIFACT_ID: ${{ inputs.artifact_id }}
+          DESTINATION_NAME: ${{ inputs.destination_name }}
+          CONFIRM: ${{ inputs.confirm }}
+        run: |
+          set -euo pipefail
+          SOURCE="$SOURCE_REPOSITORY"
+          if [ "$SOURCE" = "Current repository" ]; then
+            SOURCE="$CURRENT_REPOSITORY"
+          fi
+          python scripts/sql_restore.py \
+            --execute \
+            --source "$SOURCE" \
+            --current-repository "$CURRENT_REPOSITORY" \
+            --artifact-id "$ARTIFACT_ID" \
+            --destination-name "$DESTINATION_NAME" \
+            --confirm "$CONFIRM" \
+            --report sql-restore-report.txt

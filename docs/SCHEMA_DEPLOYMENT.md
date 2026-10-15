@@ -44,7 +44,7 @@ Stop before applying if any preflight below fails. Fix the data, then apply agai
 
 ## 3. Backup and preflight
 
-Take a backup before an upgrade. Use the DB backup workflow or a `pg_dump` of the public data. This file is not a down migration. Rollback means restoring that backup.
+Take a portable SQL backup before an upgrade ([CI-DB-SQL-BACKUP.md](CI-DB-SQL-BACKUP.md)). The artifact is guild data only. It does not contain schema SQL, so restoring it does not undo a committed schema change. A failed `psql --single-transaction` already rolls the upgrade back. The CSV workflow in [CI-DB-BACKUP.md](CI-DB-BACKUP.md) remains the legacy same-project export. The only schema file is still `docs/supabase-schema-full.sql`.
 
 Run these checks before `psql`. They only read.
 
@@ -163,9 +163,9 @@ ORDER BY 1;
 
 If `psql` exits non-zero, `--single-transaction` rolls the upgrade back. Fix the reported error and run the file again.
 
-If an upgrade committed and the application is wrong, restore the backup from section 3. Do not try to undo the file by running archived SQL. Archived copies can replace a current function with an older body.
+If an upgrade committed and the guild data is wrong, restore the SQL artifact from section 3 onto a database that already has this schema. That restore does not roll the schema back. Do not try to undo the file by running archived SQL. Archived copies can replace a current function with an older body.
 
-Data restore is separate from schema upgrade. [RESTORE-BACKUP.md](RESTORE-BACKUP.md) uses `truncate_dkp_for_restore()`, `begin_restore_load()`, and `end_restore_load()` from the canonical schema. Those functions truncate only when called. Applying the schema file does not call them.
+Data restore is separate from schema upgrade. The portable path is [CI-DB-SQL-RESTORE.md](CI-DB-SQL-RESTORE.md). [RESTORE-BACKUP.md](RESTORE-BACKUP.md) is the legacy CSV procedure. It uses `truncate_dkp_for_restore()`, `begin_restore_load()`, and `end_restore_load()` from the canonical schema. Those functions truncate only when called. Applying the schema file does not call them. Do not point a CSV restore at an SQL artifact.
 
 ---
 

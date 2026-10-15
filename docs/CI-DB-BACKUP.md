@@ -1,4 +1,8 @@
-# CI database backup (on change, tiered artifacts)
+# CI database backup (legacy CSV export)
+
+The portable recovery backup is [CI-DB-SQL-BACKUP.md](CI-DB-SQL-BACKUP.md). That workflow exports guild DKP tables as age-encrypted SQL. It is not gated on the `raid_loot` row count. Turn its daily schedule on by setting the repository variable `SQL_BACKUP_SCHEDULE` to `enabled` after the source secrets exist.
+
+This page is the legacy CSV export. It stays on its daily schedule so [SQL-LEDGER.md](SQL-LEDGER.md) can diff plaintext `supabase-backup-*` artifacts, and so those artifacts can still be restored. A `supabase-backup-*` file is not an SQL backup. An `sql-backup-*` file is not a CSV tree. Do not point one workflow at the other artifact.
 
 Backup runs only when data has changed (e.g. after raids). Artifacts are split into: **rolling** (~last 3), **weekly**, and **monthly**, so storage stays small and you keep both recent and longer-term copies.
 
@@ -96,9 +100,11 @@ With the tiered strategy above, you use a small fraction of that.
 
 ## Restore from a backup
 
-**Automated (GitHub Actions):** Use the **DB restore from backup** workflow to download an artifact and restore into Supabase. Uses the same **`SUPABASE_URL`** and **`SUPABASE_SERVICE_ROLE_KEY`** secrets as the backup workflow (see CI-DB-RESTORE.md). See **[docs/CI-DB-RESTORE.md](CI-DB-RESTORE.md)** for setup and steps.
+Portable restore of guild data onto another database is [CI-DB-SQL-RESTORE.md](CI-DB-SQL-RESTORE.md).
 
-**Manual:** In **Actions** → select the workflow run → **Artifacts**, download the `.tar.gz` you need (rolling, weekly, or monthly). Decompress: `tar xzf backup-YYYY-MM-DD.tar.gz` → you get a `backup/` directory with one CSV per table. Restore with [RESTORE-BACKUP.md](RESTORE-BACKUP.md).
+**Legacy CSV, automated:** Use **DB restore from backup** to download a `supabase-backup-*` artifact and load it into the same Supabase project. It uses `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`. See [CI-DB-RESTORE.md](CI-DB-RESTORE.md).
+
+**Legacy CSV, manual:** In **Actions** → **DB backup (on change)** → the run → **Artifacts**, download the `.tar.gz` (rolling, weekly, or monthly). Decompress: `tar xzf backup-YYYY-MM-DD.tar.gz` → a `backup/` directory with one CSV per table. Continue with [RESTORE-BACKUP.md](RESTORE-BACKUP.md).
 
 ---
 

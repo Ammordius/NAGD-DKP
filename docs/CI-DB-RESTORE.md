@@ -1,10 +1,12 @@
-# Restore Supabase from a backup artifact (CI)
+# Legacy CSV restore
 
-Use this when you need to **restore DKP data** from a previous backup (e.g. after a bad migration or data issue). Restore runs as a **manual GitHub Action** and loads a backup artifact into your Supabase project.
+Use this to reload a `supabase-backup-*` CSV artifact from [CI-DB-BACKUP.md](CI-DB-BACKUP.md) into the same Supabase project. Restore runs as a **manual GitHub Action**.
+
+This workflow does not accept an `sql-backup-*` artifact. Those files are age-encrypted SQL. Restore them with [CI-DB-SQL-RESTORE.md](CI-DB-SQL-RESTORE.md).
 
 **Authentication and accounts are never touched**—only DKP data tables (characters, raids, loot, attendance, etc.). The `profiles` table and `auth.users` are left unchanged.
 
-**Canonical guide (full restore, timeouts, sequences):** [RESTORE-BACKUP.md](RESTORE-BACKUP.md).  
+**Legacy CSV procedure (full restore, timeouts, sequences):** [RESTORE-BACKUP.md](RESTORE-BACKUP.md).  
 **Applying CSVs in diff mode (incremental, no overwrite):** [CSV-DIFF-APPLY.md](CSV-DIFF-APPLY.md).
 
 ## Prerequisites
