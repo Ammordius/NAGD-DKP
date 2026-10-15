@@ -2,7 +2,7 @@
 
 This workflow exports guild DKP data as inspectable SQL so it can move between independent Supabase projects. It is the portable recovery backup. The CSV export in [CI-DB-BACKUP.md](CI-DB-BACKUP.md) stays scheduled for the public ledger and for legacy recovery. Restore from this artifact is [CI-DB-SQL-RESTORE.md](CI-DB-SQL-RESTORE.md). Do not run a scheduled production backup until `SUPABASE_DB_URL` and `SQL_BACKUP_AGE_RECIPIENT` are set and `SQL_BACKUP_SCHEDULE` is `enabled`. A manual run is separate and still needs those two secrets.
 
-Another repository can discover and download the artifact without database credentials. See [CI-DB-SQL-BACKUP-FETCH.md](CI-DB-SQL-BACKUP-FETCH.md). That workflow does not restore a database. Decrypting the archive needs the offline age identity, which this backup workflow does not store.
+Another repository can list and dry-run these artifacts from **DB SQL restore** without writing the destination. See [CI-DB-SQL-RESTORE.md](CI-DB-SQL-RESTORE.md). Decrypting the archive needs the offline age identity, which this backup workflow does not store. The reader is [`scripts/sql_backup_fetch.py`](../scripts/sql_backup_fetch.py), described in [CI-DB-SQL-BACKUP-FETCH.md](CI-DB-SQL-BACKUP-FETCH.md).
 
 The artifact records two different schema facts. `canonical_schema_sha256` is the sha256 of the checked-out `docs/supabase-schema-full.sql`. It is the source-code fingerprint. `live_schema_status` is a read-only catalog probe of the source database: `compatible` or `incompatible` after that probe, and `not_assessed` when the probe did not run. `live_schema_compared_to_repository_file` is false. A matching file hash does not mean the live catalog was verified. The probe does not apply the schema file. An incompatible catalog is still exported, and restore refuses that artifact before any write.
 
@@ -116,7 +116,7 @@ Every successful run uploads `sql-backup-<utc>.tar.gz.age` with **retention 7 da
 
 Using the existing ~5 MB upper bound from the CSV size note, and not a new measurement of production, 7 daily copies plus about 13 weekly and 3 monthly copies are on the order of 100 MB. The SQL allowlist is a subset of the CSV export, so the encrypted file should be smaller. Do not run `estimate_backup_size.py` against production just to refresh that number; it calls the live REST API.
 
-Latest discovery in **DB SQL backup fetch** selects only `sql-backup-<utc>`. **DB SQL restore** can select the latest snapshot, the previous distinct snapshot, or a weekly or monthly copy without an artifact id. A numeric artifact id remains optional. The file inside the zip stays `sql-backup-<utc>.tar.gz.age`.
+**DB SQL restore** lists checkpoints and can select the latest snapshot, the previous distinct snapshot, or a weekly or monthly copy without an artifact id. A numeric artifact id remains optional. The file inside the zip stays `sql-backup-<utc>.tar.gz.age`. Restore compares schema structure. It keeps the source file hash as provenance and does not require the canonical schema files to be byte-identical.
 
 After decrypting with the offline private key:
 

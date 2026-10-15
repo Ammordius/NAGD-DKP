@@ -146,6 +146,193 @@ def schema_fingerprint(schema_path: Path) -> str:
     return "sha256:" + digest.hexdigest()
 
 
+SCHEMA_CLASS_FORMAT = "formatting/comment-only"
+SCHEMA_CLASS_ADDITIVE = "additive and compatible"
+SCHEMA_CLASS_POTENTIAL = "potentially incompatible"
+SCHEMA_CLASS_DEFINITE = "definitely incompatible"
+_TYPE_ALIASES = {
+    "bigserial": "bigint",
+    "serial8": "bigint",
+    "serial": "integer",
+    "serial4": "integer",
+    "int": "integer",
+    "int4": "integer",
+    "int8": "bigint",
+    "bool": "boolean",
+    "timestamptz": "timestamp with time zone",
+}
+_TYPE_PREFIXES = (
+    "timestamp with time zone",
+    "timestamp without time zone",
+    "double precision",
+    "character varying",
+)
+
+
+def schema_newlines(text: str) -> str:
+    return text.replace("\r\n", "\n").replace("\r", "\n")
+
+
+def normalize_schema_sql(text: str) -> str:
+    """Drop comments, line endings, and insignificant whitespace."""
+    collapsed = schema_newlines(text)
+    collapsed = re.sub(r"/\*.*?\*/", "", collapsed, flags=re.S)
+    lines: list[str] = []
+    for line in collapsed.split("\n"):
+        if "--" in line:
+            line = line.split("--", 1)[0]
+        line = re.sub(r"\s+", " ", line).strip()
+        if line:
+            lines.append(line)
+    return "\n".join(lines)
+
+
+def extract_create_table(sql: str, table: str) -> str | None:
+    match = re.search(
+        rf"CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(?:public\.)?{re.escape(table)}\s*\(",
+        sql,
+        flags=re.IGNORECASE,
+    )
+    if match is None:
+        return None
+    start = match.end() - 1
+    depth = 0
+    for index in range(start, len(sql)):
+        char = sql[index]
+        if char == "(":
+            depth += 1
+        elif char == ")":
+            depth -= 1
+            if depth == 0:
+                return sql[match.start() : index + 1]
+    return None
+
+
+def extract_function(sql: str, name: str) -> str | None:
+    match = re.search(
+        rf"CREATE\s+OR\s+REPLACE\s+FUNCTION\s+(?:public\.)?{re.escape(name)}\s*\(",
+        sql,
+        flags=re.IGNORECASE,
+    )
+    if match is None:
+        return None
+    rest = sql[match.start() :]
+    dollar = re.search(r"\$([A-Za-z0-9_]*)\$", rest)
+    if dollar is None:
+        return None
+    tag = dollar.group(0)
+    end = rest.find(tag, dollar.end())
+    if end < 0:
+        return None
+    return rest[: end + len(tag)]
+
+
+def _split_sql_commas(body: str) -> list[str]:
+    parts: list[str] = []
+    depth = 0
+    start = 0
+    for index, char in enumerate(body):
+        if char == "(":
+            depth += 1
+        elif char == ")":
+            depth -= 1
+        elif char == "," and depth == 0:
+            parts.append(body[start:index])
+            start = index + 1
+    parts.append(body[start:])
+    return parts
+
+
+def parse_table_parts(create_sql: str) -> tuple[dict[str, str], list[str]]:
+    open_paren = create_sql.find("(")
+    close_paren = create_sql.rfind(")")
+    inner = create_sql[open_paren + 1 : close_paren]
+    columns: dict[str, str] = {}
+    constraints: list[str] = []
+    for part in _split_sql_commas(inner):
+        text = re.sub(r"\s+", " ", part).strip().rstrip(",")
+        if not text:
+            continue
+        upper = text.upper()
+        if upper.startswith(("CONSTRAINT ", "PRIMARY KEY", "UNIQUE", "FOREIGN KEY", "CHECK ", "EXCLUDE ")):
+            constraints.append(upper)
+            continue
+        name, _, definition = text.partition(" ")
+        if name and definition:
+            columns[name.lower()] = definition.lower()
+    return columns, constraints
+
+
+def sql_type_name(definition: str) -> str:
+    text = re.sub(r"\s+", " ", definition).strip().lower()
+    for prefix in _TYPE_PREFIXES:
+        if text.startswith(prefix):
+            return prefix
+    first = text.split(" ", 1)[0]
+    return _TYPE_ALIASES.get(first, first)
+
+
+def classify_schema_texts(source: str, destination: str) -> dict:
+    """Compare two canonical schema files. Does not apply either file."""
+    if normalize_schema_sql(source) == normalize_schema_sql(destination):
+        return {
+            "classification": SCHEMA_CLASS_FORMAT,
+            "compatible": True,
+            "reasons": ["Normalized schema text matches."],
+        }
+    definite: list[str] = []
+    potential: list[str] = []
+    for table in INCLUDED_TABLES:
+        source_table = extract_create_table(source, table)
+        destination_table = extract_create_table(destination, table)
+        if source_table is None or destination_table is None:
+            missing = "source" if source_table is None else "destination"
+            definite.append(f"{missing} schema is missing table {table}.")
+            continue
+        if normalize_schema_sql(source_table) == normalize_schema_sql(destination_table):
+            continue
+        source_columns, source_constraints = parse_table_parts(source_table)
+        destination_columns, destination_constraints = parse_table_parts(destination_table)
+        required = {name.lower() for name in REQUIRED_SOURCE_COLUMNS[table]}
+        for column in sorted(required):
+            if column not in source_columns or column not in destination_columns:
+                definite.append(f"Required column {table}.{column} is missing.")
+                continue
+            if sql_type_name(source_columns[column]) != sql_type_name(destination_columns[column]):
+                definite.append(f"Column type for {table}.{column} differs.")
+            elif source_columns[column] != destination_columns[column]:
+                potential.append(f"Column constraint for {table}.{column} differs.")
+        if source_constraints != destination_constraints:
+            potential.append(f"Table constraints for {table} differ.")
+        extra = sorted(
+            (set(source_columns) ^ set(destination_columns)) - required
+        )
+        if extra and not any(item.startswith(f"Required column {table}.") for item in definite):
+            continue
+    for name in SOURCE_RESTORE_FUNCTIONS:
+        source_function = extract_function(source, name)
+        destination_function = extract_function(destination, name)
+        if source_function is None or destination_function is None:
+            missing = "source" if source_function is None else "destination"
+            definite.append(f"{missing} schema is missing restore function {name}.")
+            continue
+        if normalize_schema_sql(source_function) != normalize_schema_sql(destination_function):
+            potential.append(f"Restore function {name} differs.")
+    if definite:
+        classification = SCHEMA_CLASS_DEFINITE
+        compatible = False
+        reasons = definite + potential
+    elif potential:
+        classification = SCHEMA_CLASS_POTENTIAL
+        compatible = False
+        reasons = potential
+    else:
+        classification = SCHEMA_CLASS_ADDITIVE
+        compatible = True
+        reasons = ["Restore tables, constraints, and restore functions match."]
+    return {"classification": classification, "compatible": compatible, "reasons": reasons}
+
+
 def unevaluated_live_schema() -> dict:
     return {
         "status": "not_assessed",

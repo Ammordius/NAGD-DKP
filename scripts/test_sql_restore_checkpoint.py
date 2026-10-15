@@ -540,6 +540,8 @@ def test_execute_rechecks_the_pin() -> None:
                 "123",
                 "--destination-name",
                 "nagd-dkp",
+                "--confirm",
+                "RESTORE nagd-dkp",
             ]
         )
     except sql_restore.RestoreError as exc:
@@ -563,19 +565,34 @@ def test_workflow_choices_stay_static() -> None:
     check(options == list(sql_backup_fetch.CHECKPOINT_CHOICES), str(options))
     artifact_input = text.split("      artifact_id:\n", 1)[1].split("permissions:", 1)[0]
     check("required: false" in artifact_input, artifact_input)
-    check("destination_name:" not in text, "destination name is still a workflow input")
-    check("confirm:" not in text, "typed confirmation is still a workflow input")
+    check("destination_name:" in text, "destination name is missing from the workflow")
+    check("confirm:" in text, "typed confirmation is missing from the workflow")
+    operation = text.split("      operation:\n", 1)[1].split("      source_repository:\n", 1)[0]
+    operation_options = [line.strip()[2:] for line in operation.splitlines() if line.strip().startswith("- ")]
+    check(
+        operation_options == ["List available backups", "Dry-run restore", "Restore"],
+        str(operation_options),
+    )
+    source = text.split("      source_repository:\n", 1)[1].split("      source_repository_name:\n", 1)[0]
+    source_options = [line.strip()[2:] for line in source.splitlines() if line.strip().startswith("- ")]
+    check(
+        source_options == ["Current repository", "Rimi staging", "Other discovered fork"],
+        str(source_options),
+    )
     check("environment: sql-restore" in text, text)
     check(text.count("environment: sql-restore") == 1, "restore asks for environment approval more than once")
-    inventory = text.split("\n  inventory:", 1)[1].split("\n  restore:", 1)[0]
-    check("environment:" not in inventory, "inventory waits for restore approval")
+    listing = text.split("\n  list:", 1)[1].split("\n  preflight:", 1)[0]
+    check("environment:" not in listing, "list waits for restore approval")
+    preflight = text.split("\n  preflight:", 1)[1].split("\n  restore:", 1)[0]
+    check("environment:" not in preflight, "dry-run waits for restore approval")
     restore = text.split("\n  restore:", 1)[1]
+    check("refs/heads/main" in restore.split("steps:", 1)[0], "restore is not limited to main")
     check("inputs.checkpoint" not in restore, "restore job resolves the checkpoint again")
     check("inputs.artifact_id" not in restore, "restore job reads the form artifact id")
-    check("needs.inventory.outputs.artifact_id" in restore, restore)
-    check("steps.dryrun.outputs.artifact_sha256" in restore, restore)
+    check("needs.preflight.outputs.artifact_id" in restore, restore)
+    check("needs.preflight.outputs.artifact_sha256" in restore, restore)
     check("--check-protection" in restore, "destructive restore does not check environment protection")
-    check("success()" in restore.split("steps:", 1)[0], "restore can run after a failed inventory")
+    check("success()" in restore.split("steps:", 1)[0], "restore can run after a failed preflight")
 
 
 def main() -> None:

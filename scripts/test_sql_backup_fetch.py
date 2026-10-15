@@ -36,7 +36,7 @@ CURRENT = "example/dkp"
 ROOT_NODE = "R_kgDORQRiNA"
 ROOT_NUMERIC = 424242
 OTHER_NODE = "R_kgDORnePRA"
-OTHER_NUMERIC = 525252
+OTHER_NUMERIC = 1182240580
 TOKEN = "github_pat_test_token_value_not_real"
 STAMP = "sql-backup-20261014T150405Z"
 AGE_NAME = STAMP + ".tar.gz.age"
@@ -131,6 +131,17 @@ class FakeGitHub:
         payload = self.zips[artifact_id]
         check(len(payload) <= limit, "fake zip exceeds the caller's limit")
         return payload
+
+    def repository_name_for_node(self, node_id: str) -> str:
+        if node_id == OTHER_NODE:
+            return STAGING
+        if node_id == ROOT_NODE:
+            return SOURCE
+        return ""
+
+    def get_text(self, path: str) -> str:
+        self.calls.append(("text", path))
+        raise sql_backup_fetch.FetchError(sql_backup_fetch.github_status_message(404))
 
 
 class Boom:
@@ -514,7 +525,7 @@ def test_schema_mismatch() -> None:
         client = FakeGitHub()
         record = artifact_record(size=len(zipped))
         bind_artifact(client, record, success_run(), zipped)
-        expect_error("Schema fingerprint", client, artifact_id=str(ARTIFACT_ID), identity=identity)
+        expect_error("could not be classified", client, artifact_id=str(ARTIFACT_ID), identity=identity)
 
 
 def test_wrong_format_version() -> None:
@@ -897,11 +908,7 @@ def test_token_secret_map() -> None:
                 os.environ.pop(key, None)
             else:
                 os.environ[key] = previous
-    for relative in (
-        ".github/workflows/db-sql-backup-fetch.yml",
-        ".github/workflows/db-restore-sql.yml",
-        ".github/workflows/db-sql-backup-discover.yml",
-    ):
+    for relative in (".github/workflows/db-restore-sql.yml",):
         text = (ROOT / relative).read_text(encoding="utf-8")
         check("secrets.BACKUP_ARTIFACT_READ_TOKEN_STAGING" in text, relative)
         check("RimidalEQ/" not in text, relative + " still names a fork")
@@ -1114,6 +1121,98 @@ def test_renamed_repository_backup_verifies() -> None:
         check(ROW_MARKER.decode("ascii") not in summary, "SQL row text was printed")
 
 
+def test_source_aliases_are_not_authentication_errors() -> None:
+    saved = os.environ.get("GH_TOKEN")
+    os.environ["GH_TOKEN"] = TOKEN
+    try:
+        try:
+            sql_backup_fetch.open_source("not a repo", SOURCE)
+            fail("invalid source syntax was accepted")
+        except sql_backup_fetch.FetchError as exc:
+            message = str(exc)
+            check("selection is invalid" in message, message)
+            check("GITHUB_TOKEN:" not in message, message)
+            check("No configured token" not in message, message)
+            check("401" not in message and "403" not in message, message)
+        current = sql_backup_fetch.selection_target("  Current Repository  ", "", SOURCE)
+        check(current.role == "current" and current.value == SOURCE, current.value)
+        slots = sql_backup_fetch.tokens_for_selection(current)
+        check([name for name, _value in slots] == ["GITHUB_TOKEN"], str(slots))
+        try:
+            sql_backup_fetch.selection_target("Other discovered fork", "   ", SOURCE)
+            fail("an empty other repository was accepted")
+        except sql_backup_fetch.FetchError as exc:
+            check("requires an owner/name" in str(exc), str(exc))
+            check("GITHUB_TOKEN" not in str(exc), str(exc))
+        rimi = sql_backup_fetch.selection_target(" Rimi staging ", "", SOURCE)
+        check(rimi.kind == "node" and rimi.value == sql_backup_fetch.RIMI_REPOSITORY_NODE_ID, rimi.value)
+        client = FakeGitHub()
+        canonical = sql_backup_fetch.resolve_node_repository(client, rimi.value)
+        check(canonical == STAGING, canonical)
+        identity = sql_backup_fetch.authorize_source(client, canonical, SOURCE)
+        renamed = sql_backup_fetch.authorize_source(client, OTHER, SOURCE)
+        check(identity.node_id == renamed.node_id == sql_backup_fetch.RIMI_REPOSITORY_NODE_ID, identity.node_id)
+        check(identity.numeric_id == renamed.numeric_id == "1182240580", identity.numeric_id)
+        check(sql_backup_fetch.deployment_label(identity) == "Rimi staging", identity.full_name)
+    finally:
+        if saved is None:
+            os.environ.pop("GH_TOKEN", None)
+        else:
+            os.environ["GH_TOKEN"] = saved
+
+
+def test_schema_compatibility_classes() -> None:
+    destination = (ROOT / "docs" / "supabase-schema-full.sql").read_text(encoding="utf-8")
+    commented = destination.replace(
+        "CREATE TABLE IF NOT EXISTS characters",
+        "-- restored note\nCREATE TABLE IF NOT EXISTS characters",
+        1,
+    )
+    comment_class = sql_backup.classify_schema_texts(commented, destination)
+    check(comment_class["classification"] == sql_backup.SCHEMA_CLASS_FORMAT, str(comment_class))
+    check(comment_class["compatible"] is True, str(comment_class))
+    windows = destination.replace("\n", "\r\n")
+    line_class = sql_backup.classify_schema_texts(windows, destination)
+    check(line_class["classification"] == sql_backup.SCHEMA_CLASS_FORMAT, str(line_class))
+    needle = (
+        "    WHERE character_key = p_character_key;\n"
+        "  END IF;\n"
+        "END;\n"
+        "$$;\n"
+        "\n"
+        "-- Move one item's cost"
+    )
+    replacement = (
+        "    WHERE character_key = p_character_key;\n"
+        "\n"
+        "    DELETE FROM character_dkp_spent\n"
+        "    WHERE character_key = p_character_key\n"
+        "      AND total_spent = 0;\n"
+        "  END IF;\n"
+        "END;\n"
+        "$$;\n"
+        "\n"
+        "-- Move one item's cost"
+    )
+    check(needle in destination, "Rimi fixture anchor was not in the canonical schema")
+    rimi = destination.replace(needle, replacement, 1)
+    rimi_class = sql_backup.classify_schema_texts(rimi, destination)
+    check(rimi_class["classification"] == sql_backup.SCHEMA_CLASS_ADDITIVE, str(rimi_class))
+    check(rimi_class["compatible"] is True, str(rimi_class))
+    dropped = destination.replace("  char_id TEXT PRIMARY KEY,\n", "", 1)
+    dropped_class = sql_backup.classify_schema_texts(dropped, destination)
+    check(dropped_class["classification"] == sql_backup.SCHEMA_CLASS_DEFINITE, str(dropped_class))
+    check(dropped_class["compatible"] is False, str(dropped_class))
+    changed = destination.replace(
+        "INSERT INTO restore_in_progress (id, in_progress) VALUES (1, true)",
+        "INSERT INTO restore_in_progress (id, in_progress) VALUES (1, false)",
+        1,
+    )
+    changed_class = sql_backup.classify_schema_texts(changed, destination)
+    check(changed_class["classification"] == sql_backup.SCHEMA_CLASS_POTENTIAL, str(changed_class))
+    check(changed_class["compatible"] is False, str(changed_class))
+
+
 def main() -> None:
     test_unapproved_repository()
     test_api_forbidden()
@@ -1136,6 +1235,8 @@ def main() -> None:
     test_official_artifact_list_request()
     test_corrupt_checksum()
     test_schema_mismatch()
+    test_source_aliases_are_not_authentication_errors()
+    test_schema_compatibility_classes()
     test_wrong_format_version()
     test_executable_member()
     test_valid_approved_fork()

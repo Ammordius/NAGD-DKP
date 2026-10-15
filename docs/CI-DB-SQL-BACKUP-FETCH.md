@@ -1,14 +1,14 @@
 # Fetch a portable SQL backup artifact
 
-This workflow discovers and downloads a SQL backup artifact produced by [DB SQL backup](CI-DB-SQL-BACKUP.md). It does not restore a database, and it does not need `SUPABASE_DB_URL`, `SUPABASE_URL`, or `SUPABASE_SERVICE_ROLE_KEY`.
+Listing and dry-run now live in [DB SQL restore](CI-DB-SQL-RESTORE.md). The standalone discovery and fetch workflows have been removed. This page describes the reader those operations still call. It does not restore a database, and it does not need `SUPABASE_DB_URL`, `SUPABASE_URL`, or `SUPABASE_SERVICE_ROLE_KEY`.
 
-The job prints a summary and leaves the downloaded file on the runner only. It does not upload a new artifact. A git fork relationship does not by itself grant access to another repository's Actions artifacts. The script accepts a repository only when GitHub says it is `Ammordius/NAGD-DKP` or a fork of that repository, identified by node id `R_kgDORQRiNA`, and the repository has `db-sql-backup.yml`.
+The job prints a summary and leaves a downloaded file on the runner only when a fetch is requested. It does not upload a new artifact. A git fork relationship does not by itself grant access to another repository's Actions artifacts. The script accepts a repository only when GitHub says it is `Ammordius/NAGD-DKP` or a fork of that repository, identified by node id `R_kgDORQRiNA`, and the repository has `db-sql-backup.yml`. Rimi's deployment is node id `R_kgDORnePRA`.
 
-Workflow: [`.github/workflows/db-sql-backup-fetch.yml`](../.github/workflows/db-sql-backup-fetch.yml). Discovery: [`.github/workflows/db-sql-backup-discover.yml`](../.github/workflows/db-sql-backup-discover.yml). Script: [`scripts/sql_backup_fetch.py`](../scripts/sql_backup_fetch.py).
+Script: [`scripts/sql_backup_fetch.py`](../scripts/sql_backup_fetch.py).
 
 ## Fork network
 
-Run **DB SQL backup discovery** to list the root and every accessible fork, including forks of forks. The summary shows checkpoints, timestamps, and whether artifacts are readable. A repository the tokens can see but not read stays in the summary with the reason. A private fork the tokens cannot see is omitted and is not authorized. Typing an unrelated `owner/name` does not make it a source.
+Open **DB SQL restore** and choose **List available backups** to list the root and every accessible fork, including forks of forks. The summary shows the repository, deployment, GitHub repository id, whether it is an eligible fork, checkpoints, timestamps, daily/weekly/monthly copies, artifact ids, and why a source cannot be read. A private fork the tokens cannot see is omitted and is not authorized. Typing an unrelated `owner/name` does not make it a source.
 
 A renamed repository stays the same source. GitHub resolves the old name and the current name to one repository id. The manifest's `source_repository` must resolve to the repository that actually stored the artifact. When `source_repository_id` is present it must be that repository's numeric id. Older artifacts omit that field and remain valid. A copied archive, whose manifest names a different repository, is refused. The manifest is not rewritten. The error tells the operator to generate a new backup in the selected repository.
 
@@ -106,22 +106,22 @@ When the identity is present the script also checks:
 - No links, no `..`, no absolute paths, and no execute bits.
 - Decrypted tar at most 128 MiB, extracted members at most 256 MiB total.
 - `format_version` and `included_tables` match `scripts/sql_backup.py`.
-- `canonical_schema_sha256` matches the checked-out `docs/supabase-schema-full.sql`. That is the source-code fingerprint. It does not mark the live catalog as verified.
+- `canonical_schema_sha256` is recorded and compared with the checked-out `docs/supabase-schema-full.sql`. A different hash is provenance. The gate is the structural class: formatting/comment-only and additive and compatible continue; potentially incompatible and definitely incompatible fail. The fingerprint does not mark the live catalog as verified.
 - `live_schema_status` is `not_assessed`, `compatible`, or `incompatible`. `live_schema_compared_to_repository_file` must be false. A missing block is `not_assessed`, not compatible.
 - `source_repository` resolves to the same GitHub repository as the artifact, and `workflow_run_id` is the resolved run. A different name for that same repository is accepted. A different repository is not.
 - `SHA256SUMS` matches `data.sql` and `manifest.json`, and the manifest checksum matches `data.sql`.
 
 The script does not execute anything from the archive and does not run `psql`.
 
-## Run the workflow
+## Run the reader
 
-Actions → **DB SQL backup fetch** → Run workflow.
+Actions → **DB SQL restore** → Run workflow.
 
-- Source repository: a repository printed by **DB SQL backup discovery**, or `Current repository`.
-- Workflow run id: optional. Empty means the latest eligible run when the artifact id is also empty.
-- Artifact id: optional. When set, this exact artifact is resolved and checked.
+- Operation: **List available backups** does not need a source or a database. **Dry-run restore** and **Restore** use the source choice.
+- Source: **Current repository**, **Rimi staging**, or **Other discovered fork**. Other uses the optional `owner/name` field. **Rimi staging** resolves node id `R_kgDORnePRA`, not a historical repository name.
+- Checkpoint, workflow run id, and artifact id apply to dry-run and restore. Leave the artifact id empty for a normal checkpoint.
 
-The step summary shows the GitHub artifact identity. With `SQL_BACKUP_AGE_IDENTITY` set, it also shows the manifest's format version, schema fingerprint, and row counts.
+The step summary shows the GitHub artifact identity. With `SQL_BACKUP_AGE_IDENTITY` set, it also shows the manifest's format version, schema fingerprint, schema compatibility class, and row counts. A different schema file hash is provenance. Restore fails only when the structural class is potentially incompatible or definitely incompatible.
 
 ## Local test
 

@@ -514,6 +514,20 @@ def restore_env(port: int) -> dict[str, str]:
     return env
 
 
+def test_dry_run_can_run_from_a_branch() -> None:
+    with patch.dict(
+        os.environ,
+        {
+            "GITHUB_ACTIONS": "true",
+            "GITHUB_EVENT_NAME": "workflow_dispatch",
+            "GITHUB_REF": "refs/heads/feature/sql-restore-repair",
+        },
+        clear=False,
+    ):
+        sql_restore.assert_actions_context(execute=False)
+        assert_refused("must run from main", lambda: sql_restore.assert_actions_context(execute=True))
+
+
 def test_cli_refuses_unsafe_requests() -> None:
     env = restore_env(6543)
     completed = run_restore(env, ["--bundle-dir", "missing", "--source", "example/dkp", "--destination-name", "disposable-destination"])
@@ -596,19 +610,18 @@ def test_cli_refuses_unsafe_requests() -> None:
         env,
         [
             "--execute",
-            "--bundle-dir",
-            "missing",
             "--source",
             "example/dkp",
+            "--artifact-id",
+            "1",
             "--destination-name",
             "disposable-destination",
             "--confirm",
             "RESTORE disposable-destination",
         ],
     )
-    check(completed.returncode != 0, "a typed confirmation was accepted")
-    check("unrecognized arguments" in completed.stderr, completed.stderr)
-    check("RESTORE" not in completed.stderr or "unrecognized" in completed.stderr, completed.stderr)
+    check(completed.returncode != 0, "execute without readable protection was accepted")
+    check("protection could not be read" in completed.stderr, completed.stderr)
 
     env = restore_env(1)
     env["GITHUB_ACTIONS"] = "true"
@@ -965,7 +978,7 @@ def test_two_databases() -> None:
             assert_clean_output(dry)
             check(dry.returncode == 0, "dry-run failed:\n" + (dry.stderr or dry.stdout)[-4000:])
             check("writes: none" in dry.stdout, "dry-run did not report that it was read-only")
-            check("source_schema_fingerprint: match" in dry.stdout, "dry-run omitted the source fingerprint status")
+            check("schema_compatibility: formatting/comment-only" in dry.stdout, dry.stdout)
             check("live_schema_status: compatible" in dry.stdout, "dry-run omitted the live schema status")
             check("live_schema_compared_to_repository_file: false" in dry.stdout, "dry-run compared the repository file")
             check("restore_compatibility: compatible" in dry.stdout, "dry-run omitted restore compatibility")
@@ -987,6 +1000,8 @@ def test_two_databases() -> None:
                     SOURCE_REPO,
                     "--destination-name",
                     "disposable-destination",
+                    "--confirm",
+                    "RESTORE disposable-destination",
                 ],
             )
             assert_clean_output(failed)
@@ -1005,6 +1020,8 @@ def test_two_databases() -> None:
                     SOURCE_REPO,
                     "--destination-name",
                     "disposable-destination",
+                    "--confirm",
+                    "RESTORE disposable-destination",
                 ],
             )
             assert_clean_output(restored)
@@ -1068,6 +1085,8 @@ ROLLBACK;
                     SOURCE_REPO,
                     "--destination-name",
                     "disposable-destination",
+                    "--confirm",
+                    "RESTORE disposable-destination",
                 ],
             )
             assert_clean_output(again)
@@ -1370,6 +1389,8 @@ def test_empty_copy_postgres() -> None:
                     SOURCE_REPO,
                     "--destination-name",
                     "disposable-destination",
+                    "--confirm",
+                    "RESTORE disposable-destination",
                 ],
             )
             check(failed.returncode != 0, "intentional empty COPY failure exited 0")
@@ -1412,6 +1433,8 @@ def test_empty_copy_postgres() -> None:
                     SOURCE_REPO,
                     "--destination-name",
                     "disposable-destination",
+                    "--confirm",
+                    "RESTORE disposable-destination",
                 ],
             )
             check(restored.returncode == 0, "empty COPY restore failed:\n" + (restored.stderr or restored.stdout)[-4000:])
@@ -1439,6 +1462,7 @@ def test_empty_copy_postgres() -> None:
 def main() -> None:
     test_destination_authorization()
     test_policy_and_totals()
+    test_dry_run_can_run_from_a_branch()
     test_cli_refuses_unsafe_requests()
     test_empty_copy_serialization()
     test_empty_copy_postgres()

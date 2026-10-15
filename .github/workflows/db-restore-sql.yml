@@ -1,7 +1,7 @@
-# Manual restore of a portable SQL backup. Dry-run is the default.
+# Manual restore of a portable SQL backup.
 # Does not run on push, pull request, or artifact upload.
-# Inventory has no environment. sql-restore is the only approval, and a
-# destructive restore refuses to run until that environment has required
+# List and dry-run do not use an environment. sql-restore is the only approval.
+# A destructive restore refuses to run until that environment has required
 # reviewers and a deployment branch policy of main only.
 # See docs/CI-DB-SQL-RESTORE.md.
 
@@ -10,20 +10,31 @@ name: DB SQL restore
 on:
   workflow_dispatch:
     inputs:
-      execution:
-        description: dry-run performs no writes. restore mutates the destination.
+      operation:
+        description: List backups, dry-run a restore, or restore.
         required: true
         type: choice
-        default: dry-run
+        default: List available backups
         options:
-          - dry-run
-          - restore
+          - List available backups
+          - Dry-run restore
+          - Restore
       source_repository:
-        description: Discovered owner/name from DB SQL backup discovery. Current repository uses this repository.
+        description: Used for dry-run and restore. Ignored when listing backups.
         required: true
+        type: choice
+        default: Current repository
+        options:
+          - Current repository
+          - Rimi staging
+          - Other discovered fork
+      source_repository_name:
+        description: owner/name when the source is Other discovered fork.
+        required: false
         type: string
+        default: ""
       checkpoint:
-        description: Latest, previous, latest weekly, or latest monthly. The last two choices are for an older named backup.
+        description: Historical backup to restore. Ignored when listing backups.
         required: true
         type: choice
         default: Latest available backup
@@ -35,12 +46,22 @@ on:
           - Latest monthly backup
           - Specific checkpoint by artifact name
       checkpoint_name:
-        description: Advanced. Artifact name, only for a specific checkpoint. Leave empty otherwise.
+        description: Artifact name. Required only for a specific checkpoint.
         required: false
         type: string
         default: ""
       artifact_id:
-        description: Advanced. Optional numeric id. Leave empty for a normal checkpoint.
+        description: Optional numeric id. Leave empty for a normal checkpoint.
+        required: false
+        type: string
+        default: ""
+      destination_name:
+        description: Must match SQL_RESTORE_DESTINATION_NAME. Ignored when listing backups.
+        required: false
+        type: string
+        default: ""
+      confirm:
+        description: For a restore, type RESTORE and the destination name. Leave empty otherwise.
         required: false
         type: string
         default: ""
@@ -53,14 +74,9 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  inventory:
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+  list:
+    if: github.event_name == 'workflow_dispatch' && inputs.operation == 'List available backups'
     runs-on: ubuntu-latest
-    outputs:
-      artifact_id: ${{ steps.select.outputs.artifact_id }}
-      source_repository: ${{ steps.select.outputs.source_repository }}
-      artifact_name: ${{ steps.select.outputs.artifact_name }}
-      workflow_run_id: ${{ steps.select.outputs.workflow_run_id }}
     permissions:
       contents: read
       actions: read
@@ -84,6 +100,27 @@ jobs:
           BACKUP_FORK_READ_TOKEN_4: ${{ secrets.BACKUP_FORK_READ_TOKEN_4 }}
         run: python scripts/sql_backup_fetch.py --discover
 
+  preflight:
+    if: github.event_name == 'workflow_dispatch' && (inputs.operation == 'Dry-run restore' || inputs.operation == 'Restore')
+    runs-on: ubuntu-latest
+    outputs:
+      artifact_id: ${{ steps.dryrun.outputs.artifact_id }}
+      source_repository: ${{ steps.dryrun.outputs.source_repository }}
+      artifact_name: ${{ steps.dryrun.outputs.artifact_name }}
+      workflow_run_id: ${{ steps.dryrun.outputs.workflow_run_id }}
+      artifact_sha256: ${{ steps.dryrun.outputs.artifact_sha256 }}
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
       - name: Resolve checkpoint
         id: select
         env:
@@ -95,39 +132,20 @@ jobs:
           BACKUP_FORK_READ_TOKEN_3: ${{ secrets.BACKUP_FORK_READ_TOKEN_3 }}
           BACKUP_FORK_READ_TOKEN_4: ${{ secrets.BACKUP_FORK_READ_TOKEN_4 }}
           SOURCE_REPOSITORY: ${{ inputs.source_repository }}
+          SOURCE_REPOSITORY_NAME: ${{ inputs.source_repository_name }}
           CURRENT_REPOSITORY: ${{ github.repository }}
           CHECKPOINT: ${{ inputs.checkpoint }}
           CHECKPOINT_NAME: ${{ inputs.checkpoint_name }}
           ARTIFACT_ID: ${{ inputs.artifact_id }}
         run: |
           set -euo pipefail
-          SOURCE="$SOURCE_REPOSITORY"
-          if [ "$SOURCE" = "Current repository" ]; then
-            SOURCE="$CURRENT_REPOSITORY"
-          fi
           python scripts/sql_restore_checkpoint.py \
-            --source "$SOURCE" \
+            --source "$SOURCE_REPOSITORY" \
+            --source-name "$SOURCE_REPOSITORY_NAME" \
             --current-repository "$CURRENT_REPOSITORY" \
             --checkpoint "$CHECKPOINT" \
             --checkpoint-name "$CHECKPOINT_NAME" \
             --artifact-id "$ARTIFACT_ID"
-
-  restore:
-    needs: inventory
-    if: success() && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    environment: sql-restore
-    permissions:
-      contents: read
-      actions: write
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
 
       - name: Install PostgreSQL 17 client and age
         uses: ./.github/actions/setup-postgresql-17
@@ -148,11 +166,12 @@ jobs:
           SQL_RESTORE_DESTINATION_HOST: ${{ vars.SQL_RESTORE_DESTINATION_HOST }}
           SQL_RESTORE_DATABASE_NAME: ${{ vars.SQL_RESTORE_DATABASE_NAME }}
           SQL_RESTORE_PROJECT_REF: ${{ vars.SQL_RESTORE_PROJECT_REF }}
-          SOURCE_REPOSITORY: ${{ needs.inventory.outputs.source_repository }}
+          SOURCE_REPOSITORY: ${{ steps.select.outputs.source_repository }}
           CURRENT_REPOSITORY: ${{ github.repository }}
-          ARTIFACT_ID: ${{ needs.inventory.outputs.artifact_id }}
-          PINNED_ARTIFACT_NAME: ${{ needs.inventory.outputs.artifact_name }}
-          PINNED_WORKFLOW_RUN_ID: ${{ needs.inventory.outputs.workflow_run_id }}
+          ARTIFACT_ID: ${{ steps.select.outputs.artifact_id }}
+          PINNED_ARTIFACT_NAME: ${{ steps.select.outputs.artifact_name }}
+          PINNED_WORKFLOW_RUN_ID: ${{ steps.select.outputs.workflow_run_id }}
+          DESTINATION_NAME: ${{ inputs.destination_name }}
         run: |
           set -euo pipefail
           python scripts/sql_restore.py \
@@ -161,26 +180,45 @@ jobs:
             --artifact-id "$ARTIFACT_ID" \
             --expect-artifact-name "$PINNED_ARTIFACT_NAME" \
             --expect-workflow-run-id "$PINNED_WORKFLOW_RUN_ID" \
+            --destination-name "$DESTINATION_NAME" \
             --report sql-restore-preflight.txt
 
+  restore:
+    needs: preflight
+    if: success() && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.operation == 'Restore'
+    runs-on: ubuntu-latest
+    environment: sql-restore
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
       - name: Require protected sql-restore environment
-        if: success() && inputs.execution == 'restore'
         env:
           GH_TOKEN: ${{ github.token }}
           GITHUB_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: python scripts/sql_restore.py --check-protection
 
+      - name: Install PostgreSQL 17 client and age
+        uses: ./.github/actions/setup-postgresql-17
+
       - name: Back up the destination before restore
         id: destination_backup
-        if: success() && inputs.execution == 'restore'
         env:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
           SQL_BACKUP_AGE_RECIPIENT: ${{ secrets.SQL_BACKUP_AGE_RECIPIENT }}
         run: python scripts/sql_backup.py --out-dir sql-restore-destination-backup
 
       - name: Upload destination backup
-        if: success() && inputs.execution == 'restore'
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: sql-restore-destination-backup-${{ steps.destination_backup.outputs.stamp }}
@@ -189,7 +227,7 @@ jobs:
           if-no-files-found: error
 
       - name: Restore SQL backup
-        if: success() && inputs.execution == 'restore'
+        if: success()
         env:
           GH_TOKEN: ${{ github.token }}
           GITHUB_TOKEN: ${{ github.token }}
@@ -204,12 +242,14 @@ jobs:
           SQL_RESTORE_DESTINATION_HOST: ${{ vars.SQL_RESTORE_DESTINATION_HOST }}
           SQL_RESTORE_DATABASE_NAME: ${{ vars.SQL_RESTORE_DATABASE_NAME }}
           SQL_RESTORE_PROJECT_REF: ${{ vars.SQL_RESTORE_PROJECT_REF }}
-          SOURCE_REPOSITORY: ${{ needs.inventory.outputs.source_repository }}
+          SOURCE_REPOSITORY: ${{ needs.preflight.outputs.source_repository }}
           CURRENT_REPOSITORY: ${{ github.repository }}
-          ARTIFACT_ID: ${{ needs.inventory.outputs.artifact_id }}
-          PINNED_ARTIFACT_NAME: ${{ needs.inventory.outputs.artifact_name }}
-          PINNED_WORKFLOW_RUN_ID: ${{ needs.inventory.outputs.workflow_run_id }}
-          PINNED_SHA256: ${{ steps.dryrun.outputs.artifact_sha256 }}
+          ARTIFACT_ID: ${{ needs.preflight.outputs.artifact_id }}
+          PINNED_ARTIFACT_NAME: ${{ needs.preflight.outputs.artifact_name }}
+          PINNED_WORKFLOW_RUN_ID: ${{ needs.preflight.outputs.workflow_run_id }}
+          PINNED_SHA256: ${{ needs.preflight.outputs.artifact_sha256 }}
+          DESTINATION_NAME: ${{ inputs.destination_name }}
+          CONFIRM: ${{ inputs.confirm }}
         run: |
           set -euo pipefail
           python scripts/sql_restore.py \
@@ -220,4 +260,6 @@ jobs:
             --expect-artifact-name "$PINNED_ARTIFACT_NAME" \
             --expect-workflow-run-id "$PINNED_WORKFLOW_RUN_ID" \
             --expect-sha256 "$PINNED_SHA256" \
+            --destination-name "$DESTINATION_NAME" \
+            --confirm "$CONFIRM" \
             --report sql-restore-report.txt

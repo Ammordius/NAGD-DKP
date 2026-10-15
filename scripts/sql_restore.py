@@ -216,12 +216,12 @@ def assert_destination_identity(
         raise RestoreError("Connected project reference does not match SQL_RESTORE_PROJECT_REF.")
 
 
-def assert_actions_context() -> None:
+def assert_actions_context(*, execute: bool) -> None:
     if os.environ.get("GITHUB_ACTIONS") != "true":
         return
     if os.environ.get("GITHUB_EVENT_NAME") != "workflow_dispatch":
         raise RestoreError("Restore workflow must be started manually.")
-    if os.environ.get("GITHUB_REF") != "refs/heads/main":
+    if execute and os.environ.get("GITHUB_REF") != "refs/heads/main":
         raise RestoreError("Restore workflow must run from main.")
 
 
@@ -417,19 +417,16 @@ def verify_bundle_bytes(
         sql_backup_fetch._require_text(manifest.get("workflow_run_id"), "workflow_run_id", sql_backup_fetch._DIGITS)
         sql_backup_fetch._require_text(manifest.get("source_commit_sha"), "source_commit_sha", sql_backup_fetch._COMMIT)
         sql_backup_fetch._require_text(manifest.get("created_at"), "created_at", sql_backup_fetch._CREATED)
-        fingerprint = sql_backup_fetch._require_text(
-            manifest.get("canonical_schema_sha256"),
-            "canonical_schema_sha256",
-            sql_backup_fetch._SHA256,
-        )
     except sql_backup_fetch.FetchError as exc:
         raise RestoreError(str(exc)) from None
     if manifest.get("canonical_schema_source") != sql_backup.CANONICAL_SCHEMA:
         raise RestoreError("Manifest schema source is invalid.")
     if not schema_path.is_file():
         raise RestoreError(f"Missing canonical schema file {sql_backup.CANONICAL_SCHEMA}.")
-    if fingerprint != sql_backup.schema_fingerprint(schema_path):
-        raise RestoreError("Schema fingerprint does not match docs/supabase-schema-full.sql.")
+    try:
+        sql_backup_fetch.assess_schema_compatibility(manifest, schema_path, client, source)
+    except sql_backup_fetch.FetchError as exc:
+        raise RestoreError(str(exc)) from None
     require_restorable_live_schema(manifest)
     version = manifest.get("postgresql_version")
     if not isinstance(version, str) or not version.strip() or len(version) > 200 or "\n" in version:
@@ -564,14 +561,21 @@ def pinned_snapshot_line(manifest: dict, *, artifact_id: str, artifact_name: str
     )
 
 
-def load_from_fetch(source: str, current_repository: str, artifact_id: str) -> tuple[str, dict, dict[str, str]]:
+def load_from_fetch(
+    source: str,
+    current_repository: str,
+    artifact_id: str,
+    other_name: str = "",
+) -> tuple[str, dict, dict[str, str]]:
     if not sql_backup_fetch._DIGITS.fullmatch(artifact_id or ""):
         raise RestoreError("Select an exact artifact id.")
     identity = sql_backup_fetch._identity_from_env()
     if not identity:
         raise RestoreError("Set SQL_BACKUP_AGE_IDENTITY to verify the backup.")
     try:
-        _secret_name, token, client, origin = sql_backup_fetch.open_source(source, current_repository)
+        _secret_name, token, client, origin = sql_backup_fetch.open_source(
+            source, current_repository, other_name
+        )
     except sql_backup_fetch.FetchError as exc:
         raise RestoreError(str(exc)) from None
     work = Path(tempfile.mkdtemp(prefix="sql-restore-fetch-"))
@@ -991,6 +995,29 @@ SELECT 'foreign_keys|' || COALESCE((
   JOIN pg_namespace parent_ns ON parent_ns.oid = parent.relnamespace
   WHERE child_ns.nspname = 'public' AND c.contype = 'f'
 ), '[]'::json)::text;
+SELECT 'column_types|' || COALESCE((
+  SELECT json_object_agg(table_name, cols)
+  FROM (
+    SELECT c.table_name, json_object_agg(c.column_name, c.data_type) AS cols
+    FROM information_schema.columns c
+    WHERE c.table_schema = 'public' AND c.table_name IN ({tables})
+    GROUP BY c.table_name
+  ) typed
+), '{{}}'::json)::text;
+SELECT 'primary_keys|' || COALESCE((
+  SELECT json_object_agg(relname, cols)
+  FROM (
+    SELECT child.relname, json_agg(a.attname ORDER BY u.ord) AS cols
+    FROM pg_constraint c
+    JOIN pg_class child ON child.oid = c.conrelid
+    JOIN pg_namespace child_ns ON child_ns.oid = child.relnamespace
+    JOIN LATERAL unnest(c.conkey) WITH ORDINALITY AS u(attnum, ord) ON true
+    JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = u.attnum
+    WHERE child_ns.nspname = 'public' AND c.contype = 'p'
+      AND child.relname IN ({tables})
+    GROUP BY child.relname
+  ) keyed
+), '{{}}'::json)::text;
 """
 
 
@@ -1005,10 +1032,64 @@ def _labeled_json(conn: dict[str, str | int]) -> dict[str, object]:
             found[label] = json.loads(payload)
         except json.JSONDecodeError as exc:
             raise RestoreError("Destination preflight returned unexpected data.") from exc
-    expected = {"meta", "functions", "columns", "counts", "claims", "profile_fk", "foreign_keys"}
+    expected = {
+        "meta",
+        "functions",
+        "columns",
+        "counts",
+        "claims",
+        "profile_fk",
+        "foreign_keys",
+        "column_types",
+        "primary_keys",
+    }
     if set(found) != expected:
         raise RestoreError("Destination preflight did not return the expected checks.")
     return found
+
+
+def _expected_column_types() -> dict[str, dict[str, str]]:
+    text = (repo_root() / sql_backup.CANONICAL_SCHEMA).read_text(encoding="utf-8")
+    expected: dict[str, dict[str, str]] = {}
+    for table, columns in sql_backup.REQUIRED_SOURCE_COLUMNS.items():
+        create_sql = sql_backup.extract_create_table(text, table)
+        if create_sql is None:
+            raise RestoreError(f"Canonical schema is missing table {table}.")
+        parsed, _constraints = sql_backup.parse_table_parts(create_sql)
+        types: dict[str, str] = {}
+        for column in columns:
+            definition = parsed.get(column.lower())
+            if definition is None:
+                continue
+            types[column] = sql_backup.sql_type_name(definition)
+        expected[table] = types
+    return expected
+
+
+def _require_column_types(payload: object) -> None:
+    if not isinstance(payload, dict):
+        raise RestoreError("Destination column types could not be read.")
+    for table, columns in _expected_column_types().items():
+        present = payload.get(table)
+        if not isinstance(present, dict):
+            raise RestoreError(f"Destination is missing table {table}.")
+        for column, expected_type in columns.items():
+            live = present.get(column)
+            if not isinstance(live, str):
+                raise RestoreError(f"Destination {table} is missing column {column}.")
+            if live != expected_type:
+                raise RestoreError(
+                    f"Destination {table}.{column} type {live} is incompatible with {expected_type}."
+                )
+
+
+def _require_primary_keys(payload: object) -> None:
+    if not isinstance(payload, dict):
+        raise RestoreError("Destination primary keys could not be read.")
+    for table, columns in PRIMARY_KEYS.items():
+        present = payload.get(table)
+        if not isinstance(present, list) or tuple(present) != columns:
+            raise RestoreError(f"Destination primary key for {table} does not match the restore contract.")
 
 
 def _require_catalog(payload: dict[str, object], blocks: dict[str, dict]) -> None:
@@ -1065,6 +1146,8 @@ def _require_catalog(payload: dict[str, object], blocks: dict[str, dict]) -> Non
         if extra:
             raise RestoreError("Destination has a foreign key this restore does not handle.")
         raise RestoreError("Destination is missing an expected foreign key.")
+    _require_column_types(payload.get("column_types"))
+    _require_primary_keys(payload.get("primary_keys"))
     counts = payload["counts"]
     if not isinstance(counts, dict) or set(counts) != set(sql_backup.INCLUDED_TABLES):
         raise RestoreError("Destination table counts could not be read.")
@@ -1126,7 +1209,9 @@ def build_report(
             artifact_name=artifact_name,
         ),
         f"canonical_schema_sha256: {manifest['canonical_schema_sha256']}",
-        "source_schema_fingerprint: match",
+        f"source_schema_fingerprint: {manifest['canonical_schema_sha256']}",
+        f"destination_schema_fingerprint: {manifest.get('_destination_schema_sha256', '')}",
+        f"schema_compatibility: {manifest.get('_schema_compatibility', '')}",
         f"live_schema_status: {sql_backup.live_schema_record(manifest)['status']}",
         "live_schema_compared_to_repository_file: false",
         "restore_compatibility: compatible",
@@ -1722,12 +1807,14 @@ def run_restore(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Dry-run or restore a portable SQL backup.")
     parser.add_argument("--bundle-dir", type=Path)
     parser.add_argument("--source", default="")
+    parser.add_argument("--source-name", default="")
     parser.add_argument("--current-repository", default=os.environ.get("GITHUB_REPOSITORY", ""))
     parser.add_argument("--artifact-id", default="")
     parser.add_argument("--expect-artifact-name", default="")
     parser.add_argument("--expect-workflow-run-id", default="")
     parser.add_argument("--expect-sha256", default="")
     parser.add_argument("--destination-name", default="")
+    parser.add_argument("--confirm", default="")
     parser.add_argument("--execute", action="store_true")
     parser.add_argument("--check-protection", action="store_true")
     parser.add_argument("--report", type=Path)
@@ -1739,7 +1826,7 @@ def run_restore(argv: list[str] | None = None) -> int:
         print("sql-restore protection: required reviewers and main-only branch policy")
         return 0
 
-    assert_actions_context()
+    assert_actions_context(execute=args.execute)
     if os.environ.get("GITHUB_ACTIONS") == "true" and args.bundle_dir is not None:
         raise RestoreError("GitHub Actions must select an artifact id.")
     if args.fail_before_commit and os.environ.get("DKP_SQL_RESTORE_TEST_FAIL") != "1":
@@ -1751,6 +1838,8 @@ def run_restore(argv: list[str] | None = None) -> int:
     if args.execute:
         require_destructive_approval()
     destination_name = assert_destination_name(args.destination_name)
+    if args.execute and args.confirm != f"RESTORE {destination_name}":
+        raise RestoreError("Confirmation does not match the destination.")
     if args.execute and args.artifact_id.strip():
         require_execution_pin(
             args.expect_artifact_name,
@@ -1763,7 +1852,12 @@ def run_restore(argv: list[str] | None = None) -> int:
     assert_host_not_denied(str(conn["host"]), denied)
     if args.bundle_dir is not None:
         try:
-            source = sql_backup_fetch.normalize_repo(args.source)
+            selection = sql_backup_fetch.selection_target(
+                args.source, args.source_name, args.current_repository
+            )
+            if selection.kind != "name":
+                raise sql_backup_fetch.FetchError("A local bundle requires an owner/name source.")
+            source = selection.value
         except sql_backup_fetch.FetchError as exc:
             raise RestoreError(str(exc)) from None
         sql_text, manifest = load_bundle_dir(args.bundle_dir, source)
@@ -1772,12 +1866,11 @@ def run_restore(argv: list[str] | None = None) -> int:
         artifact_sha256 = ""
         pin = None
     else:
-        try:
-            source = sql_backup_fetch.normalize_repo(args.source)
-        except sql_backup_fetch.FetchError as exc:
-            raise RestoreError(str(exc)) from None
         artifact_id = args.artifact_id.strip()
-        sql_text, manifest, pin = load_from_fetch(source, args.current_repository, artifact_id)
+        sql_text, manifest, pin = load_from_fetch(
+            args.source, args.current_repository, artifact_id, args.source_name
+        )
+        source = pin["source_repository"]
         assert_pinned_artifact(
             pin,
             source=source,
