@@ -307,6 +307,45 @@ export function isGenericTicEventName(name) {
   return GENERATED_TIC_EVENT_NAME.test(text)
 }
 
+/** Epoch of a stored event time, or null when the clock cannot be compared. */
+export function eventRecencyMs(event, raidDateIso = '', timeZone = TIC_TIME_ZONE) {
+  const parsed = parseStoredEventTime(event?.event_time, raidDateIso, timeZone)
+  if (!parsed.ok || !parsed.date || !parsed.time) return null
+  const validated = validateTicDateTime(parsed.date, parsed.time, timeZone)
+  return validated.ok ? validated.epochMs : null
+}
+
+/**
+ * The latest event on a raid. A parsed event time wins. When none parse,
+ * the highest event_order is the most recently added tic.
+ */
+export function mostRecentEvent(events, raidDateIso = '', timeZone = TIC_TIME_ZONE) {
+  const list = events || []
+  let best = null
+  let bestMs = null
+  let bestOrder = -Infinity
+  for (const event of list) {
+    const ms = eventRecencyMs(event, raidDateIso, timeZone)
+    const order = Number(event?.event_order)
+    const orderNum = Number.isFinite(order) ? order : -Infinity
+    if (!best) {
+      best = event
+      bestMs = ms
+      bestOrder = orderNum
+      continue
+    }
+    const laterTime = ms != null && (bestMs == null || ms > bestMs)
+    const sameTimeHigherOrder = ms != null && bestMs != null && ms === bestMs && orderNum > bestOrder
+    const laterOrderWithoutTimes = ms == null && bestMs == null && orderNum > bestOrder
+    if (laterTime || sameTimeHigherOrder || laterOrderWithoutTimes) {
+      best = event
+      bestMs = ms
+      bestOrder = orderNum
+    }
+  }
+  return best
+}
+
 /**
  * Label shown for a tic. Placeholder names ("DKP tic", "On-time") and earlier
  * clock labels follow the stored event time. Tic #1 is "{time} on-time".

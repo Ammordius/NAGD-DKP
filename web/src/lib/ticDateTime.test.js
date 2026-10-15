@@ -4,6 +4,7 @@ import {
   defaultTicFields,
   displayTicEventName,
   dkpTicEventName,
+  mostRecentEvent,
   eventFieldsForTimeSave,
   eventTimeToStore,
   firstEqStampInPaste,
@@ -266,5 +267,25 @@ describe('eventFieldsForTimeSave', () => {
       eventFieldsForTimeSave('Fire minis', '2026-10-14T21:00:00-04:00', '21:00:00', 1),
       { event_time: '2026-10-14T21:00:00-04:00' },
     )
+  })
+})
+
+describe('mostRecentEvent', () => {
+  it('picks the latest event time', () => {
+    const chosen = mostRecentEvent([
+      { event_id: 'early', event_order: 1, event_time: '2026-10-14T12:00:00-04:00' },
+      { event_id: 'late', event_order: 2, event_time: '2026-10-14T21:15:00-04:00' },
+      { event_id: 'mid', event_order: 3, event_time: '2026-10-14T18:00:00-04:00' },
+    ], '2026-10-14')
+    assert.equal(chosen.event_id, 'late')
+  })
+
+  it('uses the highest event order when times are missing', () => {
+    const chosen = mostRecentEvent([
+      { event_id: 'first', event_order: 1 },
+      { event_id: 'third', event_order: 3 },
+      { event_id: 'second', event_order: 2 },
+    ])
+    assert.equal(chosen.event_id, 'third')
   })
 })

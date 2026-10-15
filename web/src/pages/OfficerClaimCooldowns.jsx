@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase'
 import { fetchAllByRange } from '../lib/fetchAllByRange'
 import { useDkpData } from '../lib/dkpLeaderboard'
 import { usePersistedState } from '../lib/usePersistedState'
-import { buildAccountAdminRows, buildAccountColumnRows, buildCharacterRows, characterMatchesQuery, filterAccountAdminRows, accountColumnLabel } from '../lib/siteAdminCharacters'
+import { buildAccountAdminRows, buildAccountColumnRows, buildCharacterRows, characterMatchesQuery, filterAccountAdminRows, accountColumnLabel, claimAccountChoices } from '../lib/siteAdminCharacters'
 import { normalizeUiPreferences } from '../lib/uiPreferences'
 import { canRemoveSiteUser, removalBlockReason } from '../lib/siteAdminRemoveUser'
 
@@ -30,11 +30,6 @@ function accountListLabel(row) {
   return `${row.label} (${row.account_id})`
 }
 
-function claimOptionLabel(account) {
-  const id = String(account?.account_id ?? '')
-  const name = (account?.display_name || '').trim()
-  return name ? `${id} — ${name}` : id
-}
 
 export default function OfficerClaimCooldowns({ isOfficer, isSiteAdmin = false, profile }) {
   const navigate = useNavigate()
@@ -52,6 +47,8 @@ export default function OfficerClaimCooldowns({ isOfficer, isSiteAdmin = false, 
   const [unclaimingId, setUnclaimingId] = useState(null)
   const [claimOpenId, setClaimOpenId] = useState(null)
   const [claimAccountId, setClaimAccountId] = useState('')
+  const [claimQuery, setClaimQuery] = useState('')
+  const [claimSuggestIndex, setClaimSuggestIndex] = useState(0)
   const [removeOpenId, setRemoveOpenId] = useState(null)
   const [claimingId, setClaimingId] = useState(null)
   const [claimAccounts, setClaimAccounts] = useState(null)
@@ -214,6 +211,7 @@ export default function OfficerClaimCooldowns({ isOfficer, isSiteAdmin = false, 
     if (claimOpenId === profileId) {
       setClaimOpenId(null)
       setClaimAccountId('')
+      setClaimQuery('')
     }
     await loadSiteUsers()
   }
@@ -221,6 +219,8 @@ export default function OfficerClaimCooldowns({ isOfficer, isSiteAdmin = false, 
   async function openClaim(profileId) {
     setClaimOpenId(profileId)
     setClaimAccountId('')
+    setClaimQuery('')
+    setClaimSuggestIndex(0)
     setUserError('')
     if (claimAccounts || claimAccountsLoading) return
     setClaimAccountsLoading(true)
@@ -234,8 +234,23 @@ export default function OfficerClaimCooldowns({ isOfficer, isSiteAdmin = false, 
     }
   }
 
-  async function handleClaimProfile(profileId) {
-    const accountId = claimAccountId.trim()
+  function selectClaimAccount(row) {
+    setClaimAccountId(row.id)
+    setClaimQuery(row.label)
+    const next = claimAccountChoices(unclaimedAccountsForClaim(), row.label)
+    const nextIndex = next.findIndex((choice) => choice.id === row.id)
+    setClaimSuggestIndex(nextIndex >= 0 ? nextIndex : 0)
+  }
+
+  function unclaimedAccountsForClaim() {
+    const claimedAccountIds = new Set(
+      siteUsers.map((user) => (user.account_id ? String(user.account_id) : '')).filter(Boolean)
+    )
+    return (claimAccounts || []).filter((account) => account?.account_id && !claimedAccountIds.has(String(account.account_id)))
+  }
+
+  async function handleClaimProfile(profileId, accountIdOverride) {
+    const accountId = String(accountIdOverride || claimAccountId || '').trim()
     if (!accountId) return
     setClaimingId(profileId)
     setUserError('')
@@ -250,6 +265,7 @@ export default function OfficerClaimCooldowns({ isOfficer, isSiteAdmin = false, 
     }
     setClaimOpenId(null)
     setClaimAccountId('')
+    setClaimQuery('')
     await loadSiteUsers()
   }
 
@@ -477,69 +493,29 @@ export default function OfficerClaimCooldowns({ isOfficer, isSiteAdmin = false, 
 
   const query = (charQuery || '').trim()
   const showSuggestList = showSuggest && query.length > 0
-  const claimedAccountIds = new Set(
-    siteUsers.map((user) => (user.account_id ? String(user.account_id) : '')).filter(Boolean)
+  const unclaimedAccountOptions = unclaimedAccountsForClaim()
+  const claimChoices = claimAccountChoices(unclaimedAccountOptions, claimQuery)
+  const claimActiveIndex = claimChoices.length === 0 ? 0 : Math.min(claimSuggestIndex, claimChoices.length - 1)
+  const claimQueryKey = claimQuery.trim().toLowerCase()
+  const exactClaimMatches = claimQueryKey
+    ? claimChoices.filter((row) => (
+      row.label.toLowerCase() === claimQueryKey
+      || row.id.toLowerCase() === claimQueryKey
+      || (row.account.display_name || '').trim().toLowerCase() === claimQueryKey
+    ))
+    : []
+  const resolvedClaimAccountId = (
+    claimAccountId && claimChoices.some((row) => row.id === claimAccountId)
   )
-  const unclaimedAccountOptions = (claimAccounts || [])
-    .filter((account) => account?.account_id && !claimedAccountIds.has(String(account.account_id)))
-    .sort((a, b) => claimOptionLabel(a).localeCompare(claimOptionLabel(b), undefined, { sensitivity: 'base' }))
+    ? claimAccountId
+    : (exactClaimMatches.length === 1 ? exactClaimMatches[0].id : '')
+  const claimPickId = resolvedClaimAccountId
+    || (claimQuery.trim() ? (claimChoices[claimActiveIndex]?.id || '') : '')
 
   return (
     <div className="container">
       <p><Link to="/officer/RaidAdmin">← Raid Admin</Link></p>
       <h1>Site Admin</h1>
-
-      {/* Claim cooldowns */}
-      <section className="card" style={{ marginBottom: '1.5rem' }}>
-        <h2 style={{ marginTop: 0 }}>Claim cooldowns</h2>
-        <p style={{ color: '#a1a1aa', marginBottom: '0.75rem' }}>
-          Players who unclaimed an account must wait before claiming again (10 min → 1 day → 7 days). Remove cooldown to let them claim immediately.
-        </p>
-        {error && <p className="error" style={{ marginBottom: '0.75rem' }}>{error}</p>}
-        {loading ? (
-          <p style={{ color: '#71717a' }}>Loading…</p>
-        ) : profiles.length === 0 ? (
-          <p style={{ color: '#71717a' }}>No accounts currently on claim cooldown.</p>
-        ) : (
-          <table>
-            <thead>
-              <tr>
-                <th>Email</th>
-                <th>Cooldown until</th>
-                <th>Unclaim count</th>
-                <th style={{ width: '10rem' }}></th>
-              </tr>
-            </thead>
-            <tbody>
-              {profiles.map((p) => {
-                const until = p.unclaim_cooldown_until ? new Date(p.unclaim_cooldown_until) : null
-                const isExpired = until && until <= new Date()
-                return (
-                  <tr key={p.id}>
-                    <td>{p.email || <span style={{ color: '#71717a' }}>—</span>}</td>
-                    <td>
-                      {until ? until.toLocaleString() : '—'}
-                      {isExpired && <span style={{ color: '#71717a', marginLeft: '0.5rem' }}>(expired)</span>}
-                    </td>
-                    <td>{p.unclaim_count ?? 0}</td>
-                    <td>
-                      <button
-                        type="button"
-                        className="btn btn-ghost"
-                        style={{ fontSize: '0.875rem' }}
-                        onClick={() => handleResetCooldown(p.id)}
-                        disabled={resettingId === p.id}
-                      >
-                        {resettingId === p.id ? 'Removing…' : 'Remove cooldown'}
-                      </button>
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        )}
-      </section>
 
       <section className="card" style={{ marginBottom: '1.5rem' }}>
         <h2 style={{ marginTop: 0 }}>Set accounts as active or inactive</h2>
@@ -725,6 +701,58 @@ export default function OfficerClaimCooldowns({ isOfficer, isSiteAdmin = false, 
         </div>
       </section>
 
+      {/* Claim cooldowns */}
+      <section className="card" style={{ marginBottom: '1.5rem' }}>
+        <h2 style={{ marginTop: 0 }}>Claim cooldowns</h2>
+        <p style={{ color: '#a1a1aa', marginBottom: '0.75rem' }}>
+          Players who unclaimed an account must wait before claiming again (10 min → 1 day → 7 days). Remove cooldown to let them claim immediately.
+        </p>
+        {error && <p className="error" style={{ marginBottom: '0.75rem' }}>{error}</p>}
+        {loading ? (
+          <p style={{ color: '#71717a' }}>Loading…</p>
+        ) : profiles.length === 0 ? (
+          <p style={{ color: '#71717a' }}>No accounts currently on claim cooldown.</p>
+        ) : (
+          <table>
+            <thead>
+              <tr>
+                <th>Email</th>
+                <th>Cooldown until</th>
+                <th>Unclaim count</th>
+                <th style={{ width: '10rem' }}></th>
+              </tr>
+            </thead>
+            <tbody>
+              {profiles.map((p) => {
+                const until = p.unclaim_cooldown_until ? new Date(p.unclaim_cooldown_until) : null
+                const isExpired = until && until <= new Date()
+                return (
+                  <tr key={p.id}>
+                    <td>{p.email || <span style={{ color: '#71717a' }}>—</span>}</td>
+                    <td>
+                      {until ? until.toLocaleString() : '—'}
+                      {isExpired && <span style={{ color: '#71717a', marginLeft: '0.5rem' }}>(expired)</span>}
+                    </td>
+                    <td>{p.unclaim_count ?? 0}</td>
+                    <td>
+                      <button
+                        type="button"
+                        className="btn btn-ghost"
+                        style={{ fontSize: '0.875rem' }}
+                        onClick={() => handleResetCooldown(p.id)}
+                        disabled={resettingId === p.id}
+                      >
+                        {resettingId === p.id ? 'Removing…' : 'Remove cooldown'}
+                      </button>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        )}
+      </section>
+
       <section className="card" style={{ marginBottom: '1.5rem' }}>
           <h2 style={{ marginTop: 0 }}>Site Profile Accounts</h2>
           <p style={{ color: '#a1a1aa', marginBottom: '0.75rem' }}>
@@ -870,34 +898,83 @@ export default function OfficerClaimCooldowns({ isOfficer, isSiteAdmin = false, 
                                   <span className="site-profile-unclaimed">No unclaimed accounts.</span>
                                 ) : (
                                   <>
-                                    <select
-                                      aria-label={`Account to claim for ${name || user.id}`}
-                                      value={claimAccountId}
-                                      onChange={(event) => setClaimAccountId(event.target.value)}
-                                    >
-                                      <option value="">Choose an account</option>
-                                      {unclaimedAccountOptions.map((option) => (
-                                        <option key={option.account_id} value={option.account_id}>
-                                          {claimOptionLabel(option)}
-                                        </option>
-                                      ))}
-                                    </select>
-                                    <button
-                                      type="button"
-                                      className="btn site-profile-btn"
-                                      onClick={() => handleClaimProfile(user.id)}
-                                      disabled={claimingId === user.id || !claimAccountId}
-                                    >
-                                      {claimingId === user.id ? 'Claiming...' : 'Claim'}
-                                    </button>
-                                    <button
-                                      type="button"
-                                      className="btn btn-ghost site-profile-btn"
-                                      onClick={() => setClaimOpenId(null)}
-                                      disabled={claimingId === user.id}
-                                    >
-                                      Cancel
-                                    </button>
+                                    <div className="site-profile-claim-picker">
+                                      <input
+                                        type="text"
+                                        value={claimQuery}
+                                        onChange={(event) => {
+                                          setClaimQuery(event.target.value)
+                                          setClaimAccountId('')
+                                          setClaimSuggestIndex(0)
+                                        }}
+                                        onKeyDown={(event) => {
+                                          if (event.key === 'ArrowDown') {
+                                            event.preventDefault()
+                                            setClaimSuggestIndex((index) => Math.min(index + 1, Math.max(claimChoices.length - 1, 0)))
+                                            return
+                                          }
+                                          if (event.key === 'ArrowUp') {
+                                            event.preventDefault()
+                                            setClaimSuggestIndex((index) => Math.max(index - 1, 0))
+                                            return
+                                          }
+                                          if (event.key === 'Enter') {
+                                            event.preventDefault()
+                                            const row = claimChoices[claimActiveIndex]
+                                            if (row) selectClaimAccount(row)
+                                          }
+                                        }}
+                                        placeholder="Type a display name"
+                                        autoComplete="off"
+                                        aria-label={`Account to claim for ${name || user.id}`}
+                                        aria-autocomplete="list"
+                                        aria-controls={`claim-account-list-${user.id}`}
+                                        aria-activedescendant={claimChoices[claimActiveIndex] ? `claim-account-${user.id}-${claimChoices[claimActiveIndex].id}` : undefined}
+                                      />
+                                      <div
+                                        id={`claim-account-list-${user.id}`}
+                                        className="officer-member-list site-profile-claim-list"
+                                        role="listbox"
+                                        aria-label="Unclaimed accounts"
+                                      >
+                                        {claimChoices.length === 0 ? (
+                                          <p className="officer-member-empty">No matching accounts</p>
+                                        ) : (
+                                          claimChoices.map((row, index) => (
+                                              <button
+                                                key={row.id}
+                                                id={`claim-account-${user.id}-${row.id}`}
+                                                type="button"
+                                                role="option"
+                                                aria-selected={row.id === claimPickId}
+                                                className={(claimQuery.trim() || resolvedClaimAccountId) && index === claimActiveIndex ? 'is-highlighted' : undefined}
+                                                onMouseEnter={() => setClaimSuggestIndex(index)}
+                                                onClick={() => selectClaimAccount(row)}
+                                              >
+                                                {row.label}
+                                              </button>
+                                          ))
+                                        )}
+                                      </div>
+                                    </div>
+                                    <div className="site-profile-claim-actions">
+                                      <button
+                                        type="button"
+                                        className="btn site-profile-btn"
+                                        onClick={() => handleClaimProfile(user.id, claimPickId)}
+                                        disabled={claimingId === user.id || !claimPickId}
+                                      >
+                                        {claimingId === user.id ? 'Claiming...' : 'Claim'}
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="btn btn-ghost site-profile-btn"
+                                        onClick={() => setClaimOpenId(null)}
+                                        disabled={claimingId === user.id}
+                                      >
+                                        Cancel
+                                      </button>
+                                    </div>
                                   </>
                                 )}
                               </div>

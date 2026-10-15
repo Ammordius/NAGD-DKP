@@ -209,6 +209,51 @@ export function filterAccountAdminRows(rows, query) {
     .map((row) => withResolvedCharacter(row, query))
 }
 
+export function claimAccountDisplayName(account) {
+  const name = (account?.display_name || '').trim()
+  return name || (account?.account_id != null ? String(account.account_id) : '')
+}
+
+/** Named accounts first, A–Z by display name. Accounts with no display name follow, by id. */
+export function sortClaimAccounts(accounts) {
+  return [...(accounts || [])].sort((a, b) => {
+    const aName = (a?.display_name || '').trim()
+    const bName = (b?.display_name || '').trim()
+    if (aName && !bName) return -1
+    if (!aName && bName) return 1
+    const byName = claimAccountDisplayName(a).localeCompare(claimAccountDisplayName(b), undefined, { sensitivity: 'base' })
+    if (byName !== 0) return byName
+    return String(a?.account_id ?? '').localeCompare(String(b?.account_id ?? ''), undefined, { numeric: true, sensitivity: 'base' })
+  })
+}
+
+export function claimAccountMatchesQuery(account, query) {
+  const q = (query || '').trim().toLowerCase()
+  if (!q) return true
+  const name = (account?.display_name || '').trim().toLowerCase()
+  const id = account?.account_id != null ? String(account.account_id).toLowerCase() : ''
+  if (name && (name.includes(q) || q.startsWith(name))) return true
+  return Boolean(id) && id.includes(q)
+}
+
+/** Sorted, filtered claim choices. Duplicate display names include the account id. */
+export function claimAccountChoices(accounts, query) {
+  const filtered = sortClaimAccounts(accounts).filter((account) => claimAccountMatchesQuery(account, query))
+  const nameCounts = new Map()
+  for (const account of filtered) {
+    const name = (account?.display_name || '').trim().toLowerCase()
+    if (!name) continue
+    nameCounts.set(name, (nameCounts.get(name) || 0) + 1)
+  }
+  return filtered.map((account) => {
+    const name = (account?.display_name || '').trim()
+    const id = account?.account_id != null ? String(account.account_id) : ''
+    const duplicated = name && (nameCounts.get(name.toLowerCase()) || 0) > 1
+    const label = !name ? id : (duplicated ? `${name} (${id})` : name)
+    return { account, id, label }
+  })
+}
+
 export function buildAccountColumnRows(accountIds, accountsById) {
   const rows = []
   const seen = new Set()

@@ -27,6 +27,7 @@ import {
   floorNowEastern,
   formatRaidSchedule,
   formatStoredClock,
+  mostRecentEvent,
   newTicTimestamp,
   raidLocalCalendarDate,
   raidStartToStore,
@@ -45,6 +46,10 @@ function generateRaidId() {
 function ticOptionLabel(event, raidDateIso) {
   const order = event?.event_order != null && event.event_order !== '' ? `#${event.event_order} ` : ''
   return `${order}${displayTicEventName(event, raidDateIso)}`
+}
+
+function defaultLootEventId(events, raidDateIso) {
+  return mostRecentEvent(events, raidDateIso)?.event_id || ''
 }
 
 function ResultNames({ label, names, tone }) {
@@ -451,12 +456,13 @@ export default function Officer({ isOfficer, profile }) {
   }, [events, appendEventId, ticDestination])
 
   useEffect(() => {
+    const raidDateIso = raid?.date_iso || raid?.date || ''
     if (events.length > 0 && (!lootEventId || !events.some((e) => e.event_id === lootEventId))) {
-      setLootEventId(events[0].event_id)
+      setLootEventId(defaultLootEventId(events, raidDateIso))
     } else if (events.length === 0 && lootEventId) {
       setLootEventId('')
     }
-  }, [events, lootEventId])
+  }, [events, lootEventId, raid])
 
   const handleCreateAccount = async () => {
     setNewAccountError('')
@@ -810,7 +816,7 @@ export default function Officer({ isOfficer, profile }) {
     setMutating(true)
     setLootResult(null)
     setError('')
-    const event_id = lootEventId || (events.length > 0 ? events[0].event_id : 'loot')
+    const event_id = lootEventId || defaultLootEventId(events, raid?.date_iso || raid?.date || '') || 'loot'
     const { error: err } = await supabase.from('raid_loot').insert({
       raid_id: selectedRaidId,
       event_id,
@@ -869,7 +875,7 @@ export default function Officer({ isOfficer, profile }) {
     setMutating(true)
     setLootResult(null)
     setError('')
-    const event_id = lootEventId || (events.length > 0 ? events[0].event_id : 'loot')
+    const event_id = lootEventId || defaultLootEventId(events, raid?.date_iso || raid?.date || '') || 'loot'
     const knownItemSet = new Set(allItemNamesForLootLog.map((n) => (n || '').trim().toLowerCase()))
     const itemNameByLower = {}
     allItemNamesForLootLog.forEach((n) => { if (n) itemNameByLower[n.trim().toLowerCase()] = n })
@@ -1594,25 +1600,27 @@ export default function Officer({ isOfficer, profile }) {
               </p>
             </details>
             <div className="officer-tic-choice" role="radiogroup" aria-label="Tic destination">
-              <label>
-                <input
-                  type="radio"
-                  name="tic-destination"
-                  checked={ticDestination === 'new'}
-                  onChange={() => { setTicDestination('new'); setTicResult(null) }}
-                />
-                New tic
-              </label>
-              <label>
-                <input
-                  type="radio"
-                  name="tic-destination"
-                  checked={ticDestination === 'existing'}
-                  disabled={events.length === 0}
-                  onChange={() => { setTicDestination('existing'); setTicResult(null) }}
-                />
-                Existing tic
-              </label>
+              <div className="officer-tic-choice-row">
+                <label className="officer-tic-option officer-tic-option--new">
+                  <input
+                    type="radio"
+                    name="tic-destination"
+                    checked={ticDestination === 'new'}
+                    onChange={() => { setTicDestination('new'); setTicResult(null) }}
+                  />
+                  New tic
+                </label>
+                <label className={`officer-tic-option officer-tic-option--existing${events.length === 0 ? ' is-disabled' : ''}`}>
+                  <input
+                    type="radio"
+                    name="tic-destination"
+                    checked={ticDestination === 'existing'}
+                    disabled={events.length === 0}
+                    onChange={() => { setTicDestination('existing'); setTicResult(null) }}
+                  />
+                  Existing tic
+                </label>
+              </div>
               {ticDestination === 'existing' && (
                 <select
                   value={appendEventId}
@@ -1784,8 +1792,8 @@ export default function Officer({ isOfficer, profile }) {
             <h2 style={{ marginTop: 0 }}>Add loot</h2>
             <p className="officer-hint">
               {useCharacterAdminSelectors
-                ? 'Pick an item, a character on the DKP list, a tic, and a cost. New loot starts on the first tic unless you pick another.'
-                : 'Pick an item, an account, a tic, and a cost. The list shows the account and the character that will be credited. New loot starts on the first tic unless you pick another.'}
+                ? 'Pick an item, a character on the DKP list, a tic, and a cost. New loot starts on the most recent event unless you pick another.'
+                : 'Pick an item, an account, a tic, and a cost. The list shows the account and the character that will be credited. New loot starts on the most recent event unless you pick another.'}
             </p>
             <div className="officer-loot-fields">
               <div className="officer-suggest-wrap">
@@ -1877,15 +1885,18 @@ export default function Officer({ isOfficer, profile }) {
                 )}
               </div>
               {events.length > 0 && (
-                <select
-                  value={lootEventId}
-                  onChange={(e) => setLootEventId(e.target.value)}
-                  aria-label="Tic for new loot"
-                >
-                  {events.map((e) => (
-                    <option key={e.event_id} value={e.event_id}>{ticOptionLabel(e, raidDateIso)}</option>
-                  ))}
-                </select>
+                <div className="officer-loot-event">
+                  <p className="officer-loot-event-heading">Choose the Event for adding loot</p>
+                  <select
+                    value={lootEventId}
+                    onChange={(e) => setLootEventId(e.target.value)}
+                    aria-label="Choose the Event for adding loot"
+                  >
+                    {events.map((e) => (
+                      <option key={e.event_id} value={e.event_id}>{ticOptionLabel(e, raidDateIso)}</option>
+                    ))}
+                  </select>
+                </div>
               )}
               <div className="officer-loot-actions">
                 <input

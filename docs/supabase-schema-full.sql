@@ -4994,19 +4994,171 @@ CREATE TRIGGER refresh_character_dkp_spent_after_loot
   AFTER INSERT OR UPDATE OR DELETE ON raid_loot
   FOR EACH STATEMENT EXECUTE FUNCTION public.trigger_refresh_character_dkp_spent();
 
-CREATE OR REPLACE FUNCTION public.trigger_refresh_character_dkp_spent_after_assignment()
-RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+-- Same character key as refresh_character_dkp_spent: assignment wins, otherwise the buyer.
+CREATE OR REPLACE FUNCTION public.loot_spent_character_key(
+  p_assigned_char_id text,
+  p_assigned_character_name text,
+  p_buyer_char_id text,
+  p_buyer_character_name text
+) RETURNS text
+LANGUAGE sql
+IMMUTABLE
+AS $$
+  SELECT CASE
+    WHEN COALESCE(trim(p_assigned_char_id), '') <> '' THEN trim(p_assigned_char_id)
+    WHEN COALESCE(trim(p_assigned_character_name), '') <> '' THEN trim(p_assigned_character_name)
+    WHEN COALESCE(trim(p_buyer_char_id), '') <> '' THEN trim(p_buyer_char_id)
+    ELSE COALESCE(trim(p_buyer_character_name), 'unknown')
+  END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.apply_character_dkp_spent_delta(
+  p_character_key text,
+  p_char_id text,
+  p_character_name text,
+  p_delta numeric
+) RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
 BEGIN
-  IF restore_load_in_progress() THEN RETURN NULL; END IF;
-  PERFORM refresh_character_dkp_spent();
+  IF p_character_key IS NULL OR p_delta IS NULL OR p_delta = 0 THEN
+    RETURN;
+  END IF;
+
+  IF p_delta > 0 THEN
+    INSERT INTO character_dkp_spent (character_key, char_id, character_name, total_spent, updated_at)
+    VALUES (
+      p_character_key,
+      nullif(trim(COALESCE(p_char_id, '')), ''),
+      nullif(trim(COALESCE(p_character_name, '')), ''),
+      p_delta,
+      now()
+    )
+    ON CONFLICT (character_key) DO UPDATE SET
+      total_spent = character_dkp_spent.total_spent + EXCLUDED.total_spent,
+      char_id = COALESCE(character_dkp_spent.char_id, EXCLUDED.char_id),
+      character_name = COALESCE(character_dkp_spent.character_name, EXCLUDED.character_name),
+      updated_at = now();
+  ELSE
+    UPDATE character_dkp_spent
+    SET total_spent = total_spent + p_delta,
+        updated_at = now()
+    WHERE character_key = p_character_key;
+
+    DELETE FROM character_dkp_spent
+    WHERE character_key = p_character_key
+      AND total_spent = 0;
+  END IF;
+END;
+$$;
+
+-- Move one item's cost between the previous owner and the new owner.
+-- A missing loot row (cascade delete) is a no-op; the raid_loot trigger rebuilds spent.
+CREATE OR REPLACE FUNCTION public.shift_character_dkp_spent_for_loot(
+  p_loot_id bigint,
+  p_old_assigned_char_id text,
+  p_old_assigned_character_name text,
+  p_new_assigned_char_id text,
+  p_new_assigned_character_name text
+) RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_cost numeric := 0;
+  v_cost_text text;
+  v_buyer_char_id text;
+  v_buyer_name text;
+  v_old_key text;
+  v_new_key text;
+BEGIN
+  SELECT rl.cost, rl.char_id::text, rl.character_name
+  INTO v_cost_text, v_buyer_char_id, v_buyer_name
+  FROM raid_loot rl
+  WHERE rl.id = p_loot_id;
+
+  IF NOT FOUND THEN
+    RETURN;
+  END IF;
+
+  IF v_cost_text IS NOT NULL AND trim(v_cost_text) <> '' THEN
+    BEGIN
+      v_cost := trim(v_cost_text)::numeric;
+    EXCEPTION
+      WHEN invalid_text_representation THEN
+        v_cost := 0;
+    END;
+  END IF;
+
+  v_old_key := public.loot_spent_character_key(
+    p_old_assigned_char_id, p_old_assigned_character_name, v_buyer_char_id, v_buyer_name
+  );
+  v_new_key := public.loot_spent_character_key(
+    p_new_assigned_char_id, p_new_assigned_character_name, v_buyer_char_id, v_buyer_name
+  );
+
+  IF v_old_key IS NOT DISTINCT FROM v_new_key THEN
+    RETURN;
+  END IF;
+
+  PERFORM public.apply_character_dkp_spent_delta(
+    v_old_key,
+    COALESCE(p_old_assigned_char_id, v_buyer_char_id),
+    COALESCE(p_old_assigned_character_name, v_buyer_name),
+    -v_cost
+  );
+  PERFORM public.apply_character_dkp_spent_delta(
+    v_new_key,
+    COALESCE(p_new_assigned_char_id, v_buyer_char_id),
+    COALESCE(p_new_assigned_character_name, v_buyer_name),
+    v_cost
+  );
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.trigger_refresh_character_dkp_spent_after_assignment()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  IF restore_load_in_progress() THEN
+    RETURN NULL;
+  END IF;
+
+  IF TG_OP = 'INSERT' THEN
+    PERFORM public.shift_character_dkp_spent_for_loot(
+      NEW.loot_id, NULL, NULL, NEW.assigned_char_id, NEW.assigned_character_name
+    );
+  ELSIF TG_OP = 'DELETE' THEN
+    PERFORM public.shift_character_dkp_spent_for_loot(
+      OLD.loot_id, OLD.assigned_char_id, OLD.assigned_character_name, NULL, NULL
+    );
+  ELSIF TG_OP = 'UPDATE' THEN
+    PERFORM public.shift_character_dkp_spent_for_loot(
+      NEW.loot_id,
+      OLD.assigned_char_id,
+      OLD.assigned_character_name,
+      NEW.assigned_char_id,
+      NEW.assigned_character_name
+    );
+  END IF;
+
   RETURN NULL;
 END;
 $$;
 
+COMMENT ON FUNCTION public.trigger_refresh_character_dkp_spent_after_assignment() IS
+  'Moves character_dkp_spent for the characters on one loot assignment change. Does not rebuild the table. Bulk assignment disables this trigger and refreshes once.';
+
 DROP TRIGGER IF EXISTS refresh_character_dkp_spent_after_assignment ON loot_assignment;
 CREATE TRIGGER refresh_character_dkp_spent_after_assignment
   AFTER INSERT OR UPDATE OR DELETE ON loot_assignment
-  FOR EACH STATEMENT EXECUTE FUNCTION public.trigger_refresh_character_dkp_spent_after_assignment();
+  FOR EACH ROW EXECUTE FUNCTION public.trigger_refresh_character_dkp_spent_after_assignment();
 
 CREATE OR REPLACE FUNCTION public.get_character_dkp_spent(p_keys text[])
 RETURNS TABLE(character_key text, char_id text, character_name text, total_spent numeric)
@@ -5039,10 +5191,12 @@ BEGIN
     SELECT 1 FROM information_schema.columns
     WHERE table_schema = 'public' AND table_name = 'raid_loot' AND column_name = 'assigned_char_id'
   ) THEN
+    ALTER TABLE loot_assignment DISABLE TRIGGER refresh_character_dkp_spent_after_assignment;
     INSERT INTO loot_assignment (loot_id, assigned_char_id, assigned_character_name, assigned_via_magelo)
     SELECT id, assigned_char_id, assigned_character_name, assigned_via_magelo
     FROM raid_loot
     ON CONFLICT (loot_id) DO NOTHING;
+    ALTER TABLE loot_assignment ENABLE TRIGGER refresh_character_dkp_spent_after_assignment;
   END IF;
 END;
 $$;
@@ -6138,6 +6292,9 @@ REVOKE ALL ON FUNCTION public.refresh_dkp_last_activity(text[], text[]) FROM PUB
 REVOKE ALL ON FUNCTION public.touch_dkp_last_activity(text[], text[], date) FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION public.recompute_dkp_last_activity_if_latest(text[], text[], date[]) FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION public.refresh_character_dkp_spent() FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION public.loot_spent_character_key(text, text, text, text) FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION public.apply_character_dkp_spent_delta(text, text, text, numeric) FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION public.shift_character_dkp_spent_for_loot(bigint, text, text, text, text) FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION public.update_raid_loot_assignments(jsonb) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.refresh_after_bulk_loot_assignment() FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.write_site_admin_audit(text, text, text, jsonb) FROM PUBLIC, anon, authenticated, service_role;
