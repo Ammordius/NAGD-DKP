@@ -1,0 +1,98 @@
+# Portable SQL backup. Daily schedule is gated by SQL_BACKUP_SCHEDULE=enabled.
+# The job runs only from main. A manual run does not read that variable.
+# Does not commit .ci markers. See docs/CI-DB-SQL-BACKUP.md.
+# Secrets: SUPABASE_DB_URL, SQL_BACKUP_AGE_RECIPIENT. Never print them.
+
+name: DB SQL backup
+
+on:
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Also upload this week's and this month's long-retention copies"
+        required: false
+        type: boolean
+        default: false
+  schedule:
+    - cron: '30 7 * * *'
+
+concurrency:
+  group: db-sql-backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'workflow_dispatch' || vars.SQL_BACKUP_SCHEDULE == 'enabled')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install PostgreSQL client and age
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client age
+
+      - name: Export encrypted backup
+        id: export
+        run: python scripts/sql_backup.py --out-dir sql-backup-out
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          SQL_BACKUP_AGE_RECIPIENT: ${{ secrets.SQL_BACKUP_AGE_RECIPIENT }}
+
+      - name: Upload encrypted backup
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sql-backup-${{ steps.export.outputs.stamp }}
+          path: sql-backup-out/*.tar.gz.age
+          retention-days: 7
+          if-no-files-found: error
+
+      - name: Decide weekly and monthly copies
+        id: tiers
+        if: success()
+        env:
+          FORCE: ${{ github.event_name == 'workflow_dispatch' && inputs.force && 'true' || 'false' }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api --paginate "/repos/${GITHUB_REPOSITORY}/actions/artifacts?per_page=100" --jq '.artifacts[] | select(.expired != true) | .name' > artifact-names.txt
+          PYTHONPATH=scripts python - <<'PY'
+          import os
+          from datetime import datetime, timezone
+          from pathlib import Path
+          import sql_backup
+          names = {line.strip() for line in Path("artifact-names.txt").read_text(encoding="utf-8").splitlines() if line.strip()}
+          plan = sql_backup.retention_tiers(names, datetime.now(timezone.utc), os.environ.get("FORCE") == "true")
+          weekly = next((name for name, _days in plan if name.startswith("sql-backup-weekly-")), "")
+          monthly = next((name for name, _days in plan if name.startswith("sql-backup-monthly-")), "")
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8", newline="\n") as handle:
+              handle.write(f"upload_weekly={'true' if weekly else 'false'}\n")
+              handle.write(f"weekly_name={weekly}\n")
+              handle.write(f"upload_monthly={'true' if monthly else 'false'}\n")
+              handle.write(f"monthly_name={monthly}\n")
+          PY
+
+      - name: Upload weekly backup
+        if: steps.tiers.outputs.upload_weekly == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.tiers.outputs.weekly_name }}
+          path: sql-backup-out/*.tar.gz.age
+          retention-days: 90
+          if-no-files-found: error
+
+      - name: Upload monthly backup
+        if: steps.tiers.outputs.upload_monthly == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.tiers.outputs.monthly_name }}
+          path: sql-backup-out/*.tar.gz.age
+          retention-days: 90
+          if-no-files-found: error
