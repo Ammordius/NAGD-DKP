@@ -116,7 +116,7 @@ Every successful run uploads `sql-backup-<utc>.tar.gz.age` with **retention 7 da
 
 Using the existing ~5 MB upper bound from the CSV size note, and not a new measurement of production, 7 daily copies plus about 13 weekly and 3 monthly copies are on the order of 100 MB. The SQL allowlist is a subset of the CSV export, so the encrypted file should be smaller. Do not run `estimate_backup_size.py` against production just to refresh that number; it calls the live REST API.
 
-Latest discovery selects only `sql-backup-<utc>`. Weekly and monthly names are restored by pasting their artifact id. The file inside the zip stays `sql-backup-<utc>.tar.gz.age`.
+Latest discovery in **DB SQL backup fetch** selects only `sql-backup-<utc>`. **DB SQL restore** can select the latest snapshot, the previous distinct snapshot, or a weekly or monthly copy without an artifact id. A numeric artifact id remains optional. The file inside the zip stays `sql-backup-<utc>.tar.gz.age`.
 
 After decrypting with the offline private key:
 

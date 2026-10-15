@@ -448,7 +448,81 @@ def load_bundle_dir(directory: Path, source: str) -> tuple[str, dict]:
     return verify_bundle_bytes(files, source=source, schema_path=repo_root() / sql_backup.CANONICAL_SCHEMA)
 
 
-def load_from_fetch(source: str, current_repository: str, artifact_id: str) -> tuple[str, dict]:
+def pin_from_summary(summary: str) -> dict[str, str]:
+    fields: dict[str, str] = {}
+    for line in summary.splitlines():
+        if line.startswith(" ") or ":" not in line:
+            continue
+        key, value = line.split(":", 1)
+        fields[key.strip()] = value.strip()
+    required = ("artifact_id", "artifact_name", "workflow_run_id", "artifact_sha256", "source_repository")
+    for key in required:
+        if not fields.get(key):
+            raise RestoreError(f"Verified artifact is missing {key}.")
+    if sql_backup_fetch._DIGITS.fullmatch(fields["artifact_id"]) is None:
+        raise RestoreError("Verified artifact id is invalid.")
+    if sql_backup_fetch._DIGITS.fullmatch(fields["workflow_run_id"]) is None:
+        raise RestoreError("Verified artifact is missing its workflow run.")
+    if not re.fullmatch(r"[0-9a-f]{64}", fields["artifact_sha256"]):
+        raise RestoreError("Verified artifact digest is invalid.")
+    return {key: fields[key] for key in required}
+
+
+def require_execution_pin(name: str, run_id: str, digest: str) -> None:
+    if not name.strip() or not run_id.strip() or not digest.strip():
+        raise RestoreError(
+            "Restore requires the pinned artifact name, workflow run, and digest from preflight."
+        )
+    if not re.fullmatch(r"[0-9a-f]{64}", digest.strip().lower()):
+        raise RestoreError("Pinned artifact digest is invalid.")
+
+
+def assert_pinned_artifact(
+    pin: dict[str, str],
+    *,
+    source: str,
+    artifact_id: str,
+    expect_name: str,
+    expect_run: str,
+    expect_sha256: str,
+    require_digest: bool,
+) -> None:
+    if require_digest:
+        require_execution_pin(expect_name, expect_run, expect_sha256)
+    if pin["artifact_id"] != artifact_id:
+        raise RestoreError(
+            "Fetched artifact id does not match the pinned checkpoint. Refusing to restore a different backup."
+        )
+    if pin["source_repository"] != source:
+        raise RestoreError(
+            "Fetched artifact repository does not match the pinned checkpoint. "
+            "Refusing to restore a different backup."
+        )
+    if expect_name and pin["artifact_name"] != expect_name:
+        raise RestoreError(
+            "Fetched artifact name does not match the pinned checkpoint. Refusing to restore a different backup."
+        )
+    if expect_run and pin["workflow_run_id"] != expect_run:
+        raise RestoreError(
+            "Fetched workflow run does not match the pinned checkpoint. Refusing to restore a different backup."
+        )
+    if expect_sha256 and pin["artifact_sha256"] != expect_sha256.strip().lower():
+        raise RestoreError(
+            "Fetched artifact digest does not match the pinned checkpoint. Refusing to restore a different backup."
+        )
+
+
+def pinned_snapshot_line(manifest: dict, *, artifact_id: str, artifact_name: str) -> str:
+    created = manifest.get("created_at", "")
+    name = artifact_name or "bundle"
+    ident = artifact_id or "bundle"
+    return (
+        f"pinned_snapshot: {created} artifact {name} id {ident} "
+        "replaces guild DKP data. Destination auth, profiles, claims, and the officer audit log are kept."
+    )
+
+
+def load_from_fetch(source: str, current_repository: str, artifact_id: str) -> tuple[str, dict, dict[str, str]]:
     if not sql_backup_fetch._DIGITS.fullmatch(artifact_id or ""):
         raise RestoreError("Select an exact artifact id.")
     identity = sql_backup_fetch._identity_from_env()
@@ -471,6 +545,7 @@ def load_from_fetch(source: str, current_repository: str, artifact_id: str) -> t
             raise RestoreError(str(exc)) from None
         if "inner_verified: true" not in summary:
             raise RestoreError("Artifact was not verified.")
+        pin = pin_from_summary(summary)
         match = re.search(r"(?m)^workflow_run_id: ([0-9]+)$", summary)
         if match is None:
             raise RestoreError("Verified artifact is missing its workflow run.")
@@ -495,7 +570,11 @@ def load_from_fetch(source: str, current_repository: str, artifact_id: str) -> t
                 _extract_tar(archive, extract)
         except (tarfile.TarError, OSError) as exc:
             raise RestoreError("Archive is malformed.") from exc
-        return load_bundle_dir(extract, sql_backup_fetch.require_source(source, current_repository))
+        sql_text, manifest = load_bundle_dir(
+            extract,
+            sql_backup_fetch.require_source(source, current_repository),
+        )
+        return sql_text, manifest, pin
     finally:
         shutil.rmtree(work, ignore_errors=True)
 
@@ -978,6 +1057,8 @@ def build_report(
     present_claims: list[str],
     totals: dict[str, dict[str, str]],
     destination_name: str,
+    artifact_name: str = "",
+    artifact_sha256: str = "",
 ) -> str:
     lines = [
         f"mode: {mode}",
@@ -985,6 +1066,14 @@ def build_report(
         f"source_repository: {source}",
         f"workflow_run_id: {manifest['workflow_run_id']}",
         f"artifact_id: {artifact_id or 'bundle'}",
+        f"artifact_name: {artifact_name or 'bundle'}",
+        f"artifact_sha256: {artifact_sha256 or 'bundle'}",
+        f"snapshot_created_at: {manifest['created_at']}",
+        pinned_snapshot_line(
+            manifest,
+            artifact_id=artifact_id,
+            artifact_name=artifact_name,
+        ),
         f"canonical_schema_sha256: {manifest['canonical_schema_sha256']}",
         "source_schema_fingerprint: match",
         f"live_schema_status: {sql_backup.live_schema_record(manifest)['status']}",
@@ -1420,7 +1509,7 @@ END $$;
 """
 
 
-def write_report(report: str, path: Path | None) -> None:
+def write_report(report: str, path: Path | None, *, heading: str) -> None:
     sys.stdout.write(report)
     if path is not None:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -1428,7 +1517,31 @@ def write_report(report: str, path: Path | None) -> None:
     step_summary = os.environ.get("GITHUB_STEP_SUMMARY", "").strip()
     if step_summary:
         with open(step_summary, "a", encoding="utf-8", newline="\n") as handle:
-            handle.write("## SQL restore preflight\n\n```\n" + report + "```\n")
+            handle.write(f"## {heading}\n\n```\n" + report + "```\n")
+
+
+def announce_pinned_restore(line: str) -> None:
+    print(line, flush=True)
+    step_summary = os.environ.get("GITHUB_STEP_SUMMARY", "").strip()
+    if step_summary:
+        with open(step_summary, "a", encoding="utf-8", newline="\n") as handle:
+            handle.write("## Pinned SQL restore snapshot\n\n" + line + "\n\n")
+
+
+def write_pin_outputs(pin: dict[str, str], manifest: dict) -> None:
+    try:
+        sql_backup_fetch.write_github_output(
+            {
+                "artifact_id": pin["artifact_id"],
+                "source_repository": pin["source_repository"],
+                "artifact_name": pin["artifact_name"],
+                "workflow_run_id": pin["workflow_run_id"],
+                "artifact_sha256": pin["artifact_sha256"],
+                "snapshot_created_at": str(manifest["created_at"]),
+            }
+        )
+    except sql_backup_fetch.FetchError as exc:
+        raise RestoreError(str(exc)) from None
 
 
 def assert_execute_request(destination_name: str, confirm: str) -> None:
@@ -1445,6 +1558,9 @@ def run_restore(argv: list[str] | None = None) -> int:
     parser.add_argument("--source", required=True)
     parser.add_argument("--current-repository", default=os.environ.get("GITHUB_REPOSITORY", ""))
     parser.add_argument("--artifact-id", default="")
+    parser.add_argument("--expect-artifact-name", default="")
+    parser.add_argument("--expect-workflow-run-id", default="")
+    parser.add_argument("--expect-sha256", default="")
     parser.add_argument("--destination-name", required=True)
     parser.add_argument("--confirm", default="")
     parser.add_argument("--execute", action="store_true")
@@ -1461,6 +1577,12 @@ def run_restore(argv: list[str] | None = None) -> int:
         raise RestoreError("Pass exactly one of --bundle-dir or --artifact-id.")
     if args.execute:
         assert_execute_request(args.destination_name, args.confirm)
+        if args.artifact_id.strip():
+            require_execution_pin(
+                args.expect_artifact_name,
+                args.expect_workflow_run_id,
+                args.expect_sha256,
+            )
     else:
         expected_name, _, _ = destination_settings()
         if args.destination_name != expected_name:
@@ -1476,13 +1598,27 @@ def run_restore(argv: list[str] | None = None) -> int:
             raise RestoreError(str(exc)) from None
         sql_text, manifest = load_bundle_dir(args.bundle_dir, source)
         artifact_id = ""
+        artifact_name = ""
+        artifact_sha256 = ""
+        pin = None
     else:
         try:
             source = sql_backup_fetch.require_source(args.source, args.current_repository)
         except sql_backup_fetch.FetchError as exc:
             raise RestoreError(str(exc)) from None
-        sql_text, manifest = load_from_fetch(source, args.current_repository, args.artifact_id.strip())
         artifact_id = args.artifact_id.strip()
+        sql_text, manifest, pin = load_from_fetch(source, args.current_repository, artifact_id)
+        assert_pinned_artifact(
+            pin,
+            source=source,
+            artifact_id=artifact_id,
+            expect_name=args.expect_artifact_name.strip(),
+            expect_run=args.expect_workflow_run_id.strip(),
+            expect_sha256=args.expect_sha256.strip().lower(),
+            require_digest=args.execute,
+        )
+        artifact_name = pin["artifact_name"]
+        artifact_sha256 = pin["artifact_sha256"]
 
     blocks = parsed_blocks(sql_text)
     require_parsed_counts(blocks, manifest)
@@ -1503,18 +1639,25 @@ def run_restore(argv: list[str] | None = None) -> int:
         present_claims=present,
         totals=totals,
         destination_name=args.destination_name,
+        artifact_name=artifact_name,
+        artifact_sha256=artifact_sha256,
     )
     if not args.execute:
         report = report.replace("writes: committed", "writes: none")
-        write_report(report, args.report)
+        write_report(report, args.report, heading="SQL restore preflight")
+        if pin is not None:
+            write_pin_outputs(pin, manifest)
         return 0
 
+    announce_pinned_restore(
+        pinned_snapshot_line(manifest, artifact_id=artifact_id, artifact_name=artifact_name)
+    )
     script = build_restore_sql(sql_text, blocks, totals, fail_before_commit=args.fail_before_commit)
     run_psql(conn, script, read_only=False)
     report = report.replace("writes: none", "writes: committed")
     if "writes: committed" not in report:
         report = report.replace("writes: none", "writes: committed")
-    write_report(report, args.report)
+    write_report(report, args.report, heading="SQL restore")
     return 0
 
 
