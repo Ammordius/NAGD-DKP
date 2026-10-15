@@ -514,6 +514,20 @@ def restore_env(port: int) -> dict[str, str]:
     return env
 
 
+def test_dry_run_can_run_from_a_branch() -> None:
+    with patch.dict(
+        os.environ,
+        {
+            "GITHUB_ACTIONS": "true",
+            "GITHUB_EVENT_NAME": "workflow_dispatch",
+            "GITHUB_REF": "refs/heads/feature/sql-restore-repair",
+        },
+        clear=False,
+    ):
+        sql_restore.assert_actions_context(execute=False)
+        assert_refused("must run from main", lambda: sql_restore.assert_actions_context(execute=True))
+
+
 def test_cli_refuses_unsafe_requests() -> None:
     env = restore_env(6543)
     completed = run_restore(env, ["--bundle-dir", "missing", "--source", "example/dkp", "--destination-name", "disposable-destination"])
@@ -1448,6 +1462,7 @@ def test_empty_copy_postgres() -> None:
 def main() -> None:
     test_destination_authorization()
     test_policy_and_totals()
+    test_dry_run_can_run_from_a_branch()
     test_cli_refuses_unsafe_requests()
     test_empty_copy_serialization()
     test_empty_copy_postgres()

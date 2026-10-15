@@ -216,12 +216,12 @@ def assert_destination_identity(
         raise RestoreError("Connected project reference does not match SQL_RESTORE_PROJECT_REF.")
 
 
-def assert_actions_context() -> None:
+def assert_actions_context(*, execute: bool) -> None:
     if os.environ.get("GITHUB_ACTIONS") != "true":
         return
     if os.environ.get("GITHUB_EVENT_NAME") != "workflow_dispatch":
         raise RestoreError("Restore workflow must be started manually.")
-    if os.environ.get("GITHUB_REF") != "refs/heads/main":
+    if execute and os.environ.get("GITHUB_REF") != "refs/heads/main":
         raise RestoreError("Restore workflow must run from main.")
 
 
@@ -1826,7 +1826,7 @@ def run_restore(argv: list[str] | None = None) -> int:
         print("sql-restore protection: required reviewers and main-only branch policy")
         return 0
 
-    assert_actions_context()
+    assert_actions_context(execute=args.execute)
     if os.environ.get("GITHUB_ACTIONS") == "true" and args.bundle_dir is not None:
         raise RestoreError("GitHub Actions must select an artifact id.")
     if args.fail_before_commit and os.environ.get("DKP_SQL_RESTORE_TEST_FAIL") != "1":
