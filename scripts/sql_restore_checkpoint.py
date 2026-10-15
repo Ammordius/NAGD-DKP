@@ -34,9 +34,18 @@ def main(argv: list[str] | None = None) -> int:
 
     token = ""
     try:
-        token = sql_backup_fetch.token_for_source(args.source, args.current_repository)
-        repo = sql_backup_fetch.require_source(args.source, args.current_repository)
-        client = sql_backup_fetch.UrllibGitHub(token)
+        _secret_name, token, client, identity = sql_backup_fetch.open_source(
+            args.source, args.current_repository
+        )
+        selected_name = sql_backup_fetch.normalize_repo(args.source)
+        repo = identity.full_name
+        identity_lines = "\n".join(
+            [
+                f"selected_repository: {selected_name}",
+                f"canonical_repository: {repo}",
+                f"repository_id: {identity.node_id}",
+            ]
+        )
         now = datetime.now(timezone.utc)
         snapshots = sql_backup_fetch.discover_snapshots(client, repo, now=now)
         try:
@@ -50,7 +59,7 @@ def main(argv: list[str] | None = None) -> int:
                 now=now,
             )
         except sql_backup_fetch.FetchError as exc:
-            inventory = sql_backup_fetch.format_checkpoint_inventory(
+            inventory = identity_lines + "\n" + sql_backup_fetch.format_checkpoint_inventory(
                 snapshots,
                 None,
                 checkpoint=args.checkpoint,
@@ -59,7 +68,7 @@ def main(argv: list[str] | None = None) -> int:
             write_step_summary("SQL restore checkpoints", inventory)
             print(sql_backup_fetch._redact(str(exc), [token]), file=sys.stderr)
             return 1
-        inventory = sql_backup_fetch.format_checkpoint_inventory(
+        inventory = identity_lines + "\n" + sql_backup_fetch.format_checkpoint_inventory(
             snapshots,
             selection,
             checkpoint=args.checkpoint,

@@ -31,7 +31,12 @@ ROOT = Path(__file__).resolve().parents[1]
 REQUIRED = os.environ.get("DKP_PG_TEST") == "1"
 SOURCE = "Ammordius/NAGD-DKP"
 OTHER = "RimidalEQ/RimidalEQ-NAGD-DKP-backup"
+STAGING = "RimidalEQ/RimidalEQ-NAGD-DKP-staging"
 CURRENT = "example/dkp"
+ROOT_NODE = "R_kgDORQRiNA"
+ROOT_NUMERIC = 424242
+OTHER_NODE = "R_kgDORnePRA"
+OTHER_NUMERIC = 525252
 TOKEN = "github_pat_test_token_value_not_real"
 STAMP = "sql-backup-20261014T150405Z"
 AGE_NAME = STAMP + ".tar.gz.age"
@@ -43,6 +48,47 @@ ROW_MARKER = b"ROWMARKER_SHOULD_NOT_PRINT"
 
 def fail(message: str) -> None:
     raise SystemExit(message)
+
+
+def repository_document(full_name: str) -> dict | None:
+    if full_name == SOURCE:
+        return {"id": ROOT_NUMERIC, "node_id": ROOT_NODE, "full_name": SOURCE, "fork": False}
+    if full_name in (OTHER, STAGING):
+        canonical = STAGING if full_name == STAGING else OTHER
+        return {
+            "id": OTHER_NUMERIC,
+            "node_id": OTHER_NODE,
+            "full_name": canonical,
+            "fork": True,
+            "parent": {
+                "id": ROOT_NUMERIC,
+                "node_id": ROOT_NODE,
+                "full_name": SOURCE,
+                "fork": False,
+            },
+        }
+    if full_name in (CURRENT, "evil/not-a-fork", "evil/fork"):
+        return {"id": 999001, "node_id": "R_outside", "full_name": full_name, "fork": False}
+    return None
+
+
+def default_github_payload(path: str) -> dict | None:
+    parts = [part for part in path.strip("/").split("/") if part]
+    if len(parts) < 3 or parts[0] != "repos":
+        return None
+    full_name = parts[1] + "/" + parts[2]
+    document = repository_document(full_name)
+    if len(parts) == 3:
+        return document
+    if document is None:
+        return None
+    if len(parts) == 4 and parts[3] == "forks":
+        return {"forks": []}
+    if parts[3:] == ["actions", "workflows", "db-sql-backup.yml"]:
+        if document["node_id"] in (ROOT_NODE, OTHER_NODE):
+            return {"path": ".github/workflows/db-sql-backup.yml", "id": 1}
+        raise sql_backup_fetch.FetchError(sql_backup_fetch.github_status_message(404))
+    return None
 
 
 def check(condition: bool, message: str) -> None:
@@ -65,6 +111,9 @@ class FakeGitHub:
         page = int(parse_qs(parsed.query).get("page", ["1"])[0])
         key = (parsed.path, page)
         if key not in self.json_routes:
+            default = default_github_payload(parsed.path)
+            if default is not None:
+                return default
             fail(f"unexpected GitHub path {path}")
         result = self.json_routes[key]
         if isinstance(result, Exception):
@@ -135,8 +184,13 @@ def zip_bytes(name: str, payload: bytes) -> bytes:
     return buffer.getvalue()
 
 
-def bind_artifact(client: FakeGitHub, record: dict, run: dict, payload: bytes | None) -> None:
-    repo = SOURCE
+def bind_artifact(
+    client: FakeGitHub,
+    record: dict,
+    run: dict,
+    payload: bytes | None,
+    repo: str = SOURCE,
+) -> None:
     client.add_json(f"/repos/{repo}/actions/artifacts/{record['id']}", record)
     client.add_json(f"/repos/{repo}/actions/runs/{run['id']}", run)
     if payload is not None:
@@ -175,10 +229,19 @@ def expect_error(substring: str, client, **kwargs) -> str:
 
 
 def test_unapproved_repository() -> None:
-    sql_backup_fetch.require_source(SOURCE, CURRENT)
-    sql_backup_fetch.require_source(OTHER, CURRENT)
-    sql_backup_fetch.require_source(CURRENT, CURRENT)
-    expect_error("not approved", Boom(), source="evil/not-a-fork")
+    client = FakeGitHub()
+    root = sql_backup_fetch.authorize_source(client, SOURCE, CURRENT)
+    check(root.node_id == ROOT_NODE, root.node_id)
+    fork = sql_backup_fetch.authorize_source(client, OTHER, CURRENT)
+    check(fork.node_id == OTHER_NODE, fork.node_id)
+    try:
+        sql_backup_fetch.authorize_source(client, "evil/not-a-fork", CURRENT)
+        fail("a repository outside the fork network was authorized")
+    except sql_backup_fetch.FetchError as exc:
+        message = str(exc)
+        check("not a fork" in message, message)
+        check("evil/not-a-fork" in message, message)
+        check(TOKEN not in message, "token leaked in a network error")
 
 
 def test_api_forbidden() -> None:
@@ -813,50 +876,36 @@ def test_http_downgrade_is_not_requested() -> None:
         _stop_servers(api_server, evil)
 
 
+def _token_env_names() -> tuple[str, ...]:
+    return ("GH_TOKEN", "GITHUB_TOKEN", *sql_backup_fetch.FORK_READ_TOKEN_ENVS)
+
+
 def test_token_secret_map() -> None:
-    check(
-        sql_backup_fetch.token_secret_name(OTHER, CURRENT) == "BACKUP_ARTIFACT_READ_TOKEN_STAGING",
-        "staging repository did not select its secret",
-    )
-    check(
-        sql_backup_fetch.token_secret_name(CURRENT, CURRENT) == "GITHUB_TOKEN",
-        "current repository did not select GITHUB_TOKEN",
-    )
+    saved = {key: os.environ.get(key) for key in _token_env_names()}
     try:
-        sql_backup_fetch.token_secret_name(SOURCE, CURRENT)
-        fail("unmapped approved repository was given a token")
-    except sql_backup_fetch.FetchError as exc:
-        check("mapped" in str(exc), str(exc))
-        check(TOKEN not in str(exc), "token leaked in an unmapped-source error")
-    saved = {
-        key: os.environ.get(key)
-        for key in ("BACKUP_ARTIFACT_TOKEN_SECRET", "GH_TOKEN", "BACKUP_ARTIFACT_READ_TOKEN_STAGING")
-    }
-    try:
-        os.environ["BACKUP_ARTIFACT_TOKEN_SECRET"] = "BACKUP_ARTIFACT_READ_TOKEN"
+        for key in _token_env_names():
+            os.environ.pop(key, None)
+        check(sql_backup_fetch.configured_token_slots() == [], "an empty environment still had a token slot")
         os.environ["GH_TOKEN"] = TOKEN
-        try:
-            sql_backup_fetch.token_for_source(OTHER, CURRENT)
-            fail("wrong secret name was accepted")
-        except sql_backup_fetch.FetchError as exc:
-            check("does not match" in str(exc), str(exc))
-            check(TOKEN not in str(exc), "token leaked in a secret-name error")
-        os.environ["BACKUP_ARTIFACT_TOKEN_SECRET"] = "BACKUP_ARTIFACT_READ_TOKEN_STAGING"
-        check(sql_backup_fetch.token_for_source(OTHER, CURRENT) == TOKEN, "mapped source did not read GH_TOKEN")
-        os.environ.pop("GH_TOKEN", None)
-        os.environ.pop("BACKUP_ARTIFACT_TOKEN_SECRET", None)
-        os.environ["BACKUP_ARTIFACT_READ_TOKEN_STAGING"] = TOKEN
-        check(sql_backup_fetch.token_for_source(OTHER, CURRENT) == TOKEN, "mapped source did not read its named secret")
+        os.environ["BACKUP_FORK_READ_TOKEN"] = "github_pat_other_slot_value_not_real"
+        names = [name for name, _value in sql_backup_fetch.configured_token_slots()]
+        check(names == ["GITHUB_TOKEN", "BACKUP_FORK_READ_TOKEN"], str(names))
+        check(TOKEN not in " ".join(names), "token value leaked into a secret name")
     finally:
         for key, previous in saved.items():
             if previous is None:
                 os.environ.pop(key, None)
             else:
                 os.environ[key] = previous
-    for relative in (".github/workflows/db-sql-backup-fetch.yml", ".github/workflows/db-restore-sql.yml"):
+    for relative in (
+        ".github/workflows/db-sql-backup-fetch.yml",
+        ".github/workflows/db-restore-sql.yml",
+        ".github/workflows/db-sql-backup-discover.yml",
+    ):
         text = (ROOT / relative).read_text(encoding="utf-8")
         check("secrets.BACKUP_ARTIFACT_READ_TOKEN_STAGING" in text, relative)
-        check("secrets.BACKUP_ARTIFACT_READ_TOKEN}" not in text, relative + " still requires the unmapped secret")
+        check("RimidalEQ/" not in text, relative + " still names a fork")
+        check("BACKUP_FORK_READ_TOKEN_4" in text, relative)
 
 
 def test_official_artifact_list_request() -> None:
@@ -941,6 +990,130 @@ def test_live_optional() -> None:
     check(payload.get("id") == int(artifact_id), "live artifact id did not match")
 
 
+def test_repository_identity_provenance() -> None:
+    client = FakeGitHub()
+    origin = sql_backup_fetch.authorize_source(client, OTHER, CURRENT)
+    renamed = {"source_repository": STAGING, "workflow_run_id": str(RUN_ID)}
+    sql_backup_fetch.assert_manifest_origin(
+        renamed,
+        origin=origin,
+        selected_name=OTHER,
+        client=client,
+        run_id=str(RUN_ID),
+    )
+    same = {"source_repository": OTHER, "source_repository_id": str(OTHER_NUMERIC)}
+    sql_backup_fetch.assert_manifest_origin(
+        same,
+        origin=origin,
+        selected_name=OTHER,
+        client=client,
+        run_id=str(RUN_ID),
+    )
+    copied = {"source_repository": SOURCE}
+    try:
+        sql_backup_fetch.assert_manifest_origin(
+            copied,
+            origin=origin,
+            selected_name=OTHER,
+            client=client,
+            run_id=str(RUN_ID),
+        )
+        fail("a copied archive was accepted")
+    except sql_backup_fetch.FetchError as exc:
+        message = str(exc)
+        check("Generate a new backup" in message, message)
+        check(f"selected_repository: {OTHER}" in message, message)
+        check(f"manifest_source_repository: {SOURCE}" in message, message)
+        check(ROOT_NODE in message and OTHER_NODE in message, message)
+        check("was not rewritten" in message, message)
+        check(ROW_MARKER.decode("ascii") not in message, "SQL row text was printed")
+        check("http" not in message.lower(), message)
+    mismatched_id = {"source_repository": OTHER, "source_repository_id": "1"}
+    try:
+        sql_backup_fetch.assert_manifest_origin(
+            mismatched_id,
+            origin=origin,
+            selected_name=OTHER,
+            client=client,
+            run_id=str(RUN_ID),
+        )
+        fail("a conflicting repository id was accepted")
+    except sql_backup_fetch.FetchError as exc:
+        check("Generate a new backup" in str(exc), str(exc))
+        check("embedded_repository_id: 1" in str(exc), str(exc))
+
+
+def test_fork_discovery_reports_unreadable_sources() -> None:
+    client = FakeGitHub()
+    nested_name = "ExampleNest/NAGD-DKP"
+    nested = {
+        "id": 626262,
+        "node_id": "R_nestedfork",
+        "full_name": nested_name,
+        "fork": True,
+        "parent": {
+            "id": OTHER_NUMERIC,
+            "node_id": OTHER_NODE,
+            "full_name": OTHER,
+            "fork": True,
+        },
+    }
+    client.add_json(f"/repos/{SOURCE}/forks", {"forks": [repository_document(OTHER)]})
+    client.add_json(f"/repos/{OTHER}/forks", {"forks": [nested]})
+    client.add_json(f"/repos/{nested_name}", nested)
+    client.add_json(f"/repos/{nested_name}/forks", {"forks": []})
+    client.add_json(
+        f"/repos/{nested_name}/actions/workflows/db-sql-backup.yml",
+        {"path": ".github/workflows/db-sql-backup.yml", "id": 9},
+    )
+    client.add_json(f"/repos/{SOURCE}/actions/artifacts", {"artifacts": []})
+    client.add_json(f"/repos/{OTHER}/actions/artifacts", {"artifacts": []})
+    client.add_json(
+        f"/repos/{nested_name}/actions/artifacts",
+        sql_backup_fetch.FetchError(sql_backup_fetch.github_status_message(403)),
+    )
+    client.add_json(f"/repos/{SOURCE}/actions/workflows/db-sql-backup.yml/runs", {"workflow_runs": []})
+    client.add_json(f"/repos/{OTHER}/actions/workflows/db-sql-backup.yml/runs", {"workflow_runs": []})
+    summary = sql_backup_fetch.discover_sources([("GITHUB_TOKEN", client)])
+    check(f"repository: {SOURCE}" in summary, summary)
+    check(f"repository: {OTHER}" in summary, summary)
+    check(f"repository: {nested_name}" in summary, summary)
+    check("eligible: yes" in summary, summary)
+    check("eligible: no" in summary, summary)
+    check("403" in summary, summary)
+    check("No configured token can read Actions artifacts" in summary, summary)
+    check("Private forks" in summary, summary)
+    check(TOKEN not in summary, "token leaked in discovery")
+    try:
+        sql_backup_fetch.authorize_source(client, CURRENT, SOURCE)
+        fail("an arbitrary repository was treated as a fork")
+    except sql_backup_fetch.FetchError as exc:
+        check("not a fork" in str(exc), str(exc))
+
+
+def test_renamed_repository_backup_verifies() -> None:
+    if not age_available():
+        if REQUIRED:
+            fail("age is required for the rename provenance test")
+        print("skip rename provenance: age is not installed")
+        return
+    with tempfile.TemporaryDirectory() as tmp:
+        data = b"-- fixture\n" + ROW_MARKER + b"\n"
+        manifest = manifest_for(data, source_repository=STAGING)
+        identity, zipped = encrypted_zip(Path(tmp), manifest, data)
+        client = FakeGitHub()
+        renamed = repository_document(STAGING)
+        client.add_json(f"/repos/{OTHER}", renamed)
+        record = artifact_record(size=len(zipped))
+        bind_artifact(client, record, success_run(), zipped, repo=STAGING)
+        summary = run_fetch(client, source=OTHER, artifact_id=str(ARTIFACT_ID), identity=identity)
+        check("inner_verified: true" in summary, summary)
+        check(f"canonical_repository: {STAGING}" in summary, summary)
+        check(f"selected_repository: {OTHER}" in summary, summary)
+        check(f"manifest_source_repository: {STAGING}" in summary, summary)
+        check(ROW_MARKER.decode("ascii") not in summary, "SQL row text was printed")
+
+
 def main() -> None:
     test_unapproved_repository()
     test_api_forbidden()
@@ -958,12 +1131,15 @@ def main() -> None:
     test_redirect_loop_is_bounded()
     test_http_downgrade_is_not_requested()
     test_token_secret_map()
+    test_repository_identity_provenance()
+    test_fork_discovery_reports_unreadable_sources()
     test_official_artifact_list_request()
     test_corrupt_checksum()
     test_schema_mismatch()
     test_wrong_format_version()
     test_executable_member()
     test_valid_approved_fork()
+    test_renamed_repository_backup_verifies()
     test_live_optional()
     print("SQL backup fetch tests passed")
 
