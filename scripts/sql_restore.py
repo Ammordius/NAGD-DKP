@@ -4,7 +4,8 @@
 Dry-run is the default and performs no writes. An actual restore loads the
 allowlisted COPY blocks into temporary tables, then replaces guild DKP rows
 in one psql transaction. Destination auth users, profiles, and the officer
-audit log stay in place. Production restore is disabled.
+audit log stay in place. A hosted destination is accepted when its configured
+name, host, database, and Supabase project reference match the connection.
 """
 
 from __future__ import annotations
@@ -26,14 +27,10 @@ from pathlib import Path
 import sql_backup
 import sql_backup_fetch
 
-PRODUCTION_RESTORE_ENABLED = False
 MAX_DATA_SQL_BYTES = 512 * 1024 * 1024
 MIN_POSTGRES_MAJOR = 15
 TRANSACTION_POOLER_PORT = 6543
-# Explicit non-production destinations: (name, host, database).
-# Empty until an officer commits a staging identity. A hostname string is not enough.
-# Production is never listed. PRODUCTION_RESTORE_ENABLED stays false.
-ALLOWED_RESTORE_DESTINATIONS: tuple[tuple[str, str, str], ...] = ()
+SESSION_PORT = 5432
 LOCAL_DESTINATION_HOSTS = frozenset({"localhost", "127.0.0.1"})
 
 REQUIRED_FUNCTIONS = sql_backup.SOURCE_RESTORE_FUNCTIONS
@@ -127,7 +124,9 @@ CATALOG_TABLES = tuple(
 )
 
 _IDENT = re.compile(r"[A-Za-z_][A-Za-z0-9_]*$")
-_PRODUCTION_NAME = re.compile(r"(?i)(^|[^a-z0-9])(prod|production)([^a-z0-9]|$)")
+_POOLER_HOST = re.compile(r"^[a-z0-9-]+\.pooler\.supabase\.com$")
+_DIRECT_HOST = re.compile(r"^db\.([a-z0-9]+)\.supabase\.co$")
+_POOLER_USER = re.compile(r"^postgres\.([a-z0-9]+)$")
 _CREATE_TABLE = re.compile(r"(?im)^[ \t]*CREATE[ \t]+TABLE\b")
 _VERSION_MAJOR = re.compile(r"(\d+)")
 
@@ -159,35 +158,62 @@ def load_denylist(path: Path | None = None) -> set[str]:
     return hosts
 
 
-def production_name(value: str) -> bool:
-    return _PRODUCTION_NAME.search(value or "") is not None
+def assert_host_not_denied(host: str, denied_hosts: set[str]) -> None:
+    # SQL_RESTORE_ALLOW_PRODUCTION does not grant access and does not bypass this list.
+    if host.lower() in denied_hosts:
+        raise RestoreError("Destination host is refused.")
 
 
-def assert_production_locked(destination_name: str, host: str, denied_hosts: set[str]) -> None:
-    # SQL_RESTORE_ALLOW_PRODUCTION cannot enable production while the constant is false.
-    if production_name(destination_name) or host.lower() in denied_hosts:
-        raise RestoreError("Production restore is disabled.")
-    if not PRODUCTION_RESTORE_ENABLED and production_name(destination_name):
-        raise RestoreError("Production restore is disabled.")
+def proven_project_ref(host: str, user: str) -> str:
+    """Return the Supabase project reference this connection proves."""
+    host_name = host.lower()
+    user_name = user.lower()
+    if _POOLER_HOST.fullmatch(host_name):
+        match = _POOLER_USER.fullmatch(user_name)
+        if not match:
+            raise RestoreError("Session pooler username does not include a project reference.")
+        return match.group(1)
+    direct = _DIRECT_HOST.fullmatch(host_name)
+    if direct:
+        if user_name != "postgres":
+            raise RestoreError("Direct connection username does not match the Supabase project.")
+        return direct.group(1)
+    raise RestoreError("Destination identity is not an approved restore target.")
 
 
-def assert_destination_identity(name: str, host: str, database: str) -> None:
-    """Allow a destination only when its name, host, and database are an explicit identity."""
-    if (
-        production_name(name)
-        or production_name(host)
-        or production_name(database)
-    ):
-        raise RestoreError("Production restore is disabled.")
-    identity = (name, host.lower(), database)
-    allowed = {(item_name, item_host.lower(), item_database) for item_name, item_host, item_database in ALLOWED_RESTORE_DESTINATIONS}
-    if os.environ.get("GITHUB_ACTIONS") == "true":
-        if identity not in allowed:
+def assert_destination_identity(
+    name: str,
+    host: str,
+    database: str,
+    user: str = "postgres",
+    *,
+    port: int = SESSION_PORT,
+    sslmode: str = "",
+) -> None:
+    """Allow localhost for tests, or a hosted destination whose configuration matches."""
+    if host.lower() in LOCAL_DESTINATION_HOSTS:
+        if os.environ.get("GITHUB_ACTIONS") == "true":
             raise RestoreError("Destination identity is not an approved restore target.")
         return
-    if host.lower() in LOCAL_DESTINATION_HOSTS or identity in allowed:
-        return
-    raise RestoreError("Destination identity is not an approved restore target.")
+    if port == TRANSACTION_POOLER_PORT:
+        raise RestoreError("Refusing the transaction pooler. Use the session pooler on port 5432.")
+    if port != SESSION_PORT:
+        raise RestoreError("Hosted restore requires the session pooler on port 5432.")
+    if sslmode != "require":
+        raise RestoreError("Hosted restore requires sslmode=require.")
+    expected_name, expected_host, expected_db = destination_settings()
+    if name != expected_name:
+        raise RestoreError("Destination name does not match SQL_RESTORE_DESTINATION_NAME.")
+    if host.lower() != expected_host.lower():
+        raise RestoreError("Connected host does not match SQL_RESTORE_DESTINATION_HOST.")
+    if database != expected_db:
+        raise RestoreError("Connected database does not match SQL_RESTORE_DATABASE_NAME.")
+    expected_ref = os.environ.get("SQL_RESTORE_PROJECT_REF", "").strip().lower()
+    if not expected_ref:
+        raise RestoreError("Set SQL_RESTORE_PROJECT_REF.")
+    proven = proven_project_ref(host, user)
+    if proven != expected_ref:
+        raise RestoreError("Connected project reference does not match SQL_RESTORE_PROJECT_REF.")
 
 
 def assert_actions_context() -> None:
@@ -303,9 +329,14 @@ def connect_destination() -> dict[str, str | int]:
         raise RestoreError("Connected host does not match SQL_RESTORE_DESTINATION_HOST.")
     if str(conn["database"]) != expected_db:
         raise RestoreError("Connected database does not match SQL_RESTORE_DATABASE_NAME.")
-    if production_name(expected_name):
-        raise RestoreError("Production restore is disabled.")
-    assert_destination_identity(expected_name, str(conn["host"]), str(conn["database"]))
+    assert_destination_identity(
+        expected_name,
+        str(conn["host"]),
+        str(conn["database"]),
+        str(conn["user"]),
+        port=int(conn["port"]),
+        sslmode=str(conn["sslmode"]),
+    )
     return conn
 
 
@@ -1437,7 +1468,7 @@ def run_restore(argv: list[str] | None = None) -> int:
 
     denied = load_denylist()
     conn = connect_destination()
-    assert_production_locked(args.destination_name, str(conn["host"]), denied)
+    assert_host_not_denied(str(conn["host"]), denied)
     if args.bundle_dir is not None:
         try:
             source = sql_backup_fetch.normalize_repo(args.source)

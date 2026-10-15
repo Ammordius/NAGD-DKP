@@ -1,6 +1,6 @@
 # Manual restore of a portable SQL backup. Dry-run is the default.
 # Does not run on push, pull request, or artifact upload.
-# Production restore is disabled in scripts/sql_restore.py.
+# The sql-restore environment authorizes the destination.
 # See docs/CI-DB-SQL-RESTORE.md.
 
 name: DB SQL restore
@@ -75,6 +75,7 @@ jobs:
           SQL_RESTORE_DESTINATION_NAME: ${{ vars.SQL_RESTORE_DESTINATION_NAME }}
           SQL_RESTORE_DESTINATION_HOST: ${{ vars.SQL_RESTORE_DESTINATION_HOST }}
           SQL_RESTORE_DATABASE_NAME: ${{ vars.SQL_RESTORE_DATABASE_NAME }}
+          SQL_RESTORE_PROJECT_REF: ${{ vars.SQL_RESTORE_PROJECT_REF }}
           SOURCE_REPOSITORY: ${{ inputs.source_repository }}
           CURRENT_REPOSITORY: ${{ github.repository }}
           ARTIFACT_ID: ${{ inputs.artifact_id }}
@@ -146,7 +147,7 @@ jobs:
         with:
           name: sql-restore-destination-backup-${{ steps.destination_backup.outputs.stamp }}
           path: sql-restore-destination-backup/*.tar.gz.age
-          retention-days: 7
+          retention-days: 90
           if-no-files-found: error
 
       - name: Restore SQL backup
@@ -159,6 +160,7 @@ jobs:
           SQL_RESTORE_DESTINATION_NAME: ${{ vars.SQL_RESTORE_DESTINATION_NAME }}
           SQL_RESTORE_DESTINATION_HOST: ${{ vars.SQL_RESTORE_DESTINATION_HOST }}
           SQL_RESTORE_DATABASE_NAME: ${{ vars.SQL_RESTORE_DATABASE_NAME }}
+          SQL_RESTORE_PROJECT_REF: ${{ vars.SQL_RESTORE_PROJECT_REF }}
           SOURCE_REPOSITORY: ${{ inputs.source_repository }}
           CURRENT_REPOSITORY: ${{ github.repository }}
           ARTIFACT_ID: ${{ inputs.artifact_id }}
