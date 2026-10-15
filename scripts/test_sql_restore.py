@@ -19,6 +19,7 @@ import time
 import zipfile
 from datetime import date, datetime, timezone
 from pathlib import Path
+from unittest.mock import patch
 
 import sql_backup
 import sql_backup_fetch
@@ -281,29 +282,30 @@ def test_policy_and_totals() -> None:
             os.environ.pop("SQL_RESTORE_ALLOW_PRODUCTION", None)
         else:
             os.environ["SQL_RESTORE_ALLOW_PRODUCTION"] = previous
-    sql_restore.assert_destination_identity("disposable-destination", "127.0.0.1", "postgres")
-    try:
-        sql_restore.assert_destination_identity("staging", "db.example.supabase.co", "postgres")
-        fail("non-local host was allowed without an allowlist entry")
-    except sql_restore.RestoreError as exc:
-        check("approved" in str(exc), str(exc))
-    actions = os.environ.get("GITHUB_ACTIONS")
-    os.environ["GITHUB_ACTIONS"] = "true"
-    try:
+    with patch.dict(os.environ):
+        os.environ.pop("GITHUB_ACTIONS", None)
         sql_restore.assert_destination_identity("disposable-destination", "127.0.0.1", "postgres")
-        fail("GitHub Actions accepted an unlisted destination")
-    except sql_restore.RestoreError as exc:
-        check("approved" in str(exc), str(exc))
-    finally:
-        if actions is None:
-            os.environ.pop("GITHUB_ACTIONS", None)
-        else:
-            os.environ["GITHUB_ACTIONS"] = actions
-    try:
-        sql_restore.assert_destination_identity("production", "127.0.0.1", "postgres")
-        fail("production name was allowed on localhost")
-    except sql_restore.RestoreError as exc:
-        check("disabled" in str(exc), str(exc))
+        try:
+            sql_restore.assert_destination_identity("staging", "db.example.supabase.co", "postgres")
+            fail("non-local host was allowed without an allowlist entry")
+        except sql_restore.RestoreError as exc:
+            check("approved" in str(exc), str(exc))
+        try:
+            sql_restore.assert_destination_identity("production", "127.0.0.1", "postgres")
+            fail("production name was allowed on localhost")
+        except sql_restore.RestoreError as exc:
+            check("disabled" in str(exc), str(exc))
+    with patch.dict(os.environ, {"GITHUB_ACTIONS": "true"}):
+        try:
+            sql_restore.assert_destination_identity("disposable-destination", "127.0.0.1", "postgres")
+            fail("GitHub Actions accepted an unlisted destination")
+        except sql_restore.RestoreError as exc:
+            check("approved" in str(exc), str(exc))
+        try:
+            sql_restore.assert_destination_identity("production", "127.0.0.1", "postgres")
+            fail("production name was allowed on localhost")
+        except sql_restore.RestoreError as exc:
+            check("disabled" in str(exc), str(exc))
     incompatible = {
         "live_schema_status": "incompatible",
         "live_schema_fingerprint": "sha256:" + ("ab" * 32),
