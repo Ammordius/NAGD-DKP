@@ -1,0 +1,61 @@
+name: Setup PostgreSQL 17 client
+description: Install the PostgreSQL 17 client from apt.postgresql.org and put it first on PATH.
+
+runs:
+  using: composite
+  steps:
+    - name: Install PostgreSQL 17 client and age
+      shell: bash
+      run: |
+        set -euo pipefail
+        export DEBIAN_FRONTEND=noninteractive
+        sudo apt-get update
+        sudo apt-get install -y curl ca-certificates age
+        sudo install -d /usr/share/postgresql-common/pgdg
+        sudo curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc --fail https://www.postgresql.org/media/keys/ACCC4CF8.asc
+        . /etc/os-release
+        if [ -z "${VERSION_CODENAME:-}" ]; then
+          echo "VERSION_CODENAME is empty; cannot configure the PostgreSQL apt repository."
+          exit 1
+        fi
+        echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list >/dev/null
+        sudo apt-get update
+        sudo apt-get install -y postgresql-client-17
+        if [ ! -x /usr/lib/postgresql/17/bin/pg_dump ] || [ ! -x /usr/lib/postgresql/17/bin/psql ]; then
+          echo "PostgreSQL 17 client binaries were not installed."
+          exit 1
+        fi
+        echo "/usr/lib/postgresql/17/bin" >> "$GITHUB_PATH"
+        /usr/lib/postgresql/17/bin/pg_dump --version
+        /usr/lib/postgresql/17/bin/psql --version
+
+    - name: Verify PostgreSQL 17 client is first on PATH
+      shell: bash
+      run: |
+        set -euo pipefail
+        command -v pg_dump
+        command -v psql
+        pg_dump --version
+        psql --version
+        if [ "$(command -v pg_dump)" != "/usr/lib/postgresql/17/bin/pg_dump" ]; then
+          echo "pg_dump resolved to $(command -v pg_dump), not /usr/lib/postgresql/17/bin/pg_dump."
+          exit 1
+        fi
+        if [ "$(command -v psql)" != "/usr/lib/postgresql/17/bin/psql" ]; then
+          echo "psql resolved to $(command -v psql), not /usr/lib/postgresql/17/bin/psql."
+          exit 1
+        fi
+        case "$(pg_dump --version)" in
+          "pg_dump (PostgreSQL) 17."*) ;;
+          *)
+            echo "pg_dump is not PostgreSQL 17."
+            exit 1
+            ;;
+        esac
+        case "$(psql --version)" in
+          "psql (PostgreSQL) 17."*) ;;
+          *)
+            echo "psql is not PostgreSQL 17."
+            exit 1
+            ;;
+        esac
