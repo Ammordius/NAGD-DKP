@@ -246,6 +246,50 @@ async function fetchAccountDetail(accountId) {
   return { account: accRes.data, characters: chars, raids: rMap, activityByRaid, dkpByCharacterKey }
 }
 
+function spentFromActivity(activityByRaid) {
+  const spent = {}
+  for (const act of activityByRaid || []) {
+    for (const row of act.items || []) {
+      const key = (
+        row.assigned_char_id ||
+        row.assigned_character_name ||
+        row.char_id ||
+        row.character_name ||
+        ''
+      ).trim()
+      if (!key) continue
+      const cost = parseFloat(row.cost || 0)
+      if (!Number.isFinite(cost)) continue
+      spent[key] = (spent[key] || 0) + cost
+    }
+  }
+  return spent
+}
+
+function patchLootAssignment(data, lootId, charId, charName) {
+  if (!data) return data
+  const activityByRaid = (data.activityByRaid || []).map((act) => ({
+    ...act,
+    items: (act.items || []).map((item) => (
+      String(item.id) === String(lootId)
+        ? {
+            ...item,
+            assigned_char_id: charId || null,
+            assigned_character_name: charName || null,
+          }
+        : item
+    )),
+  }))
+  return {
+    ...data,
+    activityByRaid,
+    dkpByCharacterKey: {
+      ...(data.dkpByCharacterKey || { earned: {}, spent: {} }),
+      spent: spentFromActivity(activityByRaid),
+    },
+  }
+}
+
 export default function AccountDetail({ isOfficer, profile, session, onProfileUpdate }) {
   const { accountId } = useParams()
   const navigate = useNavigate()
@@ -265,7 +309,7 @@ export default function AccountDetail({ isOfficer, profile, session, onProfileUp
     },
     [setSearchParams]
   )
-  const { getAccountId, getAccountDisplayName } = useCharToAccountMap()
+  const { getAccountDisplayName } = useCharToAccountMap()
   const { mutate: globalMutate } = useSWRConfig()
   const cacheKey = accountId ? `account-detail-${accountId}` : null
   const fallbackData = cacheKey ? getAccountDetailFromSession(accountId) : undefined
@@ -326,8 +370,10 @@ export default function AccountDetail({ isOfficer, profile, session, onProfileUp
   const isMyAccount = myAccountId === accountId
   const canAddChar = isOfficer || isMyAccount
   const canEditLoot = isOfficer || isMyAccount
-  const [savingLootId, setSavingLootId] = useState(null)
+  const [savingLootIds, setSavingLootIds] = useState(() => new Set())
+  const [pendingAssign, setPendingAssign] = useState({})
   const [lootAssignError, setLootAssignError] = useState('')
+  const assignChainRef = useRef(Promise.resolve())
   const [displayNameEditorOpen, setDisplayNameEditorOpen] = useState(false)
   const [displayNameQuery, setDisplayNameQuery] = useState('')
   const [displayNameCharId, setDisplayNameCharId] = useState('')
@@ -462,6 +508,79 @@ export default function AccountDetail({ isOfficer, profile, session, onProfileUp
       return String(a.name || a.char_id).localeCompare(String(b.name || b.char_id))
     })
   }, [characters, dkpByCharacterKey])
+
+  function enqueueAssign(task) {
+    const run = assignChainRef.current.then(task, task)
+    assignChainRef.current = run.then(() => {}, () => {})
+    return run
+  }
+
+  function handleAssignLoot(row, val) {
+    const lootKey = String(row.id)
+    const previous = {
+      assigned_char_id: (row.assigned_char_id || '').trim() || null,
+      assigned_character_name: (row.assigned_character_name || '').trim() || null,
+    }
+    let cid = null
+    let cname = null
+    if (val !== '') {
+      const character = sortedCharacters.find((ch) => (ch.char_id || ch.name) === val)
+      cid = character?.char_id || val
+      cname = character?.name || character?.displayName || val
+    }
+    setLootAssignError('')
+    setPendingAssign((prev) => ({ ...prev, [lootKey]: val }))
+    setSavingLootIds((prev) => {
+      const next = new Set(prev)
+      next.add(lootKey)
+      return next
+    })
+
+    enqueueAssign(async () => {
+      try {
+        let patched = null
+        await mutate((current) => {
+          patched = patchLootAssignment(current, row.id, cid, cname)
+          return patched
+        }, { revalidate: false })
+        if (accountId && patched) setAccountDetailInSession(accountId, patched)
+
+        // Assignment does not change account DKP. Skip refresh_account_dkp_summary_for_raid
+        // so the click is not blocked on a raid-wide summary rebuild.
+        const { error: rpcError } = await supabase.rpc('update_single_raid_loot_assignment', {
+          p_loot_id: row.id,
+          p_assigned_char_id: cid,
+          p_assigned_character_name: cname,
+        })
+        if (rpcError) throw new Error(rpcError.message)
+      } catch (err) {
+        setLootAssignError(err?.message || 'Could not update assignment')
+        let reverted = null
+        await mutate((current) => {
+          reverted = patchLootAssignment(
+            current,
+            row.id,
+            previous.assigned_char_id,
+            previous.assigned_character_name,
+          )
+          return reverted
+        }, { revalidate: false })
+        if (accountId && reverted) setAccountDetailInSession(accountId, reverted)
+      } finally {
+        setPendingAssign((prev) => {
+          if (!Object.prototype.hasOwnProperty.call(prev, lootKey)) return prev
+          const next = { ...prev }
+          delete next[lootKey]
+          return next
+        })
+        setSavingLootIds((prev) => {
+          const next = new Set(prev)
+          next.delete(lootKey)
+          return next
+        })
+      }
+    })
+  }
 
   const activityWithMissing = useMemo(() => (
     activityByRaid.map((act) => {
@@ -769,7 +888,11 @@ export default function AccountDetail({ isOfficer, profile, session, onProfileUp
                   const hasAssignment = (row.assigned_character_name || row.assigned_char_id || '').trim()
                   const currentCharId = (row.assigned_char_id || '').trim() || null
                   const currentCharName = (row.assigned_character_name || '').trim() || null
-                  const isSaving = savingLootId === row.id
+                  const lootKey = String(row.id)
+                  const isSaving = savingLootIds.has(lootKey)
+                  const selectValue = Object.prototype.hasOwnProperty.call(pendingAssign, lootKey)
+                    ? pendingAssign[lootKey]
+                    : ((currentCharId || currentCharName || '').trim() || '')
                   return (
                     <tr key={row.id} style={{ borderBottom: '1px solid #27272a' }}>
                       <td style={{ padding: '0.5rem 0.75rem', fontSize: '0.9rem' }}>
@@ -789,57 +912,26 @@ export default function AccountDetail({ isOfficer, profile, session, onProfileUp
                       </td>
                       <td style={{ padding: '0.5rem 0.75rem' }}>
                         {canEditLoot ? (
-                          <select
-                            value={(currentCharId || currentCharName || '').trim() || ''}
-                            disabled={isSaving}
-                            onChange={(e) => {
-                              const val = e.target.value
-                              setLootAssignError('')
-                              setSavingLootId(row.id)
-                              const raidId = row.raid_id || row._raid_id
-                              const prevAccountId = (currentCharId || currentCharName) ? getAccountId(currentCharId || currentCharName) : null
-                              const nextAccountId = val === '' ? null : accountId
-                              const extraIds = [...new Set([prevAccountId, nextAccountId].filter(Boolean))].map(String)
-                              if (val === '') {
-                                supabase.rpc('update_single_raid_loot_assignment', { p_loot_id: row.id, p_assigned_char_id: null, p_assigned_character_name: null })
-                                  .then(async ({ error }) => {
-                                    setSavingLootId(null)
-                                    if (error) setLootAssignError(error.message)
-                                    else {
-                                      if (raidId && extraIds.length > 0) {
-                                        await supabase.rpc('refresh_account_dkp_summary_for_raid', { p_raid_id: raidId, p_extra_account_ids: extraIds })
-                                        try { sessionStorage.removeItem('dkp_leaderboard_v2') } catch (_) {}
-                                      }
-                                      mutate()
-                                    }
-                                  })
-                              } else {
-                                const c = sortedCharacters.find((ch) => (ch.char_id || ch.name) === val)
-                                const cid = c?.char_id || val
-                                const cname = c?.name || c?.displayName || val
-                                supabase.rpc('update_single_raid_loot_assignment', { p_loot_id: row.id, p_assigned_char_id: cid, p_assigned_character_name: cname })
-                                  .then(async ({ error }) => {
-                                    setSavingLootId(null)
-                                    if (error) setLootAssignError(error.message)
-                                    else {
-                                      if (raidId && extraIds.length > 0) {
-                                        await supabase.rpc('refresh_account_dkp_summary_for_raid', { p_raid_id: raidId, p_extra_account_ids: extraIds })
-                                        try { sessionStorage.removeItem('dkp_leaderboard_v2') } catch (_) {}
-                                      }
-                                      mutate()
-                                    }
-                                  })
-                              }
-                            }}
-                            style={{ minWidth: '10rem', padding: '0.25rem 0.5rem', background: '#18181b', color: '#e4e4e7', border: '1px solid #27272a', borderRadius: '4px' }}
-                          >
-                            <option value="">Unassigned</option>
-                            {sortedCharacters.map((c) => {
-                              const id = c.char_id || c.name
-                              const label = c.name || c.char_id
-                              return <option key={id} value={id}>{label}</option>
-                            })}
-                          </select>
+                          <span className="loot-assign-field">
+                            <select
+                              value={selectValue}
+                              disabled={isSaving}
+                              aria-busy={isSaving}
+                              title={isSaving ? 'Updating, please wait...' : 'Assigned to'}
+                              onChange={(e) => handleAssignLoot(row, e.target.value)}
+                              style={{ minWidth: '10rem', padding: '0.25rem 0.5rem', background: '#18181b', color: '#e4e4e7', border: '1px solid #27272a', borderRadius: '4px' }}
+                            >
+                              <option value="">Unassigned</option>
+                              {sortedCharacters.map((c) => {
+                                const id = c.char_id || c.name
+                                const label = c.name || c.char_id
+                                return <option key={id} value={id}>{label}</option>
+                              })}
+                            </select>
+                            {isSaving && (
+                              <span className="loot-assign-status" role="status">Updating, please wait...</span>
+                            )}
+                          </span>
                         ) : (
                           <span style={hasAssignment ? {} : { color: '#71717a' }}>{hasAssignment ? (row.assigned_character_name || row.assigned_char_id) : 'Unassigned'}</span>
                         )}

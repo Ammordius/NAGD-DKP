@@ -82,7 +82,7 @@ Trigger functions in the same file (`trigger_delta_*`, `trigger_raid_events_*`, 
 | **get_character_dkp_spent** | LootRecipients.jsx |
 | **update_single_raid_loot_assignment** | AccountDetail.jsx |
 | **update_raid_loot_assignments** | Loot CI / update_raid_loot_assignments_supabase.py |
-| **refresh_character_dkp_spent** | Trigger on loot and assignment (no-op while `restore_load_in_progress`), and `end_restore_load` |
+| **refresh_character_dkp_spent** | Full rebuild from the raid_loot trigger, bulk assignment, and `end_restore_load` (no-op while `restore_load_in_progress`). One assignment moves spent for the two characters instead of rebuilding the table. |
 | **refresh_after_bulk_loot_assignment** | After bulk assignment |
 
 Older copies of these functions are under `docs/sql-archive/superseded/`. They are not schema steps.

@@ -1876,6 +1876,23 @@ export default function Officer({ isOfficer, profile }) {
                   </ul>
                 )}
               </div>
+              <div className="officer-loot-price">
+                <label className="officer-price-label" htmlFor="loot-item-price">Item price (DKP)</label>
+                <div className="officer-loot-actions">
+                  <input
+                    id="loot-item-price"
+                    className="officer-cost"
+                    type="number"
+                    min={0}
+                    value={lootCost}
+                    onChange={(e) => setLootCost(e.target.value)}
+                    aria-label="Item price (DKP)"
+                  />
+                  <button type="button" className="btn" onClick={handleAddLootManual} disabled={mutating || !lootItemQuery.trim()}>
+                    Add
+                  </button>
+                </div>
+              </div>
               {events.length > 0 && (
                 <select
                   value={lootEventId}
@@ -1887,20 +1904,6 @@ export default function Officer({ isOfficer, profile }) {
                   ))}
                 </select>
               )}
-              <div className="officer-loot-actions">
-                <input
-                  className="officer-cost"
-                  type="number"
-                  min={0}
-                  value={lootCost}
-                  onChange={(e) => setLootCost(e.target.value)}
-                  placeholder="Cost"
-                  aria-label="Loot cost"
-                />
-                <button type="button" className="btn" onClick={handleAddLootManual} disabled={mutating || !lootItemQuery.trim()}>
-                  Add
-                </button>
-              </div>
             </div>
             <hr className="officer-divider" />
             <p className="officer-hint">Paste log award line here. The line must contain the full character name, a number, and the word &quot;DKP&quot;. A shorter name inside that name is not added, so deepmind does not also add mind. If the format does not match it will error. Refer to the example below.</p>
