@@ -65,9 +65,15 @@ Inputs:
 
 - **execution** defaults to `dry-run`.
 - **source repository** is limited to this repository, `Ammordius/NAGD-DKP`, and `RimidalEQ/RimidalEQ-NAGD-DKP-backup`.
-- **artifact id** is required. The latest artifact is not selected automatically. A weekly or monthly id is valid. A `supabase-backup-*` id is refused.
+- **checkpoint** chooses the backup. The default is `Latest available backup`. The other choices are the previous distinct snapshot, the latest or previous weekly backup, the latest or previous monthly backup, and a specific artifact name. The dropdown does not change when a new backup is uploaded.
+- **checkpoint name** is required only for `Specific checkpoint by artifact name`. It must match one available artifact name. An expired or duplicated name is rejected.
+- **artifact id** is optional. Leave it empty for a normal run. If you paste an id and leave the checkpoint at the default, that id is used. If you also choose a different checkpoint, the id must be the artifact that checkpoint resolves to. A `supabase-backup-*` id is refused.
 - **destination name** must match `SQL_RESTORE_DESTINATION_NAME`.
 - **confirm** stays empty for a dry-run. A restore requires `RESTORE <destination name>`.
+
+Daily, weekly, and monthly artifacts from the same backup run are one snapshot when their sizes match. Latest and previous choose distinct snapshots. A weekly or monthly choice uses that retention copy. The preflight prints the five newest available snapshots, plus the selected snapshot if it is older, with the UTC time, repository, artifact name, artifact id, created and expiration times, tier, size, and whether it is still available.
+
+Preflight resolves the choice once, verifies that artifact, and passes the artifact id, repository, name, workflow run, and zip digest to the restore job. The restore job downloads that same artifact again. It does not look up Latest a second time. A backup uploaded while the workflow is running is not the one restored. The summary names the historical snapshot that would replace guild DKP data. Destination auth, profiles, claims, and the officer audit log stay in place.
 
 The restore job runs only after the dry-run succeeds. It then takes an encrypted backup of the destination and uploads that artifact before any mutation. That backup is kept for 90 days. If that backup fails, the restore does not start. Only one restore workflow runs at a time.
 
@@ -79,17 +85,19 @@ Create the `sql-restore` environment, with required reviewers and a deployment b
 
 1. On the source repository, set `SUPABASE_DB_URL` to the session-pooler URI (port 5432, `sslmode=require`) and `SQL_BACKUP_AGE_RECIPIENT` to the age public key. Generate the key pair with `age-keygen` on a machine you control. Keep the identity file offline. Put that identity only in the destination secret `SQL_BACKUP_AGE_IDENTITY`. The backup workflow must not have the private key.
 2. To read artifacts from `RimidalEQ/RimidalEQ-NAGD-DKP-backup`, store a fine-grained token with Actions read on that source as `BACKUP_ARTIFACT_READ_TOKEN_STAGING`. The allowlist is the current repository plus the names in `APPROVED_SOURCE_REPOSITORIES` in `scripts/sql_backup_fetch.py`. The token map is `SOURCE_READ_TOKEN_SECRETS`. One token has one owner. Forking the source does not grant artifact access. Do not rename the staging secret.
-3. Run **DB SQL backup fetch** and copy the numeric artifact id from the step summary. Latest discovery ignores `sql-backup-weekly-*` and `sql-backup-monthly-*`. Paste one of those ids when you want that copy.
-4. Run **DB SQL restore** with execution `dry-run` and that id. The summary should show `writes: none`, source and destination row counts, preserved claims, and expected DKP. A fetch that reports `inner_verified: false` has not done this check.
+3. Open **Actions → DB SQL restore → Run workflow** on `main`. Choose the source repository and a checkpoint. Use `Latest available backup` or `Previous backup (previous distinct snapshot)` for a normal restore. Choose a weekly or monthly checkpoint when you want that retention copy. For one named artifact, choose `Specific checkpoint by artifact name` and enter the artifact name shown in the backup run. Leave the artifact id empty unless you already have a numeric id.
+4. Run it with execution `dry-run`. The checkpoint summary lists the selected artifact id, name, time, tier, and size. The preflight should show `writes: none`, the pinned snapshot, source and destination row counts, preserved claims, and expected DKP. A fetch that reports `inner_verified: false` has not done this check. The same pinned artifact is the one a later restore in that workflow run will use.
 5. Approve the `sql-restore` environment. Required reviewers and a `main`-only branch policy are the approval. The operator still types `RESTORE <destination name>` in the confirm field. The workflow uploads `sql-restore-destination-backup-*` before it writes. Both the dry-run job and the restore job use that environment, so reviewers may be asked twice.
 6. After a committed restore, read the step summary again: counts, claim anchors, and DKP totals. `source_schema_fingerprint: match` means the artifact matches the checked-out `docs/supabase-schema-full.sql`. `live_schema_status` is the source catalog probe and is not that file hash. `restore_compatibility: compatible` means the destination preflight passed. `schema_apply: false` means this workflow did not apply schema. `not_assessed` is not a live-schema verification.
-7. A failed statement rolls the transaction back, including derived totals and the restore flag. If the destination backup fails, the restore does not start. If a committed restore is wrong, run this workflow again with the `sql-restore-destination-backup-*` artifact id and the same destination. `end_restore_load()` rebuilds derived DKP in the transaction. `bid_portfolio_auction_fact` is cleared and must be filled again with the existing bidding backfill. Reload the site so browser caches refresh.
+7. A failed statement rolls the transaction back, including derived totals and the restore flag. If the destination backup fails, the restore does not start. If a committed restore is wrong, run this workflow again and select the earlier guild checkpoint. `sql-restore-destination-backup-*` is the encrypted destination backup taken before the write. It is not a source checkpoint. `end_restore_load()` rebuilds derived DKP in the transaction. `bid_portfolio_auction_fact` is cleared and must be filled again with the existing bidding backfill. Reload the site so browser caches refresh.
 
 Set `SQL_BACKUP_SCHEDULE` to `enabled` only after a manual backup has succeeded and an officer has authorized the scheduled read of production. This repository does not set that variable by itself.
 
 ## Local test
 
 ```bash
+python scripts/test_sql_restore_checkpoint.py
+python scripts/test_sql_backup_fetch.py
 python scripts/test_sql_restore.py
 ```
 
