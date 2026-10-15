@@ -25,7 +25,7 @@ from unittest.mock import patch
 import sql_backup
 import sql_backup_fetch
 import sql_restore
-from test_sql_backup_fetch import FakeGitHub
+from test_sql_backup_fetch import ROOT_NUMERIC, FakeGitHub
 
 ROOT = Path(__file__).resolve().parents[1]
 BACKUP_SCRIPT = ROOT / "scripts" / "sql_backup.py"
@@ -757,6 +757,7 @@ def backup_source(port: int, out_dir: Path, recipient: str) -> None:
     env["SUPABASE_DB_URL"] = f"postgresql://postgres:{PASSWORD}@127.0.0.1:{port}/postgres?sslmode=disable"
     env["SQL_BACKUP_AGE_RECIPIENT"] = recipient
     env["GITHUB_REPOSITORY"] = SOURCE_REPO
+    env["GITHUB_REPOSITORY_ID"] = str(ROOT_NUMERIC)
     env["GITHUB_RUN_ID"] = str(WORKFLOW_RUN_ID)
     env["GITHUB_SHA"] = "abc123deadbeef"
     completed = subprocess.run(
