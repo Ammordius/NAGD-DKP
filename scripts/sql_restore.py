@@ -1177,16 +1177,69 @@ END IF;
 """
 
 
+def _copy_stdin(table: str, columns: list[str], body: list[str]) -> str:
+    """Serialize one staged COPY. An empty body is zero rows, not a blank data line."""
+    column_sql = ", ".join(quote_ident(column) for column in columns)
+    header = f"COPY pg_temp.stage_{table} ({column_sql}) FROM stdin;"
+    if not body:
+        return f"{header}\n\\."
+    return header + "\n" + "\n".join(body) + "\n\\."
+
+
+def _agreed_row_counts(sections: dict[str, dict], blocks: dict[str, dict], manifest: dict) -> dict[str, int]:
+    recorded = manifest.get("row_counts")
+    if not isinstance(recorded, dict) or set(recorded) != set(sql_backup.INCLUDED_TABLES):
+        raise RestoreError("Manifest row_counts do not match the allowlist.")
+    if set(blocks) != set(sql_backup.INCLUDED_TABLES):
+        raise RestoreError("data.sql table list does not match the allowlist.")
+    agreed: dict[str, int] = {}
+    for table in sql_backup.INCLUDED_TABLES:
+        parsed = len(blocks[table]["rows"])
+        copied = len(sections[table]["body"])
+        manifest_count = recorded[table]
+        if isinstance(manifest_count, bool) or not isinstance(manifest_count, int) or manifest_count < 0:
+            raise RestoreError(f"Manifest row count for {table} is invalid.")
+        if copied != parsed or manifest_count != parsed:
+            raise RestoreError(f"Staged row count does not match the backup for {table}.")
+        agreed[table] = parsed
+    return agreed
+
+
+def _staged_count_checks(expected: dict[str, int]) -> str:
+    comparisons: list[str] = []
+    for table in sql_backup.INCLUDED_TABLES:
+        count = expected[table]
+        relation = quote_ident(f"stage_{table}")
+        comparisons.append(
+            f"""
+SELECT count(*) INTO stage_count FROM pg_temp.{relation};
+IF stage_count IS DISTINCT FROM {count} THEN
+  RAISE EXCEPTION 'staged {table} count does not match the backup';
+END IF;
+"""
+        )
+    return f"""
+DO $$
+DECLARE
+  stage_count bigint;
+BEGIN
+  {"".join(comparisons)}
+END $$;
+"""
+
+
 def build_restore_sql(
     sql_text: str,
     blocks: dict[str, dict],
     totals: dict[str, dict[str, str]],
     *,
+    manifest: dict,
     fail_before_commit: bool,
 ) -> str:
     sections = copy_sections(sql_text)
     if set(sections) != set(sql_backup.INCLUDED_TABLES):
         raise RestoreError("data.sql table list does not match the allowlist.")
+    expected_counts = _agreed_row_counts(sections, blocks, manifest)
     statements = [
         "\\set ON_ERROR_STOP on",
         "BEGIN;",
@@ -1223,11 +1276,8 @@ def build_restore_sql(
         statements.append(
             f"CREATE TEMP TABLE stage_{table} (LIKE public.{quote_ident(table)} INCLUDING DEFAULTS);"
         )
-        columns = ", ".join(quote_ident(column) for column in sections[table]["columns"])
-        body = "\n".join(sections[table]["body"])
-        statements.append(
-            f"COPY pg_temp.stage_{table} ({columns}) FROM stdin;\n{body}\n\\."
-        )
+        statements.append(_copy_stdin(table, sections[table]["columns"], sections[table]["body"]))
+    statements.append(_staged_count_checks(expected_counts))
     statements.append(_staging_checks())
     statements.append("SELECT public.begin_restore_load();")
     for table in LOCK_ORDER:
@@ -1652,7 +1702,9 @@ def run_restore(argv: list[str] | None = None) -> int:
     announce_pinned_restore(
         pinned_snapshot_line(manifest, artifact_id=artifact_id, artifact_name=artifact_name)
     )
-    script = build_restore_sql(sql_text, blocks, totals, fail_before_commit=args.fail_before_commit)
+    script = build_restore_sql(
+        sql_text, blocks, totals, manifest=manifest, fail_before_commit=args.fail_before_commit
+    )
     run_psql(conn, script, read_only=False)
     report = report.replace("writes: none", "writes: committed")
     if "writes: committed" not in report:
