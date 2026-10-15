@@ -2,7 +2,9 @@
 
 This restores a portable SQL backup into an independent database. The backup contains guild DKP rows, not authentication. The destination keeps its own `auth.users`, `profiles`, local sign-in identities, site-admin and officer roles, profile preferences, and officer audit log.
 
-The CSV restore in [CI-DB-RESTORE.md](CI-DB-RESTORE.md) is a different path. Do not use it for a cross-project SQL artifact. This workflow does not apply `docs/supabase-schema-full.sql`. The destination must already be on that canonical schema. Production restore is disabled.
+The CSV restore in [CI-DB-RESTORE.md](CI-DB-RESTORE.md) is a different path. Do not use it for a cross-project SQL artifact. This workflow does not apply `docs/supabase-schema-full.sql`. The destination must already be on that canonical schema.
+
+This is the supported historical restore for the live site. Anyone who can run **DB SQL restore** on `main` and pass the `sql-restore` environment can use it. A new artifact does not require a source change.
 
 ## What changes
 
@@ -51,10 +53,11 @@ Create a GitHub Environment named `sql-restore` before the first run. Give it re
 
 | Name | Kind | Value |
 | --- | --- | --- |
-| `SQL_RESTORE_DB_URL` | Secret | Session-mode URI of the non-production destination, with `sslmode=require`. Do not reuse the production `SUPABASE_DB_URL`. |
-| `SQL_RESTORE_DESTINATION_NAME` | Variable | Short name the operator must type. Must not be `production` or `prod`. |
-| `SQL_RESTORE_DESTINATION_HOST` | Variable | Host of `SQL_RESTORE_DB_URL`, without the user or password. |
-| `SQL_RESTORE_DATABASE_NAME` | Variable | Database name in that URI. |
+| `SQL_RESTORE_DB_URL` | Secret | Session-pooler URI for Supabase project `ynvwtvphqsevhpytcugj`, port 5432, `sslmode=require`. This is the same database `SUPABASE_DB_URL` reads. Do not commit the password. Do not use port 6543. |
+| `SQL_RESTORE_DESTINATION_NAME` | Variable | `nagd-dkp`. Every person who runs the workflow types this same name. |
+| `SQL_RESTORE_DESTINATION_HOST` | Variable | Host of `SQL_RESTORE_DB_URL`, without the user or password. Copy the session-pooler hostname from Supabase → Project Settings → Database. |
+| `SQL_RESTORE_DATABASE_NAME` | Variable | `postgres` |
+| `SQL_RESTORE_PROJECT_REF` | Variable | `ynvwtvphqsevhpytcugj` |
 
 The workflow also reads the existing repository secrets `SQL_BACKUP_AGE_IDENTITY` and `SQL_BACKUP_AGE_RECIPIENT`. A backup from `RimidalEQ/RimidalEQ-NAGD-DKP-backup` uses `BACKUP_ARTIFACT_READ_TOKEN_STAGING`. The current repository uses `GITHUB_TOKEN`. `Ammordius/NAGD-DKP` has no mapped token, so that choice fails closed.
 
@@ -66,13 +69,13 @@ Inputs:
 - **destination name** must match `SQL_RESTORE_DESTINATION_NAME`.
 - **confirm** stays empty for a dry-run. A restore requires `RESTORE <destination name>`.
 
-The restore job runs only after the dry-run succeeds. It then takes an encrypted backup of the destination and uploads that artifact before any mutation. If that backup fails, the restore does not start. Only one restore workflow runs at a time.
+The restore job runs only after the dry-run succeeds. It then takes an encrypted backup of the destination and uploads that artifact before any mutation. That backup is kept for 90 days. If that backup fails, the restore does not start. Only one restore workflow runs at a time.
 
-`PRODUCTION_RESTORE_ENABLED` in `scripts/sql_restore.py` is false. A destination is accepted only when its name, host, and database equal an entry in `ALLOWED_RESTORE_DESTINATIONS`. That tuple is empty, so a GitHub Actions restore has no approved target. Outside Actions, only `localhost` and `127.0.0.1` are accepted, which is how the disposable tests run. A hostname that merely avoids the letters `prod` is not an approved destination. A destination name of production, or a host listed in `scripts/sql_restore_production_denylist.txt`, is still refused. Enabling a production restore is a later code change after a separate test.
+A hosted connection is accepted only when the environment configuration and the connection agree. The name, host, and database must match `SQL_RESTORE_DB_URL`. `SQL_RESTORE_PROJECT_REF` must match the project reference the connection proves. On the session pooler, that reference is the suffix of the username `postgres.<project-ref>`, and the host must be a `*.pooler.supabase.com` name on port 5432. A direct host must be `db.<project-ref>.supabase.co` with username `postgres`. Hosted TLS must be `sslmode=require`. If any value is missing or disagrees, the destination is rejected. `SQL_RESTORE_ALLOW_PRODUCTION` does not grant access. Outside Actions, `localhost` and `127.0.0.1` remain available for the disposable tests. Actions rejects those hosts. A host listed in `scripts/sql_restore_production_denylist.txt` is refused; leave the configured destination host off that list.
 
-Create the `sql-restore` environment, with required reviewers and a deployment branch policy of `main` only, before the first restore. The workflow does not create that protection by itself.
+Create the `sql-restore` environment, with required reviewers and a deployment branch policy of `main` only, before the first restore. The workflow does not create that protection by itself. People who can run or approve that environment are the people who can restore. Granting that access does not require a source change.
 
-## Officer procedure
+## Restore procedure
 
 1. On the source repository, set `SUPABASE_DB_URL` to the session-pooler URI (port 5432, `sslmode=require`) and `SQL_BACKUP_AGE_RECIPIENT` to the age public key. Generate the key pair with `age-keygen` on a machine you control. Keep the identity file offline. Put that identity only in the destination secret `SQL_BACKUP_AGE_IDENTITY`. The backup workflow must not have the private key.
 2. To read artifacts from `RimidalEQ/RimidalEQ-NAGD-DKP-backup`, store a fine-grained token with Actions read on that source as `BACKUP_ARTIFACT_READ_TOKEN_STAGING`. The allowlist is the current repository plus the names in `APPROVED_SOURCE_REPOSITORIES` in `scripts/sql_backup_fetch.py`. The token map is `SOURCE_READ_TOKEN_SECRETS`. One token has one owner. Forking the source does not grant artifact access. Do not rename the staging secret.
@@ -80,7 +83,7 @@ Create the `sql-restore` environment, with required reviewers and a deployment b
 4. Run **DB SQL restore** with execution `dry-run` and that id. The summary should show `writes: none`, source and destination row counts, preserved claims, and expected DKP. A fetch that reports `inner_verified: false` has not done this check.
 5. Approve the `sql-restore` environment. Required reviewers and a `main`-only branch policy are the approval. The operator still types `RESTORE <destination name>` in the confirm field. The workflow uploads `sql-restore-destination-backup-*` before it writes. Both the dry-run job and the restore job use that environment, so reviewers may be asked twice.
 6. After a committed restore, read the step summary again: counts, claim anchors, and DKP totals. `source_schema_fingerprint: match` means the artifact matches the checked-out `docs/supabase-schema-full.sql`. `live_schema_status` is the source catalog probe and is not that file hash. `restore_compatibility: compatible` means the destination preflight passed. `schema_apply: false` means this workflow did not apply schema. `not_assessed` is not a live-schema verification.
-7. A failed statement rolls the transaction back, including derived totals and the restore flag. If the destination backup fails, the restore does not start. If a committed restore is wrong, run this workflow again with the `sql-restore-destination-backup-*` artifact id and the same destination. Production restore stays disabled in `scripts/sql_restore.py`.
+7. A failed statement rolls the transaction back, including derived totals and the restore flag. If the destination backup fails, the restore does not start. If a committed restore is wrong, run this workflow again with the `sql-restore-destination-backup-*` artifact id and the same destination. `end_restore_load()` rebuilds derived DKP in the transaction. `bid_portfolio_auction_fact` is cleared and must be filled again with the existing bidding backfill. Reload the site so browser caches refresh.
 
 Set `SQL_BACKUP_SCHEDULE` to `enabled` only after a manual backup has succeeded and an officer has authorized the scheduled read of production. This repository does not set that variable by itself.
 
