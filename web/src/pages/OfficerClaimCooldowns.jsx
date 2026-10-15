@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase'
 import { fetchAllByRange } from '../lib/fetchAllByRange'
 import { useDkpData } from '../lib/dkpLeaderboard'
 import { usePersistedState } from '../lib/usePersistedState'
-import { buildAccountAdminRows, buildAccountColumnRows, buildCharacterRows, characterMatchesQuery, filterAccountAdminRows, accountColumnLabel, claimAccountChoices } from '../lib/siteAdminCharacters'
+import { buildAccountAdminRows, buildAccountColumnRows, buildCharacterRows, characterMatchesQuery, filterAccountAdminRows, accountColumnLabel, claimAccountChoices, resolveClaimSubmitAccountId } from '../lib/siteAdminCharacters'
 import { normalizeUiPreferences } from '../lib/uiPreferences'
 import { canRemoveSiteUser, removalBlockReason } from '../lib/siteAdminRemoveUser'
 
@@ -496,23 +496,12 @@ export default function OfficerClaimCooldowns({ isOfficer, isSiteAdmin = false, 
   const unclaimedAccountOptions = unclaimedAccountsForClaim()
   const claimChoices = claimAccountChoices(unclaimedAccountOptions, claimQuery)
   const claimActiveIndex = claimChoices.length === 0 ? 0 : Math.min(claimSuggestIndex, claimChoices.length - 1)
-  const claimQueryKey = claimQuery.trim().toLowerCase()
-  const exactClaimMatches = claimQueryKey
-    ? claimChoices.filter((row) => (
-      row.label.toLowerCase() === claimQueryKey
-      || row.id.toLowerCase() === claimQueryKey
-      || (row.account.display_name || '').trim().toLowerCase() === claimQueryKey
-    ))
-    : []
-  const resolvedClaimAccountId = (
-    claimAccountId && claimChoices.some((row) => row.id === claimAccountId)
-  )
-    ? claimAccountId
-    : (exactClaimMatches.length === 1 ? exactClaimMatches[0].id : '')
-  const highlightedClaimId = claimQuery.trim()
-    ? (claimChoices[claimActiveIndex]?.id || '')
-    : ''
-  const claimPickId = highlightedClaimId || resolvedClaimAccountId
+  const claimPickId = resolveClaimSubmitAccountId({
+    claimAccountId,
+    claimQuery,
+    claimChoices,
+    claimActiveIndex,
+  })
 
   return (
     <div className="container">
@@ -949,7 +938,7 @@ export default function OfficerClaimCooldowns({ isOfficer, isSiteAdmin = false, 
                                                 type="button"
                                                 role="option"
                                                 aria-selected={row.id === claimPickId}
-                                                className={(claimQuery.trim() || resolvedClaimAccountId) && index === claimActiveIndex ? 'is-highlighted' : undefined}
+                                                className={(claimQuery.trim() || claimChoices.some((row) => row.id === claimAccountId)) && index === claimActiveIndex ? 'is-highlighted' : undefined}
                                                 onMouseEnter={() => setClaimSuggestIndex(index)}
                                                 onClick={() => selectClaimAccount(row)}
                                               >

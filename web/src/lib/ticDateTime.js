@@ -65,6 +65,12 @@ function formatClock(hour, minute, second) {
   return `${pad(hour)}:${pad(minute)}:${pad(second)}`
 }
 
+/** Hours and minutes for the tic time control. The control does not display seconds. */
+export function minuteClock(time) {
+  const match = String(time ?? '').trim().match(/^(\d{2}):(\d{2})/)
+  return match ? `${match[1]}:${match[2]}` : ''
+}
+
 function isRealCalendarDate(year, month, day) {
   if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) return false
   if (month < 1 || month > 12 || day < 1 || day > 31) return false
@@ -307,6 +313,45 @@ export function isGenericTicEventName(name) {
   return GENERATED_TIC_EVENT_NAME.test(text)
 }
 
+/** Epoch of a stored event time, or null when the clock cannot be compared. */
+export function eventRecencyMs(event, raidDateIso = '', timeZone = TIC_TIME_ZONE) {
+  const parsed = parseStoredEventTime(event?.event_time, raidDateIso, timeZone)
+  if (!parsed.ok || !parsed.date || !parsed.time) return null
+  const validated = validateTicDateTime(parsed.date, parsed.time, timeZone)
+  return validated.ok ? validated.epochMs : null
+}
+
+/**
+ * The latest event on a raid. A parsed event time wins. When none parse,
+ * the highest event_order is the most recently added tic.
+ */
+export function mostRecentEvent(events, raidDateIso = '', timeZone = TIC_TIME_ZONE) {
+  const list = events || []
+  let best = null
+  let bestMs = null
+  let bestOrder = -Infinity
+  for (const event of list) {
+    const ms = eventRecencyMs(event, raidDateIso, timeZone)
+    const order = Number(event?.event_order)
+    const orderNum = Number.isFinite(order) ? order : -Infinity
+    if (!best) {
+      best = event
+      bestMs = ms
+      bestOrder = orderNum
+      continue
+    }
+    const laterTime = ms != null && (bestMs == null || ms > bestMs)
+    const sameTimeHigherOrder = ms != null && bestMs != null && ms === bestMs && orderNum > bestOrder
+    const laterOrderWithoutTimes = ms == null && bestMs == null && orderNum > bestOrder
+    if (laterTime || sameTimeHigherOrder || laterOrderWithoutTimes) {
+      best = event
+      bestMs = ms
+      bestOrder = orderNum
+    }
+  }
+  return best
+}
+
 /**
  * Label shown for a tic. Placeholder names ("DKP tic", "On-time") and earlier
  * clock labels follow the stored event time. Tic #1 is "{time} on-time".
@@ -349,6 +394,39 @@ export function newTicTimestamp(date, time, timeZone = TIC_TIME_ZONE) {
     stored: validated.canonical,
     epochMs: validated.epochMs,
     eventId: eventIdFromEpoch(validated.epochMs),
+  }
+}
+
+/**
+ * New tic id for one raid. Keeps seconds already in `time`. When that id is
+ * taken, uses the next free second in the same minute. Does not change ids
+ * that are already in `existingEventIds`.
+ * @returns {{ ok: true, stored: string, epochMs: number, eventId: string } | { ok: false, error: string }}
+ */
+export function allocateUniqueTicTimestamp(date, time, existingEventIds = [], timeZone = TIC_TIME_ZONE) {
+  const validated = validateTicDateTime(date, time, timeZone)
+  if (!validated.ok) return validated
+  const taken = new Set((existingEventIds || []).map((id) => String(id)))
+  const clock = validated.canonical.match(/T(\d{2}):(\d{2}):(\d{2})/)
+  const datePart = validated.canonical.slice(0, 10)
+  const hour = Number(clock[1])
+  const minute = Number(clock[2])
+  const startSecond = Number(clock[3])
+  for (let second = startSecond; second <= 59; second += 1) {
+    const attempt = validateTicDateTime(datePart, formatClock(hour, minute, second), timeZone)
+    if (!attempt.ok) continue
+    const eventId = eventIdFromEpoch(attempt.epochMs)
+    if (taken.has(eventId)) continue
+    return {
+      ok: true,
+      stored: attempt.canonical,
+      epochMs: attempt.epochMs,
+      eventId,
+    }
+  }
+  return {
+    ok: false,
+    error: 'That minute already has a tic for every second. Choose another minute.',
   }
 }
 

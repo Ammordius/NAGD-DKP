@@ -1,15 +1,19 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import {
+  allocateUniqueTicTimestamp,
   defaultTicFields,
   displayTicEventName,
   dkpTicEventName,
+  mostRecentEvent,
   eventFieldsForTimeSave,
   eventTimeToStore,
   firstEqStampInPaste,
   floorNowEastern,
   formatRaidSchedule,
+  minuteClock,
   newTicTimestamp,
+  parseStoredEventTime,
   raidCalendarDate,
   validateTicDateTime,
 } from './ticDateTime.js'
@@ -193,11 +197,26 @@ describe('firstEqStampInPaste', () => {
   })
 })
 
+describe('minuteClock', () => {
+  it('keeps hours and minutes and drops seconds', () => {
+    assert.equal(minuteClock('08:15:32'), '08:15')
+    assert.equal(minuteClock('21:35:20'), '21:35')
+    assert.equal(minuteClock('09:08'), '09:08')
+    assert.equal(minuteClock(''), '')
+  })
+})
+
 describe('newTicTimestamp', () => {
   it('builds an event id from the Eastern instant', () => {
     const result = newTicTimestamp('2026-10-10', '00:30:00')
     assert.equal(result.stored, '2026-10-10T00:30:00-04:00')
     assert.equal(result.eventId, `tic-${result.epochMs}`)
+  })
+
+  it('stores a minute-only clock with zero seconds', () => {
+    const result = newTicTimestamp('2026-10-10', '00:30')
+    assert.equal(result.ok, true)
+    assert.equal(result.stored, '2026-10-10T00:30:00-04:00')
   })
 })
 
@@ -266,5 +285,124 @@ describe('eventFieldsForTimeSave', () => {
       eventFieldsForTimeSave('Fire minis', '2026-10-14T21:00:00-04:00', '21:00:00', 1),
       { event_time: '2026-10-14T21:00:00-04:00' },
     )
+  })
+})
+
+describe('mostRecentEvent', () => {
+  it('picks the latest event time', () => {
+    const chosen = mostRecentEvent([
+      { event_id: 'early', event_order: 1, event_time: '2026-10-14T12:00:00-04:00' },
+      { event_id: 'late', event_order: 2, event_time: '2026-10-14T21:15:00-04:00' },
+      { event_id: 'mid', event_order: 3, event_time: '2026-10-14T18:00:00-04:00' },
+    ], '2026-10-14')
+    assert.equal(chosen.event_id, 'late')
+  })
+
+  it('uses the highest event order when times are missing', () => {
+    const chosen = mostRecentEvent([
+      { event_id: 'first', event_order: 1 },
+      { event_id: 'third', event_order: 3 },
+      { event_id: 'second', event_order: 2 },
+    ])
+    assert.equal(chosen.event_id, 'third')
+  })
+
+  it('prefers a parsed time over a later row that has no time', () => {
+    const chosen = mostRecentEvent([
+      { event_id: 'timed', event_order: 1, event_time: '2026-10-14T12:00:00-04:00' },
+      { event_id: 'untimed', event_order: 9 },
+    ], '2026-10-14')
+    assert.equal(chosen.event_id, 'timed')
+  })
+
+  it('compares EQ stamps, offsets, and zone-less clocks as the same Eastern instant', () => {
+    const chosen = mostRecentEvent([
+      { event_id: 'eq', event_order: 1, event_time: 'Wed Oct 14 20:00:00 2026' },
+      { event_id: 'offset', event_order: 2, event_time: '2026-10-14T21:00:00-04:00' },
+      { event_id: 'wall', event_order: 3, event_time: '2026-10-14 19:30:00' },
+    ], '2026-10-14')
+    assert.equal(chosen.event_id, 'offset')
+  })
+
+  it('breaks an equal timestamp with the higher event order', () => {
+    const chosen = mostRecentEvent([
+      { event_id: 'lower', event_order: 1, event_time: '2026-10-14T21:00:00-04:00' },
+      { event_id: 'higher', event_order: 4, event_time: 'Wed Oct 14 21:00:00 2026' },
+    ], '2026-10-14')
+    assert.equal(chosen.event_id, 'higher')
+  })
+
+  it('does not treat the first row as newest when a later row is', () => {
+    const chosen = mostRecentEvent([
+      { event_id: 'first', event_order: 1, event_time: '2026-10-14T18:00:00-04:00' },
+      { event_id: 'second', event_order: 2, event_time: '2026-10-14T21:00:00-04:00' },
+    ], '2026-10-14')
+    assert.equal(chosen.event_id, 'second')
+  })
+})
+
+describe('allocateUniqueTicTimestamp', () => {
+  it('gives two minute-only tics in one minute different ids', () => {
+    const first = allocateUniqueTicTimestamp('2026-10-14', '21:35', [])
+    const second = allocateUniqueTicTimestamp('2026-10-14', '21:35', [first.eventId])
+    assert.equal(first.ok, true)
+    assert.equal(second.ok, true)
+    assert.equal(first.stored, '2026-10-14T21:35:00-04:00')
+    assert.equal(second.stored, '2026-10-14T21:35:01-04:00')
+    assert.notEqual(first.eventId, second.eventId)
+    assert.equal(first.eventId, `tic-${first.epochMs}`)
+    assert.equal(second.eventId, `tic-${second.epochMs}`)
+  })
+
+  it('leaves an existing event id unchanged and stores the next free second', () => {
+    const existing = newTicTimestamp('2026-10-14', '21:35:00')
+    const ids = [existing.eventId]
+    const created = allocateUniqueTicTimestamp('2026-10-14', '21:35', ids)
+    assert.equal(created.eventId === existing.eventId, false)
+    assert.deepEqual(ids, [existing.eventId])
+    assert.equal(eventFieldsForTimeSave('DKP tic', created.stored, '21:35', 2).event_id, undefined)
+  })
+
+  it('keeps seconds from an EQ stamp and from an older second-precision event', () => {
+    const stamp = firstEqStampInPaste("[Wed Oct 14 21:45:32 2026] Icbm says out of character, 'Earring grats Barndog, 4 DKP'")
+    assert.equal(stamp.time, '21:45:32')
+    const fromLog = allocateUniqueTicTimestamp(stamp.date, stamp.time, [])
+    const historical = allocateUniqueTicTimestamp('2026-10-14', '21:45:33', [])
+    assert.equal(fromLog.stored, '2026-10-14T21:45:32-04:00')
+    assert.equal(historical.stored, '2026-10-14T21:45:33-04:00')
+    assert.notEqual(fromLog.eventId, historical.eventId)
+    const parsed = parseStoredEventTime('Wed Oct 14 21:45:32 2026', '2026-10-14')
+    assert.equal(parsed.ok, true)
+    assert.equal(parsed.time, '21:45:32')
+  })
+
+  it('rejects a minute whose seconds are all taken', () => {
+    const ids = []
+    for (let second = 0; second <= 59; second += 1) {
+      const tic = newTicTimestamp('2026-10-14', `21:35:${String(second).padStart(2, '0')}`)
+      ids.push(tic.eventId)
+    }
+    const full = allocateUniqueTicTimestamp('2026-10-14', '21:35', ids)
+    assert.equal(full.ok, false)
+    assert.equal(full.eventId, undefined)
+  })
+})
+
+describe('Eastern boundaries', () => {
+  it('keeps midnight on the Eastern calendar date', () => {
+    const result = validateTicDateTime('2026-10-10', '00:00:00')
+    assert.equal(result.ok, true)
+    assert.equal(result.canonical, '2026-10-10T00:00:00-04:00')
+    assert.equal(result.epochMs, Date.parse('2026-10-10T04:00:00Z'))
+  })
+
+  it('uses the earlier offset during the fall-back hour', () => {
+    const earlier = validateTicDateTime('2026-11-01', '01:30:00')
+    const laterSecond = validateTicDateTime('2026-11-01', '01:30:30')
+    assert.equal(earlier.ok, true)
+    assert.equal(earlier.canonical, '2026-11-01T01:30:00-04:00')
+    assert.equal(laterSecond.ok, true)
+    assert.notEqual(earlier.epochMs, laterSecond.epochMs)
+    assert.equal(validateTicDateTime('2026-03-08', '02:30:00').ok, false)
   })
 })

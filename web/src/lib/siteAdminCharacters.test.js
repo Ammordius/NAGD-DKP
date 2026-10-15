@@ -9,6 +9,7 @@ import {
   claimAccountChoices,
   filterAccountAdminRows,
   resolveAdminCharacter,
+  resolveClaimSubmitAccountId,
   sortClaimAccounts,
 } from './siteAdminCharacters.js'
 
@@ -196,5 +197,24 @@ describe('sortClaimAccounts', () => {
       { account_id: '2', display_name: 'Sexy' },
       { account_id: '1', display_name: 'Bees' },
     ], '').map((row) => row.label), ['Bees', 'Sexy'])
+  })
+
+  it('claims the highlighted account after moving from A to B', () => {
+    const choices = claimAccountChoices([
+      { account_id: 'acct-a', display_name: 'Alpha' },
+      { account_id: 'acct-b', display_name: 'Alpha Two' },
+    ], 'Alpha')
+    const indexA = choices.findIndex((row) => row.id === 'acct-a')
+    const indexB = choices.findIndex((row) => row.id === 'acct-b')
+    assert.equal(indexA, 0)
+    assert.ok(indexB > indexA)
+    const submitted = resolveClaimSubmitAccountId({
+      claimAccountId: 'acct-a',
+      claimQuery: 'Alpha',
+      claimChoices: choices,
+      claimActiveIndex: indexB,
+    })
+    assert.equal(submitted, 'acct-b')
+    assert.equal(choices[indexB].label, 'Alpha Two')
   })
 })

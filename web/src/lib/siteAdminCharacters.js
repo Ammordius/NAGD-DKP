@@ -254,6 +254,39 @@ export function claimAccountChoices(accounts, query) {
   })
 }
 
+/**
+ * Account id the Claim button submits.
+ * The highlighted suggestion wins over an earlier click so moving from A to B
+ * cannot claim A while the list shows B.
+ */
+export function resolveClaimSubmitAccountId({
+  claimAccountId = '',
+  claimQuery = '',
+  claimChoices = [],
+  claimActiveIndex = 0,
+} = {}) {
+  const choices = claimChoices || []
+  const activeIndex = choices.length === 0
+    ? 0
+    : Math.min(Math.max(claimActiveIndex, 0), choices.length - 1)
+  const queryKey = String(claimQuery || '').trim().toLowerCase()
+  const exact = queryKey
+    ? choices.filter((row) => (
+      row.label.toLowerCase() === queryKey
+      || String(row.id).toLowerCase() === queryKey
+      || (row.account?.display_name || '').trim().toLowerCase() === queryKey
+    ))
+    : []
+  const stored = claimAccountId && choices.some((row) => row.id === claimAccountId)
+    ? claimAccountId
+    : ''
+  const resolved = stored || (exact.length === 1 ? exact[0].id : '')
+  const indicated = (String(claimQuery || '').trim() || resolved)
+    ? (choices[activeIndex]?.id || '')
+    : ''
+  return indicated || resolved || ''
+}
+
 export function buildAccountColumnRows(accountIds, accountsById) {
   const rows = []
   const seen = new Set()
