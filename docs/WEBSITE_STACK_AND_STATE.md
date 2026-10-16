@@ -106,6 +106,8 @@ Fetched with `fetch('/…')` from `public/` or CDN:
 | `sessionStorage` | `pageState:/officer/RaidAdmin:ticDraft:<raid id>` | Unsaved tic paste, resolutions, and Attending character ids for that raid |
 | `sessionStorage` | `account-detail-cache-${accountId}` | SWR fallback for account page |
 | `sessionStorage` | `pageState:/loot:*` | Item History search text and sort. Results are not cached; `/loot` queries `raid_loot_history` one page at a time (`LootSearch.jsx`). Deploy the view with `docs/sql-archive/superseded/supabase-raid-loot-history.sql`. |
+| `sessionStorage` | `pageState:/mobs:query`, `pageState:/mobs:filterSlot`, `pageState:/mobs:filterClass`, `pageState:/mobs:groups` | Raid Items search, slot, class, user-opened and user-closed mobs, and Show more counts |
+| `sessionStorage` | `pageState:/mobs:scrollAnchor` | Raid Items scroll anchor (`{ mobKey, itemKey }`), throttled, not stored through `usePersistedState` |
 | TTL cache | `raids_month_*` | Raids calendar month blobs (`web/src/lib/cache.js`) |
 | TTL cache | `accounts_list_v7` | Accounts list (`web/src/pages/Accounts.jsx`, 10 minutes), including the Claimed by column from `account_claim_labels()`. The page refetches on load and overwrites this key. Character “spent” is loot for that account, same buyer fallback as the account page (assignee, else `character_name`, else `char_id`). It is not the DKP leaderboard total. |
 
@@ -138,9 +140,24 @@ React Router **unmounts** screens when you navigate away. Any state held only in
 
 ### `usePersistedState`
 
-- **API:** `const [x, setX] = usePersistedState('key', initialValue)`
+- **API:** `const [x, setX] = usePersistedState('key', initialValue, normalize?)`
 - **Storage:** `sessionStorage` key `pageState:` + your key.
 - **Dynamic keys:** When the key changes (e.g. per `accountId` or `raidId`), the hook reloads that storage slot (see implementation).
+- **Normalize:** Optional third argument. It runs on the parsed value when the slot is read. If it throws, the hook uses `initialValue`.
+
+### Raid Items (`/mobs`)
+
+Search, slot, and class stay in `pageState:/mobs:query`, `pageState:/mobs:filterSlot`, and `pageState:/mobs:filterClass`.
+
+Group memory is `pageState:/mobs:groups` (`web/src/lib/mobLootViewState.js`):
+
+- `expanded[mobKey] === true` means the user opened that mob. `false` means the user closed it. A missing key is not a choice.
+- While a slot or class filter is on, a mob with one or two matching items opens for that visit only. That open state is not stored, and it does not override an explicit `false`.
+- `itemsShown[mobKey]` is how many loot rows Show more has revealed (20, 40, …).
+
+Scroll position is `pageState:/mobs:scrollAnchor`: `{ mobKey, itemKey }`. It is the mob or item at the top of the viewport, written on a short throttle and on page hide, not on every scroll event. Restoration runs once, after mob loot, item stats, elemental armor, and zone classification have finished and the row has been laid out. Changing search, slot, or class drops the anchor so an old position is not applied to the new list. While Raid Items is mounted, `history.scrollRestoration` is `manual`; other pages keep the browser default.
+
+This is tab session storage. It survives navigation (including Back from an item page), reload, and the browser discarding the tab. It does not survive a different tab. A mob key that no longer exists is ignored. Last-3 DKP figures are loaded again and are not part of the saved view.
 
 ### Last route restore (`dkp-last-path`)
 
