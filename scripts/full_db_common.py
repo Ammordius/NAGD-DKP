@@ -31,6 +31,17 @@ ARCHIVE_MEMBERS = (
     "summary.txt",
 )
 LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1"}
+# Ports published by the long-lived supabase start in this worktree.
+DENIED_PORTS = frozenset({54320, 54321, 54322, 54323, 54324, 54327, 54329})
+LONG_LIVED_FRAGMENT = "dkp-full-db-recovery"
+LONG_LIVED_VOLUMES = frozenset(
+    {
+        "supabase_db_dkp-full-db-recovery",
+        "supabase_storage_dkp-full-db-recovery",
+        "supabase_edge_runtime_dkp-full-db-recovery",
+    }
+)
+PROJECT_LABEL = "com.supabase.cli.project"
 RECIPIENT_ENV = "FULL_DB_BACKUP_AGE_RECIPIENT"
 IDENTITY_ENV = "FULL_DB_BACKUP_AGE_IDENTITY"
 URL_ENV = "FULL_DB_DATABASE_URL"
@@ -206,6 +217,109 @@ def run_command(args: list[str], *, env: dict[str, str] | None, secrets: list[st
     return completed
 
 
+def refuse_long_lived_endpoint(host: str, port: int) -> None:
+    if host not in LOCAL_HOSTS:
+        raise FullDbError("Full-database tools refuse non-local hosts.")
+    if int(port) in DENIED_PORTS:
+        raise FullDbError(
+            f"Refusing port {port}. That port belongs to the long-lived local Supabase stack."
+        )
+
+
+def docker_inspect(container: str) -> dict:
+    completed = run_command(
+        ["docker", "inspect", container],
+        env=None,
+        secrets=[],
+        label="docker inspect",
+    )
+    payload = json.loads(completed.stdout or "[]")
+    if not isinstance(payload, list) or len(payload) != 1:
+        raise FullDbError("docker inspect did not return the disposable container.")
+    return payload[0]
+
+
+def assert_disposable_identity(
+    *,
+    host: str,
+    port: int,
+    disposable_label: str,
+    project_id: str,
+    secrets: list[str],
+) -> dict[str, object]:
+    """Prove a target is a disposable local Postgres 17 database.
+
+    A database with zero auth.users rows is not disposable. The long-lived
+    stack is refused by port, container name, volume name, and project label.
+    This function does not delete containers or volumes and does not write SQL.
+    """
+    refuse_long_lived_endpoint(host, port)
+    if not disposable_label.startswith("full-db-restore-"):
+        raise FullDbError("Disposable label must start with full-db-restore-.")
+    if not project_id.startswith("full-db-") or LONG_LIVED_FRAGMENT in project_id:
+        raise FullDbError("Disposable project id must start with full-db- and must not name the long-lived stack.")
+    if LONG_LIVED_FRAGMENT in disposable_label:
+        raise FullDbError("Disposable label names the long-lived stack.")
+    published = container_publishing(port)
+    if LONG_LIVED_FRAGMENT in published:
+        raise FullDbError("Refusing the long-lived database container.")
+    inspected = docker_inspect(published)
+    name = str(inspected.get("Name") or "").lstrip("/")
+    if name != published:
+        raise FullDbError("Inspected container does not match the container publishing the endpoint.")
+    if project_id not in name:
+        raise FullDbError("Container name does not match the disposable project id.")
+    labels = ((inspected.get("Config") or {}).get("Labels") or {})
+    if labels.get(PROJECT_LABEL) != project_id:
+        raise FullDbError("Container project label does not match the disposable project id.")
+    image = str((inspected.get("Config") or {}).get("Image") or "")
+    if "postgres" not in image:
+        raise FullDbError("Disposable container image is not Postgres.")
+    volumes: list[str] = []
+    for mount in inspected.get("Mounts") or []:
+        mount_type = mount.get("Type")
+        if mount_type == "volume":
+            volume = str(mount.get("Name") or "")
+            if volume in LONG_LIVED_VOLUMES or LONG_LIVED_FRAGMENT in volume:
+                raise FullDbError("Refusing a volume that belongs to the long-lived stack.")
+            if project_id not in volume:
+                raise FullDbError("Volume name does not belong to the disposable project.")
+            volumes.append(volume)
+        elif mount_type == "bind":
+            source = str(mount.get("Source") or "")
+            if LONG_LIVED_FRAGMENT in source:
+                raise FullDbError("Refusing a bind mount from the long-lived project directory.")
+        elif mount_type == "tmpfs":
+            continue
+        else:
+            raise FullDbError("Disposable container has an unexpected mount type.")
+    if not volumes:
+        raise FullDbError("Disposable container has no labeled volume.")
+    version = psql_text(name, "SELECT current_setting('server_version');", secrets)
+    require_major_17(version, "destination server")
+    try:
+        marker = psql_text(name, "SELECT label FROM full_db_meta.disposable_marker;", secrets)
+    except FullDbError as exc:
+        raise FullDbError(
+            "Destination has no full_db_meta.disposable_marker. "
+            "Refusing to write to a database that was not explicitly labeled disposable."
+        ) from exc
+    if marker != disposable_label:
+        raise FullDbError("Destination marker does not match the disposable label.")
+    return {"container": name, "volumes": volumes, "project_id": project_id, "port": int(port)}
+
+
+def volumes_safe_to_remove(identity: dict[str, object]) -> list[str]:
+    project_id = str(identity["project_id"])
+    volumes = [str(volume) for volume in identity["volumes"]]  # type: ignore[index]
+    if not volumes:
+        raise FullDbError("No disposable volumes were identified.")
+    for volume in volumes:
+        if volume in LONG_LIVED_VOLUMES or LONG_LIVED_FRAGMENT in volume or project_id not in volume:
+            raise FullDbError("Refusing to remove a volume that failed the disposable identity check.")
+    return volumes
+
+
 def container_publishing(port: int) -> str:
     completed = run_command(
         ["docker", "ps", "--format", "{{.Names}}|{{.Ports}}"],
@@ -243,6 +357,53 @@ def psql_text(container: str, sql: str, secrets: list[str]) -> str:
         input_bytes=sql.encode("utf-8"),
     )
     return (completed.stdout or "").strip()
+
+
+def set_destination_event_triggers(container: str, enabled: bool, secrets: list[str]) -> None:
+    """Disable destination event triggers while schema SQL is replayed.
+
+    Supabase event triggers are owned by supabase_admin. They grant privileges
+    during DDL. postgres cannot alter them. When that role exists, this runs
+    on the container already proven disposable. A database without
+    supabase_admin is left unchanged.
+    """
+    exists = psql_text(
+        container,
+        "SELECT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'supabase_admin');",
+        secrets,
+    )
+    if exists != "t":
+        return
+    verb = "ENABLE" if enabled else "DISABLE"
+    sql = f"""
+DO $$
+DECLARE
+  trigger_name text;
+BEGIN
+  FOR trigger_name IN SELECT evtname FROM pg_event_trigger LOOP
+    EXECUTE format('ALTER EVENT TRIGGER %I {verb}', trigger_name);
+  END LOOP;
+END $$;
+"""
+    run_command(
+        [
+            "docker",
+            "exec",
+            "-i",
+            container,
+            "psql",
+            "-U",
+            "supabase_admin",
+            "-d",
+            "postgres",
+            "-v",
+            "ON_ERROR_STOP=1",
+        ],
+        env=None,
+        secrets=secrets,
+        label="psql",
+        input_bytes=sql.encode("utf-8"),
+    )
 
 
 def psql_script(container: str, sql: str, secrets: list[str]) -> None:
@@ -290,6 +451,13 @@ def classify_object(schema: str, name: str, object_type: str) -> tuple[str, str 
 
     restore mode is live, inert, capture_only, schema_only, or omit.
     """
+    if schema in {"full_db_meta", "full_db_captured"}:
+        return (
+            "UNSUPPORTED",
+            "Disposable marker and capture schemas are restore machinery. They are not application data.",
+            "omit",
+        )
+
     if schema not in PLATFORM_SCHEMAS and schema != "public":
         if object_type in {"table", "partition", "partitioned_table", "sequence"}:
             return "FULLY_RECOVERABLE", None, "live"
@@ -617,6 +785,115 @@ def collect_catalog(container: str, secrets: list[str]) -> tuple[dict, list[dict
     return identity, catalog
 
 
+def schema_dump_targets(catalog: list[dict]) -> list[str]:
+    """User schemas whose definitions belong in schema.sql.
+
+    Platform schemas stay out. public is always included.
+    """
+    targets = {"public"}
+    relation_types = {
+        "table",
+        "partition",
+        "partitioned_table",
+        "view",
+        "materialized_view",
+        "sequence",
+        "function",
+        "procedure",
+    }
+    for entry in catalog:
+        schema = entry.get("schema") or ""
+        if schema in PLATFORM_SCHEMAS or schema in {"pg_extension", "pg_roles", "full_db_meta", "full_db_captured"}:
+            continue
+        if entry.get("object_type") in relation_types:
+            targets.add(schema)
+    return sorted(targets)
+
+
+def assert_catalog_prerequisites(container: str, catalog: list[dict], secrets: list[str]) -> None:
+    installed = set(
+        part
+        for part in psql_text(
+            container,
+            "SELECT coalesce(string_agg(extname, ',' ORDER BY extname), '') FROM pg_extension;",
+            secrets,
+        ).split(",")
+        if part
+    )
+    for entry in catalog:
+        if entry.get("object_type") == "extension" and entry.get("name") not in installed:
+            raise FullDbError(f"Destination is missing required extension {entry.get('name')}.")
+    roles = set(
+        part
+        for part in psql_text(
+            container,
+            "SELECT coalesce(string_agg(rolname, ',' ORDER BY rolname), '') FROM pg_roles;",
+            secrets,
+        ).split(",")
+        if part
+    )
+    for entry in catalog:
+        if entry.get("object_type") == "role" and entry.get("restore_mode") == "omit" and entry.get("name") not in roles:
+            raise FullDbError(f"Destination is missing required role {entry.get('name')}.")
+
+
+def assert_can_set_replica(container: str, user: str, secrets: list[str]) -> None:
+    if not user or any(ch.isspace() for ch in user):
+        raise FullDbError("Restore user is missing.")
+    try:
+        run_command(
+            [
+                "docker",
+                "exec",
+                "-i",
+                container,
+                "psql",
+                "-U",
+                user,
+                "-d",
+                "postgres",
+                "-v",
+                "ON_ERROR_STOP=1",
+                "-c",
+                "SET session_replication_role = replica;",
+            ],
+            env=None,
+            secrets=secrets,
+            label="psql privilege check",
+        )
+    except FullDbError as exc:
+        raise FullDbError(
+            "Destination role cannot SET session_replication_role = replica. Refusing to restore."
+        ) from exc
+
+
+def publication_sql(catalog: list[dict]) -> str:
+    statements: list[str] = []
+    for entry in catalog:
+        if entry.get("object_type") != "publication_member" or entry.get("schema") != "public":
+            continue
+        publication = str(entry.get("publication") or "")
+        table = str(entry.get("table_name") or "")
+        if not publication or not table or any(ch in publication + table for ch in "\"'"):
+            raise FullDbError("Publication membership has an unsafe identifier.")
+        statements.append(
+            "\n".join(
+                [
+                    "DO $$",
+                    "BEGIN",
+                    "  IF NOT EXISTS (",
+                    "    SELECT 1 FROM pg_publication_tables",
+                    f"    WHERE pubname = '{publication}' AND schemaname = 'public' AND tablename = '{table}'",
+                    "  ) THEN",
+                    f"    ALTER PUBLICATION {quote_ident(publication)} ADD TABLE public.{quote_ident(table)};",
+                    "  END IF;",
+                    "END $$;",
+                ]
+            )
+        )
+    return "\n".join(statements) + ("\n" if statements else "")
+
+
 def data_schemas(catalog: list[dict]) -> list[str]:
     schemas = {
         entry["schema"]
@@ -716,6 +993,7 @@ def encrypt_bundle(bundle: Path, recipient: str, destination: Path) -> None:
 
 def decrypt_bundle(artifact: Path, identity: Path, destination: Path) -> None:
     age = find_age("age")
+    destination.mkdir(parents=True, exist_ok=True)
     tar_path = destination / "backup.tar.gz"
     run_command(
         [age, "--decrypt", "--identity", str(identity), "--output", str(tar_path), str(artifact)],
@@ -725,14 +1003,20 @@ def decrypt_bundle(artifact: Path, identity: Path, destination: Path) -> None:
     )
     with tarfile.open(tar_path, "r:gz") as archive:
         archive.extractall(destination)
-    sums = (destination / "SHA256SUMS").read_text(encoding="utf-8")
+    sums_path = destination / "SHA256SUMS"
+    if not sums_path.is_file():
+        raise FullDbError("Archive is missing SHA256SUMS.")
+    sums = sums_path.read_text(encoding="utf-8")
     for line in sums.splitlines():
         if not line.strip():
             continue
         digest, _, name = line.partition("  ")
-        if not name:
+        if not name or "/" in name or "\\" in name or name.startswith("."):
             raise FullDbError("SHA256SUMS entry is malformed.")
-        actual = sha256_file(destination / name)
+        member = destination / name
+        if not member.is_file():
+            raise FullDbError(f"Archive is missing {name}.")
+        actual = sha256_file(member)
         if actual != digest:
             raise FullDbError(f"Checksum mismatch for {name}.")
 

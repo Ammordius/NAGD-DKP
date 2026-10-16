@@ -24,6 +24,8 @@ from full_db_common import (
     data_schemas,
     encrypt_bundle,
     parse_database_url,
+    refuse_long_lived_endpoint,
+    schema_dump_targets,
     pg_dump,
     public_triggers_on_managed,
     redact,
@@ -36,18 +38,35 @@ from full_db_common import (
 )
 
 
+def _keep_default_privilege(line: str) -> bool:
+    """Keep a default-privilege statement only when postgres owns it.
+
+    pg_dump also emits defaults owned by supabase_admin and other platform
+    roles. The restoring postgres role cannot change those, so they stay out.
+    """
+    if "FOR ROLE" not in line:
+        return True
+    return " FOR ROLE postgres " in line or ' FOR ROLE "postgres" ' in line
+
+
 def _schema_sql(dump: str) -> str:
     lines = [
-        "-- ALTER DEFAULT PRIVILEGES statements are omitted.",
+        "-- ALTER DEFAULT PRIVILEGES owned by roles other than postgres are omitted.",
         "-- The restoring role cannot change default privileges owned by another role.",
-        "-- Explicit GRANT statements for existing objects are kept.",
+        "-- Defaults owned by postgres, and explicit GRANT statements, are kept.",
+        "-- Postgres-owned defaults are applied after CREATE so they do not add",
+        "-- privileges that the following GRANT statements do not revoke.",
     ]
+    defaults: list[str] = []
     for line in dump.splitlines():
         if line.startswith("ALTER DEFAULT PRIVILEGES"):
+            if _keep_default_privilege(line):
+                defaults.append(line)
             continue
         if line.startswith("CREATE SCHEMA ") and "IF NOT EXISTS" not in line:
             line = "CREATE SCHEMA IF NOT EXISTS " + line[len("CREATE SCHEMA ") :]
         lines.append(line)
+    lines.extend(defaults)
     return "\n".join(lines) + "\n"
 
 
@@ -70,6 +89,7 @@ def build_backup(out_path: Path) -> dict:
         raise FullDbError("Set " + " and ".join(missing) + ".")
     recipient = validate_recipient(recipient_raw)
     conn = parse_database_url(url)
+    refuse_long_lived_endpoint(str(conn["host"]), int(conn["port"]))
     secrets = [str(conn["password"]), recipient]
     container = container_publishing(int(conn["port"]))
     identity, catalog = collect_catalog(container, secrets)
@@ -82,13 +102,10 @@ def build_backup(out_path: Path) -> dict:
     data_sql = pg_dump(container, schema_args, secrets)
     if "decrypted_secrets" in data_sql:
         raise FullDbError("Refusing to package vault.decrypted_secrets.")
-    public_schema = _schema_sql(
-        pg_dump(
-            container,
-            ["--schema-only", "--no-owner", "--quote-all-identifiers", "--encoding=UTF8", "--schema", "public"],
-            secrets,
-        )
-    )
+    schema_args = ["--schema-only", "--no-owner", "--quote-all-identifiers", "--encoding=UTF8"]
+    for schema in schema_dump_targets(catalog):
+        schema_args.extend(["--schema", schema])
+    public_schema = _schema_sql(pg_dump(container, schema_args, secrets))
     auth_custom = public_triggers_on_managed(container, secrets)
     history = _history_sql(container, secrets, identity["installed_schemas"])
     roles = roles_sql(catalog)

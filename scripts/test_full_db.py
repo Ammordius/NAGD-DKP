@@ -55,9 +55,14 @@ def run(args: list[str], timeout: int = 180) -> subprocess.CompletedProcess[str]
 
 
 def free_port() -> int:
-    with socket.socket() as sock:
-        sock.bind(("127.0.0.1", 0))
-        return int(sock.getsockname()[1])
+    for _ in range(20):
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = int(sock.getsockname()[1])
+        if port not in full_db_common.DENIED_PORTS:
+            return port
+    fail("could not find a disposable local port")
+    return 0
 
 
 def psql(container: str, sql: str, timeout: int = 300) -> subprocess.CompletedProcess[str]:
@@ -127,6 +132,10 @@ def start_database(name: str) -> tuple[str, int]:
             f"JWT_SECRET={JWT}",
             "-e",
             "JWT_EXP=3600",
+            "--label",
+            f"com.supabase.cli.project={name}",
+            "-v",
+            f"{name}-data:/var/lib/postgresql/data",
             "-p",
             f"127.0.0.1:{port}:5432",
             IMAGE,
@@ -372,6 +381,7 @@ def test_disposable_restore() -> None:
                     identity,
                     LABEL,
                     f"RESTORE FULL {LABEL}",
+                    dest,
                 )
             finally:
                 os.environ.pop(full_db_common.URL_ENV, None)
@@ -400,6 +410,7 @@ def test_disposable_restore() -> None:
             check("handle_new_user" in (trigger.stdout or ""), trigger.stdout or trigger.stderr)
     finally:
         run(["docker", "rm", "-f", source, dest], timeout=60)
+        run(["docker", "volume", "rm", "-f", f"{source}-data", f"{dest}-data"], timeout=60)
 
 
 def main() -> None:
