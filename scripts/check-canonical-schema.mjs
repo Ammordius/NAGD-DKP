@@ -38,6 +38,7 @@ function walk(dir, found = []) {
 
 function allowedSql(path) {
   return path === 'docs/supabase-schema-full.sql'
+    || path === 'docs/full-db-hosted-inventory.sql'
     || path.startsWith('docs/sql-archive/')
     || path.startsWith('web/test/pg/')
 }
