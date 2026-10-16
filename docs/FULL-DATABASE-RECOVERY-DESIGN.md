@@ -16,7 +16,7 @@ Reviewed sources, without a connection to production or staging:
 
 Local inventory used Supabase CLI 2.121.0 and `supabase start` in this worktree. [`supabase/config.toml`](../supabase/config.toml) sets `major_version = 17`. The database container is `public.ecr.aws/supabase/postgres:17.11.0.004`. `SHOW server_version` returned `17.11`. `pg_dump --version` inside that container returned `pg_dump (PostgreSQL) 17.11`. The Windows PostgreSQL 16 install is not used. Tools refuse a client or server whose major version is not 17.
 
-age is the WinGet package FiloSottile.age 1.3.2 when `age` is not already on `PATH`. The tool discovers that executable and does not download another copy. No full-database age identity is configured in the environment. Tests generate an ephemeral key pair in a temporary directory and delete it. They do not read, print, or replace `SQL_BACKUP_AGE_RECIPIENT` or `SQL_BACKUP_AGE_IDENTITY`. The backup recipient remains `FULL_DB_BACKUP_AGE_RECIPIENT`, a separate public key from the portable guild backup. That variable is unset here, so this phase did not create a long-lived key.
+age is the WinGet package FiloSottile.age 1.3.2 when `age` is not already on `PATH`. The tool discovers that executable and does not download another copy. No full-database age identity is configured in the environment. Tests generate an ephemeral key pair in a temporary directory and delete it. They do not read, print, or replace `SQL_BACKUP_AGE_RECIPIENT` or `SQL_BACKUP_AGE_IDENTITY`. Local tests still pass an ephemeral public key through `FULL_DB_BACKUP_AGE_RECIPIENT`. GitHub Actions does not create that key. The hosted backup reuses `SQL_BACKUP_AGE_RECIPIENT` and `SQL_BACKUP_AGE_IDENTITY`.
 
 The hosted server major version is still unknown. [`docs/full-db-hosted-inventory.sql`](full-db-hosted-inventory.sql) is the read-only procedure for a later check. `python scripts/full_db_inspect.py --hosted-procedure` prints that path and does not connect. Backup and restore accept only `localhost`, `127.0.0.1`, and `::1`.
 
@@ -48,7 +48,7 @@ The artifact must be enough to recreate, on a newly initialized Supabase project
 - table definitions, columns, constraints, indexes, views, functions, procedures, triggers, row-level security policies, grants, and sequence positions
 - extension identity, migration history, and publication membership, recorded even when the object itself is not recreated
 
-It must survive an attacker who can download a future GitHub Actions artifact. The uploaded bytes are ciphertext. The private key stays offline. Password hashes, emails, and audit rows use a different key from the portable guild backup.
+It must survive an attacker who can download a future GitHub Actions artifact. The uploaded bytes are ciphertext. The private key stays offline. GitHub Actions encrypts this artifact with the same age recipient as the portable guild backup.
 
 The dangerous operator mistake is restoring this artifact onto the wrong project, or feeding it to the portable guild restore. Identity checks and a distinct format close that path. The dangerous technical mistake is `pg_restore --clean` against schemas Supabase owns.
 
@@ -163,14 +163,14 @@ A failed statement rolls the transaction back. Hosted connections use the sessio
 
 ## Encryption and manifest design
 
-Encryption is `age`, then the same wrapper shape as the portable backup: gzip-compressed tar, then `age`. Proposed secret names, not created in this phase:
+Encryption is `age`, then the same wrapper shape as the portable backup: gzip-compressed tar, then `age`. GitHub Actions reuses the existing portable age keys. Do not create a second recipient or identity.
 
 | Name | Kind | Value |
 | --- | --- | --- |
-| `FULL_DB_BACKUP_AGE_RECIPIENT` | Public key | `age1...` line from a new `age-keygen` run |
-| `FULL_DB_BACKUP_AGE_IDENTITY` | Private key | Offline. Never a secret of a backup workflow. |
+| `SQL_BACKUP_AGE_RECIPIENT` | Public key | Existing repository secret. The full backup workflow encrypts with it. |
+| `SQL_BACKUP_AGE_IDENTITY` | Private key | Existing secret. Inspect, verify, and a later authorized restore can decrypt. The backup workflow must not receive it. |
 
-The portable secrets `SQL_BACKUP_AGE_RECIPIENT` and `SQL_BACKUP_AGE_IDENTITY` stay on the guild-data artifact. A person who can decrypt a portable backup cannot decrypt password hashes or officer audit rows.
+`FULL_DB_BACKUP_AGE_RECIPIENT` remains the process variable for local disposable tests only. It is not a GitHub secret.
 
 The dump sets `PGOPTIONS=-c default_transaction_read_only=on` and passes the connection through libpq environment variables. Logs list object names and counts. They omit the connection string, passwords, the age recipient, row contents, and hashes.
 
@@ -434,8 +434,8 @@ The portable backup remains the way to move guild DKP between independent projec
 | Schema | not in the artifact | `public` definitions are in the artifact |
 | Auth, profiles, audit | destination keeps its own | source rows replace destination rows |
 | Caches | rebuilt or left behind | restored as stored |
-| Encryption identity | `SQL_BACKUP_AGE_*` | `FULL_DB_BACKUP_AGE_*` |
-| Workflow | `db-sql-backup.yml`, `db-restore-sql.yml` | none in this phase |
+| Encryption identity | `SQL_BACKUP_AGE_*` | `SQL_BACKUP_AGE_*` (same keys; distinct artifact format) |
+| Workflow | `db-sql-backup.yml`, `db-restore-sql.yml` | `full_self_host_backup.yml`, `full_self_host_restore.yml` |
 | Confirmation | `RESTORE <destination>` | `RESTORE FULL <destination>` |
 
 The portable restore loads an allowlist inside one transaction and then calls `end_restore_load()`. It does not execute `data.sql` as a script. This full restore is a different loader. It must not call the portable swap, and the portable loader must not be pointed at `full-db-backup-*`.
@@ -452,7 +452,7 @@ No file in this phase changes:
 
 ## Decisions applied in Phase 2
 
-1. Encryption stays age, using the WinGet 1.3.2 executable when it is not on `PATH`. The recipient variable is `FULL_DB_BACKUP_AGE_RECIPIENT`. It is separate from the portable key. No long-lived key was generated in this phase.
+1. Encryption stays age, using the WinGet 1.3.2 executable when it is not on `PATH`. Local tests use an ephemeral `FULL_DB_BACKUP_AGE_RECIPIENT`. GitHub Actions reuses `SQL_BACKUP_AGE_RECIPIENT` and `SQL_BACKUP_AGE_IDENTITY`. No second production key is created.
 2. Local servers, `pg_dump`, and disposable tests are PostgreSQL 17. PostgreSQL 16 is refused. The hosted major version is unchecked until [`docs/full-db-hosted-inventory.sql`](full-db-hosted-inventory.sql) is authorized.
 3. `cron`, `net`, and `pgmq` were absent locally and are disclosed. Installed operational tables are captured and restored inert. Vault ciphertext is captured and not reloaded into `vault`. The plaintext view is not dumped.
 4. Destructive certification against the `supabase start` database has not been run. Phase 2 restore tests create and remove their own containers.

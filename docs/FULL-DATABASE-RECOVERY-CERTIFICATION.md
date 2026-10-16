@@ -1,6 +1,6 @@
 # Full database recovery certification
 
-Certified at 2026-10-16 08:30:08 Central Daylight Time on a disposable local Supabase CLI 2.121.0 stack.
+Certified at 2026-10-16 09:02:37 Central Daylight Time on a disposable local Supabase CLI 2.121.0 stack.
 PostgreSQL server version: `17.11`. Client `pg_dump` and `psql` are PostgreSQL 17.11 from the extracted Windows binaries used only on `PATH` for this run. The database image is `public.ecr.aws/supabase/postgres:17.11.0.004`.
 
 ## Verdicts
@@ -39,8 +39,8 @@ Two destructive cycles used different fixtures. Cycle A has raids, attendance, l
 
 | Cycle | Backup seconds | Restore seconds | Tables hashed | Catalog entries |
 | --- | --- | --- | --- | --- |
-| a | 2.6 | 2.1 | 64 | 402 |
-| b | 2.6 | 2.0 | 64 | 402 |
+| a | 2.7 | 2.2 | 64 | 402 |
+| b | 2.8 | 2.1 | 64 | 402 |
 
 ## Inventory and hashes
 
@@ -48,12 +48,12 @@ Row hashes are `md5` of `row_to_json` text, ordered by that text. The restored h
 
 | Cycle | Table | Baseline hash | Restored hash |
 | --- | --- | --- | --- |
-| a | auth.audit_log_entries | edb84ea7bf9e6144f9f8c580022ed905 | edb84ea7bf9e6144f9f8c580022ed905 |
+| a | auth.audit_log_entries | 9c5428ddd8e416af30df39e08fc04945 | 9c5428ddd8e416af30df39e08fc04945 |
 | a | auth.custom_oauth_providers | d41d8cd98f00b204e9800998ecf8427e | d41d8cd98f00b204e9800998ecf8427e |
 | a | auth.flow_state | d41d8cd98f00b204e9800998ecf8427e | d41d8cd98f00b204e9800998ecf8427e |
-| a | auth.identities | 7c23523730e3e69732ccb6515e41cbb2 | 7c23523730e3e69732ccb6515e41cbb2 |
+| a | auth.identities | f20a1530cf08fbfdb96c2380cf59e936 | f20a1530cf08fbfdb96c2380cf59e936 |
 | a | auth.instances | d41d8cd98f00b204e9800998ecf8427e | d41d8cd98f00b204e9800998ecf8427e |
-| a | auth.mfa_amr_claims | 664d3cc875140c3b4497fb864aa28911 | 664d3cc875140c3b4497fb864aa28911 |
+| a | auth.mfa_amr_claims | ff80e8af749e634c94092752be495160 | ff80e8af749e634c94092752be495160 |
 | a | auth.mfa_challenges | d41d8cd98f00b204e9800998ecf8427e | d41d8cd98f00b204e9800998ecf8427e |
 | a | auth.mfa_factors | d41d8cd98f00b204e9800998ecf8427e | d41d8cd98f00b204e9800998ecf8427e |
 | a | auth.mfa_recovery_code_sets | d41d8cd98f00b204e9800998ecf8427e | d41d8cd98f00b204e9800998ecf8427e |
@@ -63,35 +63,35 @@ Row hashes are `md5` of `row_to_json` text, ordered by that text. The restored h
 | a | auth.oauth_clients | d41d8cd98f00b204e9800998ecf8427e | d41d8cd98f00b204e9800998ecf8427e |
 | a | auth.oauth_consents | d41d8cd98f00b204e9800998ecf8427e | d41d8cd98f00b204e9800998ecf8427e |
 | a | auth.one_time_tokens | d41d8cd98f00b204e9800998ecf8427e | d41d8cd98f00b204e9800998ecf8427e |
-| a | auth.refresh_tokens | 23a6fa43b2396832a24904b5f39d2d42 | 23a6fa43b2396832a24904b5f39d2d42 |
+| a | auth.refresh_tokens | 06e15351b2cb4558a294023400ade5af | 06e15351b2cb4558a294023400ade5af |
 | a | auth.saml_providers | d41d8cd98f00b204e9800998ecf8427e | d41d8cd98f00b204e9800998ecf8427e |
 | a | auth.saml_relay_states | d41d8cd98f00b204e9800998ecf8427e | d41d8cd98f00b204e9800998ecf8427e |
 | a | auth.schema_migrations | 33cac503c99c09d6a74d508809afa2d3 | 33cac503c99c09d6a74d508809afa2d3 |
 | a | auth.scim_tokens | d41d8cd98f00b204e9800998ecf8427e | d41d8cd98f00b204e9800998ecf8427e |
 | a | auth.scim_users | d41d8cd98f00b204e9800998ecf8427e | d41d8cd98f00b204e9800998ecf8427e |
-| a | auth.sessions | 18da94097884f9d24ee74195df652fd2 | 18da94097884f9d24ee74195df652fd2 |
+| a | auth.sessions | 4fc8f36dfa75dc1d80a44b10fdb85b2c | 4fc8f36dfa75dc1d80a44b10fdb85b2c |
 | a | auth.sso_domains | d41d8cd98f00b204e9800998ecf8427e | d41d8cd98f00b204e9800998ecf8427e |
 | a | auth.sso_providers | d41d8cd98f00b204e9800998ecf8427e | d41d8cd98f00b204e9800998ecf8427e |
-| a | auth.users | fab7efcfeab6a65eab8c5f37dd93403f | fab7efcfeab6a65eab8c5f37dd93403f |
+| a | auth.users | ad2539704891d2862836cd3df57d6a0a | ad2539704891d2862836cd3df57d6a0a |
 | a | auth.webauthn_challenges | d41d8cd98f00b204e9800998ecf8427e | d41d8cd98f00b204e9800998ecf8427e |
 | a | auth.webauthn_credentials | d41d8cd98f00b204e9800998ecf8427e | d41d8cd98f00b204e9800998ecf8427e |
 | a | certification_extra.notes | f2bdc233b1ba9619c1b34fd31c45118c | f2bdc233b1ba9619c1b34fd31c45118c |
 | a | public.account_class_coverage | d41d8cd98f00b204e9800998ecf8427e | d41d8cd98f00b204e9800998ecf8427e |
-| a | public.account_dkp_summary | 1d24a6bc25b9eea2b902ffd94e11adfe | 1d24a6bc25b9eea2b902ffd94e11adfe |
+| a | public.account_dkp_summary | fdead0b988949b0b2b6a4f2cf369b88a | fdead0b988949b0b2b6a4f2cf369b88a |
 | a | public.accounts | 6e920feec6ef8f2b1dd02741f86d0776 | 6e920feec6ef8f2b1dd02741f86d0776 |
 | a | public.active_accounts | d41d8cd98f00b204e9800998ecf8427e | d41d8cd98f00b204e9800998ecf8427e |
 | a | public.active_raiders | 5239cd4dfdd866920135e15928db81b1 | 5239cd4dfdd866920135e15928db81b1 |
 | a | public.bid_portfolio_auction_fact | d41d8cd98f00b204e9800998ecf8427e | d41d8cd98f00b204e9800998ecf8427e |
 | a | public.character_account | ef60466fe5cd06967546a09dfb55fad9 | ef60466fe5cd06967546a09dfb55fad9 |
-| a | public.character_dkp_spent | 994e69554966e5d8a9d3ebc2ab59f6d7 | 994e69554966e5d8a9d3ebc2ab59f6d7 |
+| a | public.character_dkp_spent | e603975708e9b25b317b4f47f2be672e | e603975708e9b25b317b4f47f2be672e |
 | a | public.character_loot_assignment_counts | d41d8cd98f00b204e9800998ecf8427e | d41d8cd98f00b204e9800998ecf8427e |
 | a | public.characters | d765df7e5efb510ff998e04c8de9fd37 | d765df7e5efb510ff998e04c8de9fd37 |
 | a | public.dkp_adjustments | 95186257478b21c98edba0d7e39ea084 | 95186257478b21c98edba0d7e39ea084 |
 | a | public.dkp_period_totals | 63c0c871f5585a2f726dac35ce81a346 | 63c0c871f5585a2f726dac35ce81a346 |
-| a | public.dkp_summary | 460d29fb388463f783ea5915380448e3 | 460d29fb388463f783ea5915380448e3 |
+| a | public.dkp_summary | 57829ae65f747a59629f1eab3d5921ef | 57829ae65f747a59629f1eab3d5921ef |
 | a | public.loot_assignment | d41d8cd98f00b204e9800998ecf8427e | d41d8cd98f00b204e9800998ecf8427e |
-| a | public.officer_audit_log | 6e3193a315768487f5cea626be5e752d | 6e3193a315768487f5cea626be5e752d |
-| a | public.profiles | d0dfd12b5dfc302e07600830df16556c | d0dfd12b5dfc302e07600830df16556c |
+| a | public.officer_audit_log | f6bc0e293dd11c6de4fedc3281fc52f2 | f6bc0e293dd11c6de4fedc3281fc52f2 |
+| a | public.profiles | dca9a9bc531d95a58c9c12a2d45177f9 | dca9a9bc531d95a58c9c12a2d45177f9 |
 | a | public.raid_attendance | d41d8cd98f00b204e9800998ecf8427e | d41d8cd98f00b204e9800998ecf8427e |
 | a | public.raid_attendance_dkp | e0d03cf6e4fa75dc8840513a491445c4 | e0d03cf6e4fa75dc8840513a491445c4 |
 | a | public.raid_attendance_dkp_by_account | 739f26460bf85fb885b29f479b1c51cb | 739f26460bf85fb885b29f479b1c51cb |
@@ -102,22 +102,22 @@ Row hashes are `md5` of `row_to_json` text, ordered by that text. The restored h
 | a | public.raid_loot | 83e3abbabed9dde1c2dc16b6e0b9791a | 83e3abbabed9dde1c2dc16b6e0b9791a |
 | a | public.raids | 86c347e1a0855e4cfa90296bc99d8a8c | 86c347e1a0855e4cfa90296bc99d8a8c |
 | a | public.restore_in_progress | 5d246b9f1c99f1b9311dde0fa7a56b6f | 4188631e8b2fc1a90b55cee5d5253bbe |
-| a | storage.buckets | d6a0eb94e64a6c706b22d6af67a447df | d6a0eb94e64a6c706b22d6af67a447df |
+| a | storage.buckets | f0fb4f58bdcb337509a5e7d2a9ea6a8e | f0fb4f58bdcb337509a5e7d2a9ea6a8e |
 | a | storage.buckets_analytics | d41d8cd98f00b204e9800998ecf8427e | d41d8cd98f00b204e9800998ecf8427e |
 | a | storage.buckets_vectors | d41d8cd98f00b204e9800998ecf8427e | d41d8cd98f00b204e9800998ecf8427e |
 | a | storage.iceberg_namespaces | d41d8cd98f00b204e9800998ecf8427e | d41d8cd98f00b204e9800998ecf8427e |
 | a | storage.iceberg_tables | d41d8cd98f00b204e9800998ecf8427e | d41d8cd98f00b204e9800998ecf8427e |
-| a | storage.migrations | 8485b30199969469e0149161d5cb8b43 | 8485b30199969469e0149161d5cb8b43 |
-| a | storage.objects | d089dd4a8dbfd4c81c3ea13f14799871 | d089dd4a8dbfd4c81c3ea13f14799871 |
+| a | storage.migrations | 3c3dea80486e1faf288052c37e6b7b19 | 3c3dea80486e1faf288052c37e6b7b19 |
+| a | storage.objects | 474ebfef69e95e952c7294eb45d81271 | 474ebfef69e95e952c7294eb45d81271 |
 | a | storage.s3_multipart_uploads | d41d8cd98f00b204e9800998ecf8427e | d41d8cd98f00b204e9800998ecf8427e |
 | a | storage.s3_multipart_uploads_parts | d41d8cd98f00b204e9800998ecf8427e | d41d8cd98f00b204e9800998ecf8427e |
 | a | storage.vector_indexes | d41d8cd98f00b204e9800998ecf8427e | d41d8cd98f00b204e9800998ecf8427e |
-| b | auth.audit_log_entries | 9df2ae8495d0b77a79a436e7bdb77d2b | 9df2ae8495d0b77a79a436e7bdb77d2b |
+| b | auth.audit_log_entries | 70a35d5cc168a4881f13649c09ab6b43 | 70a35d5cc168a4881f13649c09ab6b43 |
 | b | auth.custom_oauth_providers | d41d8cd98f00b204e9800998ecf8427e | d41d8cd98f00b204e9800998ecf8427e |
 | b | auth.flow_state | d41d8cd98f00b204e9800998ecf8427e | d41d8cd98f00b204e9800998ecf8427e |
-| b | auth.identities | 37fd641d631e99b3461f3acf71b6f4f2 | 37fd641d631e99b3461f3acf71b6f4f2 |
+| b | auth.identities | 1bb864d2023dee4ada2d0fab6c6cdca8 | 1bb864d2023dee4ada2d0fab6c6cdca8 |
 | b | auth.instances | d41d8cd98f00b204e9800998ecf8427e | d41d8cd98f00b204e9800998ecf8427e |
-| b | auth.mfa_amr_claims | 7ef7118b89ba144d306d6f558e519f55 | 7ef7118b89ba144d306d6f558e519f55 |
+| b | auth.mfa_amr_claims | 2019d3ead2c96fcdcd846421e64bd401 | 2019d3ead2c96fcdcd846421e64bd401 |
 | b | auth.mfa_challenges | d41d8cd98f00b204e9800998ecf8427e | d41d8cd98f00b204e9800998ecf8427e |
 | b | auth.mfa_factors | d41d8cd98f00b204e9800998ecf8427e | d41d8cd98f00b204e9800998ecf8427e |
 | b | auth.mfa_recovery_code_sets | d41d8cd98f00b204e9800998ecf8427e | d41d8cd98f00b204e9800998ecf8427e |
@@ -127,16 +127,16 @@ Row hashes are `md5` of `row_to_json` text, ordered by that text. The restored h
 | b | auth.oauth_clients | d41d8cd98f00b204e9800998ecf8427e | d41d8cd98f00b204e9800998ecf8427e |
 | b | auth.oauth_consents | d41d8cd98f00b204e9800998ecf8427e | d41d8cd98f00b204e9800998ecf8427e |
 | b | auth.one_time_tokens | d41d8cd98f00b204e9800998ecf8427e | d41d8cd98f00b204e9800998ecf8427e |
-| b | auth.refresh_tokens | 2d1aafd4a81087010749752c2fed6516 | 2d1aafd4a81087010749752c2fed6516 |
+| b | auth.refresh_tokens | 0d9ef4042ef6a79727fef621c64ccb4c | 0d9ef4042ef6a79727fef621c64ccb4c |
 | b | auth.saml_providers | d41d8cd98f00b204e9800998ecf8427e | d41d8cd98f00b204e9800998ecf8427e |
 | b | auth.saml_relay_states | d41d8cd98f00b204e9800998ecf8427e | d41d8cd98f00b204e9800998ecf8427e |
 | b | auth.schema_migrations | 33cac503c99c09d6a74d508809afa2d3 | 33cac503c99c09d6a74d508809afa2d3 |
 | b | auth.scim_tokens | d41d8cd98f00b204e9800998ecf8427e | d41d8cd98f00b204e9800998ecf8427e |
 | b | auth.scim_users | d41d8cd98f00b204e9800998ecf8427e | d41d8cd98f00b204e9800998ecf8427e |
-| b | auth.sessions | b8773e10d77a8838eab14f0bb84ab21d | b8773e10d77a8838eab14f0bb84ab21d |
+| b | auth.sessions | fd070e31b724a41185115b37a93e060c | fd070e31b724a41185115b37a93e060c |
 | b | auth.sso_domains | d41d8cd98f00b204e9800998ecf8427e | d41d8cd98f00b204e9800998ecf8427e |
 | b | auth.sso_providers | d41d8cd98f00b204e9800998ecf8427e | d41d8cd98f00b204e9800998ecf8427e |
-| b | auth.users | a67a0546380d1f1e04774cad5b24f1b9 | a67a0546380d1f1e04774cad5b24f1b9 |
+| b | auth.users | 340b7a28d084eefa4abc62a72c651dc4 | 340b7a28d084eefa4abc62a72c651dc4 |
 | b | auth.webauthn_challenges | d41d8cd98f00b204e9800998ecf8427e | d41d8cd98f00b204e9800998ecf8427e |
 | b | auth.webauthn_credentials | d41d8cd98f00b204e9800998ecf8427e | d41d8cd98f00b204e9800998ecf8427e |
 | b | certification_extra.notes | 09ce38e237e4b8718cef69ed0282729c | 09ce38e237e4b8718cef69ed0282729c |
@@ -154,8 +154,8 @@ Row hashes are `md5` of `row_to_json` text, ordered by that text. The restored h
 | b | public.dkp_period_totals | d41d8cd98f00b204e9800998ecf8427e | d41d8cd98f00b204e9800998ecf8427e |
 | b | public.dkp_summary | d41d8cd98f00b204e9800998ecf8427e | d41d8cd98f00b204e9800998ecf8427e |
 | b | public.loot_assignment | d41d8cd98f00b204e9800998ecf8427e | d41d8cd98f00b204e9800998ecf8427e |
-| b | public.officer_audit_log | f76d6a428faaf52890c9004668c000e2 | f76d6a428faaf52890c9004668c000e2 |
-| b | public.profiles | 0e7da883250a064cba96264abefd91c5 | 0e7da883250a064cba96264abefd91c5 |
+| b | public.officer_audit_log | 11e272933832b238c526d7a4e90ae3b7 | 11e272933832b238c526d7a4e90ae3b7 |
+| b | public.profiles | b32231daa3cf24348974811c19135cbb | b32231daa3cf24348974811c19135cbb |
 | b | public.raid_attendance | d41d8cd98f00b204e9800998ecf8427e | d41d8cd98f00b204e9800998ecf8427e |
 | b | public.raid_attendance_dkp | d41d8cd98f00b204e9800998ecf8427e | d41d8cd98f00b204e9800998ecf8427e |
 | b | public.raid_attendance_dkp_by_account | d41d8cd98f00b204e9800998ecf8427e | d41d8cd98f00b204e9800998ecf8427e |
@@ -166,13 +166,13 @@ Row hashes are `md5` of `row_to_json` text, ordered by that text. The restored h
 | b | public.raid_loot | d41d8cd98f00b204e9800998ecf8427e | d41d8cd98f00b204e9800998ecf8427e |
 | b | public.raids | d41d8cd98f00b204e9800998ecf8427e | d41d8cd98f00b204e9800998ecf8427e |
 | b | public.restore_in_progress | 5d246b9f1c99f1b9311dde0fa7a56b6f | 4188631e8b2fc1a90b55cee5d5253bbe |
-| b | storage.buckets | 735e019a25c4c9110bf49a152a9c3c21 | 735e019a25c4c9110bf49a152a9c3c21 |
+| b | storage.buckets | 352d7ac1f09f6a048243fa2054c0375c | 352d7ac1f09f6a048243fa2054c0375c |
 | b | storage.buckets_analytics | d41d8cd98f00b204e9800998ecf8427e | d41d8cd98f00b204e9800998ecf8427e |
 | b | storage.buckets_vectors | d41d8cd98f00b204e9800998ecf8427e | d41d8cd98f00b204e9800998ecf8427e |
 | b | storage.iceberg_namespaces | d41d8cd98f00b204e9800998ecf8427e | d41d8cd98f00b204e9800998ecf8427e |
 | b | storage.iceberg_tables | d41d8cd98f00b204e9800998ecf8427e | d41d8cd98f00b204e9800998ecf8427e |
-| b | storage.migrations | 87bb58cb45a07c23925e92316948e371 | 87bb58cb45a07c23925e92316948e371 |
-| b | storage.objects | 099e6fa012ab1f05bd03eb667d63cdd1 | 099e6fa012ab1f05bd03eb667d63cdd1 |
+| b | storage.migrations | 1c7dfc0c0ced2be1c310fdd5b5189ed2 | 1c7dfc0c0ced2be1c310fdd5b5189ed2 |
+| b | storage.objects | 5d8ea078856ecd8471fd034f782c3f81 | 5d8ea078856ecd8471fd034f782c3f81 |
 | b | storage.s3_multipart_uploads | d41d8cd98f00b204e9800998ecf8427e | d41d8cd98f00b204e9800998ecf8427e |
 | b | storage.s3_multipart_uploads_parts | d41d8cd98f00b204e9800998ecf8427e | d41d8cd98f00b204e9800998ecf8427e |
 | b | storage.vector_indexes | d41d8cd98f00b204e9800998ecf8427e | d41d8cd98f00b204e9800998ecf8427e |

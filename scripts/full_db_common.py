@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """Shared helpers for the full-database backup.
 
-This module does not read or write the portable guild backup. It refuses
-non-local hosts and any PostgreSQL client or server that is not major
-version 17.
+Local backup and restore refuse non-local hosts. Hosted read-only backup is a
+separate entry and does not weaken those checks. PostgreSQL clients and
+servers must be major version 17.
 """
 
 from __future__ import annotations
 
+import contextvars
 import hashlib
 import json
 import os
@@ -45,6 +46,21 @@ PROJECT_LABEL = "com.supabase.cli.project"
 RECIPIENT_ENV = "FULL_DB_BACKUP_AGE_RECIPIENT"
 IDENTITY_ENV = "FULL_DB_BACKUP_AGE_IDENTITY"
 URL_ENV = "FULL_DB_DATABASE_URL"
+HOSTED_URL_ENV = "SUPABASE_DB_URL"
+HOSTED_RECIPIENT_ENV = "SQL_BACKUP_AGE_RECIPIENT"
+SESSION_PORT = 5432
+TRANSACTION_POOLER_PORT = 6543
+REQUIRED_TABLES = (
+    ("auth", "users"),
+    ("auth", "identities"),
+    ("public", "profiles"),
+    ("public", "officer_audit_log"),
+)
+_CATALOG_QUERY: contextvars.ContextVar = contextvars.ContextVar("full_db_catalog_query", default=None)
+_FORBIDDEN_SQL = re.compile(
+    r"\b(insert|update|delete|merge|create|alter|drop|grant|revoke|truncate|copy|call|do)\b",
+    re.IGNORECASE,
+)
 
 # Platform roles. Passwords for these roles are never stored.
 RESERVED_ROLES = (
@@ -149,6 +165,183 @@ def parse_database_url(url: str) -> dict[str, str | int]:
     }
 
 
+def parse_hosted_database_url(url: str) -> dict[str, str | int]:
+    """Parse a hosted session URI. This does not accept a local host."""
+    if not url or not url.strip():
+        raise FullDbError(f"Set {HOSTED_URL_ENV}.")
+    try:
+        parsed = urlparse(url.strip())
+    except ValueError as exc:
+        raise FullDbError(f"{HOSTED_URL_ENV} could not be parsed.") from exc
+    if parsed.scheme not in ("postgresql", "postgres"):
+        raise FullDbError(f"{HOSTED_URL_ENV} must use the postgresql scheme.")
+    if not parsed.hostname or not parsed.username or not parsed.path or parsed.path == "/":
+        raise FullDbError(f"{HOSTED_URL_ENV} is missing a host, user, or database name.")
+    host = parsed.hostname
+    if host.lower() in LOCAL_HOSTS:
+        raise FullDbError("Hosted full-database tools refuse a local host.")
+    database = parsed.path.lstrip("/").split("/", 1)[0]
+    if not database:
+        raise FullDbError(f"{HOSTED_URL_ENV} is missing a database name.")
+    sslmode = ""
+    if parsed.query:
+        for part in parsed.query.split("&"):
+            key, _, value = part.partition("=")
+            if key == "sslmode" and value:
+                sslmode = unquote(value)
+                break
+    return {
+        "host": host,
+        "port": parsed.port or SESSION_PORT,
+        "user": unquote(parsed.username),
+        "password": unquote(parsed.password or ""),
+        "database": database,
+        "sslmode": sslmode,
+    }
+
+
+def assert_hosted_identity(conn: dict[str, str | int]) -> None:
+    """Require the configured destination identity. Does not open a session."""
+    host = str(conn["host"])
+    if host.lower() in LOCAL_HOSTS:
+        raise FullDbError("Hosted full-database tools refuse a local host.")
+    port = int(conn["port"])
+    if port == TRANSACTION_POOLER_PORT:
+        raise FullDbError("Refusing the transaction pooler. Use the session pooler on port 5432.")
+    if port != SESSION_PORT:
+        raise FullDbError("Hosted full-database access requires the session pooler on port 5432.")
+    if str(conn.get("sslmode") or "") != "require":
+        raise FullDbError("Hosted full-database access requires sslmode=require.")
+    import sql_restore
+
+    name = os.environ.get("SQL_RESTORE_DESTINATION_NAME", "").strip()
+    if not name:
+        raise FullDbError("Set SQL_RESTORE_DESTINATION_NAME.")
+    try:
+        sql_restore.assert_destination_identity(
+            name,
+            host,
+            str(conn["database"]),
+            str(conn["user"]),
+            port=port,
+            sslmode=str(conn.get("sslmode") or ""),
+        )
+    except sql_restore.RestoreError as exc:
+        raise FullDbError(str(exc)) from exc
+
+
+def hosted_child_env(conn: dict[str, str | int], *, read_only: bool = True) -> dict[str, str]:
+    """Libpq environment for a hosted client. The private age key is removed."""
+    env = os.environ.copy()
+    for key in list(env):
+        if key.startswith("BACKUP_ARTIFACT_READ_TOKEN") or key in {
+            "SUPABASE_DB_URL",
+            "SQL_RESTORE_DB_URL",
+            "SQL_BACKUP_AGE_RECIPIENT",
+            "SQL_BACKUP_AGE_IDENTITY",
+            "FULL_DB_DATABASE_URL",
+            "FULL_DB_BACKUP_AGE_RECIPIENT",
+            "FULL_DB_BACKUP_AGE_IDENTITY",
+            "DATABASE_URL",
+            "GH_TOKEN",
+            "GITHUB_TOKEN",
+            "BACKUP_ARTIFACT_TOKEN_SECRET",
+        }:
+            env.pop(key, None)
+    env["PGHOST"] = str(conn["host"])
+    env["PGPORT"] = str(conn["port"])
+    env["PGUSER"] = str(conn["user"])
+    env["PGPASSWORD"] = str(conn["password"])
+    env["PGDATABASE"] = str(conn["database"])
+    if read_only:
+        env["PGOPTIONS"] = "-c default_transaction_read_only=on"
+    else:
+        env.pop("PGOPTIONS", None)
+    env["PGCLIENTENCODING"] = "UTF8"
+    env["LC_ALL"] = "C"
+    env["PGPASSFILE"] = "NUL" if os.name == "nt" else os.devnull
+    if conn.get("sslmode"):
+        env["PGSSLMODE"] = str(conn["sslmode"])
+    else:
+        env.pop("PGSSLMODE", None)
+    return env
+
+
+def hosted_psql(conn: dict[str, str | int], sql: str, secrets: list[str], *, tuples_only: bool) -> str:
+    args = ["psql", "-v", "ON_ERROR_STOP=1"]
+    if tuples_only:
+        args.append("-At")
+    completed = run_command(
+        args,
+        env=hosted_child_env(conn),
+        secrets=secrets,
+        label="psql",
+        input_bytes=sql.encode("utf-8"),
+    )
+    return completed.stdout or ""
+
+
+def hosted_psql_text(conn: dict[str, str | int], sql: str, secrets: list[str]) -> str:
+    return hosted_psql(conn, sql, secrets, tuples_only=True).strip()
+
+
+def hosted_psql_script(conn: dict[str, str | int], sql: str, secrets: list[str]) -> None:
+    """Run one fail-fast transaction. A statement error rolls the transaction back."""
+    run_command(
+        ["psql", "-v", "ON_ERROR_STOP=1", "--single-transaction"],
+        env=hosted_child_env(conn, read_only=False),
+        secrets=secrets,
+        label="psql",
+        input_bytes=sql.encode("utf-8"),
+    )
+
+
+def hosted_client_version(binary: str) -> str:
+    completed = run_command([binary, "--version"], env=None, secrets=[], label=binary)
+    return require_major_17(completed.stdout or completed.stderr or "", binary)
+
+
+def assert_hosted_session_read_only(conn: dict[str, str | int], secrets: list[str]) -> str:
+    hosted_client_version("psql")
+    hosted_client_version("pg_dump")
+    version = hosted_psql_text(conn, "SELECT current_setting('server_version');", secrets)
+    require_major_17(version, "hosted server")
+    readonly = hosted_psql_text(conn, "SHOW default_transaction_read_only;", secrets)
+    if readonly.strip() != "on":
+        raise FullDbError("Hosted session is not read only.")
+    return version.strip()
+
+
+def assert_readonly_sql(sql: str) -> None:
+    stripped = re.sub(r"/\*.*?\*/", "", sql, flags=re.S)
+    stripped = re.sub(r"--.*?$", "", stripped, flags=re.M)
+    if _FORBIDDEN_SQL.search(stripped):
+        raise FullDbError("Inventory SQL is not read-only.")
+
+
+def run_hosted_inventory(conn: dict[str, str | int], secrets: list[str]) -> str:
+    """Run the checked-in inventory script. It is SELECT-only and read-only."""
+    version = assert_hosted_session_read_only(conn, secrets)
+    path = repo_root() / "docs" / "full-db-hosted-inventory.sql"
+    if not path.is_file():
+        raise FullDbError("Hosted inventory SQL is missing.")
+    sql = path.read_text(encoding="utf-8")
+    assert_readonly_sql(sql)
+    output = hosted_psql(conn, sql, secrets, tuples_only=False)
+    return f"server_version: {version}\n{output}"
+
+
+def hosted_pg_dump(conn: dict[str, str | int], args: list[str], secrets: list[str]) -> str:
+    hosted_client_version("pg_dump")
+    completed = run_command(
+        ["pg_dump", *args],
+        env=hosted_child_env(conn),
+        secrets=secrets,
+        label="pg_dump",
+    )
+    return completed.stdout or ""
+
+
 def require_major_17(version_text: str, label: str) -> str:
     match = re.search(r"(\d+)\.(\d+)", version_text)
     if not match or int(match.group(1)) != POSTGRES_MAJOR:
@@ -186,12 +379,12 @@ def age_version(binary: str) -> str:
     return text.splitlines()[0].strip()
 
 
-def validate_recipient(recipient: str) -> str:
+def validate_recipient(recipient: str, env_name: str = RECIPIENT_ENV) -> str:
     value = (recipient or "").strip()
     if not value:
-        raise FullDbError(f"Set {RECIPIENT_ENV} to an age public key.")
+        raise FullDbError(f"Set {env_name} to an age public key.")
     if value.startswith("AGE-SECRET-KEY-") or not value.startswith("age1") or any(ch.isspace() for ch in value):
-        raise FullDbError(f"{RECIPIENT_ENV} must be an age public key (age1...), not a secret key.")
+        raise FullDbError(f"{env_name} must be an age public key (age1...), not a secret key.")
     return value
 
 
@@ -543,8 +736,15 @@ def absent_schema_entry(name: str) -> dict:
     }
 
 
+def _catalog_text(container: str, sql: str, secrets: list[str]) -> str:
+    query = _CATALOG_QUERY.get()
+    if query is not None:
+        return query(sql)
+    return psql_text(container, sql, secrets)
+
+
 def _json_rows(container: str, sql: str, secrets: list[str]) -> list[dict]:
-    text = psql_text(container, sql, secrets)
+    text = _catalog_text(container, sql, secrets)
     if not text:
         return []
     parsed = json.loads(text)
@@ -553,13 +753,34 @@ def _json_rows(container: str, sql: str, secrets: list[str]) -> list[dict]:
     return parsed
 
 
-def collect_catalog(container: str, secrets: list[str]) -> tuple[dict, list[dict]]:
-    version = psql_text(container, "SELECT current_setting('server_version');", secrets)
-    version_num = int(psql_text(container, "SELECT current_setting('server_version_num');", secrets))
+def collect_catalog(
+    container: str,
+    secrets: list[str],
+    query=None,
+    dump_version: str | None = None,
+) -> tuple[dict, list[dict]]:
+    """Catalog a local container, or a hosted session when query is supplied.
+
+    query receives SQL and returns text. The local path stays docker exec.
+    """
+    if query is not None and not dump_version:
+        raise FullDbError("Hosted catalog query is missing the pg_dump version.")
+    token = _CATALOG_QUERY.set(query)
+    try:
+        return _collect_catalog(container, secrets, dump_version)
+    finally:
+        _CATALOG_QUERY.reset(token)
+
+
+def _collect_catalog(container: str, secrets: list[str], dump_version: str | None) -> tuple[dict, list[dict]]:
+    version = _catalog_text(container, "SELECT current_setting('server_version');", secrets)
+    version_num = int(_catalog_text(container, "SELECT current_setting('server_version_num');", secrets))
     require_major_17(version, "server")
     if version_num // 10000 != POSTGRES_MAJOR:
         raise FullDbError(f"Server version num {version_num} is not PostgreSQL 17.")
-    client = _pg_version(container)
+    client = dump_version if dump_version is not None else _pg_version(container)
+    if dump_version is not None:
+        require_major_17(dump_version, "pg_dump")
     relations = _json_rows(
         container,
         """
@@ -604,7 +825,7 @@ def collect_catalog(container: str, secrets: list[str]) -> tuple[dict, list[dict
     )
     count_map = {(row["schema"], row["name"]): int(row["row_count"]) for row in counts}
     schemas = set(
-        psql_text(
+        _catalog_text(
             container,
             "SELECT string_agg(nspname, ',' ORDER BY nspname) FROM pg_namespace WHERE nspname <> 'information_schema' AND nspname NOT LIKE 'pg_%';",
             secrets,
@@ -771,11 +992,7 @@ def collect_catalog(container: str, secrets: list[str]) -> tuple[dict, list[dict
                 "table_name": row["table_name"],
             }
         )
-    for entry in catalog:
-        if not entry.get("classification"):
-            raise FullDbError(f"Unclassified object {entry.get('schema')}.{entry.get('name')}.")
-        if entry["restore_mode"] == "omit" and not entry.get("exclusion_reason"):
-            raise FullDbError(f"Omitted object {entry['schema']}.{entry['name']} has no exclusion reason.")
+    assert_catalog_entries(catalog)
     identity = {
         "postgresql_version": version.strip(),
         "server_version_num": version_num,
@@ -783,6 +1000,25 @@ def collect_catalog(container: str, secrets: list[str]) -> tuple[dict, list[dict
         "installed_schemas": sorted(schemas),
     }
     return identity, catalog
+
+
+def assert_catalog_entries(catalog: list[dict]) -> None:
+    for entry in catalog:
+        if not entry.get("classification"):
+            raise FullDbError(f"Unclassified object {entry.get('schema')}.{entry.get('name')}.")
+        if entry.get("restore_mode") == "omit" and not entry.get("exclusion_reason"):
+            raise FullDbError(f"Omitted object {entry['schema']}.{entry['name']} has no exclusion reason.")
+
+
+def assert_required_tables(catalog: list[dict]) -> None:
+    present = {
+        (entry.get("schema"), entry.get("name"))
+        for entry in catalog
+        if entry.get("object_type") in {"table", "partition", "partitioned_table"}
+    }
+    missing = [f"{schema}.{name}" for schema, name in REQUIRED_TABLES if (schema, name) not in present]
+    if missing:
+        raise FullDbError("Required table is missing: " + ", ".join(missing) + ".")
 
 
 def schema_dump_targets(catalog: list[dict]) -> list[str]:
@@ -904,9 +1140,9 @@ def data_schemas(catalog: list[dict]) -> list[str]:
     return sorted(schemas)
 
 
-def public_triggers_on_managed(container: str, secrets: list[str]) -> str:
-    sql = psql_text(
-        container,
+def public_triggers_on_managed(container: str, secrets: list[str], query=None) -> str:
+    ask = query or (lambda sql: psql_text(container, sql, secrets))
+    sql = ask(
         """
         SELECT coalesce(string_agg(pg_get_triggerdef(t.oid, true) || ';', E'\\n' ORDER BY n.nspname, c.relname, t.tgname), '')
         FROM pg_trigger t
@@ -917,8 +1153,7 @@ def public_triggers_on_managed(container: str, secrets: list[str]) -> str:
         WHERE NOT t.tgisinternal
           AND pn.nspname = 'public'
           AND n.nspname <> 'public';
-        """,
-        secrets,
+        """
     )
     if "CREATE SCHEMA" in sql or "CREATE TABLE" in sql:
         raise FullDbError("auth-custom.sql tried to recreate a managed schema.")

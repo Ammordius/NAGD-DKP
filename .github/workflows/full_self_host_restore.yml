@@ -1,0 +1,214 @@
+# Manual full-database restore. No schedule, push, pull request, or artifact trigger.
+# List and pin do not decrypt and do not use an environment.
+# Inspect, verify, and restore use sql-restore and run only from main.
+# Hosted writes are not activated. Restore stops before any hosted SQL write.
+# Reviewers and deployment branch policies belong to the environment administrator.
+
+name: Full self-host restore
+
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: List backups, inspect one, verify readiness, or restore.
+        required: true
+        type: choice
+        default: List available backups
+        options:
+          - List available backups
+          - Inspect backup
+          - Verify recovery readiness
+          - Restore full database
+      checkpoint:
+        description: Static choice. The summary lists real artifact ids.
+        required: true
+        type: choice
+        default: Latest available weekly backup
+        options:
+          - Latest available weekly backup
+          - Previous weekly backup
+          - Specific artifact ID
+      artifact_id:
+        description: Numeric id. Required for Specific artifact ID. Leave empty otherwise.
+        required: false
+        type: string
+        default: ""
+      confirm:
+        description: For a restore, type RESTORE FULL DATABASE and the destination name.
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: full-self-host-restore
+  cancel-in-progress: false
+
+jobs:
+  list:
+    if: github.event_name == 'workflow_dispatch' && inputs.operation == 'List available backups'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: List full backups
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
+          CURRENT_REPOSITORY: ${{ github.repository }}
+        run: python scripts/full_db_fetch.py --list
+
+  pin:
+    if: github.event_name == 'workflow_dispatch' && inputs.operation != 'List available backups'
+    runs-on: ubuntu-latest
+    outputs:
+      artifact_id: ${{ steps.pin.outputs.artifact_id }}
+      artifact_name: ${{ steps.pin.outputs.artifact_name }}
+      workflow_run_id: ${{ steps.pin.outputs.workflow_run_id }}
+      artifact_sha256: ${{ steps.pin.outputs.artifact_sha256 }}
+      source_repository: ${{ steps.pin.outputs.source_repository }}
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Require main
+        if: github.ref != 'refs/heads/main'
+        run: echo "Inspect, verify, and restore run only from main." >&2 && exit 1
+
+      - name: Pin full backup
+        id: pin
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
+          CURRENT_REPOSITORY: ${{ github.repository }}
+          CHECKPOINT: ${{ inputs.checkpoint }}
+          ARTIFACT_ID: ${{ inputs.artifact_id }}
+        run: python scripts/full_db_fetch.py --select
+
+  inspect:
+    needs: pin
+    if: success() && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.operation == 'Inspect backup'
+    runs-on: ubuntu-latest
+    environment: sql-restore
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install PostgreSQL 17 client and age
+        uses: ./.github/actions/setup-postgresql-17
+
+      - name: Download pinned backup
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
+          CURRENT_REPOSITORY: ${{ github.repository }}
+          ARTIFACT_ID: ${{ needs.pin.outputs.artifact_id }}
+          PINNED_SHA256: ${{ needs.pin.outputs.artifact_sha256 }}
+        run: python scripts/full_db_fetch.py --download --out-dir full-db-inspect-in
+
+      - name: Inspect backup
+        env:
+          SQL_BACKUP_AGE_IDENTITY: ${{ secrets.SQL_BACKUP_AGE_IDENTITY }}
+        run: python scripts/full_db_inspect.py --identity-env --artifact full-db-inspect-in/*.tar.gz.age
+
+  verify:
+    needs: pin
+    if: success() && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.operation == 'Verify recovery readiness'
+    runs-on: ubuntu-latest
+    environment: sql-restore
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install PostgreSQL 17 client and age
+        uses: ./.github/actions/setup-postgresql-17
+
+      - name: Download pinned backup
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
+          CURRENT_REPOSITORY: ${{ github.repository }}
+          ARTIFACT_ID: ${{ needs.pin.outputs.artifact_id }}
+          PINNED_SHA256: ${{ needs.pin.outputs.artifact_sha256 }}
+        run: python scripts/full_db_fetch.py --download --out-dir full-db-verify-in
+
+      - name: Verify recovery readiness
+        env:
+          SQL_BACKUP_AGE_IDENTITY: ${{ secrets.SQL_BACKUP_AGE_IDENTITY }}
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          SQL_RESTORE_DESTINATION_NAME: ${{ vars.SQL_RESTORE_DESTINATION_NAME }}
+          SQL_RESTORE_DESTINATION_HOST: ${{ vars.SQL_RESTORE_DESTINATION_HOST }}
+          SQL_RESTORE_DATABASE_NAME: ${{ vars.SQL_RESTORE_DATABASE_NAME }}
+          SQL_RESTORE_PROJECT_REF: ${{ vars.SQL_RESTORE_PROJECT_REF }}
+        run: python scripts/full_db_inspect.py --identity-env --readiness --artifact full-db-verify-in/*.tar.gz.age
+
+  restore:
+    needs: pin
+    if: success() && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.operation == 'Restore full database'
+    runs-on: ubuntu-latest
+    environment: sql-restore
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Download pinned backup
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
+          CURRENT_REPOSITORY: ${{ github.repository }}
+          ARTIFACT_ID: ${{ needs.pin.outputs.artifact_id }}
+          PINNED_SHA256: ${{ needs.pin.outputs.artifact_sha256 }}
+        run: python scripts/full_db_fetch.py --download --out-dir full-db-restore-in
+
+      - name: Restore full database
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          SQL_RESTORE_DESTINATION_NAME: ${{ vars.SQL_RESTORE_DESTINATION_NAME }}
+          SQL_RESTORE_DESTINATION_HOST: ${{ vars.SQL_RESTORE_DESTINATION_HOST }}
+          SQL_RESTORE_DATABASE_NAME: ${{ vars.SQL_RESTORE_DATABASE_NAME }}
+          SQL_RESTORE_PROJECT_REF: ${{ vars.SQL_RESTORE_PROJECT_REF }}
+          CONFIRM: ${{ inputs.confirm }}
+        run: python scripts/full_db_restore.py --hosted --confirm "$CONFIRM" --artifact full-db-restore-in/*.tar.gz.age

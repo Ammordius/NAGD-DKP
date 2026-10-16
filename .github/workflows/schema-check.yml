@@ -49,6 +49,11 @@ jobs:
           DKP_PG_TEST: '1'
         run: python3 scripts/test_sql_restore.py
 
+      - name: Full database actions test
+        env:
+          DKP_PG_TEST: '1'
+        run: python3 scripts/test_full_db_actions.py
+
       - name: Build
         working-directory: web
         run: npm run build

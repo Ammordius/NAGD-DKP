@@ -1,0 +1,67 @@
+# Full database backup. Manual until the first hosted artifact is verified.
+# Weekly cron, not registered yet: 0 8 * * 0
+# That is 08:00 UTC Sunday, after the 07:30 UTC daily portable SQL backup.
+# Do not add a repository variable to gate this schedule. Do not give this job the age private key.
+# Secrets: SUPABASE_DB_URL, SQL_BACKUP_AGE_RECIPIENT.
+# Repository variables: SQL_RESTORE_DESTINATION_NAME, SQL_RESTORE_DESTINATION_HOST,
+# SQL_RESTORE_DATABASE_NAME, SQL_RESTORE_PROJECT_REF.
+
+name: Full self-host backup
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: full-self-host-backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    if: github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install PostgreSQL 17 client and age
+        uses: ./.github/actions/setup-postgresql-17
+
+      - name: Export encrypted full backup
+        id: export
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          SQL_BACKUP_AGE_RECIPIENT: ${{ secrets.SQL_BACKUP_AGE_RECIPIENT }}
+          SQL_RESTORE_DESTINATION_NAME: ${{ vars.SQL_RESTORE_DESTINATION_NAME }}
+          SQL_RESTORE_DESTINATION_HOST: ${{ vars.SQL_RESTORE_DESTINATION_HOST }}
+          SQL_RESTORE_DATABASE_NAME: ${{ vars.SQL_RESTORE_DATABASE_NAME }}
+          SQL_RESTORE_PROJECT_REF: ${{ vars.SQL_RESTORE_PROJECT_REF }}
+        run: python scripts/full_db_backup.py --hosted-readonly --out-dir full-db-backup-out
+
+      - name: Upload encrypted full backup
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: full-db-backup-${{ steps.export.outputs.stamp }}
+          path: full-db-backup-out/*.tar.gz.age
+          retention-days: 90
+          if-no-files-found: error
+
+      - name: Record backup result
+        if: success()
+        run: |
+          test -n "${{ steps.export.outputs.stamp }}"
+          test -n "${{ steps.export.outputs.sha256 }}"
+          echo "artifact_upload: PASS" >> "$GITHUB_STEP_SUMMARY"
+          echo "FULL DATABASE BACKUP: PASS" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Record backup failure
+        if: failure()
+        run: echo "FULL DATABASE BACKUP: FAIL" >> "$GITHUB_STEP_SUMMARY"
