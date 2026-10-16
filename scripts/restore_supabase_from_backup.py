@@ -9,7 +9,7 @@ Uses SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY (same as backup workflow).
   export SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=...
   python scripts/restore_supabase_from_backup.py --backup-dir backup
 
-Used by .github/workflows/db-restore.yml after downloading an artifact.
+Local loader for a historical CSV tree. The GitHub Action that called this script is retired.
 """
 
 from __future__ import annotations

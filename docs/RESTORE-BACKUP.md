@@ -2,7 +2,7 @@
 
 This guide reloads DKP data from a `supabase-backup-*` CSV artifact, or from a local `backup/` directory of those CSVs. It does **not** cover incremental/diff apply of CSVs (see [CSV-DIFF-APPLY.md](CSV-DIFF-APPLY.md)).
 
-An `sql-backup-*.tar.gz.age` file is not a CSV tree. Decrypting it does not produce this directory layout. Use [CI-DB-SQL-RESTORE.md](CI-DB-SQL-RESTORE.md) for that artifact. Keep this procedure until a SQL restore has been demonstrated against a realistic backup and an independent database; do not delete [scripts/restore_supabase_from_backup.py](../scripts/restore_supabase_from_backup.py) before that.
+An `sql-backup-*.tar.gz.age` file is not a CSV tree. Decrypting it does not produce this directory layout. Use [CI-DB-SQL-RESTORE.md](CI-DB-SQL-RESTORE.md) for that artifact. This page is the local loader for a historical CSV tree. [scripts/restore_supabase_from_backup.py](../scripts/restore_supabase_from_backup.py) stays for that tree.
 
 **Authentication and profiles are never touched.** Only DKP data tables are cleared and reloaded (characters, accounts, character_account, raids, raid_events, raid_loot, raid_attendance, raid_event_attendance, and derived/cache tables).
 
@@ -10,7 +10,7 @@ An `sql-backup-*.tar.gz.age` file is not a CSV tree. Decrypting it does not prod
 
 ## 1. Prerequisites
 
-- **Backup artifact** – At least one successful run of **DB backup (on change)** (`.github/workflows/db-backup.yml`) so an artifact exists (e.g. `supabase-backup-2026-02-20`), or a local `backup/` directory of CSVs.
+- **Backup artifact** – An existing unexpired `supabase-backup-*` artifact (for example `supabase-backup-2026-02-20`), or a local `backup/` directory of CSVs. The CSV workflow is retired and does not upload new artifacts. Historical artifacts are not deleted.
 - **Secrets** – `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` (Supabase Dashboard → Project Settings → API → service_role key).
 
 ---
@@ -29,25 +29,13 @@ characters, accounts, account_class_coverage, character_account, raids, raid_eve
 - `accounts` is **not** truncated (profiles references it). Restore **upserts** accounts from CSV to avoid breaking profiles.
 - `account_class_coverage` is **not** truncated. Restore upserts it when `account_class_coverage.csv` is present. An older artifact with no such file leaves the live rows in place.
 - `raid_dkp_totals`, `raid_attendance_dkp`, `raid_attendance_dkp_by_account`, `account_dkp_summary`, and `character_dkp_spent` are **not** loaded from CSV. `end_restore_load()` rebuilds them, including `refresh_character_dkp_spent()`.
-- `loot_assignment`, `bid_portfolio_auction_fact`, and `character_loot_assignment_counts` are in the backup only after the next forced **DB backup (on change)** run (Actions → force checked). Older artifacts omit those CSVs. Truncate still clears `loot_assignment` and `bid_portfolio_auction_fact`, so those rows stay empty until you restore a backup that includes them or run **Loot-to-character assignment**.
+- `loot_assignment`, `bid_portfolio_auction_fact`, and `character_loot_assignment_counts` are present only in artifacts exported after those tables were added. Older artifacts omit those CSVs. Truncate still clears `loot_assignment` and `bid_portfolio_auction_fact`, so those rows stay empty until you restore a backup that includes them or run **Loot-to-character assignment**.
 
 ---
 
-## 3. Running a restore (GitHub Actions)
+## 3. GitHub Action
 
-1. Go to **Actions** → **DB restore from backup**.
-2. **Run workflow**.
-3. **Branch:** usually `main`.
-4. **Artifact name:** `latest` (most recent backup) or a specific name from the list (e.g. `supabase-backup-2026-02-20`).
-5. **Truncate already run in Supabase (load only):**  
-   - **Unchecked (default)** – workflow runs truncate RPC then loads from CSVs.  
-   - **Checked** – skip truncate; only load from CSVs. Use only if `truncate_dkp_for_restore()` from `docs/supabase-schema-full.sql` has already been called. Tables should be empty or you may get duplicates.
-
-The job downloads the artifact, extracts `backup/`, then runs:
-
-```bash
-python scripts/restore_supabase_from_backup.py --backup-dir backup [--load-only]
-```
+The **DB restore from backup** action is retired. Download an existing artifact yourself, extract `backup/`, and use the local commands in the next section. Pass `--load-only` only when `truncate_dkp_for_restore()` from `docs/supabase-schema-full.sql` has already been called.
 
 ---
 
@@ -148,6 +136,6 @@ For a one-time aggressive reclaim (brief lock): `VACUUM FULL ANALYZE;` during lo
 |------|--------|
 | `scripts/restore_supabase_from_backup.py` | Restore script (truncate + load from CSVs). |
 | `scripts/pull_parse_dkp_site/run_end_restore_load.py` | Run `end_restore_load()` only (after timeout). |
-| `.github/workflows/db-restore.yml` | GitHub Action for restore from artifact. |
+| `.github/workflows/db-restore.yml` | Removed. The CSV restore action is retired. |
 | `docs/CI-DB-RESTORE.md` | Shorter CI-focused restore notes. |
 | `docs/supabase-schema-full.sql` | Defines `truncate_dkp_for_restore`, `begin_restore_load`, `end_restore_load`, `fix_serial_sequences_for_restore`. Schema install and upgrade use this file only. |

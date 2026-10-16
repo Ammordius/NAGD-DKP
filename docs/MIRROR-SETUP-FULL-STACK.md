@@ -1,13 +1,13 @@
 # Full-stack mirror setup (step-by-step)
 
-This guide walks through setting up a **complete mirror** of the DKP site: your own database (Supabase), your own GitHub repo with the same CI workflows, and the same data and frontend. The mirror has its own DB and can run backups, the SQL Ledger, and (optionally) loot-to-character assignment independently.
+This guide walks through setting up a **complete mirror** of the DKP site: your own database (Supabase), your own GitHub repo with the same CI workflows, and the same data and frontend. The mirror has its own DB and can run the portable SQL backup, the SQL Ledger, and (optionally) loot-to-character assignment independently.
 
 ---
 
 ## What you get
 
 - **Own Supabase project** — separate from any other instance; you control schema and data.
-- **Same CI** — DB backup (on change), SQL Ledger (daily delta to GitHub Pages), and optionally loot-to-character assignment.
+- **Same CI** — portable SQL backup, SQL Ledger (daily delta to GitHub Pages), and optionally loot-to-character assignment. The CSV backup workflow is retired.
 - **Same data** — loaded either from a **backup artifact** (e.g. from the original repo’s Actions) or from your own `data/` CSVs.
 - **Same web app** — React frontend deployed to Vercel (or similar), pointed at your Supabase.
 
@@ -61,13 +61,13 @@ Do not truncate the new project with an archived reset script. Load data with th
 
 ## Step 4: Load data into your mirror DB
 
-You need guild data in Supabase. The portable copy is an SQL backup ([CI-DB-SQL-BACKUP.md](CI-DB-SQL-BACKUP.md), restore in [CI-DB-SQL-RESTORE.md](CI-DB-SQL-RESTORE.md)). The steps below remain the legacy CSV load from a `supabase-backup-*` artifact or from your own `data/` CSVs. Do not unzip an `sql-backup-*` artifact and treat it as those CSVs.
+You need guild data in Supabase. The portable copy is an SQL backup ([CI-DB-SQL-BACKUP.md](CI-DB-SQL-BACKUP.md), restore in [CI-DB-SQL-RESTORE.md](CI-DB-SQL-RESTORE.md)). The steps below remain the legacy CSV load from an existing `supabase-backup-*` artifact or from your own `data/` CSVs. The CSV workflow no longer uploads new artifacts. Historical artifacts are not deleted. Do not unzip an `sql-backup-*` artifact and treat it as those CSVs.
 
 ### Option A: Restore from a GitHub backup artifact (recommended if you have one)
 
-Use this when you have a backup from the **original** repo’s Actions or from your mirror after at least one successful DB backup run. The first time you set up the mirror, you can use an artifact from the source repo; after that your own CI will produce artifacts.
+Use this when you already have a `supabase-backup-*` artifact from an earlier run. The CSV workflow is retired and will not produce a new one.
 
-1. In the **source** repo (or your mirror), go to **Actions** → workflow **“DB backup (on change)”**.
+1. In the **source** repo, open a historical run of **“DB backup (on change)”** that still has artifacts.
 2. Open a run that has artifacts and **download** the artifact named like **`supabase-backup-YYYY-MM-DD`** (or a weekly/monthly one). GitHub gives you a **zip** file.
 3. Unzip it; inside you’ll see **`backup-YYYY-MM-DD.tar.gz`**. Extract that:
    ```bash
@@ -165,11 +165,10 @@ See [LOOT-TO-CHARACTER.md](LOOT-TO-CHARACTER.md) and [DEBUG-loot-to-character-su
 | Workflow | Schedule | What it does | Needs |
 |----------|----------|--------------|--------|
 | **DB SQL backup** | Daily at 07:30 UTC once `SQL_BACKUP_SCHEDULE` is `enabled`; manual anytime | Age-encrypted guild SQL. Daily artifact for 7 days, plus weekly and monthly copies for 90 days when this repo does not already have that period’s artifact. Not gated on `raid_loot`. | `SUPABASE_DB_URL`, `SQL_BACKUP_AGE_RECIPIENT` |
-| **DB backup (on change)** | Daily (e.g. 07:00 UTC) | Legacy CSV export. If `raid_loot` count changed, or a manual run checks **force**: exports public tables to CSV, uploads `supabase-backup-YYYY-MM-DD` (and weekly/monthly when applicable). The public ledger still reads these. | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` |
-| **SQL Ledger** | Daily (e.g. 07:30 UTC) | Downloads two latest backup artifacts, diffs them (excluding `raid_loot`), publishes delta to GitHub Pages. | At least 2 backup artifacts (from DB backup workflow). No Supabase secrets. |
+| **SQL Ledger** | Daily (e.g. 07:30 UTC) | Downloads the two latest unexpired `supabase-backup-*` artifacts, diffs them (excluding `raid_loot`), publishes delta to GitHub Pages. No new CSV artifacts are uploaded. | At least 2 unexpired backup artifacts. No Supabase secrets. |
 | **Loot-to-character assignment** | Daily (e.g. 18:00 UTC) or manual | Fetches raid_loot (and related) from Supabase, downloads Magelo dumps, assigns loot to characters, pushes assignments and counts to Supabase. | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`; optional: `data/elemental_armor.json`, `dkp_elemental_to_magelo.json` |
 
-These workflows use the **same** repo and the **same** Supabase project (your mirror DB). The SQL in the repo is the source of schema (`docs/supabase-schema-full.sql` only). Guild data for a new database comes from the portable SQL backup. The ledger still reads the CSV artifacts.
+These workflows use the **same** repo and the **same** Supabase project (your mirror DB). The SQL in the repo is the source of schema (`docs/supabase-schema-full.sql` only). Guild data for a new database comes from the portable SQL backup. The ledger still reads CSV artifacts that have not expired. The CSV backup workflow is retired, and historical `supabase-backup-*` artifacts are not deleted.
 
 ---
 
@@ -191,6 +190,6 @@ These workflows use the **same** repo and the **same** Supabase project (your mi
 
 - **[SCHEMA_DEPLOYMENT.md](SCHEMA_DEPLOYMENT.md)** — single schema file, upgrade, backup, and verification.
 - **[SETUP-WALKTHROUGH.md](SETUP-WALKTHROUGH.md)** — Single-instance setup (Supabase, import, local run, Vercel).
-- **[CI-DB-BACKUP.md](CI-DB-BACKUP.md)** — Backup workflow, retention, restore from artifact.
+- **[CI-DB-BACKUP.md](CI-DB-BACKUP.md)** — Retired CSV export. Historical `supabase-backup-*` artifacts are not deleted.
 - **[SQL-LEDGER.md](SQL-LEDGER.md)** — How the ledger workflow and GitHub Pages work.
 - **[LOOT-TO-CHARACTER.md](LOOT-TO-CHARACTER.md)** — Loot-to-character assignment and CI.

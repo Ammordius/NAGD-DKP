@@ -2,7 +2,7 @@
 
 This restores a portable SQL backup into an independent database. The backup contains guild DKP rows, not authentication. The destination keeps its own `auth.users`, `profiles`, local sign-in identities, site-admin and officer roles, profile preferences, and officer audit log.
 
-The CSV restore in [CI-DB-RESTORE.md](CI-DB-RESTORE.md) remains available for historical plaintext artifacts. The scheduled CSV backup stays because [SQL-LEDGER.md](SQL-LEDGER.md) diffs those artifacts. This workflow does not apply `docs/supabase-schema-full.sql`. The destination must already be able to load the snapshot. Byte-identical schema files are not required when the restore tables, columns, types, constraints, foreign keys, and restore functions are compatible.
+The scheduled CSV backup and its GitHub Action are retired. A local load of a historical plaintext CSV tree is still described in [CI-DB-RESTORE.md](CI-DB-RESTORE.md). [SQL-LEDGER.md](SQL-LEDGER.md) diffs `supabase-backup-*` artifacts that have not expired. Those artifacts are not deleted. This workflow does not apply `docs/supabase-schema-full.sql`. The destination must already be able to load the snapshot. Byte-identical schema files are not required when the restore tables, columns, types, constraints, foreign keys, and restore functions are compatible.
 
 This is the supported historical restore for the live site. Anyone who can run **DB SQL restore** on `main` can use it. A new artifact does not require a source change.
 

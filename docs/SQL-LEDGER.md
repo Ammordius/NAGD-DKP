@@ -2,7 +2,7 @@
 
 The **Public SQL Ledger** produces **daily SQL-to-SQL diffs**: it compares the last two backup artifacts table-by-table and publishes exact **added / removed / changed** row deltas to GitHub Pages. That gives you a transparent, historical record of database state. Because it is hosted on GitHub, it acts as a **root of trust** — even a site admin cannot easily wipe it without leaving a trace (history lives in the repo and in Actions).
 
-The ledger still reads plaintext `supabase-backup-*` CSV artifacts from [CI-DB-BACKUP.md](CI-DB-BACKUP.md). It does not read `sql-backup-*` artifacts. Those are age-encrypted, and the private key is not stored in CI. The CSV schedule stays so this report can keep running. Portable recovery is [CI-DB-SQL-BACKUP.md](CI-DB-SQL-BACKUP.md).
+The ledger still reads plaintext `supabase-backup-*` CSV artifacts that have not expired ([CI-DB-BACKUP.md](CI-DB-BACKUP.md)). It does not read `sql-backup-*` artifacts. Those are age-encrypted, and the private key is not stored in CI. The CSV schedule is retired, so no new CSV artifacts are uploaded. Historical artifacts are not deleted. When fewer than two remain, the ledger publishes “No delta yet”. Portable recovery is [CI-DB-SQL-BACKUP.md](CI-DB-SQL-BACKUP.md).
 
 ## Backup type selection
 
@@ -21,7 +21,7 @@ The report title and index page show the type and the two backup labels (e.g. `2
 
 ## What is included
 
-- **Backup-to-backup comparison**: the CI compares the two most recent backup artifacts of the selected type (from the [DB backup](CI-DB-BACKUP.md) workflow) and generates an HTML report. Default is daily-to-daily.
+- **Backup-to-backup comparison**: the CI compares the two most recent unexpired backup artifacts of the selected type and generates an HTML report. Default is daily-to-daily. The CSV workflow that produced those artifacts is retired ([CI-DB-BACKUP.md](CI-DB-BACKUP.md)).
 - **All audited tables** from the schema are included **except**:
   - **`raid_loot`** — loot assignments to character are excluded by design (as requested).
 - Tables that are diffed: `profiles`, `characters`, `accounts`, `character_account`, `raids`, `raid_events`, `raid_attendance`, `raid_event_attendance`, `raid_dkp_totals`, `raid_attendance_dkp`, `raid_classifications`, `dkp_adjustments`, `dkp_summary`, `dkp_period_totals`, `active_raiders`.  
@@ -29,8 +29,8 @@ The report title and index page show the type and the two backup labels (e.g. `2
 
 ## How it works
 
-1. **DB backup workflow** (`.github/workflows/db-backup.yml`) runs on a schedule and, when data has changed, exports public tables to CSV and uploads a rolling artifact named `supabase-backup-YYYY-MM-DD`.
-2. **SQL Ledger workflow** (`.github/workflows/sql-ledger.yml`) runs daily (after the backup) or on manual trigger. It:
+1. Historical `supabase-backup-*` artifacts remain in GitHub Actions until they expire. The CSV workflow that uploaded them is retired, and it no longer commits `.ci` marker files.
+2. **SQL Ledger workflow** (`.github/workflows/sql-ledger.yml`) runs daily or on manual trigger. It:
    - Uses the selected backup type (daily, weekly, or monthly; default daily) and picks the **two most recent** artifact names of that type.
    - Downloads those two artifacts (from their respective workflow runs).
    - Extracts the backup CSVs and runs `scripts/ledger_delta.py` to diff every table (except `raid_loot`).
@@ -53,7 +53,7 @@ If there are fewer than two daily backup artifacts, the ledger workflow still pu
 
 - **Latest delta**: the published page always shows the **latest** delta (newest backup vs. previous backup). Open the site and click the “Latest delta” link to view `delta.html`.
 - **Other backups**: backup files live as **GitHub Actions artifacts** (rolling 7 days, plus weekly/monthly). To compare two specific backup dates:
-  1. Go to **Actions → DB backup (on change)** and find runs that produced the dates you want.
+  1. Open the historical **DB backup (on change)** runs that still list artifacts for the dates you want. That workflow no longer runs.
   2. Download the two artifacts (`supabase-backup-YYYY-MM-DD`).
   3. Locally: extract both `.tar.gz` files so you have two directories (e.g. `backup_old/`, `backup_new/` with CSVs inside).
   4. Run:
