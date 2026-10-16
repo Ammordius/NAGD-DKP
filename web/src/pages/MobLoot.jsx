@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useCallback, Fragment } from 'react'
+import { useEffect, useState, useMemo, useCallback, useRef, Fragment } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { usePersistedState } from '../lib/usePersistedState'
@@ -6,8 +6,23 @@ import { createCache } from '../lib/cache'
 import { getDkpMobLoot, getRaidItemSources } from '../lib/staticData'
 import { getItemStats, ensureItemStatsLoaded, getItemStatsCached, getGearScore, itemHasSlot, itemUsableByClass } from '../lib/itemStats'
 import { ensureElementalArmorLoaded, getMoldInfo, getArmorIdForMoldAndClass } from '../lib/elementalArmor'
-
-const ITEMS_PER_PAGE = 20
+import {
+  EMPTY_GROUP_STATE,
+  ITEMS_PER_PAGE,
+  SCROLL_SAVE_DELAY_MS,
+  chooseScrollAnchor,
+  clearScrollAnchor,
+  findScrollAnchorElement,
+  isMobOpen,
+  itemAnchorKey,
+  itemsShownLimit,
+  normalizeGroupState,
+  readScrollAnchor,
+  revealMoreItems,
+  scrollRestoreDecision,
+  toggleMobGroup,
+  writeScrollAnchor,
+} from '../lib/mobLootViewState'
 
 /** EQ slot options for filter (order for dropdown). */
 const SLOT_OPTIONS = ['HEAD', 'FACE', 'NECK', 'SHOULDERS', 'ARMS', 'BACK', 'CHEST', 'WRIST', 'HANDS', 'WAIST', 'LEGS', 'FEET', 'PRIMARY', 'SECONDARY', 'RANGE', 'EAR', 'FINGERS', 'AMMO']
@@ -236,16 +251,24 @@ export default function MobLoot() {
   const [query, setQuery] = usePersistedState('/mobs:query', '')
   const [filterSlot, setFilterSlot] = usePersistedState('/mobs:filterSlot', '')
   const [filterClass, setFilterClass] = usePersistedState('/mobs:filterClass', '')
+  const [groups, setGroups] = usePersistedState('/mobs:groups', EMPTY_GROUP_STATE, normalizeGroupState)
   const [loading, setLoading] = useState(true)
-  const [expanded, setExpanded] = useState({})
-  const [itemsShownPerKey, setItemsShownPerKey] = useState({}) // key -> number to show
   const [itemLast3, setItemLast3] = useState({})
   const [mobZoneFromRaids, setMobZoneFromRaids] = useState({})
   const [itemStatsReady, setItemStatsReady] = useState(false)
+  const [armorReady, setArmorReady] = useState(false)
+  const [zonesReady, setZonesReady] = useState(false)
+  const scrollMemoryRef = useRef({
+    userInteracted: false,
+    filtersChangedByUser: false,
+    suppressSave: false,
+    phase: 'pending',
+  })
+  const filterSeenRef = useRef(null)
 
   useEffect(() => {
-    ensureItemStatsLoaded().then(() => setItemStatsReady(true)).catch(() => {})
-    ensureElementalArmorLoaded().catch(() => {})
+    ensureItemStatsLoaded().then(() => setItemStatsReady(true)).catch(() => setItemStatsReady(true))
+    ensureElementalArmorLoaded().then(() => setArmorReady(true)).catch(() => setArmorReady(true))
   }, [])
 
   const nameToId = useMemo(() => {
@@ -268,45 +291,51 @@ export default function MobLoot() {
   useEffect(() => {
     let cancelled = false
     const run = async () => {
-      const { data: raidRows } = await supabase.from('raids').select('raid_id, raid_name')
-      if (cancelled) return
-      const raidIdToName = {}
-      ;(raidRows || []).forEach((r) => { raidIdToName[r.raid_id] = (r.raid_name || '').trim() })
-
-      const allClass = []
-      let from = 0
-      const PAGE = 2000
-      while (true) {
-        const { data: chunk } = await supabase.from('raid_classifications').select('raid_id, mob, zone').range(from, from + PAGE - 1)
+      try {
+        const { data: raidRows } = await supabase.from('raids').select('raid_id, raid_name')
         if (cancelled) return
-        if (!chunk?.length) break
-        allClass.push(...chunk)
-        if (chunk.length < PAGE) break
-        from += PAGE
-      }
-      if (cancelled) return
+        const raidIdToName = {}
+        ;(raidRows || []).forEach((r) => { raidIdToName[r.raid_id] = (r.raid_name || '').trim() })
 
-      const mobToZones = {}
-      allClass.forEach((row) => {
-        const mob = (row.mob || '').trim()
-        if (!mob) return
-        const key = normalizeMobKey(mob)
-        const zoneFromDb = (row.zone || '').trim()
-        const raidName = raidIdToName[row.raid_id] || ''
-        const inferred = inferZoneFromRaidName(raidName)
-        const zone = zoneFromDb || inferred
-        if (!zone) return
-        if (!mobToZones[key]) mobToZones[key] = []
-        mobToZones[key].push(zone)
-      })
-      const mobToZone = {}
-      Object.entries(mobToZones).forEach(([key, zones]) => {
-        const counts = {}
-        zones.forEach((z) => { counts[z] = (counts[z] || 0) + 1 })
-        const best = Object.entries(counts).sort((a, b) => b[1] - a[1])[0]
-        if (best) mobToZone[key] = best[0]
-      })
-      if (!cancelled) setMobZoneFromRaids(mobToZone)
+        const allClass = []
+        let from = 0
+        const PAGE = 2000
+        while (true) {
+          const { data: chunk } = await supabase.from('raid_classifications').select('raid_id, mob, zone').range(from, from + PAGE - 1)
+          if (cancelled) return
+          if (!chunk?.length) break
+          allClass.push(...chunk)
+          if (chunk.length < PAGE) break
+          from += PAGE
+        }
+        if (cancelled) return
+
+        const mobToZones = {}
+        allClass.forEach((row) => {
+          const mob = (row.mob || '').trim()
+          if (!mob) return
+          const key = normalizeMobKey(mob)
+          const zoneFromDb = (row.zone || '').trim()
+          const raidName = raidIdToName[row.raid_id] || ''
+          const inferred = inferZoneFromRaidName(raidName)
+          const zone = zoneFromDb || inferred
+          if (!zone) return
+          if (!mobToZones[key]) mobToZones[key] = []
+          mobToZones[key].push(zone)
+        })
+        const mobToZone = {}
+        Object.entries(mobToZones).forEach(([key, zones]) => {
+          const counts = {}
+          zones.forEach((z) => { counts[z] = (counts[z] || 0) + 1 })
+          const best = Object.entries(counts).sort((a, b) => b[1] - a[1])[0]
+          if (best) mobToZone[key] = best[0]
+        })
+        if (!cancelled) setMobZoneFromRaids(mobToZone)
+      } catch {
+        // Zone labels are optional. Scroll restore still proceeds once this attempt finishes.
+      } finally {
+        if (!cancelled) setZonesReady(true)
+      }
     }
     run()
     return () => { cancelled = true }
@@ -624,25 +653,151 @@ export default function MobLoot() {
     return zoneEntries
   }, [filteredForDisplay, filterSlot, filterClass])
 
-  /** When filtering by slot/class, auto-expand mobs that have <3 matching items. */
-  useEffect(() => {
-    if (!filterSlot && !filterClass) return
-    const toExpand = {}
-    filteredForDisplay.forEach((e) => {
-      const loot = getFilteredAndSortedLoot(e.loot, e)
-      if (loot.length > 0 && loot.length < 3) toExpand[e.key] = true
-    })
-    if (Object.keys(toExpand).length === 0) return
-    setExpanded((prev) => ({ ...prev, ...toExpand }))
-  }, [filterSlot, filterClass, filteredForDisplay, getFilteredAndSortedLoot])
+  const filtersActive = !!(filterSlot || filterClass)
 
-  const toggle = (key) => {
-    setExpanded((prev) => ({ ...prev, [key]: !prev[key] }))
+  const toggle = (key, currentlyOpen) => {
+    setGroups((prev) => toggleMobGroup(prev, key, currentlyOpen))
   }
 
   const showMoreItems = (key) => {
-    setItemsShownPerKey((prev) => ({ ...prev, [key]: (prev[key] || ITEMS_PER_PAGE) + ITEMS_PER_PAGE }))
+    setGroups((prev) => revealMoreItems(prev, key))
   }
+
+  const filterSignature = `${query}\0${filterSlot}\0${filterClass}`
+  useEffect(() => {
+    if (filterSeenRef.current == null) {
+      filterSeenRef.current = filterSignature
+      return
+    }
+    if (filterSeenRef.current === filterSignature) return
+    filterSeenRef.current = filterSignature
+    scrollMemoryRef.current.filtersChangedByUser = true
+    scrollMemoryRef.current.phase = 'settled'
+    clearScrollAnchor(sessionStorage)
+  }, [filterSignature])
+
+  useEffect(() => {
+    if (!('scrollRestoration' in history)) return undefined
+    const previous = history.scrollRestoration
+    history.scrollRestoration = 'manual'
+    return () => {
+      history.scrollRestoration = previous || 'auto'
+    }
+  }, [])
+
+  useEffect(() => {
+    const mark = () => {
+      if (scrollMemoryRef.current.phase === 'settled') return
+      scrollMemoryRef.current.userInteracted = true
+    }
+    window.addEventListener('wheel', mark, { passive: true })
+    window.addEventListener('touchstart', mark, { passive: true })
+    window.addEventListener('keydown', mark)
+    return () => {
+      window.removeEventListener('wheel', mark)
+      window.removeEventListener('touchstart', mark)
+      window.removeEventListener('keydown', mark)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (scrollMemoryRef.current.phase === 'settled') return undefined
+    if (!loading && !data) {
+      scrollMemoryRef.current.phase = 'settled'
+      return undefined
+    }
+    let frame = 0
+    let frames = 0
+    let cancelled = false
+    const attempt = () => {
+      if (cancelled || scrollMemoryRef.current.phase === 'settled') return
+      frames += 1
+      const anchor = readScrollAnchor(sessionStorage)
+      const visible = new Set(filteredForDisplay.map((entry) => entry.key))
+      const anchorInList = !!(anchor && visible.has(anchor.mobKey))
+      const node = anchorInList ? findScrollAnchorElement(document, anchor) : null
+      const decision = scrollRestoreDecision({
+        userInteracted: scrollMemoryRef.current.userInteracted,
+        filtersChangedByUser: scrollMemoryRef.current.filtersChangedByUser,
+        dataReady: !loading && data != null,
+        statsReady: itemStatsReady,
+        zonesReady,
+        armorReady,
+        anchor,
+        anchorInList,
+        anchorInDom: !!node,
+      })
+      if (decision === 'wait') {
+        const gatesReady = !loading && data != null && itemStatsReady && zonesReady && armorReady
+        if (gatesReady && frames < 30) frame = requestAnimationFrame(attempt)
+        else if (gatesReady) scrollMemoryRef.current.phase = 'settled'
+        return
+      }
+      scrollMemoryRef.current.phase = 'settled'
+      if (decision !== 'restore' || !node || typeof node.scrollIntoView !== 'function') return
+      scrollMemoryRef.current.suppressSave = true
+      node.scrollIntoView({ block: 'start' })
+      requestAnimationFrame(() => {
+        scrollMemoryRef.current.suppressSave = false
+      })
+    }
+    frame = requestAnimationFrame(() => {
+      frame = requestAnimationFrame(attempt)
+    })
+    return () => {
+      cancelled = true
+      cancelAnimationFrame(frame)
+    }
+  }, [loading, data, itemStatsReady, zonesReady, armorReady, filteredForDisplay])
+
+  useEffect(() => {
+    if (loading || !data) return undefined
+    let timer = 0
+    const save = () => {
+      if (scrollMemoryRef.current.phase !== 'settled') return
+      if (scrollMemoryRef.current.suppressSave) return
+      const entries = []
+      document.querySelectorAll('[data-mob-key]').forEach((node) => {
+        const mobKey = node.getAttribute('data-mob-key')
+        if (!mobKey) return
+        const itemKey = node.getAttribute('data-item-key')
+        entries.push({
+          mobKey,
+          itemKey: itemKey || null,
+          top: node.getBoundingClientRect().top,
+        })
+      })
+      if (entries.length === 0) return
+      const anchor = chooseScrollAnchor(entries, 0)
+      if (!anchor) {
+        clearScrollAnchor(sessionStorage)
+        return
+      }
+      writeScrollAnchor(sessionStorage, anchor)
+    }
+    const onScroll = () => {
+      if (scrollMemoryRef.current.phase !== 'settled' || scrollMemoryRef.current.suppressSave) return
+      window.clearTimeout(timer)
+      timer = window.setTimeout(save, SCROLL_SAVE_DELAY_MS)
+    }
+    const flush = () => {
+      window.clearTimeout(timer)
+      timer = 0
+      save()
+    }
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') flush()
+    }
+    window.addEventListener('scroll', onScroll, { passive: true })
+    window.addEventListener('pagehide', flush)
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => {
+      flush()
+      window.removeEventListener('scroll', onScroll)
+      window.removeEventListener('pagehide', flush)
+      document.removeEventListener('visibilitychange', onVisibility)
+    }
+  }, [loading, data])
 
   if (loading) return <div className="container">Loading raid items…</div>
   if (!data) {
@@ -721,20 +876,20 @@ export default function MobLoot() {
                   </td>
                 </tr>
                 {zoneEntries.map((e) => {
-                  const isOpen = expanded[e.key]
                   const filteredLoot = getFilteredAndSortedLoot(e.loot, e)
-                  const limit = itemsShownPerKey[e.key] ?? ITEMS_PER_PAGE
+                  const isOpen = isMobOpen(groups, e.key, { filtersActive, matchCount: filteredLoot.length })
+                  const limit = itemsShownLimit(groups, e.key)
                   const visibleLoot = filteredLoot.slice(0, limit)
                   const hasMore = filteredLoot.length > limit
                   return (
                     <Fragment key={e.key}>
-                      <tr>
+                      <tr data-mob-key={e.key}>
                         <td>
                           <button
                             type="button"
                             className="btn btn-ghost"
                             style={{ padding: '0.25rem', fontSize: '1rem' }}
-                            onClick={() => toggle(e.key)}
+                            onClick={() => toggle(e.key, isOpen)}
                             aria-expanded={isOpen}
                           >
                             {isOpen ? '−' : '+'}
@@ -768,8 +923,9 @@ export default function MobLoot() {
                                         : '—'
                                       const displayName = (displayItemId && stats?.name) ? stats.name : name
                                       const rowItemId = displayItemId ?? itemId
+                                      const rowItemKey = itemAnchorKey(item)
                                       return (
-                                        <tr key={item.item_id || item.name}>
+                                        <tr key={item.item_id || item.name} data-mob-key={e.key} data-item-key={rowItemKey || undefined}>
                                           <td style={{ verticalAlign: 'middle', maxWidth: '420px' }}>
                                             <InlineItemRow name={displayName} itemId={rowItemId} showGearScore moldName={moldName} initialStats={stats} />
                                           </td>
