@@ -268,7 +268,19 @@ def hosted_child_env(conn: dict[str, str | int], *, read_only: bool = True) -> d
 
 
 def hosted_psql(conn: dict[str, str | int], sql: str, secrets: list[str], *, tuples_only: bool) -> str:
-    args = ["psql", "-v", "ON_ERROR_STOP=1"]
+    args = [
+        "psql",
+        "-h",
+        str(conn["host"]),
+        "-p",
+        str(conn["port"]),
+        "-U",
+        str(conn["user"]),
+        "-d",
+        str(conn["database"]),
+        "-v",
+        "ON_ERROR_STOP=1",
+    ]
     if tuples_only:
         args.append("-At")
     completed = run_command(
@@ -288,7 +300,20 @@ def hosted_psql_text(conn: dict[str, str | int], sql: str, secrets: list[str]) -
 def hosted_psql_script(conn: dict[str, str | int], sql: str, secrets: list[str]) -> None:
     """Run one fail-fast transaction. A statement error rolls the transaction back."""
     run_command(
-        ["psql", "-v", "ON_ERROR_STOP=1", "--single-transaction"],
+        [
+            "psql",
+            "-h",
+            str(conn["host"]),
+            "-p",
+            str(conn["port"]),
+            "-U",
+            str(conn["user"]),
+            "-d",
+            str(conn["database"]),
+            "-v",
+            "ON_ERROR_STOP=1",
+            "--single-transaction",
+        ],
         env=hosted_child_env(conn, read_only=False),
         secrets=secrets,
         label="psql",

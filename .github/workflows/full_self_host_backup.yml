@@ -64,4 +64,5 @@ jobs:
 
       - name: Record backup failure
         if: failure()
-        run: echo "FULL DATABASE BACKUP: FAIL" >> "$GITHUB_STEP_SUMMARY"
+        run: |
+          echo "FULL DATABASE BACKUP: FAIL" >> "$GITHUB_STEP_SUMMARY"

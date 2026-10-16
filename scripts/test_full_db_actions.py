@@ -12,6 +12,7 @@ import os
 import shutil
 import subprocess
 import tempfile
+import time
 import zipfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -383,16 +384,39 @@ def test_disposable_postgres() -> None:
         raise SystemExit(started.stderr or "docker run failed")
     try:
         port = ""
-        for _ in range(40):
-            ready = subprocess.run(
-                ["docker", "exec", name, "pg_isready", "-U", "postgres", "-d", "postgres"],
+        deadline = time.time() + 90
+        while time.time() < deadline:
+            logs = subprocess.run(["docker", "logs", name], capture_output=True, text=True, check=False)
+            ready_twice = ((logs.stdout or "") + (logs.stderr or "")).count(
+                "database system is ready to accept connections"
+            ) >= 2
+            probe = subprocess.run(
+                [
+                    "docker",
+                    "exec",
+                    "-i",
+                    name,
+                    "psql",
+                    "-U",
+                    "postgres",
+                    "-d",
+                    "postgres",
+                    "-v",
+                    "ON_ERROR_STOP=1",
+                    "-At",
+                    "-c",
+                    "SELECT 1",
+                ],
                 capture_output=True,
+                text=True,
                 check=False,
             )
-            if ready.returncode == 0:
-                mapped = subprocess.run(["docker", "port", name, "5432"], capture_output=True, text=True, check=False)
-                port = mapped.stdout.strip().rsplit(":", 1)[-1]
+            mapped = subprocess.run(["docker", "port", name, "5432"], capture_output=True, text=True, check=False)
+            published = mapped.stdout.strip().rsplit(":", 1)[-1]
+            if ready_twice and probe.returncode == 0 and (probe.stdout or "").strip() == "1" and published.isdigit():
+                port = published
                 break
+            time.sleep(1)
         check(bool(port), "Disposable Postgres 17 did not become ready.")
         fails(
             lambda: full_db_common.assert_catalog_prerequisites(
