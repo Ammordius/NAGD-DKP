@@ -44,7 +44,7 @@ Stop before applying if any preflight below fails. Fix the data, then apply agai
 
 ## 3. Backup and preflight
 
-Take a portable SQL backup before an upgrade ([CI-DB-SQL-BACKUP.md](CI-DB-SQL-BACKUP.md)). The artifact is guild data only. It does not contain schema SQL, so restoring it does not undo a committed schema change. A failed `psql --single-transaction` already rolls the upgrade back. The CSV workflow in [CI-DB-BACKUP.md](CI-DB-BACKUP.md) remains the legacy same-project export. The only schema file is still `docs/supabase-schema-full.sql`.
+Take a portable SQL backup before an upgrade ([CI-DB-SQL-BACKUP.md](CI-DB-SQL-BACKUP.md)). The artifact is guild data only. It does not contain schema SQL, so restoring it does not undo a committed schema change. A failed `psql --single-transaction` already rolls the upgrade back. The CSV workflow in [CI-DB-BACKUP.md](CI-DB-BACKUP.md) is retired. Historical `supabase-backup-*` artifacts are not deleted. The only schema file is still `docs/supabase-schema-full.sql`.
 
 Run these checks before `psql`. They only read.
 

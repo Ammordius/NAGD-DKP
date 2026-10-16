@@ -1,6 +1,6 @@
 # Portable SQL backup
 
-This workflow exports guild DKP data as inspectable SQL so it can move between independent Supabase projects. It is the portable recovery backup. The CSV export in [CI-DB-BACKUP.md](CI-DB-BACKUP.md) stays scheduled for the public ledger and for legacy recovery. Restore from this artifact is [CI-DB-SQL-RESTORE.md](CI-DB-SQL-RESTORE.md). Do not run a scheduled production backup until `SUPABASE_DB_URL` and `SQL_BACKUP_AGE_RECIPIENT` are set and `SQL_BACKUP_SCHEDULE` is `enabled`. A manual run is separate and still needs those two secrets.
+This workflow exports guild DKP data as inspectable SQL so it can move between independent Supabase projects. It is the portable recovery backup. The CSV export in [CI-DB-BACKUP.md](CI-DB-BACKUP.md) is retired. Historical `supabase-backup-*` artifacts are not deleted. Restore from this artifact is [CI-DB-SQL-RESTORE.md](CI-DB-SQL-RESTORE.md). Do not run a scheduled production backup until `SUPABASE_DB_URL` and `SQL_BACKUP_AGE_RECIPIENT` are set and `SQL_BACKUP_SCHEDULE` is `enabled`. A manual run is separate and still needs those two secrets.
 
 Another repository can list and dry-run these artifacts from **DB SQL restore** without writing the destination. See [CI-DB-SQL-RESTORE.md](CI-DB-SQL-RESTORE.md). Decrypting the archive needs the offline age identity, which this backup workflow does not store. The reader is [`scripts/sql_backup_fetch.py`](../scripts/sql_backup_fetch.py), described in [CI-DB-SQL-BACKUP-FETCH.md](CI-DB-SQL-BACKUP-FETCH.md).
 
@@ -45,7 +45,7 @@ The artifact records two different schema facts. `canonical_schema_sha256` is th
 
 A portable guild backup is the 13 allowlisted tables above. It is enough to rebuild DKP on another database that already has `docs/supabase-schema-full.sql`. It is not a complete disaster-recovery copy. Supabase’s own backup or point-in-time recovery is what recreates logins, roles, secrets, and schema. This artifact cannot.
 
-The CSV exporter still writes profiles, the officer audit log, and several caches. [scripts/restore_supabase_from_backup.py](../scripts/restore_supabase_from_backup.py) does not load every CSV it finds. `character_dkp_spent` is in neither export; restore rebuilds it.
+The CSV exporter wrote profiles, the officer audit log, and several caches. [scripts/restore_supabase_from_backup.py](../scripts/restore_supabase_from_backup.py) does not load every CSV it finds. `character_dkp_spent` is in neither export; restore rebuilds it.
 
 | Table | CSV export | SQL portable backup |
 | --- | --- | --- |
@@ -65,7 +65,7 @@ Restore loads the allowlisted tables in one transaction, then calls `end_restore
 Workflow: [`.github/workflows/db-sql-backup.yml`](../.github/workflows/db-sql-backup.yml). Actions installs the PostgreSQL 17 client from apt.postgresql.org because `pg_dump` must be at least the server major version.
 
 - **Manual:** Actions → **DB SQL backup** → Run workflow, from `main`. This is the on-demand backup. It does not consult the `raid_loot` count. Check **force** to also upload this week’s and this month’s long-retention copies even when those names already exist. A run selected from another branch does not start the job.
-- **Daily:** `30 7 * * *`, thirty minutes after the CSV job. GitHub runs the schedule only from the default branch. The export runs only when that ref is `main` and the repository variable `SQL_BACKUP_SCHEDULE` is `enabled`, or when someone starts the workflow by hand from `main`. A push of this file does not read production. The schedule is not gated on the `raid_loot` row count, and it does not commit `.ci` marker files.
+- **Daily:** `30 7 * * *`. GitHub runs the schedule only from the default branch. The export runs only when that ref is `main` and the repository variable `SQL_BACKUP_SCHEDULE` is `enabled`, or when someone starts the workflow by hand from `main`. A push of this file does not read production. The schedule is not gated on the `raid_loot` row count, and it does not commit `.ci` marker files.
 - The job has `contents: read` and `actions: write`. It does not commit or push. Weekly and monthly copies are chosen by listing this repository’s own Actions artifacts. A fork does not inherit another fork’s artifact list, so a stale `.ci` commit cannot suppress or repeat those copies.
 - Upload runs only after the export step succeeds (`if: success()`), and `if-no-files-found: error` rejects an empty upload. A failed `pg_dump` or missing secret writes no artifact.
 - Logs and the step summary list table names and row counts. They do not include the connection string, password, recipient, or row contents.
