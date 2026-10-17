@@ -5,6 +5,7 @@ import { useDkpData, ACTIVE_DAYS } from '../lib/dkpLeaderboard'
 import {
   LEADERBOARD_SORT_COLUMNS,
   attendanceShareColor,
+  attendanceShareEarned,
   attendanceSharePercent,
   compareLeaderboardRows,
   leaderboardRowMetrics,
@@ -190,8 +191,8 @@ export default function DKP({ isOfficer, profile }) {
               const total60 = periodTotals['60d'] || 0
               const pct30 = attendanceSharePercent(metrics.earned30, total30)
               const pct60 = attendanceSharePercent(metrics.earned60, total60)
-              const cell30 = pct30 == null ? '—' : `${metrics.earned30} / ${total30} (${pct30}%)`
-              const cell60 = pct60 == null ? '—' : `${metrics.earned60} / ${total60} (${pct60}%)`
+              const cell30 = pct30 == null ? '—' : `${attendanceShareEarned(metrics.earned30, total30)} / ${total30} (${pct30}%)`
+              const cell60 = pct60 == null ? '—' : `${attendanceShareEarned(metrics.earned60, total60)} / ${total60} (${pct60}%)`
               return (
                 <tr key={r.account_id + i} data-scroll-anchor={r.account_id}>
                   <td><Link to={`/accounts/${r.account_id}`}>{r.name}</Link></td>

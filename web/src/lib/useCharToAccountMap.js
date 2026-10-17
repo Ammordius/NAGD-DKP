@@ -95,6 +95,7 @@ export function useCharToAccountMap() {
   const { data, isLoading } = useSWR(CHAR_TO_ACCOUNT_KEY, fetchCharToAccountMap, {
     dedupingInterval: DEDUPING_INTERVAL_MS,
     revalidateOnFocus: false,
+    revalidateOnReconnect: false,
   })
 
   const charToAccount = data?.charToAccount ?? {}

@@ -213,14 +213,18 @@ function dedupeByCharacterName(list) {
     const mNameKey = isNameKey(m)
     const rNameKey = isNameKey(r)
     if (mNameKey && !rNameKey) {
-      byName[key] = { ...r }
+      byName[key] = {
+        ...r,
+        earned_30d: Math.max(m.earned_30d ?? 0, r.earned_30d ?? 0),
+        earned_60d: Math.max(m.earned_60d ?? 0, r.earned_60d ?? 0),
+      }
       return
     }
-    // Incoming row is name-key duplicate: do not add earned/spent (same raids may be on both keys).
-    // Still add earned_30d/earned_60d so period columns are correct when the two keys have different raids.
+    // Incoming row is name-key duplicate: do not add earned/spent or window DKP.
+    // Both keys can list the same raids, so keep the larger window total.
     if (!mNameKey && rNameKey) {
-      m.earned_30d = (m.earned_30d ?? 0) + (r.earned_30d ?? 0)
-      m.earned_60d = (m.earned_60d ?? 0) + (r.earned_60d ?? 0)
+      m.earned_30d = Math.max(m.earned_30d ?? 0, r.earned_30d ?? 0)
+      m.earned_60d = Math.max(m.earned_60d ?? 0, r.earned_60d ?? 0)
       if (r.last_activity_date && (!m.last_activity_date || (r.last_activity_date > m.last_activity_date))) {
         m.last_activity_date = r.last_activity_date
       }
@@ -371,6 +375,7 @@ export function useDkpData(fetcher = defaultDkpFetcher, { enabled = true } = {})
   const { data: apiData, error, isLoading, mutate } = useSWR(enabled ? DKP_DATA_KEY : null, fetcher, {
     dedupingInterval: DEDUPING_INTERVAL_MS,
     revalidateOnFocus: false,
+    revalidateOnReconnect: false,
   })
   const processed = useMemo(() => (apiData ? processApiPayload(apiData) : null), [apiData])
   const accountBalanceByAccountId = useMemo(() => processed?.fullAccountBalances ?? {}, [processed])

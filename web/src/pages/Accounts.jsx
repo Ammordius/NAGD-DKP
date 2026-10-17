@@ -4,7 +4,9 @@ import { ACCOUNTS_LIST_CACHE_KEY, createCache } from '../lib/cache'
 import { fetchAll } from '../lib/accountData'
 import { supabase } from '../lib/supabase'
 import { usePersistedState } from '../lib/usePersistedState'
+import { compareAccountsByName } from '../lib/accountSort'
 import { useScrollContentReady } from '../lib/routeScrollView'
+import MyDkpStandings from '../components/MyDkpStandings'
 import {
   formatCharacterClassSpentLine,
   buildSpentByAccountFromLoot,
@@ -19,7 +21,7 @@ function claimedByLabel(names) {
   return names.map((name) => (name || '').trim() || '—').join(', ')
 }
 
-export default function Accounts() {
+export default function Accounts({ profile }) {
   const [accounts, setAccounts] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -112,7 +114,7 @@ export default function Accounts() {
           characters,
         }
       })
-      accList.sort((x, y) => (y.characters?.length || 0) - (x.characters?.length || 0))
+      accList.sort(compareAccountsByName)
       setAccounts(accList)
       setLoading(false)
       cache.set(accList)
@@ -136,6 +138,7 @@ export default function Accounts() {
   return (
     <div className="container">
       <h1>Accounts &amp; characters</h1>
+      <MyDkpStandings accountId={profile?.account_id} />
       <p style={{ color: '#71717a', marginBottom: '1rem' }}>
         All accounts with full character lists. Type a name to find who it is.
       </p>

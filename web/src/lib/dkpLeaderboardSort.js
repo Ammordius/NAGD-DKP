@@ -5,11 +5,21 @@ export const ATTENDANCE_GREEN = '#22c55e'
 export const ATTENDANCE_YELLOW = '#fbbf24'
 export const ATTENDANCE_RED = '#f87171'
 
-/** Rounded share of period DKP, matching the percent shown in the 30d and 60d cells. */
+/** Rounded share of period DKP, matching the percent shown in the 30d and 60d cells. Never above 100. */
 export function attendanceSharePercent(earned, total) {
   const pool = Number(total) || 0
   if (pool <= 0) return null
-  return Math.round(((Number(earned) || 0) / pool) * 100)
+  const earnedNum = Number(earned) || 0
+  if (earnedNum <= 0) return 0
+  return Math.min(100, Math.round((earnedNum / pool) * 100))
+}
+
+/** Window DKP shown in the 30d and 60d cells. An account cannot earn more than the period pool. */
+export function attendanceShareEarned(earned, total) {
+  const pool = Number(total) || 0
+  const earnedNum = Number(earned) || 0
+  if (pool <= 0) return Math.max(0, Math.round(earnedNum))
+  return Math.min(Math.max(0, Math.round(earnedNum)), Math.round(pool))
 }
 
 /** Above 45% green, 10% through 45% yellow, below 10% red. */

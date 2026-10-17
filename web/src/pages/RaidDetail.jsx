@@ -55,7 +55,7 @@ export default function RaidDetail({ isOfficer, profile }) {
   const { data, error: swrError, isLoading, mutate } = useSWR(
     raidId ? `raid-detail-${raidId}` : null,
     () => fetchRaidDetail(raidId),
-    { dedupingInterval: RAID_DEDUPING_INTERVAL_MS, revalidateOnFocus: false }
+    { dedupingInterval: RAID_DEDUPING_INTERVAL_MS, revalidateOnFocus: false, revalidateOnReconnect: false }
   )
   const raid = data?.raid ?? null
   const events = data?.events ?? []

@@ -307,6 +307,7 @@ export default function AccountDetail({ isOfficer, profile, session, onProfileUp
       fallbackData,
       dedupingInterval: ACCOUNT_DEDUPING_INTERVAL_MS,
       revalidateOnFocus: false,
+      revalidateOnReconnect: false,
       onSuccess: (data) => { if (accountId && data) setAccountDetailInSession(accountId, data) },
     }
   )
