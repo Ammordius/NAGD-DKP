@@ -1,3 +1,5 @@
+import { browserStorage } from './pageState.js'
+
 export const UI_PREFERENCE_DEFAULTS = {
   showTicCharacterPicker: true,
   useCharacterAdminSelectors: true,
@@ -61,6 +63,33 @@ export function writeTicDraft(storage, raidId, draft, userId) {
   } catch {
     // Private mode or a full session store should not block the form.
   }
+}
+
+function takeSessionTicDraft(sessionStore, localStore, raidId, userId) {
+  if (!sessionStore || !localStore || !userId) return
+  const scoped = ticDraftStorageKey(raidId, userId)
+  const legacy = ticDraftStorageKey(raidId)
+  try {
+    if (localStore.getItem(scoped) == null) {
+      const raw = sessionStore.getItem(scoped) ?? sessionStore.getItem(legacy)
+      if (raw != null) localStore.setItem(scoped, raw)
+    }
+    sessionStore.removeItem(scoped)
+    sessionStore.removeItem(legacy)
+  } catch {
+    // A failed move still leaves the session draft readable on the next visit.
+  }
+}
+
+/** Raid Admin tic draft for this user, kept in localStorage and moved out of the tab session once. */
+export function readBrowserTicDraft(raidId, userId) {
+  const local = browserStorage('local')
+  takeSessionTicDraft(browserStorage('session'), local, raidId, userId)
+  return readTicDraft(local, raidId, userId)
+}
+
+export function writeBrowserTicDraft(raidId, draft, userId) {
+  writeTicDraft(browserStorage('local'), raidId, draft, userId)
 }
 
 export function emptyTicDraft() {
