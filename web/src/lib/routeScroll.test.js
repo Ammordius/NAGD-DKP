@@ -160,7 +160,7 @@ describe('route scroll', () => {
     assert.equal(readScrollRecord(storage, '/mobs'), null)
   })
 
-  it('stores Raid Items scroll per user and can migrate the old session key', () => {
+  it('stores every route\'s scroll per user and can migrate the old session key', () => {
     const session = memoryStorage({
       'pageState:scroll:/mobs': JSON.stringify({
         anchorId: 'Anar_of_Water|Plane of Time',
@@ -182,6 +182,18 @@ describe('route scroll', () => {
       top: 0,
       savedAt: 2,
     }, null), 'skip')
+    assert.equal(readRouteScroll(stores, '/mobs', 'user-a').itemId, '28655')
+    assert.equal(commitRouteScroll(stores, {
+      measured: true,
+      routeKey: '/dkp',
+      anchorId: 'dkp-account',
+      itemId: null,
+      top: 400,
+      offset: 12,
+      savedAt: 3,
+    }, 'user-a'), 'write')
+    assert.equal(readRouteScroll(stores, '/dkp', 'user-a').anchorId, 'dkp-account')
+    assert.equal(readRouteScroll(stores, '/dkp', 'user-b'), null)
     assert.equal(readRouteScroll(stores, '/mobs', 'user-a').itemId, '28655')
     const header = row('Anar_of_Water|Plane of Time', null)
     const item = row('Anar_of_Water|Plane of Time', '28655')

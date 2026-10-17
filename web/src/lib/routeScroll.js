@@ -11,9 +11,11 @@ import {
 export const SCROLL_SAVE_DELAY_MS = 150
 const SCROLL_ANCHOR_SLACK_PX = 4
 const SCROLL_PREFIX = 'pageState:scroll:'
-export const MOBS_SCROLL_ROUTE = '/mobs'
-const MOBS_SCROLL_LOGICAL = 'scroll:/mobs'
-const MOBS_SCROLL_VERSION = 1
+const SCROLL_VERSION = 1
+
+export function scrollLogicalKey(routeKey) {
+  return `scroll:${routeKey}`
+}
 
 export function scrollRouteKey(pathname, search = '') {
   const path = pathname || '/'
@@ -172,39 +174,30 @@ export function findExactScrollItem(root, record) {
   return null
 }
 
-function mobsScrollStores(stores) {
-  return {
-    session: stores?.session || null,
-    local: stores?.local || null,
-  }
+function prepareUserScroll(stores, routeKey, userId) {
+  const local = stores?.local
+  if (!routeKey || !userId || !local) return false
+  migrateSessionKeyToUserLocal(stores?.session, local, scrollLogicalKey(routeKey), userId, { version: SCROLL_VERSION })
+  return true
 }
 
-/** Raid Items scroll is per signed-in user in localStorage. Other routes stay in sessionStorage. */
+/** Every route's scroll is per signed-in user in localStorage. */
 export function readRouteScroll(stores, routeKey, userId) {
-  if (routeKey === MOBS_SCROLL_ROUTE) {
-    const { session, local } = mobsScrollStores(stores)
-    if (!userId || !local) return null
-    migrateSessionKeyToUserLocal(session, local, MOBS_SCROLL_LOGICAL, userId, { version: MOBS_SCROLL_VERSION })
-    return readPageState(local, MOBS_SCROLL_LOGICAL, null, normalizeScrollRecord, {
-      userId,
-      version: MOBS_SCROLL_VERSION,
-    })
-  }
-  return readScrollRecord(stores?.session, routeKey)
+  if (!prepareUserScroll(stores, routeKey, userId)) return null
+  return readPageState(stores.local, scrollLogicalKey(routeKey), null, normalizeScrollRecord, {
+    userId,
+    version: SCROLL_VERSION,
+  })
 }
 
 export function clearRouteScroll(stores, routeKey, userId) {
-  if (routeKey === MOBS_SCROLL_ROUTE) {
-    const local = stores?.local
-    if (!userId || !local || typeof local.removeItem !== 'function') return
-    try {
-      local.removeItem(pageStateFullKey(MOBS_SCROLL_LOGICAL, { userId }))
-    } catch {
-      // ignore
-    }
-    return
+  const local = stores?.local
+  if (!routeKey || !userId || !local || typeof local.removeItem !== 'function') return
+  try {
+    local.removeItem(pageStateFullKey(scrollLogicalKey(routeKey), { userId }))
+  } catch {
+    // ignore
   }
-  clearScrollRecord(stores?.session, routeKey)
 }
 
 /**
@@ -212,13 +205,11 @@ export function clearRouteScroll(stores, routeKey, userId) {
  */
 export function commitRouteScroll(stores, snapshot, userId) {
   if (!snapshot?.measured || !snapshot.routeKey) return 'skip'
-  if (snapshot.routeKey !== MOBS_SCROLL_ROUTE) return commitScrollSnapshot(stores?.session, snapshot)
-  const { session, local } = mobsScrollStores(stores)
-  if (!userId || !local) return 'skip'
-  migrateSessionKeyToUserLocal(session, local, MOBS_SCROLL_LOGICAL, userId, { version: MOBS_SCROLL_VERSION })
-  const existing = readPageState(local, MOBS_SCROLL_LOGICAL, null, normalizeScrollRecord, {
+  if (!prepareUserScroll(stores, snapshot.routeKey, userId)) return 'skip'
+  const logical = scrollLogicalKey(snapshot.routeKey)
+  const existing = readPageState(stores.local, logical, null, normalizeScrollRecord, {
     userId,
-    version: MOBS_SCROLL_VERSION,
+    version: SCROLL_VERSION,
   })
   const incomingSavedAt = typeof snapshot.savedAt === 'number' ? snapshot.savedAt : null
   if (scrollWriteIsStale(existing, { savedAt: incomingSavedAt })) return 'stale'
@@ -229,7 +220,7 @@ export function commitRouteScroll(stores, snapshot, userId) {
   }
   const normalized = normalizeScrollRecord(snapshot)
   if (!normalized) return 'skip'
-  writePageState(local, MOBS_SCROLL_LOGICAL, normalized, { userId, version: MOBS_SCROLL_VERSION })
+  writePageState(stores.local, logical, normalized, { userId, version: SCROLL_VERSION })
   return 'write'
 }
 

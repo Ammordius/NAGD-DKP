@@ -111,6 +111,19 @@ describe('page state storage', () => {
     assert.equal(saved.expanded['Anar_of_Water|Plane of Time'], true)
     assert.equal(readPageState(local, '/mobs:groups', null, undefined, { userId: 'user-b', version: 1 }), null)
   })
+
+  it('moves a user-scoped session slot into that user\'s local slot once', () => {
+    const session = memoryStorage({
+      'pageState:user:user-a:/dkp:sortKey': JSON.stringify('name'),
+      'pageState:/dkp:sortKey': JSON.stringify('balance'),
+    })
+    const local = memoryStorage()
+    assert.equal(migrateSessionKeyToUserLocal(session, local, '/dkp:sortKey', 'user-a', { version: 1 }), true)
+    assert.equal(session.getItem('pageState:user:user-a:/dkp:sortKey'), null)
+    assert.equal(session.getItem('pageState:/dkp:sortKey'), null)
+    assert.equal(readPageState(local, '/dkp:sortKey', '', undefined, { userId: 'user-a', version: 1 }), 'name')
+    assert.equal(migrateSessionKeyToUserLocal(session, local, '/dkp:sortKey', 'user-b', { version: 1 }), false)
+  })
 })
 
 describe('view-state contract', () => {

@@ -36,7 +36,7 @@ import {
 import TicDateTimeFields from '../components/TicDateTimeFields'
 import TicMemberPicker from '../components/TicMemberPicker'
 import AttendeeCountCell from '../components/AttendeeCountCell'
-import { normalizeUiPreferences, readTicDraft, writeTicDraft } from '../lib/uiPreferences'
+import { normalizeUiPreferences, readBrowserTicDraft, writeBrowserTicDraft } from '../lib/uiPreferences'
 import { usePersistedState } from '../lib/usePersistedState'
 import { useScrollContentReady } from '../lib/routeScrollView'
 import { buildAccountAdminRows, filterAccountAdminRows } from '../lib/siteAdminCharacters'
@@ -1326,11 +1326,11 @@ export default function Officer({ isOfficer, profile, userId }) {
   useEffect(() => {
     const previousRaidId = ticRaidRef.current
     if (previousRaidId && previousRaidId !== selectedRaidId) {
-      writeTicDraft(sessionStorage, previousRaidId, ticDraftRef.current, userId)
+      writeBrowserTicDraft(previousRaidId, ticDraftRef.current, userId)
     }
     ticRaidRef.current = selectedRaidId
     skipTicDraftWrite.current = true
-    const draft = readTicDraft(sessionStorage, selectedRaidId, userId)
+    const draft = readBrowserTicDraft(selectedRaidId, userId)
     if (draft) {
       setTicPaste(draft.ticPaste)
       setTicResolutions(draft.ticResolutions)
@@ -1366,7 +1366,7 @@ export default function Officer({ isOfficer, profile, userId }) {
       return
     }
     if (!selectedRaidId) return
-    writeTicDraft(sessionStorage, selectedRaidId, {
+    writeBrowserTicDraft(selectedRaidId, {
       ticPaste,
       ticResolutions,
       ticExcludedCharIds,
