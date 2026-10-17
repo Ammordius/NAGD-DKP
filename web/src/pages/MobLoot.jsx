@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useCallback, useRef, Fragment } from 'react'
+import { useEffect, useState, useMemo, useCallback, Fragment } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { usePersistedState } from '../lib/usePersistedState'
@@ -8,21 +8,14 @@ import { getItemStats, ensureItemStatsLoaded, getItemStatsCached, getGearScore, 
 import { ensureElementalArmorLoaded, getMoldInfo, getArmorIdForMoldAndClass } from '../lib/elementalArmor'
 import {
   EMPTY_GROUP_STATE,
-  ITEMS_PER_PAGE,
-  SCROLL_SAVE_DELAY_MS,
-  chooseScrollAnchor,
-  clearScrollAnchor,
-  findScrollAnchorElement,
   isMobOpen,
   itemAnchorKey,
   itemsShownLimit,
   normalizeGroupState,
-  readScrollAnchor,
   revealMoreItems,
-  scrollRestoreDecision,
   toggleMobGroup,
-  writeScrollAnchor,
 } from '../lib/mobLootViewState'
+import { useForgetScrollOnChange, useScrollContentReady, useScrollListIds } from '../lib/routeScrollView'
 
 /** EQ slot options for filter (order for dropdown). */
 const SLOT_OPTIONS = ['HEAD', 'FACE', 'NECK', 'SHOULDERS', 'ARMS', 'BACK', 'CHEST', 'WRIST', 'HANDS', 'WAIST', 'LEGS', 'FEET', 'PRIMARY', 'SECONDARY', 'RANGE', 'EAR', 'FINGERS', 'AMMO']
@@ -258,13 +251,6 @@ export default function MobLoot() {
   const [itemStatsReady, setItemStatsReady] = useState(false)
   const [armorReady, setArmorReady] = useState(false)
   const [zonesReady, setZonesReady] = useState(false)
-  const scrollMemoryRef = useRef({
-    userInteracted: false,
-    filtersChangedByUser: false,
-    suppressSave: false,
-    phase: 'pending',
-  })
-  const filterSeenRef = useRef(null)
 
   useEffect(() => {
     ensureItemStatsLoaded().then(() => setItemStatsReady(true)).catch(() => setItemStatsReady(true))
@@ -664,140 +650,9 @@ export default function MobLoot() {
   }
 
   const filterSignature = `${query}\0${filterSlot}\0${filterClass}`
-  useEffect(() => {
-    if (filterSeenRef.current == null) {
-      filterSeenRef.current = filterSignature
-      return
-    }
-    if (filterSeenRef.current === filterSignature) return
-    filterSeenRef.current = filterSignature
-    scrollMemoryRef.current.filtersChangedByUser = true
-    scrollMemoryRef.current.phase = 'settled'
-    clearScrollAnchor(sessionStorage)
-  }, [filterSignature])
-
-  useEffect(() => {
-    if (!('scrollRestoration' in history)) return undefined
-    const previous = history.scrollRestoration
-    history.scrollRestoration = 'manual'
-    return () => {
-      history.scrollRestoration = previous || 'auto'
-    }
-  }, [])
-
-  useEffect(() => {
-    const mark = () => {
-      if (scrollMemoryRef.current.phase === 'settled') return
-      scrollMemoryRef.current.userInteracted = true
-    }
-    window.addEventListener('wheel', mark, { passive: true })
-    window.addEventListener('touchstart', mark, { passive: true })
-    window.addEventListener('keydown', mark)
-    return () => {
-      window.removeEventListener('wheel', mark)
-      window.removeEventListener('touchstart', mark)
-      window.removeEventListener('keydown', mark)
-    }
-  }, [])
-
-  useEffect(() => {
-    if (scrollMemoryRef.current.phase === 'settled') return undefined
-    if (!loading && !data) {
-      scrollMemoryRef.current.phase = 'settled'
-      return undefined
-    }
-    let frame = 0
-    let frames = 0
-    let cancelled = false
-    const attempt = () => {
-      if (cancelled || scrollMemoryRef.current.phase === 'settled') return
-      frames += 1
-      const anchor = readScrollAnchor(sessionStorage)
-      const visible = new Set(filteredForDisplay.map((entry) => entry.key))
-      const anchorInList = !!(anchor && visible.has(anchor.mobKey))
-      const node = anchorInList ? findScrollAnchorElement(document, anchor) : null
-      const decision = scrollRestoreDecision({
-        userInteracted: scrollMemoryRef.current.userInteracted,
-        filtersChangedByUser: scrollMemoryRef.current.filtersChangedByUser,
-        dataReady: !loading && data != null,
-        statsReady: itemStatsReady,
-        zonesReady,
-        armorReady,
-        anchor,
-        anchorInList,
-        anchorInDom: !!node,
-      })
-      if (decision === 'wait') {
-        const gatesReady = !loading && data != null && itemStatsReady && zonesReady && armorReady
-        if (gatesReady && frames < 30) frame = requestAnimationFrame(attempt)
-        else if (gatesReady) scrollMemoryRef.current.phase = 'settled'
-        return
-      }
-      scrollMemoryRef.current.phase = 'settled'
-      if (decision !== 'restore' || !node || typeof node.scrollIntoView !== 'function') return
-      scrollMemoryRef.current.suppressSave = true
-      node.scrollIntoView({ block: 'start' })
-      requestAnimationFrame(() => {
-        scrollMemoryRef.current.suppressSave = false
-      })
-    }
-    frame = requestAnimationFrame(() => {
-      frame = requestAnimationFrame(attempt)
-    })
-    return () => {
-      cancelled = true
-      cancelAnimationFrame(frame)
-    }
-  }, [loading, data, itemStatsReady, zonesReady, armorReady, filteredForDisplay])
-
-  useEffect(() => {
-    if (loading || !data) return undefined
-    let timer = 0
-    const save = () => {
-      if (scrollMemoryRef.current.phase !== 'settled') return
-      if (scrollMemoryRef.current.suppressSave) return
-      const entries = []
-      document.querySelectorAll('[data-mob-key]').forEach((node) => {
-        const mobKey = node.getAttribute('data-mob-key')
-        if (!mobKey) return
-        const itemKey = node.getAttribute('data-item-key')
-        entries.push({
-          mobKey,
-          itemKey: itemKey || null,
-          top: node.getBoundingClientRect().top,
-        })
-      })
-      if (entries.length === 0) return
-      const anchor = chooseScrollAnchor(entries, 0)
-      if (!anchor) {
-        clearScrollAnchor(sessionStorage)
-        return
-      }
-      writeScrollAnchor(sessionStorage, anchor)
-    }
-    const onScroll = () => {
-      if (scrollMemoryRef.current.phase !== 'settled' || scrollMemoryRef.current.suppressSave) return
-      window.clearTimeout(timer)
-      timer = window.setTimeout(save, SCROLL_SAVE_DELAY_MS)
-    }
-    const flush = () => {
-      window.clearTimeout(timer)
-      timer = 0
-      save()
-    }
-    const onVisibility = () => {
-      if (document.visibilityState === 'hidden') flush()
-    }
-    window.addEventListener('scroll', onScroll, { passive: true })
-    window.addEventListener('pagehide', flush)
-    document.addEventListener('visibilitychange', onVisibility)
-    return () => {
-      flush()
-      window.removeEventListener('scroll', onScroll)
-      window.removeEventListener('pagehide', flush)
-      document.removeEventListener('visibilitychange', onVisibility)
-    }
-  }, [loading, data])
+  useForgetScrollOnChange(filterSignature)
+  useScrollContentReady(!loading && data != null && itemStatsReady && zonesReady && armorReady)
+  useScrollListIds(filteredForDisplay.map((entry) => entry.key))
 
   if (loading) return <div className="container">Loading raid items…</div>
   if (!data) {
@@ -883,7 +738,7 @@ export default function MobLoot() {
                   const hasMore = filteredLoot.length > limit
                   return (
                     <Fragment key={e.key}>
-                      <tr data-mob-key={e.key}>
+                      <tr data-mob-key={e.key} data-scroll-anchor={e.key}>
                         <td>
                           <button
                             type="button"
@@ -925,7 +780,7 @@ export default function MobLoot() {
                                       const rowItemId = displayItemId ?? itemId
                                       const rowItemKey = itemAnchorKey(item)
                                       return (
-                                        <tr key={item.item_id || item.name} data-mob-key={e.key} data-item-key={rowItemKey || undefined}>
+                                        <tr key={item.item_id || item.name} data-mob-key={e.key} data-item-key={rowItemKey || undefined} data-scroll-anchor={e.key} data-scroll-item={rowItemKey || undefined}>
                                           <td style={{ verticalAlign: 'middle', maxWidth: '420px' }}>
                                             <InlineItemRow name={displayName} itemId={rowItemId} showGearScore moldName={moldName} initialStats={stats} />
                                           </td>

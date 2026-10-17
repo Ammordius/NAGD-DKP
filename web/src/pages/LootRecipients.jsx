@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useCharToAccountMap } from '../lib/useCharToAccountMap'
 import { usePersistedState } from '../lib/usePersistedState'
+import { useScrollContentReady } from '../lib/routeScrollView'
 import AssignedLootDisclaimer from '../components/AssignedLootDisclaimer'
 import ItemLink from '../components/ItemLink'
 import { getDkpMobLoot, getRaidItemSources } from '../lib/staticData'
@@ -48,11 +49,21 @@ const PAGE_SIZE = 500
 const CHUNK = 200
 const LOOT_COLLAPSE_THRESHOLD = 5
 
+function normalizeExpandedKeys(raw) {
+  if (!Array.isArray(raw)) return []
+  return raw.filter((key) => typeof key === 'string' && key).slice(0, 500)
+}
+
 export default function LootRecipients() {
   const { getAccountId } = useCharToAccountMap()
   const [months, setMonths] = usePersistedState('/loot-recipients:months', 6)
   const [classFilter, setClassFilter] = usePersistedState('/loot-recipients:classFilter', '')
   const [sortBy, setSortBy] = usePersistedState('/loot-recipients:sortBy', 'accountDkpTotal') // 'accountDkpTotal' | 'dkpSpentToon' | 'lastLootFirst'
+  const [expandedLootRows, setExpandedLootRows] = usePersistedState(
+    '/loot-recipients:expanded',
+    [],
+    normalizeExpandedKeys,
+  )
   const [loot, setLoot] = useState([])
   const [raids, setRaids] = useState({})
   const [characters, setCharacters] = useState([])
@@ -62,7 +73,7 @@ export default function LootRecipients() {
   const { accountBalanceByAccountId } = useDkpData() // single source of truth for Account DKP total (same cache as DKP page)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [expandedLootRows, setExpandedLootRows] = useState(() => new Set()) // character_key -> show full loot list
+  useScrollContentReady(!loading)
   const [mobLoot, setMobLoot] = useState(null)
   const [raidItemSources, setRaidItemSources] = useState(null)
 
@@ -352,17 +363,16 @@ export default function LootRecipients() {
                 const accountTo = r.account_id ? `/accounts/${r.account_id}` : null
                 const characterTo = `/characters/${encodeURIComponent(r.character_name)}`
                 const lootCount = r.lootItems.length
-                const showCollapsed = lootCount > LOOT_COLLAPSE_THRESHOLD && !expandedLootRows.has(r.character_key)
+                const showCollapsed = lootCount > LOOT_COLLAPSE_THRESHOLD && !expandedLootRows.includes(r.character_key)
                 const toggleLoot = () => {
                   setExpandedLootRows((prev) => {
-                    const next = new Set(prev)
-                    if (next.has(r.character_key)) next.delete(r.character_key)
-                    else next.add(r.character_key)
-                    return next
+                    const list = Array.isArray(prev) ? prev : []
+                    if (list.includes(r.character_key)) return list.filter((key) => key !== r.character_key)
+                    return [...list, r.character_key]
                   })
                 }
                 return (
-                  <tr key={r.character_key}>
+                  <tr key={r.character_key} data-scroll-anchor={r.character_key}>
                     <td>
                       {accountTo ? (
                         (() => {

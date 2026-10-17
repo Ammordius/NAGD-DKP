@@ -9,6 +9,8 @@ import { getItemStats, itemHasClassRestrictions } from '../lib/itemStats'
 import { getDkpMobLoot, getRaidItemSources } from '../lib/staticData'
 import { ensureElementalArmorLoaded, getMoldInfo, getArmorIdForMoldAndClass, isElementalMold } from '../lib/elementalArmor'
 import { formatAccountCharacter } from '../lib/formatAccountCharacter'
+import { usePersistedState } from '../lib/usePersistedState'
+import { useLeaveScrollToPage, useScrollContentReady } from '../lib/routeScrollView'
 
 const CLASS_OPTIONS = ['WAR', 'CLR', 'PAL', 'RNG', 'SHD', 'DRU', 'BRD', 'ROG', 'SHM', 'MNK', 'NEC', 'WIZ', 'MAG', 'ENC', 'BST']
 
@@ -162,7 +164,7 @@ function PriceChart({ data, height = 180 }) {
 
 export default function ItemPage({ isOfficer = false }) {
   const { itemNameEncoded } = useParams()
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const location = useLocation()
   const secondPlaceSectionRef = useRef(null)
   const { getAccountId, getAccountDisplayName, getDisplayNameForAccountId, getRepresentativeCharNameForAccount, getCharacterNameForCharId } = useCharToAccountMap()
@@ -172,7 +174,10 @@ export default function ItemPage({ isOfficer = false }) {
   const [mobLoot, setMobLoot] = useState(null)
   const [raidItemSources, setRaidItemSources] = useState(null)
   const [itemStats, setItemStats] = useState(null)
-  const [elementalClass, setElementalClass] = useState('')
+  const [elementalClass, setElementalClass] = usePersistedState(
+    `/items:${itemNameEncoded || ''}:elementalClass`,
+    '',
+  )
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [elementalDataReady, setElementalDataReady] = useState(false)
@@ -184,6 +189,8 @@ export default function ItemPage({ isOfficer = false }) {
   const [factError, setFactError] = useState('')
   const [rpcRunnerUpByLootId, setRpcRunnerUpByLootId] = useState({})
   const [rpcLoading, setRpcLoading] = useState(false)
+  useScrollContentReady(!loading)
+  useLeaveScrollToPage(urlSecondPlaceOpen)
 
   useEffect(() => {
     if (urlSecondPlaceOpen) setSecondPlaceOpen(true)
@@ -459,7 +466,12 @@ export default function ItemPage({ isOfficer = false }) {
 
       {isOfficer && historyAll.length > 0 && !secondPlaceOpen && (
         <p style={{ marginBottom: '1rem' }}>
-          <button type="button" className="btn btn-ghost" onClick={() => setSecondPlaceOpen(true)}>
+          <button type="button" className="btn btn-ghost" onClick={() => {
+            setSecondPlaceOpen(true)
+            const next = new URLSearchParams(searchParams)
+            next.set('second_place', '1')
+            setSearchParams(next, { replace: true })
+          }}>
             Show inferred second place (officers)
           </button>
         </p>
@@ -473,7 +485,14 @@ export default function ItemPage({ isOfficer = false }) {
         >
           <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', justifyContent: 'space-between', gap: '0.5rem' }}>
             <h2 style={{ marginTop: 0, marginBottom: '0.25rem' }}>Inferred second place (officers)</h2>
-            <button type="button" className="btn btn-ghost" style={{ fontSize: '0.85rem' }} onClick={() => setSecondPlaceOpen(false)}>
+            <button type="button" className="btn btn-ghost" style={{ fontSize: '0.85rem' }} onClick={() => {
+              setSecondPlaceOpen(false)
+              const next = new URLSearchParams(searchParams)
+              next.delete('second_place')
+              next.delete('bid_estimate')
+              next.delete('bid_portfolio')
+              setSearchParams(next, { replace: true })
+            }}>
               Hide
             </button>
           </div>

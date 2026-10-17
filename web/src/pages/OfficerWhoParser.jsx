@@ -52,7 +52,10 @@ function parseWhoNames(paste) {
 
 export default function OfficerWhoParser({ isOfficer }) {
   const navigate = useNavigate()
-  const [paste, setPaste] = usePersistedState('/officer/who-parser:paste', '')
+  const [paste, setPaste] = usePersistedState('/officer/who-parser:paste', '', undefined, {
+    userScope: true,
+    migrateUnscoped: true,
+  })
   const [activeTab, setActiveTab] = usePersistedState('/officer/who-parser:tab', 'grouped')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
