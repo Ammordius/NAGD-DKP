@@ -107,7 +107,7 @@ Fetched with `fetch('/…')` from `public/` or CDN:
 | `localStorage` | `pageState:user:<userId>:/officer/RaidAdmin:ticDraft:<raid id>` | Unsaved tic paste for that officer and raid. A legacy session key is moved here once, then deleted. Never auto-submitted. |
 | `sessionStorage` | `account-detail-cache-${accountId}` | SWR fallback for account page. Not the saved view. |
 | TTL cache | `raids_month_*` | Raids calendar month blobs (`web/src/lib/cache.js`) |
-| TTL cache | `accounts_list_v7` | Accounts list (`web/src/pages/Accounts.jsx`, 10 minutes), including the Claimed by column from `account_claim_labels()`. The page refetches on load and overwrites this key. Character “spent” is loot for that account, same buyer fallback as the account page (assignee, else `character_name`, else `char_id`). It is not the DKP leaderboard total. |
+| TTL cache | `accounts_list_v8` | Accounts list (`web/src/pages/Accounts.jsx`, 10 minutes), sorted by account name ascending. Includes the Claimed by column from `account_claim_labels()`. The page refetches on load and overwrites this key. Character “spent” is loot for that account, same buyer fallback as the account page (assignee, else `character_name`, else `char_id`). It is not the DKP leaderboard total. |
 
 ### Refreshing DKP totals
 
@@ -192,6 +192,10 @@ In `web/src/App.jsx`:
 
 If a bookmark to `/` unexpectedly jumps elsewhere, this behavior is why.
 
+### Tab focus does not reload the page
+
+Supabase emits `SIGNED_IN` again when a browser tab becomes visible. `App` ignores that event for the user who is already signed in (`web/src/lib/authGate.js`), and it does not query Supabase from inside the auth callback. The route components stay mounted, so in-progress Raid Admin tics, open Raid Items mobs, and open Character History rows stay as they were. SWR hooks also set `revalidateOnFocus` and `revalidateOnReconnect` to false.
+
 ### URL query conventions (post–state-audit)
 
 | Screen | Query | Meaning |
@@ -231,6 +235,7 @@ Vercel: set root to **`web`**, add `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_K
 | Symptom | Check |
 |---------|--------|
 | “I left the page and my selection reset” | Is that state only `useState`? Should it be URL or `usePersistedState`? |
+| “Switching browser tabs reloads the page” | `App` must ignore a repeat `SIGNED_IN` for the same user. Open sections live in that user's `pageState:user:<userId>:` slot. |
 | “Refresh loses everything” | URL params missing for primary context; or only sessionStorage without URL |
 | “Landing on `/` sends me somewhere else” | `dkp-last-path` + one-time restore in `App.jsx` |
 | “Supabase errors / empty data” | Env vars, RLS policies, user role in `profiles` |

@@ -301,7 +301,7 @@ export default function LootRecipients() {
     return list
   }, [loot, raids, characters, accounts, accountBalanceByAccountId, characterDkpSpent, classFilter, sortBy, months, getAccountId])
 
-  if (loading) return <div className="container">Loading…</div>
+  if (loading && loot.length === 0) return <div className="container">Loading…</div>
   if (error) return <div className="container"><span className="error">{error}</span> <Link to="/">← Home</Link></div>
 
   return (

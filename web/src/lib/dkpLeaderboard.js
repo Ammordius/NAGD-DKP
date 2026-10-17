@@ -375,6 +375,7 @@ export function useDkpData(fetcher = defaultDkpFetcher, { enabled = true } = {})
   const { data: apiData, error, isLoading, mutate } = useSWR(enabled ? DKP_DATA_KEY : null, fetcher, {
     dedupingInterval: DEDUPING_INTERVAL_MS,
     revalidateOnFocus: false,
+    revalidateOnReconnect: false,
   })
   const processed = useMemo(() => (apiData ? processApiPayload(apiData) : null), [apiData])
   const accountBalanceByAccountId = useMemo(() => processed?.fullAccountBalances ?? {}, [processed])

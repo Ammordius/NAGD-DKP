@@ -23,7 +23,7 @@ export function useMyAccountDkp(accountId, { activityByRaid, activityReady } = {
   const { data, error: activityFetchError, isLoading: activityLoading } = useSWR(
     !provided && id ? `my-account-activity-${id}` : null,
     () => loadAccountActivity(id),
-    { dedupingInterval: ACTIVITY_DEDUPING_MS, revalidateOnFocus: false },
+    { dedupingInterval: ACTIVITY_DEDUPING_MS, revalidateOnFocus: false, revalidateOnReconnect: false },
   )
   const raids = provided ? (activityByRaid || []) : (data?.activityByRaid || [])
   const raidsReady = provided ? activityReady !== false : !activityLoading
