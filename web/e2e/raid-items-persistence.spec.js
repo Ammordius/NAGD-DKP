@@ -18,6 +18,7 @@ async function setExpanded(page, name, open) {
 
 async function scrollTorqueToTop(page) {
   const torque = page.getByRole('link', { name: TORQUE })
+  await page.evaluate(() => window.dispatchEvent(new WheelEvent('wheel', { deltaY: 1 })))
   await torque.evaluate((node) => node.scrollIntoView({ block: 'start' }))
   const box = await torque.boundingBox()
   expect(box?.y).toBeGreaterThanOrEqual(0)

@@ -10,22 +10,22 @@ import { browserStorage, migrateSessionKeyToUserLocal, pageStateFullKey, readPag
  * @param {T} initialValue - Initial value if nothing in storage
  * @param {(parsed: unknown) => T} [normalize] - Optional. Invalid saved values fall back inside normalize, or to initialValue if it throws.
  * @param {{ storage?: 'session' | 'local', version?: number, ttlMs?: number, userScope?: boolean, migrateUnscoped?: boolean, migrateFromSession?: boolean, mergeWrite?: Function, listenStorage?: boolean }} [options]
- *   `storage: 'local'` writes a versioned `{ v, exp, value }` envelope. `userScope` keys the slot to the signed-in user.
- *   `migrateFromSession` copies an unscoped session slot into that user's local slot once.
+ *   The default is a versioned local slot for the signed-in user. `storage: 'session'` keeps the old tab-only slot.
+ *   `migrateFromSession` copies a session slot into that user's local slot once.
  *   `mergeWrite(stored, previous, next)` rebases this tab's edit onto a newer stored value.
  *   `listenStorage` applies newer local writes from other tabs.
  * @returns {[T, (value: T | ((prev: T) => T)) => void]}
  */
 export function usePersistedState(key, initialValue, normalize, options) {
   const contextUserId = useContext(PageStateUserContext)
-  const userScope = options?.userScope === true
+  const storageKind = options?.storage === 'session' ? 'session' : 'local'
+  const userScope = options?.userScope === true || (storageKind === 'local' && options?.userScope !== false)
   const userId = userScope ? (contextUserId || null) : null
-  const storageKind = options?.storage === 'local' ? 'local' : 'session'
-  const version = options?.storage === 'local' ? (options?.version ?? 1) : options?.version
+  const version = storageKind === 'local' ? (options?.version ?? 1) : options?.version
   const ttlMs = options?.ttlMs
   const migrateUnscoped = options?.migrateUnscoped === true
-  const migrateFromSession = options?.migrateFromSession === true
-  const listenStorage = options?.listenStorage === true
+  const migrateFromSession = options?.migrateFromSession !== false && storageKind === 'local' && userScope
+  const listenStorage = options?.listenStorage !== false && storageKind === 'local'
   const active = !userScope || !!userId
   const slotKey = `${storageKind}:${userScope ? userId || '' : ''}:${version ?? ''}:${key}`
 

@@ -321,6 +321,7 @@ export function RouteScrollProvider({ children }) {
     const onScroll = () => {
       if (memory.current.suppressSave) return
       if (memory.current.routeKey !== routeKey) return
+      // A new page often scrolls to 0 before restore. Keep the saved anchor unless the user has scrolled.
       if (memory.current.phase !== 'settled' && !memory.current.userInteracted) return
       const snap = measureSnapshot(routeKey, memory.current)
       if (!snap) return
