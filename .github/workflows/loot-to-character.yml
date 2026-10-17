@@ -31,7 +31,7 @@ jobs:
   assign:
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: read
     env:
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
@@ -39,6 +39,44 @@ jobs:
     steps:
       - name: Checkout DKP repo
         uses: actions/checkout@v4
+
+      # The exact key includes run_attempt because caches are immutable.
+      # A rerun must be able to save a new watermark. restore-keys picks up
+      # the newest earlier entry. A miss falls back to the file in git.
+      - name: Restore loot-count watermark
+        id: loot-count-cache
+        uses: actions/cache@v4
+        with:
+          path: .ci/last_raid_loot_count.txt
+          key: last-raid-loot-count-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            last-raid-loot-count-
+
+      - name: Validate loot-count watermark
+        id: loot-count
+        env:
+          CACHE_HIT: ${{ steps.loot-count-cache.outputs.cache-hit }}
+          CACHE_MATCHED_KEY: ${{ steps.loot-count-cache.outputs.cache-matched-key }}
+        run: |
+          VALUE=""
+          if [ -f .ci/last_raid_loot_count.txt ]; then
+            VALUE=$(tr -d '[:space:]' < .ci/last_raid_loot_count.txt)
+          fi
+          if printf '%s' "$VALUE" | grep -Eq '^[0-9]+$'; then
+            echo "last=$VALUE" >> "$GITHUB_OUTPUT"
+            if [ -n "$CACHE_MATCHED_KEY" ]; then
+              echo "Loot-count watermark $VALUE from Actions cache (cache-hit=${CACHE_HIT}, key ${CACHE_MATCHED_KEY})."
+            else
+              echo "Loot-count watermark $VALUE from repository fallback (cache-hit=${CACHE_HIT})."
+            fi
+          else
+            echo "last=" >> "$GITHUB_OUTPUT"
+            if [ -n "$CACHE_MATCHED_KEY" ]; then
+              echo "No usable loot-count watermark from Actions cache (cache-hit=${CACHE_HIT}, key ${CACHE_MATCHED_KEY}). Assignment will run."
+            else
+              echo "No usable loot-count watermark from repository fallback (cache-hit=${CACHE_HIT}). Assignment will run."
+            fi
+          fi
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -53,16 +91,15 @@ jobs:
       - name: Check for new loot
         id: check
         if: ${{ env.SUPABASE_URL != '' && (env.SUPABASE_SERVICE_ROLE_KEY != '' || env.SUPABASE_ANON_KEY != '') }}
+        env:
+          LAST_COUNT: ${{ steps.loot-count.outputs.last }}
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             echo "new_loot=true" >> $GITHUB_OUTPUT
             echo "Manual run: forcing Magelo pull and assignment (and character level update)."
           else
             CURRENT=$(python fetch_raid_loot_from_supabase.py --count-only)
-            LAST=""
-            if [ -f .ci/last_raid_loot_count.txt ]; then
-              LAST=$(cat .ci/last_raid_loot_count.txt)
-            fi
+            LAST="$LAST_COUNT"
             if [ "$CURRENT" = "$LAST" ] && [ -n "$CURRENT" ]; then
               echo "new_loot=false" >> $GITHUB_OUTPUT
               echo "No new loot (count $CURRENT unchanged), skipping Magelo pull and assignment."
@@ -144,30 +181,7 @@ jobs:
         run: |
           mkdir -p .ci
           python fetch_raid_loot_from_supabase.py --count-only > .ci/last_raid_loot_count.txt
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add .ci/last_raid_loot_count.txt
-          if git diff --staged --quiet; then
-            echo "No count file change"
-          else
-            git commit -m "chore: update last_raid_loot_count for loot-to-character skip check"
-            BRANCH="${{ github.ref_name }}"
-            ok=0
-            for i in 1 2 3; do
-              if git pull --rebase origin "$BRANCH" && git push; then
-                ok=1
-                break
-              fi
-              echo "git pull --rebase / push attempt $i failed, retrying..."
-              if [ "$i" -lt 3 ]; then
-                sleep $((i * 5))
-              fi
-            done
-            if [ "$ok" -ne 1 ]; then
-              echo "::error::git pull --rebase + push failed after 3 attempts"
-              exit 1
-            fi
-          fi
+          echo "Recorded raid_loot count $(tr -d '[:space:]' < .ci/last_raid_loot_count.txt) for the Actions cache."
 
   # Refresh account_class_coverage for Raider Activity (gear can change without new loot).
   # Requires secrets: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, CLASS_RANKINGS_URL (same JSON as VITE_CLASS_RANKINGS_URL).
