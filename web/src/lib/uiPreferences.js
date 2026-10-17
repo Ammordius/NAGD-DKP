@@ -24,8 +24,43 @@ export function discordRaidNameRequired(raw) {
   return !normalizeUiPreferences(raw).raidNameOnly
 }
 
-export function ticDraftStorageKey(raidId) {
-  return `pageState:/officer/RaidAdmin:ticDraft:${raidId}`
+export function ticDraftStorageKey(raidId, userId) {
+  const logical = `/officer/RaidAdmin:ticDraft:${raidId}`
+  if (userId) return `pageState:user:${userId}:${logical}`
+  return `pageState:${logical}`
+}
+
+export function readTicDraft(storage, raidId, userId) {
+  if (!raidId || !storage) return null
+  try {
+    const scopedKey = userId ? ticDraftStorageKey(raidId, userId) : null
+    let raw = scopedKey ? storage.getItem(scopedKey) : null
+    if (raw == null) {
+      const legacyKey = ticDraftStorageKey(raidId)
+      raw = storage.getItem(legacyKey)
+      if (raw != null && scopedKey && scopedKey !== legacyKey) {
+        try {
+          storage.setItem(scopedKey, raw)
+          storage.removeItem(legacyKey)
+        } catch {
+          // A failed move still returns the legacy draft for this visit.
+        }
+      }
+    }
+    if (raw == null) return null
+    return sanitizeTicDraft(JSON.parse(raw))
+  } catch {
+    return null
+  }
+}
+
+export function writeTicDraft(storage, raidId, draft, userId) {
+  if (!raidId || !storage) return
+  try {
+    storage.setItem(ticDraftStorageKey(raidId, userId), JSON.stringify(sanitizeTicDraft(draft)))
+  } catch {
+    // Private mode or a full session store should not block the form.
+  }
 }
 
 export function emptyTicDraft() {
@@ -58,25 +93,5 @@ export function sanitizeTicDraft(raw) {
     ticDate: typeof raw.ticDate === 'string' ? raw.ticDate : '',
     ticTime: typeof raw.ticTime === 'string' ? raw.ticTime : '',
     ticDateTimeTouched: raw.ticDateTimeTouched === true,
-  }
-}
-
-export function readTicDraft(storage, raidId) {
-  if (!raidId || !storage) return null
-  try {
-    const raw = storage.getItem(ticDraftStorageKey(raidId))
-    if (raw == null) return null
-    return sanitizeTicDraft(JSON.parse(raw))
-  } catch {
-    return null
-  }
-}
-
-export function writeTicDraft(storage, raidId, draft) {
-  if (!raidId || !storage) return
-  try {
-    storage.setItem(ticDraftStorageKey(raidId), JSON.stringify(sanitizeTicDraft(draft)))
-  } catch {
-    // Private mode or a full session store should not block the form.
   }
 }

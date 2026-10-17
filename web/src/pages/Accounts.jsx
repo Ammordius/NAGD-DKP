@@ -4,6 +4,7 @@ import { ACCOUNTS_LIST_CACHE_KEY, createCache } from '../lib/cache'
 import { fetchAll } from '../lib/accountData'
 import { supabase } from '../lib/supabase'
 import { usePersistedState } from '../lib/usePersistedState'
+import { useScrollContentReady } from '../lib/routeScrollView'
 import {
   formatCharacterClassSpentLine,
   buildSpentByAccountFromLoot,
@@ -23,6 +24,7 @@ export default function Accounts() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [search, setSearch] = usePersistedState('/accounts:search', '')
+  useScrollContentReady(!loading)
 
   useEffect(() => {
     const cache = createCache(ACCOUNTS_LIST_CACHE_KEY, CACHE_TTL)
@@ -179,7 +181,7 @@ export default function Accounts() {
             {filteredAccounts.map((acc) => {
               const chars = acc.characters || []
               return (
-                <tr key={acc.account_id}>
+                <tr key={acc.account_id} data-scroll-anchor={acc.account_id}>
                   <td style={{ verticalAlign: 'top', color: acc.claimed_by === 'unclaimed' ? '#71717a' : undefined }}>
                     {acc.claimed_by}
                   </td>

@@ -12,6 +12,7 @@ import { formatAccountCharacter, formatAccountCharacters } from '../lib/formatAc
 import { groupRaidLootByEvent } from '../lib/groupRaidLootByEvent'
 import { buildItemNameToIdMap, buildLootMobLookups, subgroupLootRowsByMob } from '../lib/lootMobSubgroups'
 import { usePersistedState } from '../lib/usePersistedState'
+import { useScrollContentReady } from '../lib/routeScrollView'
 import { displayTicEventName, eventFieldsForTimeSave, eventTimeToStore, fieldsForEdit, formatRaidSchedule, formatStoredClock } from '../lib/ticDateTime'
 import TicDateTimeFields from '../components/TicDateTimeFields'
 import { normalizeUiPreferences } from '../lib/uiPreferences'
@@ -68,6 +69,7 @@ export default function RaidDetail({ isOfficer, profile }) {
     raidId ? `/raids/detail:${raidId}:expandedEvents` : '/raids/detail:none:expandedEvents',
     {}
   )
+  useScrollContentReady(!loading)
   const [editingEventId, setEditingEventId] = useState(null)
   const [editingEventDkp, setEditingEventDkp] = useState('')
   const [editingEventTimeId, setEditingEventTimeId] = useState(null)
@@ -499,7 +501,7 @@ export default function RaidDetail({ isOfficer, profile }) {
               const isEditingTime = isOfficer && editingEventTimeId === e.event_id
               return (
                 <Fragment key={e.event_id}>
-                  <tr>
+                  <tr data-scroll-anchor={eid}>
                     <td>{e.event_order}</td>
                     <td>{displayTicEventName(e, raidDateIso)}</td>
                     <td>

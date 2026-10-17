@@ -73,7 +73,7 @@ Defined in `web/src/App.jsx`.
 
 **Site time** is Eastern for everyone. There is no timezone setting on My Site Profile. The clock is Eastern Standard Time (EST, UTC-5), and Eastern Daylight Time (EDT, UTC-4) while daylight saving is in effect (`America/New_York`). Raid dates stored as an offset instant, tic clocks, and the raids calendar use that zone. A date-only raid stays on that calendar date. A new raid with no Discord date stores the current Eastern date and time as an offset instant. Discord raid-line parsing is unchanged.
 
-**Raid Admin settings** sit on My Site Profile, in the same row as Display Name and to its right, and only for `officer` and `siteadmin`. Players do not see the section. The choices belong to the signed-in site user, stored in `profiles.ui_preferences` through `set_my_ui_preferences`. They are not stored on the game account and are not shared by every officer. The checkboxes are "Show full list for Attendance tics" (`showTicCharacterPicker`), "Show full list for Site Admin" (`useCharacterAdminSelectors`), and "Require Discord raid_schedule raid names". Missing keys stay on. For the two list settings, on keeps the full character list; turning one off restores paste-first tic entry or one row per account. The Discord checkbox is the existing `raidNameOnly` setting flipped in the form only: unticked (the default) is name-only entry, ticked is the existing Discord raid-line paste. Raid creation parsing is unchanged. Hovering a checkbox shows the longer description in the same kind of hover card used for items on Character History. Raid Admin, raid detail, and Site Admin read the same profile object. The tic paste, resolutions, and Attending selections for the open raid stay in `sessionStorage` under `pageState:/officer/RaidAdmin:ticDraft:<raid id>`, so opening Profile and coming back does not drop an unsaved tic. Hiding the attendance list does not clear those selections; Raid Admin lists them and offers Clear selected characters. Active and inactive on Site Admin always change the whole account. The separate "Add one character" form was removed from Raid Admin; adding someone to a tic uses the attendance form above it.
+**Raid Admin settings** sit on My Site Profile, in the same row as Display Name and to its right, and only for `officer` and `siteadmin`. Players do not see the section. The choices belong to the signed-in site user, stored in `profiles.ui_preferences` through `set_my_ui_preferences`. They are not stored on the game account and are not shared by every officer. The checkboxes are "Show full list for Attendance tics" (`showTicCharacterPicker`), "Show full list for Site Admin" (`useCharacterAdminSelectors`), and "Require Discord raid_schedule raid names". Missing keys stay on. For the two list settings, on keeps the full character list; turning one off restores paste-first tic entry or one row per account. The Discord checkbox is the existing `raidNameOnly` setting flipped in the form only: unticked (the default) is name-only entry, ticked is the existing Discord raid-line paste. Raid creation parsing is unchanged. Hovering a checkbox shows the longer description in the same kind of hover card used for items on Character History. Raid Admin, raid detail, and Site Admin read the same profile object. The tic paste, resolutions, and Attending selections for the open raid stay in `sessionStorage` under `pageState:user:<user id>:/officer/RaidAdmin:ticDraft:<raid id>`, so opening Profile and coming back does not drop an unsaved tic. A leftover unscoped draft is moved to the signed-in user once. Signing out removes it. Hiding the attendance list does not clear those selections; Raid Admin lists them and offers Clear selected characters. Active and inactive on Site Admin always change the whole account. The separate "Add one character" form was removed from Raid Admin; adding someone to a tic uses the attendance form above it.
 
 ## Data sources (where values come from)
 
@@ -102,8 +102,10 @@ Fetched with `fetch('/…')` from `public/` or CDN:
 | Mechanism | Key pattern | Purpose |
 |-----------|------------|---------|
 | `sessionStorage` | `dkp-last-path` | Last visited path (see below) |
-| `sessionStorage` | `pageState:…` | `usePersistedState` UI persistence (filters, Raids calendar month, raid detail expanded tics, account activity page index, etc.) |
-| `sessionStorage` | `pageState:/officer/RaidAdmin:ticDraft:<raid id>` | Unsaved tic paste, resolutions, and Attending character ids for that raid |
+| `sessionStorage` | `pageState:…` | `usePersistedState` UI persistence (filters, expansions, show-more, calendar month, loaded page counts). Guild view state is unscoped. |
+| `sessionStorage` | `pageState:user:<userId>:…` | Personalized drafts (tic paste, who-parser paste, Discord schedule paste and rows). Cleared for that user on sign-out. |
+| `sessionStorage` | `pageState:scroll:<pathname>` | Per-route scroll anchor. Account and profile keys include `?tab=`. |
+| `sessionStorage` | `pageState:user:<userId>:/officer/RaidAdmin:ticDraft:<raid id>` | Unsaved tic paste for that officer and raid. A legacy unscoped key is moved here once, then deleted. Never auto-submitted. |
 | `sessionStorage` | `account-detail-cache-${accountId}` | SWR fallback for account page |
 | `sessionStorage` | `pageState:/loot:*` | Item History search text and sort. Results are not cached; `/loot` queries `raid_loot_history` one page at a time (`LootSearch.jsx`). Deploy the view with `docs/sql-archive/superseded/supabase-raid-loot-history.sql`. |
 | `sessionStorage` | `pageState:/mobs:query`, `pageState:/mobs:filterSlot`, `pageState:/mobs:filterClass`, `pageState:/mobs:groups` | Raid Items search, slot, class, user-opened and user-closed mobs, and Show more counts |
@@ -134,9 +136,16 @@ React Router **unmounts** screens when you navigate away. Any state held only in
 
 ### Rules of thumb
 
-1. **Shareable / primary context** (which raid, which tab on account/profile): prefer the **URL** — `useSearchParams` or path params. Enables refresh, back/forward, and link sharing.
-2. **Filters / form convenience** (search text, sort, calendar month): use **`usePersistedState`** in `web/src/lib/usePersistedState.js` with keys `'<logical-path>:<field>'` (stored as `pageState:` + key in `sessionStorage`).
-3. **Ephemeral** (loading, errors, dropdown open): keep **`useState`** only.
+User-facing viewing state persists across navigation by default. New pages use `usePersistedState` and the scroll helper unless an exception is written down here. Ordinary navigation is not a reset.
+
+1. **Shareable / primary context** (which raid, which tab on account/profile, an item's open second-place section): prefer the **URL** — `useSearchParams` or path params. A hash or other deep link wins over a saved scroll anchor.
+2. **Viewing context** (search, sort, filters, expanded and explicitly collapsed sections, show-more counts, calendar month, loaded page count, display mode): use **`usePersistedState`**. Keys look like `'<logical-path>:<field>'`.
+3. **Scroll position:** mark rows with `data-scroll-anchor` and call `useScrollContentReady` from `web/src/lib/routeScrollView.jsx`. The app restorer in `App.jsx` saves a throttled anchor per route. Do not copy another route's scroll.
+4. **Ephemeral** (loading, errors, hover, open dropdowns, in-flight saves): keep **`useState`**. Do not ban `useState`.
+5. **Drafts that must not submit themselves** (tic paste, who-parser paste, Discord schedule paste and rows): persist them, but with `userScope: true` so another account on the same browser does not inherit them. Sign-out deletes `pageState:user:<userId>:`. Do not persist create-raid paste, loot forms, delete confirms, add-character fields, or loot-assignment drafts — restoring those could be submitted by the next click.
+6. **Server data** (SWR, TTL caches, leaderboard rows): refetch. Do not store payloads in view-state keys.
+
+Clearing a search clears only that field. It does not collapse sections or reset unrelated filters.
 
 ### `usePersistedState`
 

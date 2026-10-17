@@ -9,7 +9,7 @@ alwaysApply: false
 - The site is a **Vite + React + react-router-dom v6 SPA** deployed from the **`web/`** directory on Vercel. It is **not** Next.js.
 - **Canonical reference:** [docs/WEBSITE_STACK_AND_STATE.md](docs/WEBSITE_STACK_AND_STATE.md) — routes, env vars, data sources (`supabase` vs static JSON), `sessionStorage` keys, and debugging.
 - **Auth:** `web/src/App.jsx` — `RequireAuth`, session, `profiles.role`, officer nav.
-- **Persistence:** Do not rely on `useState` alone for anything the user expects to keep after navigating away. Use **URL** (`useSearchParams` / path) for primary/shareable context; use **`usePersistedState`** (`web/src/lib/usePersistedState.js`, keys like `'/path:field'`) for filters and convenience. Ephemeral UI stays in `useState`.
+- **Persistence:** User-facing viewing state persists across navigation by default. Use **URL** (`useSearchParams` / path) for shareable context; use **`usePersistedState`** (`web/src/lib/usePersistedState.js`, keys like `'/path:field'`) for search, sort, filters, expansion, and show-more. Call **`useScrollContentReady`** and mark rows with `data-scroll-anchor` (`web/src/lib/routeScrollView.jsx`). Ephemeral UI (loading, errors, hover, open menus) stays in `useState` — do not ban it. Personalized drafts pass `{ userScope: true }` and are cleared on sign-out. Do not persist a draft that the next click could submit. See the playbook in the doc before adding a page that opts out.
 - **Last route:** `App.jsx` persists `sessionStorage['dkp-last-path']` and may restore once when opening `/` after login — see the doc.
 
 When changing routes or state behavior, update `docs/WEBSITE_STACK_AND_STATE.md` if conventions or query params change.

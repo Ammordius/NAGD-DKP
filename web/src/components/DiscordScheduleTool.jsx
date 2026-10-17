@@ -19,6 +19,8 @@ import {
   timeOptionKey,
 } from '../lib/discordSchedule'
 
+const USER_DRAFT = { userScope: true, migrateUnscoped: true }
+
 function formatTimeOptionLabel(dateIso, hour24, minute) {
   const h12 = hour24 % 12 || 12
   const ampm = hour24 < 12 ? 'AM' : 'PM'
@@ -143,11 +145,13 @@ export default function DiscordScheduleTool() {
   const effectivePeriodStart = periodStart || defaultPeriodStart
   const periodStartSlot = slotFromDateIso(effectivePeriodStart)
 
-  const [rows, setRows] = usePersistedState('/tools/discord-schedule:rows', null)
-  const [paste, setPaste] = usePersistedState('/tools/discord-schedule:paste', '')
+  const [rows, setRows] = usePersistedState('/tools/discord-schedule:rows', null, undefined, USER_DRAFT)
+  const [paste, setPaste] = usePersistedState('/tools/discord-schedule:paste', '', undefined, USER_DRAFT)
   const [week2Footer, setWeek2Footer] = usePersistedState(
     '/tools/discord-schedule:week2Footer',
-    ''
+    '',
+    undefined,
+    USER_DRAFT,
   )
   const [parseError, setParseError] = useState('')
   const [copyStatus, setCopyStatus] = useState('')

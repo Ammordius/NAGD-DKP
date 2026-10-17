@@ -19,6 +19,7 @@ import { getDkpMobLoot } from '../lib/staticData'
 import { formatAccountCharacter, formatCharacterClassSpentLine } from '../lib/formatAccountCharacter'
 import { ACCOUNTS_LIST_CACHE_KEY } from '../lib/cache'
 import { usePersistedState } from '../lib/usePersistedState'
+import { useScrollContentReady } from '../lib/routeScrollView'
 import { fetchLootForAccountChars } from '../lib/accountData'
 import { aggregateLootSpent, sumCharacterSpent } from '../lib/characterSpent'
 
@@ -308,6 +309,7 @@ export default function AccountDetail({ isOfficer, profile, session, onProfileUp
   const activityByRaid = swrData?.activityByRaid ?? []
   const dkpByCharacterKey = swrData?.dkpByCharacterKey ?? { earned: {}, spent: {} }
   const loading = isLoading && !swrData
+  useScrollContentReady(!loading)
   const error = swrError?.message ?? ''
   const [activityPage, setActivityPage] = usePersistedState(
     accountId ? `/accounts/detail:${accountId}:activityPage` : '/accounts/detail:none:activityPage',
@@ -872,7 +874,7 @@ export default function AccountDetail({ isOfficer, profile, session, onProfileUp
                     ? pendingAssign[lootKey]
                     : ((currentCharId || currentCharName || '').trim() || '')
                   return (
-                    <tr key={row.id} style={{ borderBottom: '1px solid #27272a' }}>
+                    <tr key={row.id} data-scroll-anchor={String(row.id)} style={{ borderBottom: '1px solid #27272a' }}>
                       <td style={{ padding: '0.5rem 0.75rem', fontSize: '0.9rem' }}>
                         <Link to={`/raids/${row._raid_id}`}>{row._raid_name || row._raid_id}</Link>
                         {row._date && <span style={{ color: '#71717a', marginLeft: '0.25rem' }}>{row._date}</span>}

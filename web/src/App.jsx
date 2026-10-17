@@ -2,6 +2,9 @@ import { useEffect, useState, useRef } from 'react'
 import { Routes, Route, Navigate, Link, useLocation, useNavigate } from 'react-router-dom'
 import { Analytics } from '@vercel/analytics/react'
 import { supabase } from './lib/supabase'
+import { clearUserPageState } from './lib/pageState'
+import { PageStateUserProvider } from './lib/pageStateUser'
+import { RouteScrollProvider } from './lib/routeScrollView'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import Raids from './pages/Raids'
@@ -31,6 +34,7 @@ export default function App() {
   const navigate = useNavigate()
   const hasRestoredRef = useRef(false)
   const profileUserIdRef = useRef(null)
+  const sessionUserIdRef = useRef(null)
 
   // Persist current route so returning to the tab (or reopening the app) keeps you on the same page
   useEffect(() => {
@@ -61,6 +65,12 @@ export default function App() {
 
     function applySession(session) {
       if (cancelled) return
+      const nextUserId = session?.user?.id ?? null
+      const previousUserId = sessionUserIdRef.current
+      if (previousUserId && previousUserId !== nextUserId) {
+        clearUserPageState(sessionStorage, previousUserId)
+      }
+      sessionUserIdRef.current = nextUserId
       setSession(session)
       if (session) {
         // Hold the loading gate until this user's role is known. Officer pages
@@ -123,6 +133,8 @@ export default function App() {
   }
 
   return (
+    <PageStateUserProvider userId={session?.user?.id || null}>
+    <RouteScrollProvider>
     <>
       <nav>
         <Link to="/">Home</Link>
@@ -161,7 +173,7 @@ export default function App() {
         <Route path="/raids/:raidId" element={<RequireAuth><RaidDetail isOfficer={isOfficer} profile={profile} /></RequireAuth>} />
         <Route path="/dkp" element={<RequireAuth><DKP isOfficer={isOfficer} profile={profile} /></RequireAuth>} />
         <Route path="/officer" element={<RedirectPreserve to="/officer/RaidAdmin" />} />
-        <Route path="/officer/RaidAdmin" element={<RequireAuth><Officer isOfficer={isOfficer} profile={profile} /></RequireAuth>} />
+        <Route path="/officer/RaidAdmin" element={<RequireAuth><Officer isOfficer={isOfficer} profile={profile} userId={session?.user?.id || null} /></RequireAuth>} />
         <Route path="/officer/dkp-changelog" element={<RequireAuth><DkpChangelog isOfficer={isOfficer} /></RequireAuth>} />
         <Route path="/officer/who-parser" element={<RequireAuth><OfficerWhoParser isOfficer={isOfficer} /></RequireAuth>} />
         <Route path="/officer/claim-cooldowns" element={<RedirectPreserve to="/officer/SiteAdmin" />} />
@@ -180,5 +192,7 @@ export default function App() {
       </Routes>
       <Analytics />
     </>
+    </RouteScrollProvider>
+    </PageStateUserProvider>
   )
 }

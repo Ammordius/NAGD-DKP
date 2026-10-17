@@ -3,6 +3,7 @@ import { useVirtualizer } from '@tanstack/react-virtual'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { usePersistedState } from '../lib/usePersistedState'
+import { useForgetScrollOnChange, useScrollContainer, useScrollContentReady, useScrollPixelMode } from '../lib/routeScrollView'
 import { useCharToAccountMap } from '../lib/useCharToAccountMap'
 import AssignedLootDisclaimer from '../components/AssignedLootDisclaimer'
 import ItemLink from '../components/ItemLink'
@@ -31,6 +32,7 @@ const cellStyle = {
 }
 
 const PAGE_SIZE = 100
+const MAX_LOOT_PAGES = 10
 const SCROLL_LOAD_PX = 240
 const SEARCH_DEBOUNCE_MS = 300
 const CLASSIFICATION_CHUNK = 20
@@ -43,6 +45,12 @@ const SORT_COLUMNS = {
   cost: 'cost_num',
   buyer: 'character_name',
   toon: 'assigned_character_name',
+}
+
+function normalizeLootPages(raw) {
+  const n = Number(raw)
+  if (!Number.isInteger(n) || n < 1 || n > MAX_LOOT_PAGES) return 1
+  return n
 }
 
 function escapeIlike(value) {
@@ -115,11 +123,14 @@ export default function LootSearch() {
   const [debouncedQuery, setDebouncedQuery] = useState(itemQuery)
   const [sortBy, setSortBy] = usePersistedState('/loot:sortBy', 'date')
   const [sortDesc, setSortDesc] = usePersistedState('/loot:sortDesc', true)
+  const [pagesLoaded, setPagesLoaded] = usePersistedState('/loot:pagesLoaded', 1, normalizeLootPages)
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState('')
 
   const parentRef = useRef(null)
+  const pagesRef = useRef(pagesLoaded)
+  const querySeenRef = useRef(null)
   const requestId = useRef(0)
   const loadingMoreRef = useRef(false)
   const reachedEndRef = useRef(false)
@@ -139,6 +150,17 @@ export default function LootSearch() {
   }, [itemQuery])
 
   useEffect(() => {
+    const sig = `${debouncedQuery}\0${sortBy}\0${sortDesc}`
+    let pages = pagesRef.current
+    if (querySeenRef.current == null) {
+      querySeenRef.current = sig
+    } else if (querySeenRef.current !== sig) {
+      querySeenRef.current = sig
+      pages = 1
+      pagesRef.current = 1
+      setPagesLoaded(1)
+      parentRef.current?.scrollTo(0, 0)
+    }
     const myId = ++requestId.current
     loadingMoreRef.current = false
     reachedEndRef.current = false
@@ -147,12 +169,11 @@ export default function LootSearch() {
     setError('')
     setRows([])
     setTotalCount(null)
-    parentRef.current?.scrollTo(0, 0)
 
     let cancelled = false
     ;(async () => {
       const { data, error: queryError, count } = await lootHistoryQuery(debouncedQuery, sortBy, sortDesc, true)
-        .range(0, PAGE_SIZE - 1)
+        .range(0, pages * PAGE_SIZE - 1)
       if (cancelled || myId !== requestId.current) return
       if (queryError) {
         setError(queryError.message)
@@ -161,9 +182,11 @@ export default function LootSearch() {
       }
       const page = data || []
       setRows(page)
+      pagesRef.current = pages
+      setPagesLoaded(pages)
       if (typeof count === 'number') setTotalCount(count)
-      else if (page.length < PAGE_SIZE) setTotalCount(page.length)
-      if (page.length < PAGE_SIZE || (typeof count === 'number' && page.length >= count)) {
+      else if (page.length < pages * PAGE_SIZE) setTotalCount(page.length)
+      if (page.length < pages * PAGE_SIZE || (typeof count === 'number' && page.length >= count)) {
         reachedEndRef.current = true
       }
       setLoading(false)
@@ -191,6 +214,7 @@ export default function LootSearch() {
     }
     const page = data || []
     if (page.length < PAGE_SIZE) reachedEndRef.current = true
+    let loadedPages = null
     setRows((prev) => {
       if (prev.length !== from) return prev
       const seen = new Set(prev.map((row) => row.id))
@@ -199,8 +223,13 @@ export default function LootSearch() {
         if (!seen.has(row.id)) next.push(row)
       }
       if (next.length === prev.length) reachedEndRef.current = true
+      else loadedPages = Math.min(MAX_LOOT_PAGES, Math.max(1, Math.ceil(next.length / PAGE_SIZE)))
       return next
     })
+    if (loadedPages != null) {
+      pagesRef.current = loadedPages
+      setPagesLoaded(loadedPages)
+    }
     setLoadingMore(false)
     loadingMoreRef.current = false
   }, [debouncedQuery, loading, rows.length, sortBy, sortDesc, totalCount])
@@ -219,6 +248,12 @@ export default function LootSearch() {
     maybeLoadMore()
     return () => el.removeEventListener('scroll', onScroll)
   }, [maybeLoadMore])
+
+  const filterSignature = `${debouncedQuery}\0${sortBy}\0${sortDesc}`
+  useForgetScrollOnChange(filterSignature)
+  useScrollContainer(parentRef, loading || rows.length)
+  useScrollPixelMode(true)
+  useScrollContentReady(!loading)
 
   useEffect(() => {
     const missing = []
