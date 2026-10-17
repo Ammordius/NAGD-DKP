@@ -107,7 +107,7 @@ ALTER TABLE raid_event_attendance ADD COLUMN IF NOT EXISTS account_id TEXT REFER
 COMMENT ON COLUMN raid_event_attendance.account_id IS 'Resolved from char_id/character_name via character_account; used for DKP by account.';
 CREATE INDEX IF NOT EXISTS idx_raid_event_attendance_account ON raid_event_attendance(account_id) WHERE account_id IS NOT NULL;
 
--- Pre-computed DKP per raid (sum of event dkp_value). Updated by trigger when raid_events change.
+-- Pre-computed DKP per raid: distinct tics, same rule as dkp_one_tic_value. Updated when raid_events change.
 -- After first deploy or import, run: SELECT refresh_all_raid_attendance_totals();
 CREATE TABLE IF NOT EXISTS raid_dkp_totals (
   raid_id TEXT PRIMARY KEY REFERENCES raids(raid_id),
@@ -339,12 +339,12 @@ BEGIN
       SELECT
         (CASE WHEN COALESCE(trim(ra.char_id::text), '') = '' THEN COALESCE(trim(ra.character_name), 'unknown') ELSE trim(ra.char_id::text) END) AS character_key,
         MAX(COALESCE(trim(ra.character_name), ra.char_id::text, 'unknown')) AS character_name,
-        SUM(COALESCE(raid_totals.dkp, 0)) AS earned,
-        (SUM(CASE WHEN raid_date_parsed(r.date_iso) >= (current_date - 30) THEN COALESCE(raid_totals.dkp, 0) ELSE 0 END))::INTEGER AS earned_30d,
-        (SUM(CASE WHEN raid_date_parsed(r.date_iso) >= (current_date - 60) THEN COALESCE(raid_totals.dkp, 0) ELSE 0 END))::INTEGER AS earned_60d,
+        SUM(COALESCE(raid_totals.total_dkp, 0)) AS earned,
+        (SUM(CASE WHEN raid_date_parsed(r.date_iso) >= (current_date - 30) THEN COALESCE(raid_totals.total_dkp, 0) ELSE 0 END))::INTEGER AS earned_30d,
+        (SUM(CASE WHEN raid_date_parsed(r.date_iso) >= (current_date - 60) THEN COALESCE(raid_totals.total_dkp, 0) ELSE 0 END))::INTEGER AS earned_60d,
         MAX(raid_date_parsed(r.date_iso)) AS last_activity_date
       FROM raid_attendance ra
-      LEFT JOIN (SELECT raid_id, SUM((dkp_value::numeric)) AS dkp FROM raid_events GROUP BY raid_id) raid_totals ON ra.raid_id = raid_totals.raid_id
+      LEFT JOIN public.raid_distinct_tic_totals(NULL::text) raid_totals ON ra.raid_id = raid_totals.raid_id
       LEFT JOIN raids r ON r.raid_id = ra.raid_id
       GROUP BY (CASE WHEN COALESCE(trim(ra.char_id::text), '') = '' THEN COALESCE(trim(ra.character_name), 'unknown') ELSE trim(ra.char_id::text) END)
     ) e;
@@ -769,6 +769,26 @@ AS $$
   ) tic
 $$;
 
+-- One row per tic the ledger will pay: (event_id, event_order, name), lowest id wins.
+-- p_raid_id NULL returns every raid. Same sum as dkp_one_tic_value over that raid's events.
+CREATE OR REPLACE FUNCTION public.raid_distinct_tic_totals(p_raid_id text)
+RETURNS TABLE (raid_id text, total_dkp numeric)
+LANGUAGE sql
+STABLE
+SET search_path = public
+AS $$
+  SELECT tic.raid_id, COALESCE(SUM(tic.dkp), 0) AS total_dkp
+  FROM (
+    SELECT DISTINCT ON (re.raid_id, re.event_id, re.event_order, lower(trim(re.event_name)))
+      re.raid_id,
+      COALESCE(NULLIF(trim(re.dkp_value), '')::numeric, 0) AS dkp
+    FROM raid_events re
+    WHERE p_raid_id IS NULL OR re.raid_id = p_raid_id
+    ORDER BY re.raid_id, re.event_id, re.event_order, lower(trim(re.event_name)), re.id
+  ) tic
+  GROUP BY tic.raid_id
+$$;
+
 -- Refresh raid_dkp_totals, raid_attendance_dkp, and raid_attendance_dkp_by_account for one raid (used by triggers and by backfill).
 CREATE OR REPLACE FUNCTION public.refresh_raid_attendance_totals(p_raid_id TEXT)
 RETURNS void
@@ -780,7 +800,7 @@ DECLARE
   raid_total NUMERIC;
   use_per_event BOOLEAN;
 BEGIN
-  SELECT COALESCE(SUM((dkp_value::numeric)), 0) INTO raid_total FROM raid_events WHERE raid_id = p_raid_id;
+  SELECT COALESCE((SELECT t.total_dkp FROM public.raid_distinct_tic_totals(p_raid_id) t), 0) INTO raid_total;
   INSERT INTO raid_dkp_totals (raid_id, total_dkp) VALUES (p_raid_id, COALESCE(raid_total, 0))
   ON CONFLICT (raid_id) DO UPDATE SET total_dkp = EXCLUDED.total_dkp;
 
@@ -828,11 +848,10 @@ AS $$
 DECLARE
   use_per_event BOOLEAN;
 BEGIN
-  -- 1) raid_dkp_totals: one bulk upsert
+  -- 1) raid_dkp_totals: distinct tic sum, same rule as dkp_one_tic_value
   INSERT INTO raid_dkp_totals (raid_id, total_dkp)
-  SELECT raid_id, COALESCE(SUM((dkp_value::numeric)), 0)
-  FROM raid_events
-  GROUP BY raid_id
+  SELECT t.raid_id, t.total_dkp
+  FROM public.raid_distinct_tic_totals(NULL::text) t
   ON CONFLICT (raid_id) DO UPDATE SET total_dkp = EXCLUDED.total_dkp;
 
   -- 2) Clear per-raid cache tables
@@ -862,10 +881,10 @@ BEGIN
     SELECT ra.raid_id,
            (CASE WHEN COALESCE(trim(ra.char_id::text), '') = '' THEN COALESCE(trim(ra.character_name), 'unknown') ELSE trim(ra.char_id::text) END),
            MAX(COALESCE(trim(ra.character_name), ra.char_id::text, 'unknown')),
-           COALESCE(rt.dkp, 0)
+           COALESCE(rt.total_dkp, 0)
     FROM raid_attendance ra
-    LEFT JOIN (SELECT raid_id, SUM((dkp_value::numeric)) AS dkp FROM raid_events GROUP BY raid_id) rt ON ra.raid_id = rt.raid_id
-    GROUP BY ra.raid_id, (CASE WHEN COALESCE(trim(ra.char_id::text), '') = '' THEN COALESCE(trim(ra.character_name), 'unknown') ELSE trim(ra.char_id::text) END), rt.dkp;
+    LEFT JOIN public.raid_distinct_tic_totals(NULL::text) rt ON ra.raid_id = rt.raid_id
+    GROUP BY ra.raid_id, (CASE WHEN COALESCE(trim(ra.char_id::text), '') = '' THEN COALESCE(trim(ra.character_name), 'unknown') ELSE trim(ra.char_id::text) END), rt.total_dkp;
   END IF;
 END;
 $$;
@@ -6273,6 +6292,7 @@ REVOKE ALL ON FUNCTION public.refresh_dkp_summary_internal() FROM PUBLIC, anon, 
 REVOKE ALL ON FUNCTION public.refresh_account_dkp_summary_internal() FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION public.refresh_all_raid_attendance_totals() FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.refresh_raid_attendance_totals(text) FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION public.raid_distinct_tic_totals(text) FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION public.refresh_raid_totals_for_ids(text[]) FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION public.apply_earned_deltas(jsonb) FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION public.apply_spent_deltas(jsonb, text, date[]) FROM PUBLIC, anon, authenticated, service_role;

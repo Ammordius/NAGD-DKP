@@ -44,7 +44,7 @@ Stop before applying if any preflight below fails. Fix the data, then apply agai
 
 ## 3. Backup and preflight
 
-Take a portable SQL backup before an upgrade ([CI-DB-SQL-BACKUP.md](CI-DB-SQL-BACKUP.md)). The artifact is guild data only. It does not contain schema SQL, so restoring it does not undo a committed schema change. A failed `psql --single-transaction` already rolls the upgrade back. The CSV workflow in [CI-DB-BACKUP.md](CI-DB-BACKUP.md) remains the legacy same-project export. The only schema file is still `docs/supabase-schema-full.sql`.
+Take a portable SQL backup before an upgrade ([CI-DB-SQL-BACKUP.md](CI-DB-SQL-BACKUP.md)). The artifact is guild data only. It does not contain schema SQL, so restoring it does not undo a committed schema change. A failed `psql --single-transaction` already rolls the upgrade back. The CSV workflow in [CI-DB-BACKUP.md](CI-DB-BACKUP.md) is retired. Historical `supabase-backup-*` artifacts are not deleted. The only schema file is still `docs/supabase-schema-full.sql`.
 
 Run these checks before `psql`. They only read.
 
@@ -175,4 +175,4 @@ Edit `docs/supabase-schema-full.sql`. Do not add another file under `docs/` and 
 
 Keep new objects idempotent: `CREATE OR REPLACE`, `CREATE TABLE IF NOT EXISTS`, `ADD COLUMN IF NOT EXISTS`, and `DROP POLICY/TRIGGER IF EXISTS` before `CREATE`. Revoke and re-grant in the privilege block at the end of the file. Do not put `TRUNCATE`, `DELETE`, or `UPDATE` of production rows at the top level of the file. `TRUNCATE` inside a function body is allowed when the function is not called during apply.
 
-Update [SCHEMA_RPC_INDEX.md](SCHEMA_RPC_INDEX.md) when an app or script calls a new function. `scripts/check-canonical-schema.mjs` fails if a new `.sql` file appears outside this file, `docs/sql-archive/`, and `web/test/pg/`.
+Update [SCHEMA_RPC_INDEX.md](SCHEMA_RPC_INDEX.md) when an app or script calls a new function. `scripts/check-canonical-schema.mjs` fails if a new `.sql` file appears outside this file, `docs/sql-archive/`, `web/test/pg/`, and `docs/full-db-hosted-inventory.sql`. That inventory file is read-only and is not a schema step.

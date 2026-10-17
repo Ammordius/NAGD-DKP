@@ -1,5 +1,10 @@
 import { useState } from 'react'
 import { supabase } from '../lib/supabase'
+import { usePersistedState } from '../lib/usePersistedState'
+
+function normalizeIsoDate(raw, fallback) {
+  return typeof raw === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : fallback
+}
 
 function defaultDateRange() {
   const to = new Date()
@@ -26,8 +31,16 @@ function rpcErrorMessage(err) {
 /** Officer-only: aggregate bidding-portfolio stats for this account (date range required). */
 export default function AccountBiddingPortfolioCard({ accountId }) {
   const dr = defaultDateRange()
-  const [dateFrom, setDateFrom] = useState(dr.from)
-  const [dateTo, setDateTo] = useState(dr.to)
+  const [dateFrom, setDateFrom] = usePersistedState(
+    `/accounts/${accountId || 'none'}:bidFrom`,
+    dr.from,
+    (raw) => normalizeIsoDate(raw, dr.from),
+  )
+  const [dateTo, setDateTo] = usePersistedState(
+    `/accounts/${accountId || 'none'}:bidTo`,
+    dr.to,
+    (raw) => normalizeIsoDate(raw, dr.to),
+  )
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [payload, setPayload] = useState(null)

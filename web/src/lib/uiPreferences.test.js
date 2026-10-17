@@ -60,6 +60,23 @@ describe('tic draft', () => {
     assert.equal(readTicDraft(memory, 'raid-2'), null)
   })
 
+  it('does not let a second user read the first user draft, and migrates a legacy slot once', () => {
+    const storage = new Map()
+    const memory = {
+      getItem: (key) => (storage.has(key) ? storage.get(key) : null),
+      setItem: (key, value) => storage.set(key, value),
+      removeItem: (key) => storage.delete(key),
+    }
+    writeTicDraft(memory, 'raid-1', { ...emptyTicDraft(), ticPaste: 'legacy paste' })
+    const migrated = readTicDraft(memory, 'raid-1', 'user-a')
+    assert.equal(migrated.ticPaste, 'legacy paste')
+    assert.equal(storage.has('pageState:/officer/RaidAdmin:ticDraft:raid-1'), false)
+    assert.equal(readTicDraft(memory, 'raid-1', 'user-b'), null)
+    writeTicDraft(memory, 'raid-9', { ...emptyTicDraft(), ticPaste: 'only a' }, 'user-a')
+    assert.equal(readTicDraft(memory, 'raid-9', 'user-b'), null)
+    assert.equal(readTicDraft(memory, 'raid-9', 'user-a').ticPaste, 'only a')
+  })
+
   it('drops junk draft fields without clearing a real paste', () => {
     const draft = sanitizeTicDraft({ ticPaste: 'Name1', ticAttendingIds: 'nope', ticResolutions: ['bad'] })
     assert.equal(draft.ticPaste, 'Name1')

@@ -2,6 +2,9 @@ import { useEffect, useState, useRef } from 'react'
 import { Routes, Route, Navigate, Link, useLocation, useNavigate } from 'react-router-dom'
 import { Analytics } from '@vercel/analytics/react'
 import { supabase } from './lib/supabase'
+import { clearUserPageState } from './lib/pageState'
+import { PageStateUserProvider } from './lib/pageStateUser'
+import { RouteScrollProvider } from './lib/routeScrollView'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import Raids from './pages/Raids'
@@ -23,6 +26,30 @@ import DiscordSchedule from './pages/DiscordSchedule'
 import Profile from './pages/Profile'
 import AuthCallback from './pages/AuthCallback'
 
+function persistLastPath(userId, path) {
+  try {
+    if (userId) localStorage.setItem(`dkp-last-path:${userId}`, path)
+  } catch {
+    // ignore quota or private mode
+  }
+}
+
+function consumeLastPath(userId) {
+  try {
+    const scopedKey = `dkp-last-path:${userId}`
+    let saved = localStorage.getItem(scopedKey)
+    if (!saved) {
+      saved = sessionStorage.getItem('dkp-last-path') || localStorage.getItem('dkp-last-path')
+      if (saved) localStorage.setItem(scopedKey, saved)
+    }
+    sessionStorage.removeItem('dkp-last-path')
+    localStorage.removeItem('dkp-last-path')
+    return saved
+  } catch {
+    return null
+  }
+}
+
 export default function App() {
   const [session, setSession] = useState(null)
   const [profile, setProfile] = useState(null)
@@ -31,16 +58,16 @@ export default function App() {
   const navigate = useNavigate()
   const hasRestoredRef = useRef(false)
   const profileUserIdRef = useRef(null)
+  const sessionUserIdRef = useRef(null)
 
-  // Persist current route so returning to the tab (or reopening the app) keeps you on the same page
+  // Persist current route so reopening the app keeps this user on the same page
   useEffect(() => {
     const path = location.pathname + location.search
-    if (path && location.pathname !== '/login' && location.pathname !== '/auth/callback') {
-      try {
-        sessionStorage.setItem('dkp-last-path', path)
-      } catch (_) { /* ignore */ }
+    const userId = session?.user?.id
+    if (path && userId && location.pathname !== '/login' && location.pathname !== '/auth/callback') {
+      persistLastPath(userId, path)
     }
-  }, [location.pathname, location.search])
+  }, [location.pathname, location.search, session])
 
   // Restore last page only once when app loads at / (so we don't redirect when user clicks Home)
   useEffect(() => {
@@ -48,12 +75,10 @@ export default function App() {
     if (location.pathname !== '/') return
     if (hasRestoredRef.current) return
     hasRestoredRef.current = true
-    try {
-      const saved = sessionStorage.getItem('dkp-last-path')
-      if (saved && saved.startsWith('/') && saved !== '/' && !saved.startsWith('/login') && !saved.startsWith('/auth/callback')) {
-        navigate(saved, { replace: true })
-      }
-    } catch (_) { /* ignore */ }
+    const saved = consumeLastPath(session.user.id)
+    if (saved && saved.startsWith('/') && saved !== '/' && !saved.startsWith('/login') && !saved.startsWith('/auth/callback')) {
+      navigate(saved, { replace: true })
+    }
   }, [loading, session, location.pathname, navigate])
 
   useEffect(() => {
@@ -61,6 +86,12 @@ export default function App() {
 
     function applySession(session) {
       if (cancelled) return
+      const nextUserId = session?.user?.id ?? null
+      const previousUserId = sessionUserIdRef.current
+      if (previousUserId && previousUserId !== nextUserId) {
+        clearUserPageState(sessionStorage, previousUserId)
+      }
+      sessionUserIdRef.current = nextUserId
       setSession(session)
       if (session) {
         // Hold the loading gate until this user's role is known. Officer pages
@@ -123,6 +154,8 @@ export default function App() {
   }
 
   return (
+    <PageStateUserProvider userId={session?.user?.id || null}>
+    <RouteScrollProvider>
     <>
       <nav>
         <Link to="/">Home</Link>
@@ -161,7 +194,7 @@ export default function App() {
         <Route path="/raids/:raidId" element={<RequireAuth><RaidDetail isOfficer={isOfficer} profile={profile} /></RequireAuth>} />
         <Route path="/dkp" element={<RequireAuth><DKP isOfficer={isOfficer} profile={profile} /></RequireAuth>} />
         <Route path="/officer" element={<RedirectPreserve to="/officer/RaidAdmin" />} />
-        <Route path="/officer/RaidAdmin" element={<RequireAuth><Officer isOfficer={isOfficer} profile={profile} /></RequireAuth>} />
+        <Route path="/officer/RaidAdmin" element={<RequireAuth><Officer isOfficer={isOfficer} profile={profile} userId={session?.user?.id || null} /></RequireAuth>} />
         <Route path="/officer/dkp-changelog" element={<RequireAuth><DkpChangelog isOfficer={isOfficer} /></RequireAuth>} />
         <Route path="/officer/who-parser" element={<RequireAuth><OfficerWhoParser isOfficer={isOfficer} /></RequireAuth>} />
         <Route path="/officer/claim-cooldowns" element={<RedirectPreserve to="/officer/SiteAdmin" />} />
@@ -180,5 +213,7 @@ export default function App() {
       </Routes>
       <Analytics />
     </>
+    </RouteScrollProvider>
+    </PageStateUserProvider>
   )
 }

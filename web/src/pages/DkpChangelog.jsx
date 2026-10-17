@@ -1,8 +1,17 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { usePersistedState } from '../lib/usePersistedState'
+import { useScrollContentReady } from '../lib/routeScrollView'
 
 const PAGE_SIZE = 25
+const MAX_CHANGELOG_PAGES = 40
+
+function normalizeChangelogPages(raw) {
+  const n = Number(raw)
+  if (!Number.isInteger(n) || n < 1 || n > MAX_CHANGELOG_PAGES) return 1
+  return n
+}
 
 export default function DkpChangelog({ isOfficer }) {
   const navigate = useNavigate()
@@ -10,6 +19,9 @@ export default function DkpChangelog({ isOfficer }) {
   const [loading, setLoading] = useState(false)
   const [page, setPage] = useState(0)
   const [hasMore, setHasMore] = useState(true)
+  const [pagesLoaded, setPagesLoaded] = usePersistedState('/officer/dkp-changelog:pages', 1, normalizeChangelogPages)
+  const initialPages = useRef(pagesLoaded)
+  useScrollContentReady(!loading)
 
   const loadPage = useCallback(async (pageNum = 0, append = false) => {
     setLoading(true)
@@ -26,15 +38,33 @@ export default function DkpChangelog({ isOfficer }) {
     setAuditLog((prev) => (append ? [...prev, ...rows] : rows))
     setHasMore(rows.length === PAGE_SIZE)
     setPage(pageNum)
-  }, [])
+    if (append) setPagesLoaded(Math.min(MAX_CHANGELOG_PAGES, pageNum + 1))
+  }, [setPagesLoaded])
 
   useEffect(() => {
     if (!isOfficer) {
       navigate('/')
-      return
+      return undefined
     }
-    loadPage(0, false)
-  }, [isOfficer, navigate, loadPage])
+    const pages = initialPages.current
+    let cancelled = false
+    ;(async () => {
+      setLoading(true)
+      const { data, error } = await supabase
+        .from('officer_audit_log')
+        .select('id,created_at,actor_display_name,action,target_type,target_id,delta')
+        .order('created_at', { ascending: false })
+        .range(0, pages * PAGE_SIZE - 1)
+      if (cancelled) return
+      setLoading(false)
+      if (error) return
+      const rows = data ?? []
+      setAuditLog(rows)
+      setHasMore(rows.length >= pages * PAGE_SIZE)
+      setPage(Math.max(0, pages - 1))
+    })()
+    return () => { cancelled = true }
+  }, [isOfficer, navigate])
 
   if (!isOfficer) return null
 
@@ -113,7 +143,7 @@ export default function DkpChangelog({ isOfficer }) {
                 else details = Object.entries(d).map(([k, v]) => `${k}=${v}`).join(', ')
               }
               return (
-                <tr key={entry.id}>
+                <tr key={entry.id} data-scroll-anchor={String(entry.id)}>
                   <td style={{ whiteSpace: 'nowrap' }}>{when}</td>
                   <td style={{ wordBreak: 'break-word' }}>{who}</td>
                   <td>{actionLabel}</td>

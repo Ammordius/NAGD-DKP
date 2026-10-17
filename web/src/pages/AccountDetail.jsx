@@ -19,8 +19,10 @@ import { getDkpMobLoot } from '../lib/staticData'
 import { formatAccountCharacter, formatCharacterClassSpentLine } from '../lib/formatAccountCharacter'
 import { ACCOUNTS_LIST_CACHE_KEY } from '../lib/cache'
 import { usePersistedState } from '../lib/usePersistedState'
+import { useScrollContentReady } from '../lib/routeScrollView'
 import { fetchLootForAccountChars } from '../lib/accountData'
 import { aggregateLootSpent, sumCharacterSpent } from '../lib/characterSpent'
+import { distinctTicsByRaid, raidTicAttendance } from '../lib/raidTicIdentity'
 
 const MAGELO_BASE = 'https://www.takproject.net/magelo/character.php?char='
 
@@ -154,17 +156,13 @@ async function fetchAccountDetail(accountId) {
   })
   const spentByKey = aggregateLootSpent(lootRes.data || [])
   const dkpByCharacterKey = { earned: earnedByKey, spent: spentByKey }
-  const ticEarnedByRaidEventSet = {}
+  const attendedEventsByRaid = {}
   ;(eventAttResData || []).forEach((row) => {
-    const rid = row?.raid_id
-    const eid = row?.event_id
+    const rid = String(row?.raid_id ?? '').trim()
+    const eid = String(row?.event_id ?? '')
     if (!rid || !eid) return
-    if (!ticEarnedByRaidEventSet[rid]) ticEarnedByRaidEventSet[rid] = new Set()
-    ticEarnedByRaidEventSet[rid].add(String(eid))
-  })
-  const ticEarnedByRaid = {}
-  Object.entries(ticEarnedByRaidEventSet).forEach(([rid, eventSet]) => {
-    ticEarnedByRaid[rid] = eventSet.size
+    if (!attendedEventsByRaid[rid]) attendedEventsByRaid[rid] = new Set()
+    attendedEventsByRaid[rid].add(eid)
   })
 
   const raidIds = new Set([
@@ -180,8 +178,8 @@ async function fetchAccountDetail(accountId) {
   const [rRes, totalsRes, eventsRes, allPositiveEventsRes] = await Promise.all([
     fetchByChunkedIn('raids', 'raid_id, raid_name, date_iso', 'raid_id', raidList),
     fetchByChunkedIn('raid_dkp_totals', 'raid_id, total_dkp', 'raid_id', raidList),
-    fetchByChunkedIn('raid_events', 'raid_id, dkp_value', 'raid_id', raidList),
-    fetchAll('raid_events', 'raid_id, dkp_value', (q) => q.gt('dkp_value', 0)),
+    fetchByChunkedIn('raid_events', 'id, raid_id, event_id, event_order, event_name, dkp_value', 'raid_id', raidList),
+    fetchAll('raid_events', 'id, raid_id, event_id, event_order, event_name, dkp_value', (q) => q.gt('dkp_value', 0)),
   ])
   if (rRes?.error) throw new Error(rRes.error?.message || 'Failed to load raids')
   if (totalsRes?.error) throw new Error(totalsRes.error?.message || 'Failed to load raid totals')
@@ -191,13 +189,11 @@ async function fetchAccountDetail(accountId) {
   ;(rRes.data || []).forEach((row) => { rMap[row.raid_id] = row })
   const totalRaidDkp = {}
   ;(totalsRes.data || []).forEach((row) => { totalRaidDkp[row.raid_id] = parseFloat(row.total_dkp || 0) })
-  const ticTotalsByRaid = {}
-  ;(eventsRes.data || []).forEach((row) => {
-    const rid = row?.raid_id
-    if (!rid) return
-    const dkpValue = parseFloat(row?.dkp_value || 0)
-    if (dkpValue > 0) ticTotalsByRaid[rid] = (ticTotalsByRaid[rid] || 0) + 1
-  })
+  const ticsByRaid = distinctTicsByRaid(eventsRes.data || [])
+  const universeEventRows = (allPositiveEventsRes.data || []).filter(
+    (row) => !ticsByRaid.has(String(row?.raid_id ?? '').trim()),
+  )
+  const universeTicsByRaid = distinctTicsByRaid(universeEventRows)
   // Include raids where this account had no activity so "only missing" can show full absences.
   const allPositiveTicRaidIds = new Set((allPositiveEventsRes.data || []).map((row) => row.raid_id).filter(Boolean))
   const missingRaidIdsFromUniverse = [...allPositiveTicRaidIds].filter((rid) => !raidIds.has(rid))
@@ -224,16 +220,28 @@ async function fetchAccountDetail(accountId) {
     lootByRaid[row.raid_id].push(row)
   })
   const allRaidIdsForActivity = [...new Set([...raidList, ...missingRaidIdsFromUniverse])]
-  const activityByRaid = allRaidIdsForActivity.map((raidId) => ({
-    raid_id: raidId,
-    date: ((rMap[raidId]?.date_iso || universeRaidMap[raidId]?.date_iso) || '').slice(0, 10),
-    raid_name: rMap[raidId]?.raid_name || universeRaidMap[raidId]?.raid_name || raidId,
-    dkpEarned: dkpByRaid[raidId] ?? 0,
-    dkpRaidTotal: totalRaidDkp[raidId] ?? universeRaidTotalsMap[raidId] ?? 0,
-    ticEarned: ticEarnedByRaid[raidId] ?? 0,
-    ticTotal: ticTotalsByRaid[raidId] ?? 0,
-    items: lootByRaid[raidId] || [],
-  })).sort((a, b) => (b.date || '').localeCompare(a.date || ''))
+  const activityByRaid = allRaidIdsForActivity.map((raidId) => {
+    const raidKey = String(raidId ?? '').trim()
+    const fullTics = ticsByRaid.get(raidKey)
+    const partialTics = universeTicsByRaid.get(raidKey)
+    const attended = attendedEventsByRaid[raidKey] || new Set()
+    const fraction = fullTics
+      ? raidTicAttendance(fullTics, attended)
+      : partialTics
+        ? raidTicAttendance(partialTics, attended)
+        : null
+    const storedTotal = totalRaidDkp[raidId] ?? universeRaidTotalsMap[raidId] ?? 0
+    return {
+      raid_id: raidId,
+      date: ((rMap[raidId]?.date_iso || universeRaidMap[raidId]?.date_iso) || '').slice(0, 10),
+      raid_name: rMap[raidId]?.raid_name || universeRaidMap[raidId]?.raid_name || raidId,
+      dkpEarned: dkpByRaid[raidId] ?? 0,
+      dkpRaidTotal: fullTics ? fraction.totalDkp : storedTotal,
+      ticEarned: fraction ? fraction.ticEarned : 0,
+      ticTotal: fraction ? fraction.ticTotal : 0,
+      items: lootByRaid[raidId] || [],
+    }
+  }).sort((a, b) => (b.date || '').localeCompare(a.date || ''))
   return { account: accRes.data, characters: chars, raids: rMap, activityByRaid, dkpByCharacterKey }
 }
 
@@ -308,6 +316,7 @@ export default function AccountDetail({ isOfficer, profile, session, onProfileUp
   const activityByRaid = swrData?.activityByRaid ?? []
   const dkpByCharacterKey = swrData?.dkpByCharacterKey ?? { earned: {}, spent: {} }
   const loading = isLoading && !swrData
+  useScrollContentReady(!loading)
   const error = swrError?.message ?? ''
   const [activityPage, setActivityPage] = usePersistedState(
     accountId ? `/accounts/detail:${accountId}:activityPage` : '/accounts/detail:none:activityPage',
@@ -562,9 +571,8 @@ export default function AccountDetail({ isOfficer, profile, session, onProfileUp
 
   const activityWithMissing = useMemo(() => (
     activityByRaid.map((act) => {
-      const ticEarnedRaw = Number(act.ticEarned ?? 0)
+      const ticEarned = Number(act.ticEarned ?? 0)
       const ticTotal = Number(act.ticTotal ?? 0)
-      const ticEarned = ticTotal > 0 ? Math.min(ticEarnedRaw, ticTotal) : ticEarnedRaw
       const dkpEarned = Number(act.dkpEarned ?? 0)
       const dkpRaidTotal = Number(act.dkpRaidTotal ?? 0)
       const hasTrackableAttendance = ticTotal > 0 || dkpRaidTotal > 0
@@ -872,7 +880,7 @@ export default function AccountDetail({ isOfficer, profile, session, onProfileUp
                     ? pendingAssign[lootKey]
                     : ((currentCharId || currentCharName || '').trim() || '')
                   return (
-                    <tr key={row.id} style={{ borderBottom: '1px solid #27272a' }}>
+                    <tr key={row.id} data-scroll-anchor={String(row.id)} style={{ borderBottom: '1px solid #27272a' }}>
                       <td style={{ padding: '0.5rem 0.75rem', fontSize: '0.9rem' }}>
                         <Link to={`/raids/${row._raid_id}`}>{row._raid_name || row._raid_id}</Link>
                         {row._date && <span style={{ color: '#71717a', marginLeft: '0.25rem' }}>{row._date}</span>}

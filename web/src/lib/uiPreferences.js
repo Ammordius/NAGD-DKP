@@ -1,3 +1,5 @@
+import { browserStorage } from './pageState.js'
+
 export const UI_PREFERENCE_DEFAULTS = {
   showTicCharacterPicker: true,
   useCharacterAdminSelectors: true,
@@ -24,8 +26,70 @@ export function discordRaidNameRequired(raw) {
   return !normalizeUiPreferences(raw).raidNameOnly
 }
 
-export function ticDraftStorageKey(raidId) {
-  return `pageState:/officer/RaidAdmin:ticDraft:${raidId}`
+export function ticDraftStorageKey(raidId, userId) {
+  const logical = `/officer/RaidAdmin:ticDraft:${raidId}`
+  if (userId) return `pageState:user:${userId}:${logical}`
+  return `pageState:${logical}`
+}
+
+export function readTicDraft(storage, raidId, userId) {
+  if (!raidId || !storage) return null
+  try {
+    const scopedKey = userId ? ticDraftStorageKey(raidId, userId) : null
+    let raw = scopedKey ? storage.getItem(scopedKey) : null
+    if (raw == null) {
+      const legacyKey = ticDraftStorageKey(raidId)
+      raw = storage.getItem(legacyKey)
+      if (raw != null && scopedKey && scopedKey !== legacyKey) {
+        try {
+          storage.setItem(scopedKey, raw)
+          storage.removeItem(legacyKey)
+        } catch {
+          // A failed move still returns the legacy draft for this visit.
+        }
+      }
+    }
+    if (raw == null) return null
+    return sanitizeTicDraft(JSON.parse(raw))
+  } catch {
+    return null
+  }
+}
+
+export function writeTicDraft(storage, raidId, draft, userId) {
+  if (!raidId || !storage) return
+  try {
+    storage.setItem(ticDraftStorageKey(raidId, userId), JSON.stringify(sanitizeTicDraft(draft)))
+  } catch {
+    // Private mode or a full session store should not block the form.
+  }
+}
+
+function takeSessionTicDraft(sessionStore, localStore, raidId, userId) {
+  if (!sessionStore || !localStore || !userId) return
+  const scoped = ticDraftStorageKey(raidId, userId)
+  const legacy = ticDraftStorageKey(raidId)
+  try {
+    if (localStore.getItem(scoped) == null) {
+      const raw = sessionStore.getItem(scoped) ?? sessionStore.getItem(legacy)
+      if (raw != null) localStore.setItem(scoped, raw)
+    }
+    sessionStore.removeItem(scoped)
+    sessionStore.removeItem(legacy)
+  } catch {
+    // A failed move still leaves the session draft readable on the next visit.
+  }
+}
+
+/** Raid Admin tic draft for this user, kept in localStorage and moved out of the tab session once. */
+export function readBrowserTicDraft(raidId, userId) {
+  const local = browserStorage('local')
+  takeSessionTicDraft(browserStorage('session'), local, raidId, userId)
+  return readTicDraft(local, raidId, userId)
+}
+
+export function writeBrowserTicDraft(raidId, draft, userId) {
+  writeTicDraft(browserStorage('local'), raidId, draft, userId)
 }
 
 export function emptyTicDraft() {
@@ -58,25 +122,5 @@ export function sanitizeTicDraft(raw) {
     ticDate: typeof raw.ticDate === 'string' ? raw.ticDate : '',
     ticTime: typeof raw.ticTime === 'string' ? raw.ticTime : '',
     ticDateTimeTouched: raw.ticDateTimeTouched === true,
-  }
-}
-
-export function readTicDraft(storage, raidId) {
-  if (!raidId || !storage) return null
-  try {
-    const raw = storage.getItem(ticDraftStorageKey(raidId))
-    if (raw == null) return null
-    return sanitizeTicDraft(JSON.parse(raw))
-  } catch {
-    return null
-  }
-}
-
-export function writeTicDraft(storage, raidId, draft) {
-  if (!raidId || !storage) return
-  try {
-    storage.setItem(ticDraftStorageKey(raidId), JSON.stringify(sanitizeTicDraft(draft)))
-  } catch {
-    // Private mode or a full session store should not block the form.
   }
 }

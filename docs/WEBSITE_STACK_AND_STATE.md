@@ -73,7 +73,7 @@ Defined in `web/src/App.jsx`.
 
 **Site time** is Eastern for everyone. There is no timezone setting on My Site Profile. The clock is Eastern Standard Time (EST, UTC-5), and Eastern Daylight Time (EDT, UTC-4) while daylight saving is in effect (`America/New_York`). Raid dates stored as an offset instant, tic clocks, and the raids calendar use that zone. A date-only raid stays on that calendar date. A new raid with no Discord date stores the current Eastern date and time as an offset instant. Discord raid-line parsing is unchanged.
 
-**Raid Admin settings** sit on My Site Profile, in the same row as Display Name and to its right, and only for `officer` and `siteadmin`. Players do not see the section. The choices belong to the signed-in site user, stored in `profiles.ui_preferences` through `set_my_ui_preferences`. They are not stored on the game account and are not shared by every officer. The checkboxes are "Show full list for Attendance tics" (`showTicCharacterPicker`), "Show full list for Site Admin" (`useCharacterAdminSelectors`), and "Require Discord raid_schedule raid names". Missing keys stay on. For the two list settings, on keeps the full character list; turning one off restores paste-first tic entry or one row per account. The Discord checkbox is the existing `raidNameOnly` setting flipped in the form only: unticked (the default) is name-only entry, ticked is the existing Discord raid-line paste. Raid creation parsing is unchanged. Hovering a checkbox shows the longer description in the same kind of hover card used for items on Character History. Raid Admin, raid detail, and Site Admin read the same profile object. The tic paste, resolutions, and Attending selections for the open raid stay in `sessionStorage` under `pageState:/officer/RaidAdmin:ticDraft:<raid id>`, so opening Profile and coming back does not drop an unsaved tic. Hiding the attendance list does not clear those selections; Raid Admin lists them and offers Clear selected characters. Active and inactive on Site Admin always change the whole account. The separate "Add one character" form was removed from Raid Admin; adding someone to a tic uses the attendance form above it.
+**Raid Admin settings** sit on My Site Profile, in the same row as Display Name and to its right, and only for `officer` and `siteadmin`. Players do not see the section. The choices belong to the signed-in site user, stored in `profiles.ui_preferences` through `set_my_ui_preferences`. They are not stored on the game account and are not shared by every officer. The checkboxes are "Show full list for Attendance tics" (`showTicCharacterPicker`), "Show full list for Site Admin" (`useCharacterAdminSelectors`), and "Require Discord raid_schedule raid names". Missing keys stay on. For the two list settings, on keeps the full character list; turning one off restores paste-first tic entry or one row per account. The Discord checkbox is the existing `raidNameOnly` setting flipped in the form only: unticked (the default) is name-only entry, ticked is the existing Discord raid-line paste. Raid creation parsing is unchanged. Hovering a checkbox shows the longer description in the same kind of hover card used for items on Character History. Raid Admin, raid detail, and Site Admin read the same profile object. The tic paste, resolutions, and Attending selections for the open raid stay in `sessionStorage` under `pageState:user:<user id>:/officer/RaidAdmin:ticDraft:<raid id>`, so opening Profile and coming back does not drop an unsaved tic. A leftover unscoped draft is moved to the signed-in user once. Signing out removes it. Hiding the attendance list does not clear those selections; Raid Admin lists them and offers Clear selected characters. Active and inactive on Site Admin always change the whole account. The separate "Add one character" form was removed from Raid Admin; adding someone to a tic uses the attendance form above it.
 
 ## Data sources (where values come from)
 
@@ -101,11 +101,11 @@ Fetched with `fetch('/…')` from `public/` or CDN:
 
 | Mechanism | Key pattern | Purpose |
 |-----------|------------|---------|
-| `sessionStorage` | `dkp-last-path` | Last visited path (see below) |
-| `sessionStorage` | `pageState:…` | `usePersistedState` UI persistence (filters, Raids calendar month, raid detail expanded tics, account activity page index, etc.) |
-| `sessionStorage` | `pageState:/officer/RaidAdmin:ticDraft:<raid id>` | Unsaved tic paste, resolutions, and Attending character ids for that raid |
-| `sessionStorage` | `account-detail-cache-${accountId}` | SWR fallback for account page |
-| `sessionStorage` | `pageState:/loot:*` | Item History search text and sort. Results are not cached; `/loot` queries `raid_loot_history` one page at a time (`LootSearch.jsx`). Deploy the view with `docs/sql-archive/superseded/supabase-raid-loot-history.sql`. |
+| `localStorage` | `dkp-last-path:<userId>` | Last visited path for that signed-in user (see below). A legacy unscoped session or local value is moved here once, then deleted. |
+| `localStorage` | `pageState:user:<userId>:…` | `usePersistedState` viewing state: search, filters, expansion, show-more, calendar month, loaded page counts, and personalized drafts. Versioned `{ v, exp, value }`. A legacy session key is moved here once for that user, then deleted. Signing out does not delete the slot. Another user has a different key. |
+| `localStorage` | `pageState:user:<userId>:scroll:<pathname>` | Per-route scroll anchor for that user. Account and profile keys include `?tab=`. |
+| `localStorage` | `pageState:user:<userId>:/officer/RaidAdmin:ticDraft:<raid id>` | Unsaved tic paste for that officer and raid. A legacy session key is moved here once, then deleted. Never auto-submitted. |
+| `sessionStorage` | `account-detail-cache-${accountId}` | SWR fallback for account page. Not the saved view. |
 | TTL cache | `raids_month_*` | Raids calendar month blobs (`web/src/lib/cache.js`) |
 | TTL cache | `accounts_list_v7` | Accounts list (`web/src/pages/Accounts.jsx`, 10 minutes), including the Claimed by column from `account_claim_labels()`. The page refetches on load and overwrites this key. Character “spent” is loot for that account, same buyer fallback as the account page (assignee, else `character_name`, else `char_id`). It is not the DKP leaderboard total. |
 
@@ -132,21 +132,62 @@ React Router **unmounts** screens when you navigate away. Any state held only in
 
 ### Rules of thumb
 
-1. **Shareable / primary context** (which raid, which tab on account/profile): prefer the **URL** — `useSearchParams` or path params. Enables refresh, back/forward, and link sharing.
-2. **Filters / form convenience** (search text, sort, calendar month): use **`usePersistedState`** in `web/src/lib/usePersistedState.js` with keys `'<logical-path>:<field>'` (stored as `pageState:` + key in `sessionStorage`).
-3. **Ephemeral** (loading, errors, dropdown open): keep **`useState`** only.
+User-facing viewing state persists across navigation by default. New pages use `usePersistedState` and the scroll helper unless an exception is written down here. Ordinary navigation is not a reset.
+
+1. **Shareable / primary context** (which raid, which tab on account/profile, an item's open second-place section): prefer the **URL** — `useSearchParams` or path params. A hash or other deep link wins over a saved scroll anchor.
+2. **Viewing context** (search, sort, filters, expanded and explicitly collapsed sections, show-more counts, calendar month, loaded page count, display mode): use **`usePersistedState`**. Keys look like `'<logical-path>:<field>'`.
+3. **Scroll position:** mark rows with `data-scroll-anchor` and call `useScrollContentReady` from `web/src/lib/routeScrollView.jsx`. The app restorer in `App.jsx` saves a throttled anchor per route for the signed-in user. Do not copy another route's scroll.
+4. **Ephemeral** (loading, errors, hover, open dropdowns, in-flight saves): keep **`useState`**. Do not ban `useState`.
+5. **Drafts that must not submit themselves** (tic paste, who-parser paste, Discord schedule paste and rows): persist them in that user's local slot so another account on the same browser does not inherit them. Do not persist create-raid paste, loot forms, delete confirms, add-character fields, or loot-assignment drafts — restoring those could be submitted by the next click.
+6. **Server data** (SWR, TTL caches, leaderboard rows): refetch. Do not store payloads in view-state keys.
+
+Clearing a search clears only that field. It does not collapse sections or reset unrelated filters.
 
 ### `usePersistedState`
 
-- **API:** `const [x, setX] = usePersistedState('key', initialValue)`
-- **Storage:** `sessionStorage` key `pageState:` + your key.
-- **Dynamic keys:** When the key changes (e.g. per `accountId` or `raidId`), the hook reloads that storage slot (see implementation).
+- **API:** `const [x, setX] = usePersistedState('key', initialValue, normalize?, options?)`
+- **Storage:** `localStorage` key `pageState:user:<userId>:` + your key, wrapped as `{ v, exp, value }` (default version 1, optional `ttlMs`). This survives navigation, reload, a closed tab, and a second tab. Pass `storage: 'session'` only for a value that must die with the tab. `userScope: false` is the shared unscoped slot. Corrupt JSON, a failed `normalize`, an unknown `v`, or a passed `exp` falls back to `initialValue`.
+- **Migration:** a legacy session key, unscoped or already scoped to this user, is copied into the local slot once and then deleted. `migrateUnscoped: true` still moves an unscoped value that is already in the same store.
+- **Other tabs:** `listenStorage` is on by default for local slots, so another tab's newer write replaces this tab's copy. `mergeWrite(stored, previous, next)` rebases this tab's edit onto a newer stored value instead. An older scroll `savedAt` does not overwrite a newer one. Two open tabs do not live-sync scroll while both stay open; a newly opened tab reads the latest saved anchor.
+- **Dynamic keys:** When the key changes (e.g. per `accountId` or `raidId`), the hook reloads that storage slot.
+- **Normalize:** Optional third argument. It runs on the parsed value when the slot is read. If it throws, the hook uses `initialValue`.
+
+### Scroll restoration
+
+`web/src/lib/routeScroll.js` and `web/src/lib/routeScrollView.jsx`. While the app is mounted, `history.scrollRestoration` is `manual`.
+
+- Key: `pageState:user:<userId>:scroll:<pathname>` in `localStorage`, plus `?tab=` on account and profile pages. `/dkp` cannot restore `/mobs`. A legacy `pageState:scroll:<pathname>` session record is moved into that user's slot once.
+- Value: `{ anchorId, itemId, top, offset, savedAt }`. `offset` is the anchor's position relative to the scrollport. Rows use `data-scroll-anchor` and optional `data-scroll-item`. Item History's virtual list restores `top` inside its scroller (`useScrollPixelMode`).
+- The visible route is marked `data-scroll-route`. Scroll events update an in-memory snapshot immediately. Storage is written on a short throttle, on `pagehide` / `visibilitychange`, and when the listener unmounts. Leaving a page writes that snapshot. It does not measure the next page, and it does not replace a saved position with zero when the snapshot was never measured. An older `savedAt` does not overwrite a newer one.
+- Restore waits until `useScrollContentReady(true)` and, when an item id was saved, until that item row exists. It then places the anchor at the saved `offset` and keeps it there across layout changes until the user wheels, touches, or presses a key. A missing anchor falls back to the section header, then to the top. A hash (or `useLeaveScrollToPage`, used when an item URL asks for the second-place section) is left to the page.
+
+### Raid Items (`/mobs`)
+
+Search, slot, class, and groups use the same per-user local slot as every other page: `pageState:user:<userId>:/mobs:query`, `filterSlot`, `filterClass`, and `groups`.
+
+Group memory is `pageState:user:<userId>:/mobs:groups` (`web/src/lib/mobLootViewState.js`):
+
+- `expanded[mobKey] === true` means the user opened that mob. `false` means the user closed it. A missing key is not a choice.
+- While a slot or class filter is on, a mob with one or two matching items opens for that visit only. That open state is not stored, and it does not override an explicit `false`.
+- `itemsShown[mobKey]` is how many loot rows Show more has revealed (20, 40, …). A single mob keeps its JSON key. A merged group is keyed by sorted mob names plus the JSON zones, not the inferred display zone. Older keys still open the group and are moved onto the canonical key.
+- A write rebases onto the newest stored revision, so another open tab does not lose its expansion when this tab saves. `rev` counts those writes.
+- Clearing the search box clears only the query. Signing out does not delete the slot. Another signed-in user has a different key.
+
+Scroll uses `pageState:user:<userId>:scroll:/mobs`. Changing search, slot, or class drops that user's anchor. Last-3 DKP figures are loaded again and are not part of the saved view.
+
+### Other exploration pages
+
+Those fields use the same per-user local slot: DKP search and sort, raids month, accounts search, item history query, sort, and loaded page count, character history window, sort, and expanded rows, account activity page and missing-raid toggles, raid detail expanded tics, raider-activity filters, changelog loaded page count, item elemental class, per-account bidding dates, and Raid Admin expanded tics and raid-picker query. Item History still loads `raid_loot_history` one page at a time; the saved fields are the query and sort, not the result rows. Server rows are still fetched again.
+
+### Intentionally not persisted
+
+Login email, password, and display name. Loading and error flags. Hover cards and open dropdowns. Officer create-raid paste, loot entry, and delete confirmation. Account add-character and display-name editors. In-progress loot assignment on an account. Profile checkbox drafts until they are saved on `profiles.ui_preferences`.
 
 ### Last route restore (`dkp-last-path`)
 
 In `web/src/App.jsx`:
 
-- On each navigation (except bare `/login`), the app stores `pathname + search` in `sessionStorage['dkp-last-path']`.
+- On each navigation (except bare `/login` and `/auth/callback`), the app stores `pathname + search` in `localStorage['dkp-last-path:<userId>']`.
 - When the user is signed in and lands on **`/`** the **first time** in that session, the app may `replace` navigate to the saved path (`hasRestoredRef` ensures this runs once). **Clicking “Home” later stays on `/`** because the restore effect does not run again.
 
 If a bookmark to `/` unexpectedly jumps elsewhere, this behavior is why.
@@ -159,7 +200,7 @@ If a bookmark to `/` unexpectedly jumps elsewhere, this behavior is why.
 | `/accounts/:accountId` | `tab` | `activity` \| `characters` \| `loot` \| `history` (default: activity; default tab may omit query) |
 | `/profile` | `tab` | `activity` \| `characters` |
 
-**History tab charts:** bounded to account raids with earn/tic/loot (not guild absence rows). Default window is last 12 months, clipped to actual activity dates; window selector persisted as `pageState:/accounts/history:months` (12 / 24 / 36 / all).
+**History tab charts:** bounded to account raids with earn/tic/loot (not guild absence rows). Default window is last 12 months, clipped to actual activity dates; window selector persisted as `pageState:user:<userId>:/accounts/history:months` (12 / 24 / 36 / all).
 
 **Note:** Top nav `<Link to="/officer/RaidAdmin">` does not preserve `?raid=`; deep links and browser history still do. On a raid page (`/raids/:raidId`), officers and site admins see an **Edit raid** link beside the title that opens `/officer/RaidAdmin?raid=<raidId>`. Activity tab pagination on account pages uses `pageState:/accounts/detail:{accountId}:activityPage` (not the URL).
 

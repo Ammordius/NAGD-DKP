@@ -6,6 +6,7 @@ import { supabase } from '../lib/supabase'
 import { fetchAll } from '../lib/accountData'
 import { createCache } from '../lib/cache'
 import { usePersistedState } from '../lib/usePersistedState'
+import { useScrollContentReady } from '../lib/routeScrollView'
 import { floorNowEastern, formatRaidSchedule } from '../lib/ticDateTime'
 
 const CACHE_KEY_PREFIX = 'raids_month_v5_'
@@ -188,6 +189,7 @@ export default function Raids({ isOfficer }) {
   const [spentByRaid, setSpentByRaid] = useState({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  useScrollContentReady(!loading)
 
   const windowMonths = useMemo(
     () => getWindowMonths(windowEndYear, windowEndMonth),
@@ -528,7 +530,7 @@ export default function Raids({ isOfficer }) {
                   const tics = ticsByRaid[rid] ?? 0
                   const spent = spentByRaid[rid] ?? 0
                   return (
-                    <tr key={r.raid_id}>
+                    <tr key={r.raid_id} data-scroll-anchor={String(r.raid_id)}>
                       <td>{r.schedule?.label || r.date_iso || r.date || '—'}</td>
                       <td><Link to={`/raids/${r.raid_id}`}>{r.raid_name || r.raid_id}</Link></td>
                       <td>{Math.round(Number(paidOut))}</td>

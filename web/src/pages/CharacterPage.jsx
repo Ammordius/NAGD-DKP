@@ -5,6 +5,7 @@ import { fetchAllByRange } from '../lib/fetchAllByRange'
 import AssignedLootDisclaimer from '../components/AssignedLootDisclaimer'
 import ItemLink from '../components/ItemLink'
 import { getDkpMobLoot } from '../lib/staticData'
+import { useScrollContentReady } from '../lib/routeScrollView'
 
 const MAGELO_BASE = 'https://www.takproject.net/magelo/character.php?char='
 
@@ -33,6 +34,7 @@ export default function CharacterPage() {
   const [mobLoot, setMobLoot] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  useScrollContentReady(!loading)
 
   useEffect(() => {
     getDkpMobLoot().then(setMobLoot)

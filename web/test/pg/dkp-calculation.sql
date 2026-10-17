@@ -140,6 +140,8 @@ BEGIN
   VALUES ('t3-edit-raid', 'e1', 1, 'DKP tic', '99');
   PERFORM pg_temp.t3_expect('duplicate order and name counts once',
     (SELECT earned FROM account_dkp_summary WHERE account_id = 't3-a'), 6);
+  PERFORM pg_temp.t3_expect('raid total ignores the duplicate tic',
+    (SELECT total_dkp FROM raid_dkp_totals WHERE raid_id = 't3-edit-raid'), 2);
 
   UPDATE raid_events
   SET dkp_value = '4'
