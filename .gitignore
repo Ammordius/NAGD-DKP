@@ -16,6 +16,9 @@ data/audit_dkp_result.json
 node_modules/
 web/node_modules/
 web/dist/
+web/test-results/
+web/playwright-report/
+web/blob-report/
 
 # Python
 __pycache__/

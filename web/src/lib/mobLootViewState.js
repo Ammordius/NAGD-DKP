@@ -10,6 +10,7 @@ const SCROLL_ANCHOR_SLACK_PX = 4
 export const EMPTY_GROUP_STATE = Object.freeze({
   expanded: Object.freeze({}),
   itemsShown: Object.freeze({}),
+  rev: 0,
 })
 
 function isPlainObject(value) {
@@ -36,16 +37,66 @@ export function normalizeGroupState(raw) {
     if (value < ITEMS_PER_PAGE || value > MAX_ITEMS_SHOWN) continue
     itemsShown[key] = value
   }
-  return { expanded, itemsShown }
+  const rev = typeof src.rev === 'number' && Number.isInteger(src.rev) && src.rev >= 0 ? src.rev : 0
+  return { expanded, itemsShown, rev }
+}
+
+function uniqueSorted(values) {
+  return [...new Set((values || []).map((value) => (value || '').replace(/^#/, '').trim()).filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b))
+}
+
+function zoneLabel(zone) {
+  const text = typeof zone === 'string' ? zone.trim() : ''
+  return text || 'Other / Unknown'
+}
+
+/**
+ * Single-source groups keep the JSON key. Merged groups use sorted mob names and
+ * JSON zones, so async display-zone inference does not change the saved id.
+ */
+export function canonicalMobGroupKey(parts) {
+  const sourceKeys = Array.isArray(parts?.sourceKeys) ? parts.sourceKeys.filter((key) => typeof key === 'string' && key) : []
+  const mobs = uniqueSorted(parts?.mobs)
+  const zones = uniqueSorted((parts?.zones || []).map(zoneLabel))
+  if (!parts?.forceMerged && sourceKeys.length <= 1) return sourceKeys[0] || `${mobs.join('+')}|${zones.join('+')}|merged`
+  return `${mobs.join('+')}|${zones.join('+')}|merged`
+}
+
+/** Canonical key plus older merged-key spellings and the JSON source keys. */
+export function mobGroupAliases(parts) {
+  const canonical = canonicalMobGroupKey(parts)
+  const aliases = new Set([canonical])
+  for (const key of parts?.sourceKeys || []) {
+    if (typeof key === 'string' && key) aliases.add(key)
+  }
+  const mobs = uniqueSorted(parts?.mobs)
+  const head = mobs[0]
+  if (head) {
+    const zones = new Set([...(parts?.zones || []), parts?.displayZone].map(zoneLabel))
+    for (const zone of zones) aliases.add(`${head}|${zone}|merged`)
+  }
+  return { canonical, aliases: [...aliases] }
+}
+
+function expansionFlag(groups, canonical, aliases = []) {
+  const expanded = groups?.expanded || {}
+  if (typeof expanded[canonical] === 'boolean') return expanded[canonical]
+  for (const key of aliases) {
+    if (key === canonical) continue
+    if (expanded[key] === false) return false
+    if (expanded[key] === true) return true
+  }
+  return undefined
 }
 
 /**
  * @param {{ expanded?: Record<string, boolean> } | null | undefined} groups
  * @param {string} key
- * @param {{ filtersActive?: boolean, matchCount?: number }} options
+ * @param {{ filtersActive?: boolean, matchCount?: number, aliases?: string[] }} options
  */
-export function isMobOpen(groups, key, { filtersActive = false, matchCount = 0 } = {}) {
-  const flag = groups?.expanded?.[key]
+export function isMobOpen(groups, key, { filtersActive = false, matchCount = 0, aliases = [] } = {}) {
+  const flag = expansionFlag(groups, key, aliases)
   if (flag === false) return false
   if (flag === true) return true
   return !!(filtersActive && matchCount > 0 && matchCount < 3)
@@ -64,6 +115,7 @@ export function toggleMobGroup(state, key, currentlyOpen) {
   return {
     expanded: { ...base.expanded, [key]: !currentlyOpen },
     itemsShown: base.itemsShown,
+    rev: base.rev,
   }
 }
 
@@ -80,6 +132,7 @@ export function revealMoreItems(state, key) {
   return {
     expanded: base.expanded,
     itemsShown: { ...base.itemsShown, [key]: next },
+    rev: base.rev,
   }
 }
 
@@ -87,12 +140,75 @@ export function revealMoreItems(state, key) {
  * @param {{ itemsShown?: Record<string, number> } | null | undefined} state
  * @param {string} key
  */
-export function itemsShownLimit(state, key) {
-  const value = state?.itemsShown?.[key]
-  if (typeof value === 'number' && Number.isInteger(value) && value >= ITEMS_PER_PAGE && value <= MAX_ITEMS_SHOWN) {
-    return value
+export function itemsShownLimit(state, key, aliases = []) {
+  const shown = state?.itemsShown || {}
+  const valid = (value) => typeof value === 'number' && Number.isInteger(value) && value >= ITEMS_PER_PAGE && value <= MAX_ITEMS_SHOWN
+  if (valid(shown[key])) return shown[key]
+  for (const alias of aliases) {
+    if (alias === key) continue
+    if (valid(shown[alias])) return shown[alias]
   }
   return ITEMS_PER_PAGE
+}
+
+/**
+ * Move flags saved under an older key onto the canonical id.
+ * Returns the same state reference when nothing changes.
+ */
+export function migrateGroupKeys(state, specs) {
+  const base = normalizeGroupState(state)
+  const expanded = { ...base.expanded }
+  const itemsShown = { ...base.itemsShown }
+  let changed = false
+  for (const spec of specs || []) {
+    const canonical = spec?.canonical
+    if (!canonical) continue
+    if (typeof expanded[canonical] !== 'boolean') {
+      for (const alias of spec.aliases || []) {
+        if (!alias || alias === canonical || typeof expanded[alias] !== 'boolean') continue
+        expanded[canonical] = expanded[alias]
+        delete expanded[alias]
+        changed = true
+        break
+      }
+    }
+    if (itemsShown[canonical] == null) {
+      for (const alias of spec.aliases || []) {
+        if (!alias || alias === canonical || typeof itemsShown[alias] !== 'number') continue
+        itemsShown[canonical] = itemsShown[alias]
+        delete itemsShown[alias]
+        changed = true
+        break
+      }
+    }
+  }
+  if (!changed) return state
+  return { expanded, itemsShown, rev: base.rev }
+}
+
+/**
+ * Apply only the keys this tab changed onto the newest stored snapshot.
+ * Other tabs' edits stay, and the revision moves forward.
+ */
+export function mergeGroupRevision(stored, previous, next) {
+  const base = normalizeGroupState(stored)
+  const prev = normalizeGroupState(previous)
+  const nxt = normalizeGroupState(next)
+  const expanded = { ...base.expanded }
+  const itemsShown = { ...base.itemsShown }
+  const expandedKeys = new Set([...Object.keys(prev.expanded), ...Object.keys(nxt.expanded)])
+  for (const key of expandedKeys) {
+    if (prev.expanded[key] === nxt.expanded[key]) continue
+    if (typeof nxt.expanded[key] === 'boolean') expanded[key] = nxt.expanded[key]
+    else delete expanded[key]
+  }
+  const shownKeys = new Set([...Object.keys(prev.itemsShown), ...Object.keys(nxt.itemsShown)])
+  for (const key of shownKeys) {
+    if (prev.itemsShown[key] === nxt.itemsShown[key]) continue
+    if (typeof nxt.itemsShown[key] === 'number') itemsShown[key] = nxt.itemsShown[key]
+    else delete itemsShown[key]
+  }
+  return { expanded, itemsShown, rev: (base.rev || 0) + 1 }
 }
 
 /**

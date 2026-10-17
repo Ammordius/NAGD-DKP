@@ -5,6 +5,7 @@ import {
   clearUserPageState,
   decodeStoredValue,
   encodeStoredValue,
+  migrateSessionKeyToUserLocal,
   pageStateFullKey,
   readPageState,
   writePageState,
@@ -96,6 +97,19 @@ describe('page state storage', () => {
     )
     assert.equal(storage.getItem('pageState:/officer/who-parser:paste'), null)
     assert.equal(storage.getItem('pageState:user:user-a:/officer/who-parser:paste'), JSON.stringify('legacy'))
+  })
+
+  it('moves an unscoped session view into the signed-in user\'s local slot once', () => {
+    const session = memoryStorage({
+      'pageState:/mobs:groups': JSON.stringify({ expanded: { 'Anar_of_Water|Plane of Time': true }, itemsShown: {} }),
+    })
+    const local = memoryStorage()
+    assert.equal(migrateSessionKeyToUserLocal(session, local, '/mobs:groups', 'user-a', { version: 1 }), true)
+    assert.equal(session.getItem('pageState:/mobs:groups'), null)
+    assert.equal(migrateSessionKeyToUserLocal(session, local, '/mobs:groups', 'user-b', { version: 1 }), false)
+    const saved = readPageState(local, '/mobs:groups', null, undefined, { userId: 'user-a', version: 1 })
+    assert.equal(saved.expanded['Anar_of_Water|Plane of Time'], true)
+    assert.equal(readPageState(local, '/mobs:groups', null, undefined, { userId: 'user-b', version: 1 }), null)
   })
 })
 
