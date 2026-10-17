@@ -184,12 +184,16 @@ describe('scroll anchor', () => {
 describe('Raid Items page wiring', () => {
   it('persists group state and does not spread auto-open over saved collapses', () => {
     const source = readFileSync(new URL('../pages/MobLoot.jsx', import.meta.url), 'utf8')
+    const scroll = readFileSync(new URL('./routeScrollView.jsx', import.meta.url), 'utf8')
     assert.match(source, /usePersistedState\(\s*'\/mobs:groups'/)
     assert.match(source, /normalizeGroupState/)
     assert.match(source, /isMobOpen\(/)
     assert.match(source, /data-mob-key=\{e\.key\}/)
+    assert.match(source, /data-scroll-anchor=\{e\.key\}/)
     assert.match(source, /data-item-key=/)
-    assert.match(source, /scrollRestoration = 'manual'/)
+    assert.match(source, /useScrollContentReady\(/)
+    assert.match(source, /useForgetScrollOnChange\(/)
+    assert.match(scroll, /scrollRestoration = 'manual'/)
     assert.doesNotMatch(source, /\.\.\.toExpand/)
     assert.doesNotMatch(source, /itemsShownPerKey/)
   })

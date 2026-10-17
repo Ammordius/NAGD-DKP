@@ -109,7 +109,6 @@ Fetched with `fetch('/…')` from `public/` or CDN:
 | `sessionStorage` | `account-detail-cache-${accountId}` | SWR fallback for account page |
 | `sessionStorage` | `pageState:/loot:*` | Item History search text and sort. Results are not cached; `/loot` queries `raid_loot_history` one page at a time (`LootSearch.jsx`). Deploy the view with `docs/sql-archive/superseded/supabase-raid-loot-history.sql`. |
 | `sessionStorage` | `pageState:/mobs:query`, `pageState:/mobs:filterSlot`, `pageState:/mobs:filterClass`, `pageState:/mobs:groups` | Raid Items search, slot, class, user-opened and user-closed mobs, and Show more counts |
-| `sessionStorage` | `pageState:/mobs:scrollAnchor` | Raid Items scroll anchor (`{ mobKey, itemKey }`), throttled, not stored through `usePersistedState` |
 | TTL cache | `raids_month_*` | Raids calendar month blobs (`web/src/lib/cache.js`) |
 | TTL cache | `accounts_list_v7` | Accounts list (`web/src/pages/Accounts.jsx`, 10 minutes), including the Claimed by column from `account_claim_labels()`. The page refetches on load and overwrites this key. Character “spent” is loot for that account, same buyer fallback as the account page (assignee, else `character_name`, else `char_id`). It is not the DKP leaderboard total. |
 
@@ -149,10 +148,21 @@ Clearing a search clears only that field. It does not collapse sections or reset
 
 ### `usePersistedState`
 
-- **API:** `const [x, setX] = usePersistedState('key', initialValue, normalize?)`
-- **Storage:** `sessionStorage` key `pageState:` + your key.
-- **Dynamic keys:** When the key changes (e.g. per `accountId` or `raidId`), the hook reloads that storage slot (see implementation).
+- **API:** `const [x, setX] = usePersistedState('key', initialValue, normalize?, options?)`
+- **Storage:** `sessionStorage` key `pageState:` + your key. This survives navigation, reload, and a mobile browser discarding the page in the same tab. It does not survive closing the tab. Guild exploration state stays unscoped so existing keys keep working. It is not personal data.
+- **Personalized drafts:** `options.userScope` stores `pageState:user:<userId>:` + key. `migrateUnscoped: true` copies a legacy unscoped value once, then deletes it.
+- **localStorage:** `options.storage: 'local'` writes `{ v, exp, value }` (default version 1, optional `ttlMs`). Use it only for a display preference that should outlive the tab. This app does not put exploration filters there, because a shared guild computer should not keep them after the tab closes. Corrupt JSON, a failed `normalize`, an unknown `v`, or a passed `exp` falls back to `initialValue`.
+- **Dynamic keys:** When the key changes (e.g. per `accountId` or `raidId`), the hook reloads that storage slot.
 - **Normalize:** Optional third argument. It runs on the parsed value when the slot is read. If it throws, the hook uses `initialValue`.
+
+### Scroll restoration
+
+`web/src/lib/routeScroll.js` and `web/src/lib/routeScrollView.jsx`. While the app is mounted, `history.scrollRestoration` is `manual`.
+
+- Key: `pageState:scroll:<pathname>`, plus `?tab=` on account and profile pages. `/dkp` cannot restore `/mobs`.
+- Value: `{ anchorId, itemId, top }`. Rows use `data-scroll-anchor` and optional `data-scroll-item`. Item History's virtual list restores `top` inside its scroller (`useScrollPixelMode`).
+- Save on a short throttle and on `pagehide` / `visibilitychange`.
+- Restore once, after `useScrollContentReady(true)` and the row is in the layout. Wheel, touch, or a key before that cancels it. A missing anchor scrolls to the top once. A hash (or `useLeaveScrollToPage`, used when an item URL asks for the second-place section) is left to the page.
 
 ### Raid Items (`/mobs`)
 
@@ -162,11 +172,18 @@ Group memory is `pageState:/mobs:groups` (`web/src/lib/mobLootViewState.js`):
 
 - `expanded[mobKey] === true` means the user opened that mob. `false` means the user closed it. A missing key is not a choice.
 - While a slot or class filter is on, a mob with one or two matching items opens for that visit only. That open state is not stored, and it does not override an explicit `false`.
-- `itemsShown[mobKey]` is how many loot rows Show more has revealed (20, 40, …).
+- `itemsShown[mobKey]` is how many loot rows Show more has revealed (20, 40, …). Keys are the stable mob group keys, not array indexes.
+- Clearing the search box clears only the query.
 
-Scroll position is `pageState:/mobs:scrollAnchor`: `{ mobKey, itemKey }`. It is the mob or item at the top of the viewport, written on a short throttle and on page hide, not on every scroll event. Restoration runs once, after mob loot, item stats, elemental armor, and zone classification have finished and the row has been laid out. Changing search, slot, or class drops the anchor so an old position is not applied to the new list. While Raid Items is mounted, `history.scrollRestoration` is `manual`; other pages keep the browser default.
+Scroll uses the shared restorer (`pageState:scroll:/mobs`), not a MobLoot-only key. Changing search, slot, or class drops that route's anchor. Last-3 DKP figures are loaded again and are not part of the saved view.
 
-This is tab session storage. It survives navigation (including Back from an item page), reload, and the browser discarding the tab. It does not survive a different tab. A mob key that no longer exists is ignored. Last-3 DKP figures are loaded again and are not part of the saved view.
+### Other exploration pages
+
+Filters that were already persisted stay as they are (DKP search and sort, raids month, accounts search, item history query and sort, character history window and sort, account activity page and missing-raid toggles, raid detail expanded tics, raider-activity filters). Also persisted now: character-history expanded rows, item-history loaded page count, changelog loaded page count, item elemental class, per-account bidding dates, Raid Admin expanded tics and raid-picker query. Server rows are still fetched again.
+
+### Intentionally not persisted
+
+Login email, password, and display name. Loading and error flags. Hover cards and open dropdowns. Officer create-raid paste, loot entry, and delete confirmation. Account add-character and display-name editors. In-progress loot assignment on an account. Profile checkbox drafts until they are saved on `profiles.ui_preferences`.
 
 ### Last route restore (`dkp-last-path`)
 
