@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { distinctTicsByRaid, raidTicAttendance } from './raidTicIdentity.js'
 
 const PAGE = 1000
 const IN_CHUNK = 150
@@ -111,16 +112,19 @@ export async function loadAccountActivity(accountId) {
   if (raidIds.size === 0) return { account: accRes.data, characters: chars, activityByRaid: [] }
 
   const raidList = [...raidIds]
-  const [rRes, totalsRes] = await Promise.all([
+  const [rRes, totalsRes, eventsRes] = await Promise.all([
     supabase.from('raids').select('raid_id, raid_name, date_iso').in('raid_id', raidList),
     fetchAll('raid_dkp_totals', 'raid_id, total_dkp', (q) => q.in('raid_id', raidList), { order: { column: 'raid_id', ascending: true } }),
+    fetchByChunkedIn('raid_events', 'id, raid_id, event_id, event_order, event_name, dkp_value', 'raid_id', raidList),
   ])
   if (totalsRes.error) return { error: totalsRes.error?.message || 'Failed to load raid totals', characters: [], activityByRaid: [] }
+  if (eventsRes.error) return { error: eventsRes.error?.message || 'Failed to load raid events', characters: [], activityByRaid: [] }
 
   const rMap = {}
   ;(rRes.data || []).forEach((row) => { rMap[row.raid_id] = row })
   const totalRaidDkp = {}
   ;(totalsRes.data || []).forEach((row) => { totalRaidDkp[row.raid_id] = parseFloat(row.total_dkp || 0) })
+  const ticsByRaid = distinctTicsByRaid(eventsRes.data || [])
   const dkpByRaid = {}
   attDkp.forEach((row) => {
     if (!dkpByRaid[row.raid_id]) dkpByRaid[row.raid_id] = 0
@@ -136,12 +140,14 @@ export async function loadAccountActivity(accountId) {
   })
   const activityByRaid = raidList.map((raidId) => {
     const dkpEarned = dkpByRaid[raidId] ?? 0
+    const tics = ticsByRaid.get(String(raidId ?? '').trim())
+    const fraction = tics ? raidTicAttendance(tics, new Set()) : null
     return {
       raid_id: raidId,
       date: (rMap[raidId]?.date_iso || '').slice(0, 10),
       raid_name: rMap[raidId]?.raid_name || raidId,
       dkpEarned,
-      dkpRaidTotal: totalRaidDkp[raidId] ?? 0,
+      dkpRaidTotal: fraction ? fraction.totalDkp : (totalRaidDkp[raidId] ?? 0),
       attended: attendedRaidIds.has(String(raidId).trim()) || dkpEarned > 0,
       items: lootByRaid[raidId] || [],
     }
