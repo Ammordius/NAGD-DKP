@@ -1,0 +1,7 @@
+tr[data-scroll-item] {
+  height: 72px;
+}
+
+nav button {
+  margin-left: 0.75rem;
+}

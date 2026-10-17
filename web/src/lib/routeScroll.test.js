@@ -3,17 +3,22 @@ import assert from 'node:assert/strict'
 import {
   chooseRouteScrollAnchor,
   clearScrollRecord,
+  commitRouteScroll,
+  commitScrollSnapshot,
   decideRouteScroll,
+  findExactScrollItem,
   findRouteScrollElement,
   hashBlocksScrollRestore,
+  readRouteScroll,
   readScrollRecord,
   routesShareScroll,
+  scrollMeasurementAllowed,
   scrollRouteKey,
   writeScrollRecord,
 } from './routeScroll.js'
 
-function memoryStorage() {
-  const data = {}
+function memoryStorage(initial = {}) {
+  const data = { ...initial }
   return {
     getItem(key) {
       return Object.prototype.hasOwnProperty.call(data, key) ? data[key] : null
@@ -65,7 +70,7 @@ describe('route scroll', () => {
       { mobKey: 'quarm|', itemKey: '99', top: -2 },
       { anchorId: 'later', itemId: null, top: 40 },
     ], 0)
-    assert.deepEqual(anchor, { anchorId: 'quarm|', itemId: '99' })
+    assert.deepEqual(anchor, { anchorId: 'quarm|', itemId: '99', offset: -2 })
     assert.equal(chooseRouteScrollAnchor([{ anchorId: 'later', top: 40 }], 0), null)
 
     const storage = memoryStorage()
@@ -119,5 +124,69 @@ describe('route scroll', () => {
     assert.equal(findRouteScrollElement(root, { anchorId: 'quarm|', itemId: '12' }), item)
     assert.equal(findRouteScrollElement(root, { anchorId: 'quarm|', itemId: null }), header)
     assert.equal(findRouteScrollElement(root, { anchorId: 'missing' }), null)
+  })
+
+  it('keeps a measured snapshot and refuses a newer page measured under the old route', () => {
+    assert.equal(scrollMeasurementAllowed('/dkp', '/mobs'), false)
+    assert.equal(scrollMeasurementAllowed('/mobs', '/mobs'), true)
+    assert.equal(scrollMeasurementAllowed(null, '/mobs'), true)
+
+    const storage = memoryStorage()
+    writeScrollRecord(storage, '/mobs', {
+      anchorId: 'Anar_of_Water|Plane of Time',
+      itemId: '28655',
+      offset: -40,
+      top: 1800,
+      savedAt: 10,
+    })
+    assert.equal(commitScrollSnapshot(storage, { measured: false, routeKey: '/mobs', top: 0, savedAt: 11 }), 'skip')
+    assert.equal(readScrollRecord(storage, '/mobs').itemId, '28655')
+    assert.equal(commitScrollSnapshot(storage, {
+      measured: true,
+      routeKey: '/mobs',
+      anchorId: 'dkp-account',
+      itemId: null,
+      top: 0,
+      savedAt: 5,
+    }), 'stale')
+    assert.equal(readScrollRecord(storage, '/mobs').anchorId, 'Anar_of_Water|Plane of Time')
+    assert.equal(commitScrollSnapshot(storage, {
+      measured: true,
+      routeKey: '/mobs',
+      anchorId: null,
+      top: 0,
+      savedAt: 12,
+    }), 'clear')
+    assert.equal(readScrollRecord(storage, '/mobs'), null)
+  })
+
+  it('stores Raid Items scroll per user and can migrate the old session key', () => {
+    const session = memoryStorage({
+      'pageState:scroll:/mobs': JSON.stringify({
+        anchorId: 'Anar_of_Water|Plane of Time',
+        itemId: '28655',
+        top: 900,
+      }),
+    })
+    const local = memoryStorage()
+    const stores = { session, local }
+    const record = readRouteScroll(stores, '/mobs', 'user-a')
+    assert.equal(record.anchorId, 'Anar_of_Water|Plane of Time')
+    assert.equal(session.getItem('pageState:scroll:/mobs'), null)
+    assert.equal(readRouteScroll(stores, '/mobs', 'user-b'), null)
+    assert.equal(commitRouteScroll(stores, {
+      measured: true,
+      routeKey: '/mobs',
+      anchorId: 'dkp-account',
+      itemId: null,
+      top: 0,
+      savedAt: 2,
+    }, null), 'skip')
+    assert.equal(readRouteScroll(stores, '/mobs', 'user-a').itemId, '28655')
+    const header = row('Anar_of_Water|Plane of Time', null)
+    const item = row('Anar_of_Water|Plane of Time', '28655')
+    const root = { querySelectorAll() { return [header, item] } }
+    assert.equal(findExactScrollItem(root, { anchorId: 'Anar_of_Water|Plane of Time', itemId: '28655' }), item)
+    assert.equal(findExactScrollItem(root, { anchorId: 'Anar_of_Water|Plane of Time', itemId: null }), null)
   })
 })

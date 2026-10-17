@@ -8,9 +8,13 @@ import { getItemStats, ensureItemStatsLoaded, getItemStatsCached, getGearScore, 
 import { ensureElementalArmorLoaded, getMoldInfo, getArmorIdForMoldAndClass } from '../lib/elementalArmor'
 import {
   EMPTY_GROUP_STATE,
+  ITEMS_PER_PAGE,
   isMobOpen,
   itemAnchorKey,
   itemsShownLimit,
+  mergeGroupRevision,
+  migrateGroupKeys,
+  mobGroupAliases,
   normalizeGroupState,
   revealMoreItems,
   toggleMobGroup,
@@ -241,10 +245,20 @@ function normalizeMobKey(mob) {
 export default function MobLoot() {
   const [data, setData] = useState(null)
   const [raidItemSources, setRaidItemSources] = useState(null)
-  const [query, setQuery] = usePersistedState('/mobs:query', '')
-  const [filterSlot, setFilterSlot] = usePersistedState('/mobs:filterSlot', '')
-  const [filterClass, setFilterClass] = usePersistedState('/mobs:filterClass', '')
-  const [groups, setGroups] = usePersistedState('/mobs:groups', EMPTY_GROUP_STATE, normalizeGroupState)
+  const viewState = {
+    storage: 'local',
+    userScope: true,
+    version: 1,
+    migrateFromSession: true,
+    listenStorage: true,
+  }
+  const [query, setQuery] = usePersistedState('/mobs:query', '', undefined, viewState)
+  const [filterSlot, setFilterSlot] = usePersistedState('/mobs:filterSlot', '', undefined, viewState)
+  const [filterClass, setFilterClass] = usePersistedState('/mobs:filterClass', '', undefined, viewState)
+  const [groups, setGroups] = usePersistedState('/mobs:groups', EMPTY_GROUP_STATE, normalizeGroupState, {
+    ...viewState,
+    mergeWrite: mergeGroupRevision,
+  })
   const [loading, setLoading] = useState(true)
   const [itemLast3, setItemLast3] = useState({})
   const [mobZoneFromRaids, setMobZoneFromRaids] = useState({})
@@ -462,18 +476,26 @@ export default function MobLoot() {
         ...item,
         sources: [...sources].sort(),
       }))
+      const identity = mobGroupAliases({
+        sourceKeys: group.map((entry) => entry.key),
+        mobs,
+        zones: group.map((entry) => entry.zone),
+        displayZone,
+        forceMerged: group.length > 1,
+      })
       if (group.length === 1) {
         result.push({
           ...group[0],
-          key: group[0].key,
+          key: identity.canonical,
+          aliases: identity.aliases,
           mobs: mobs.length ? mobs : (group[0].mobs || [group[0].mob]),
           loot,
         })
         return
       }
-      const mergedKey = `${mobs[0] || 'mob'}|${displayZone}|merged`
       result.push({
-        key: mergedKey,
+        key: identity.canonical,
+        aliases: identity.aliases,
         mob: mobs[0] || first.mob,
         mobs,
         zone: first.zone,
@@ -497,6 +519,7 @@ export default function MobLoot() {
       if (!byGroup.has(key)) {
         byGroup.set(key, {
           key,
+          aliases: [key],
           mob: e.mob,
           mobs: [],
           zone: e.zone,
@@ -641,6 +664,14 @@ export default function MobLoot() {
 
   const filtersActive = !!(filterSlot || filterClass)
 
+  useEffect(() => {
+    const specs = entriesGrouped.map((entry) => ({ canonical: entry.key, aliases: entry.aliases || [] }))
+    setGroups((prev) => {
+      const next = migrateGroupKeys(prev, specs)
+      return next === prev ? prev : next
+    })
+  }, [entriesGrouped, setGroups])
+
   const toggle = (key, currentlyOpen) => {
     setGroups((prev) => toggleMobGroup(prev, key, currentlyOpen))
   }
@@ -732,8 +763,8 @@ export default function MobLoot() {
                 </tr>
                 {zoneEntries.map((e) => {
                   const filteredLoot = getFilteredAndSortedLoot(e.loot, e)
-                  const isOpen = isMobOpen(groups, e.key, { filtersActive, matchCount: filteredLoot.length })
-                  const limit = itemsShownLimit(groups, e.key)
+                  const isOpen = isMobOpen(groups, e.key, { filtersActive, matchCount: filteredLoot.length, aliases: e.aliases })
+                  const limit = itemsShownLimit(groups, e.key, e.aliases)
                   const visibleLoot = filteredLoot.slice(0, limit)
                   const hasMore = filteredLoot.length > limit
                   return (

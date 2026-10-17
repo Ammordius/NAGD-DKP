@@ -1,15 +1,19 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
+import { browserStorage } from './pageState.js'
+import { PageStateUserContext } from './pageStateUser'
 import {
   SCROLL_SAVE_DELAY_MS,
   chooseRouteScrollAnchor,
-  clearScrollRecord,
+  commitRouteScroll,
+  clearRouteScroll,
   decideRouteScroll,
+  findExactScrollItem,
   findRouteScrollElement,
   hashBlocksScrollRestore,
-  readScrollRecord,
+  readRouteScroll,
+  scrollMeasurementAllowed,
   scrollRouteKey,
-  writeScrollRecord,
 } from './routeScroll'
 
 const ScrollContext = createContext(null)
@@ -27,12 +31,78 @@ function writeOffset(container, top) {
   window.scrollTo(0, top)
 }
 
+function scrollStores() {
+  return { session: browserStorage('session'), local: browserStorage('local') }
+}
+
+function applyAnchorScroll(node, offset, container) {
+  if (!node) return
+  if (typeof node.scrollIntoView === 'function') node.scrollIntoView({ block: 'start' })
+  if (typeof offset !== 'number' || !Number.isFinite(offset)) return
+  if (typeof node.getBoundingClientRect !== 'function') return
+  const origin = container && typeof container.getBoundingClientRect === 'function'
+    ? container.getBoundingClientRect().top
+    : 0
+  const delta = (node.getBoundingClientRect().top - origin) - offset
+  if (Math.abs(delta) < 1) return
+  if (container) container.scrollTop += delta
+  else window.scrollBy(0, delta)
+}
+
+function measureSnapshot(routeKey, current) {
+  if (typeof document === 'undefined') return null
+  const marker = document.querySelector?.('[data-scroll-route]')
+  const markerRoute = marker && typeof marker.getAttribute === 'function'
+    ? marker.getAttribute('data-scroll-route')
+    : null
+  if (!scrollMeasurementAllowed(markerRoute, routeKey)) return null
+  const container = current.container
+  const root = container || document
+  const origin = container && typeof container.getBoundingClientRect === 'function'
+    ? container.getBoundingClientRect().top
+    : 0
+  const entries = []
+  if (root && typeof root.querySelectorAll === 'function') {
+    root.querySelectorAll('[data-scroll-anchor]').forEach((node) => {
+      const anchorId = node.getAttribute('data-scroll-anchor')
+      if (!anchorId || typeof node.getBoundingClientRect !== 'function') return
+      const itemId = node.getAttribute('data-scroll-item')
+      entries.push({
+        anchorId,
+        itemId: itemId || null,
+        top: node.getBoundingClientRect().top - origin,
+      })
+    })
+  }
+  if (current.listIds && entries.length > 0 && !entries.some((entry) => current.listIds.has(entry.anchorId))) {
+    return null
+  }
+  if (current.listIds && entries.length === 0) return null
+  const anchor = chooseRouteScrollAnchor(entries, 0)
+  const top = readOffset(container)
+  const savedAt = Date.now()
+  if (anchor) {
+    return {
+      measured: true,
+      routeKey,
+      anchorId: anchor.anchorId,
+      itemId: anchor.itemId,
+      offset: anchor.offset,
+      top,
+      savedAt,
+    }
+  }
+  return { measured: true, routeKey, anchorId: null, itemId: null, offset: null, top, savedAt }
+}
+
 export function RouteScrollProvider({ children }) {
   const location = useLocation()
   const routeKey = scrollRouteKey(location.pathname, location.search)
   const hashBlocked = hashBlocksScrollRestore(location.hash)
+  const userId = useContext(PageStateUserContext)
   const memory = useRef({
     routeKey,
+    userId,
     contentReady: false,
     registered: false,
     container: null,
@@ -42,6 +112,8 @@ export function RouteScrollProvider({ children }) {
     userInteracted: false,
     suppressSave: false,
     phase: 'pending',
+    snapshot: null,
+    pin: null,
   })
   const [epoch, setEpoch] = useState(0)
   const notify = () => setEpoch((n) => n + 1)
@@ -72,9 +144,12 @@ export function RouteScrollProvider({ children }) {
       notify()
     },
     forget(key) {
+      const target = key || memory.current.routeKey
       memory.current.phase = 'settled'
       memory.current.userInteracted = true
-      clearScrollRecord(sessionStorage, key || memory.current.routeKey)
+      memory.current.pin = null
+      memory.current.snapshot = null
+      clearRouteScroll(scrollStores(), target, memory.current.userId)
     },
   }), [])
 
@@ -88,19 +163,25 @@ export function RouteScrollProvider({ children }) {
   }, [])
 
   useEffect(() => {
-    const previousKey = memory.current.routeKey
-    if (previousKey && previousKey !== routeKey) {
-      capture(previousKey, memory.current)
+    const snap = memory.current.snapshot
+    const previousUserId = memory.current.userId
+    if (snap?.measured && (snap.routeKey !== routeKey || previousUserId !== userId)) {
+      commitRouteScroll(scrollStores(), snap, previousUserId)
     }
+    memory.current.userId = userId
     memory.current.routeKey = routeKey
     memory.current.userInteracted = false
     memory.current.phase = 'pending'
-  }, [routeKey])
+    memory.current.pin = null
+    memory.current.snapshot = null
+  }, [routeKey, userId])
 
   useEffect(() => {
-    const mark = () => {
-      if (memory.current.phase === 'settled') return
+    const mark = (event) => {
+      if (memory.current.suppressSave) return
+      if (event?.type === 'keydown' && event.metaKey) return
       memory.current.userInteracted = true
+      memory.current.pin = null
     }
     window.addEventListener('wheel', mark, { passive: true })
     window.addEventListener('touchstart', mark, { passive: true })
@@ -119,16 +200,25 @@ export function RouteScrollProvider({ children }) {
     let cancelled = false
     const attempt = () => {
       if (cancelled || memory.current.phase === 'settled') return
+      if (memory.current.userInteracted) {
+        memory.current.phase = 'settled'
+        return
+      }
       frames += 1
       const current = memory.current
       if (current.routeKey !== routeKey) return
-      const record = readScrollRecord(sessionStorage, routeKey)
+      const record = readRouteScroll(scrollStores(), routeKey, current.userId)
       const listIds = current.listIds
       const anchorInList = record?.anchorId && listIds
         ? listIds.has(record.anchorId)
         : undefined
       const root = current.container || document
-      const node = record?.anchorId ? findRouteScrollElement(root, record) : null
+      const gaveUp = frames >= 30
+      const exact = record?.itemId ? findExactScrollItem(root, record) : null
+      const fallback = record?.anchorId ? findRouteScrollElement(root, record) : null
+      const needItem = !!record?.itemId
+      const node = exact || (needItem ? (gaveUp ? fallback : null) : fallback)
+      const anchorInDom = needItem ? (!!exact || (gaveUp && !!fallback)) : !!fallback
       const contentReady = current.registered ? current.contentReady : frames >= 2
       const decision = decideRouteScroll({
         hashPresent: hashBlocked,
@@ -138,8 +228,8 @@ export function RouteScrollProvider({ children }) {
         pixel: record?.top,
         anchor: record,
         anchorInList,
-        anchorInDom: !!node,
-        missingAnchor: 'top',
+        anchorInDom,
+        missingAnchor: gaveUp || anchorInList === false ? 'top' : undefined,
         emptyAnchor: current.leaveToPage ? undefined : 'top',
       })
       if (current.leaveToPage) {
@@ -155,8 +245,18 @@ export function RouteScrollProvider({ children }) {
       current.phase = 'settled'
       if (decision === 'cancel' || decision === 'skip') return
       current.suppressSave = true
-      if (decision === 'restore' && node && typeof node.scrollIntoView === 'function') {
-        node.scrollIntoView({ block: 'start' })
+      if (decision === 'restore' && node) {
+        const offset = exact && typeof record?.offset === 'number' ? record.offset : undefined
+        applyAnchorScroll(node, offset, current.container)
+        if (exact) {
+          current.pin = {
+            routeKey,
+            anchorId: record.anchorId,
+            itemId: record.itemId,
+            offset: record.offset,
+          }
+          notify()
+        }
       } else if (decision === 'pixel' && typeof record?.top === 'number') {
         writeOffset(current.container, record.top)
       } else if (decision === 'top') {
@@ -173,25 +273,60 @@ export function RouteScrollProvider({ children }) {
       cancelled = true
       cancelAnimationFrame(frame)
     }
-  }, [routeKey, hashBlocked, epoch])
+  }, [routeKey, hashBlocked, epoch, userId])
+
+  useEffect(() => {
+    const pin = memory.current.pin
+    if (!pin || pin.routeKey !== routeKey) return undefined
+    let frame = 0
+    const repin = () => {
+      const currentPin = memory.current.pin
+      if (!currentPin || currentPin.routeKey !== routeKey || memory.current.userInteracted) return
+      const root = memory.current.container || document
+      const node = findExactScrollItem(root, currentPin) || findRouteScrollElement(root, currentPin)
+      if (!node) return
+      memory.current.suppressSave = true
+      applyAnchorScroll(node, currentPin.offset, memory.current.container)
+      requestAnimationFrame(() => {
+        memory.current.suppressSave = false
+      })
+    }
+    const schedule = () => {
+      cancelAnimationFrame(frame)
+      frame = requestAnimationFrame(repin)
+    }
+    const root = memory.current.container || document.documentElement
+    const resize = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(schedule) : null
+    resize?.observe(root)
+    const mutations = typeof MutationObserver !== 'undefined'
+      ? new MutationObserver(schedule)
+      : null
+    if (mutations && document.body) mutations.observe(document.body, { childList: true, subtree: true, characterData: true })
+    return () => {
+      cancelAnimationFrame(frame)
+      resize?.disconnect()
+      mutations?.disconnect()
+    }
+  }, [routeKey, epoch, userId])
 
   useEffect(() => {
     let timer = 0
-    const save = () => {
-      if (memory.current.phase !== 'settled') return
-      if (memory.current.suppressSave) return
-      if (memory.current.routeKey !== routeKey) return
-      capture(routeKey, memory.current)
-    }
-    const onScroll = () => {
-      if (memory.current.phase !== 'settled' || memory.current.suppressSave) return
-      window.clearTimeout(timer)
-      timer = window.setTimeout(save, SCROLL_SAVE_DELAY_MS)
-    }
     const flush = () => {
       window.clearTimeout(timer)
       timer = 0
-      save()
+      const snap = memory.current.snapshot
+      if (!snap?.measured || snap.routeKey !== routeKey) return
+      commitRouteScroll(scrollStores(), snap, memory.current.userId)
+    }
+    const onScroll = () => {
+      if (memory.current.suppressSave) return
+      if (memory.current.routeKey !== routeKey) return
+      if (memory.current.phase !== 'settled' && !memory.current.userInteracted) return
+      const snap = measureSnapshot(routeKey, memory.current)
+      if (!snap) return
+      memory.current.snapshot = snap
+      window.clearTimeout(timer)
+      timer = window.setTimeout(flush, SCROLL_SAVE_DELAY_MS)
     }
     const onVisibility = () => {
       if (document.visibilityState === 'hidden') flush()
@@ -210,41 +345,9 @@ export function RouteScrollProvider({ children }) {
 
   return (
     <ScrollContext.Provider value={api}>
-      {children}
+      <div data-scroll-route={routeKey} style={{ display: 'contents' }}>{children}</div>
     </ScrollContext.Provider>
   )
-}
-
-function capture(routeKey, current) {
-  const container = current.container
-  const root = container || document
-  const origin = container && typeof container.getBoundingClientRect === 'function'
-    ? container.getBoundingClientRect().top
-    : 0
-  const entries = []
-  if (root && typeof root.querySelectorAll === 'function') {
-    root.querySelectorAll('[data-scroll-anchor]').forEach((node) => {
-      const anchorId = node.getAttribute('data-scroll-anchor')
-      if (!anchorId || typeof node.getBoundingClientRect !== 'function') return
-      const itemId = node.getAttribute('data-scroll-item')
-      entries.push({
-        anchorId,
-        itemId: itemId || null,
-        top: node.getBoundingClientRect().top - origin,
-      })
-    })
-  }
-  const anchor = chooseRouteScrollAnchor(entries, 0)
-  const top = readOffset(container)
-  if (anchor) {
-    writeScrollRecord(sessionStorage, routeKey, { ...anchor, top })
-    return
-  }
-  if (top > 0) {
-    writeScrollRecord(sessionStorage, routeKey, { anchorId: null, itemId: null, top })
-    return
-  }
-  clearScrollRecord(sessionStorage, routeKey)
 }
 
 export function useScrollContentReady(ready) {

@@ -102,13 +102,14 @@ Fetched with `fetch('/…')` from `public/` or CDN:
 | Mechanism | Key pattern | Purpose |
 |-----------|------------|---------|
 | `sessionStorage` | `dkp-last-path` | Last visited path (see below) |
-| `sessionStorage` | `pageState:…` | `usePersistedState` UI persistence (filters, expansions, show-more, calendar month, loaded page counts). Guild view state is unscoped. |
+| `sessionStorage` | `pageState:…` | `usePersistedState` UI persistence (filters, expansions, show-more, calendar month, loaded page counts). Guild view state is unscoped. Raid Items is the exception below. |
 | `sessionStorage` | `pageState:user:<userId>:…` | Personalized drafts (tic paste, who-parser paste, Discord schedule paste and rows). Cleared for that user on sign-out. |
-| `sessionStorage` | `pageState:scroll:<pathname>` | Per-route scroll anchor. Account and profile keys include `?tab=`. |
+| `sessionStorage` | `pageState:scroll:<pathname>` | Per-route scroll anchor, except Raid Items. Account and profile keys include `?tab=`. |
+| `localStorage` | `pageState:user:<userId>:/mobs:query`, `filterSlot`, `filterClass`, `groups` | Raid Items search, filters, expansion, and Show more. Versioned `{ v, exp, value }`. A legacy unscoped session key is moved here once for the signed-in user, then deleted. |
+| `localStorage` | `pageState:user:<userId>:scroll:/mobs` | Raid Items scroll anchor for that user. Other routes stay in sessionStorage. |
 | `sessionStorage` | `pageState:user:<userId>:/officer/RaidAdmin:ticDraft:<raid id>` | Unsaved tic paste for that officer and raid. A legacy unscoped key is moved here once, then deleted. Never auto-submitted. |
 | `sessionStorage` | `account-detail-cache-${accountId}` | SWR fallback for account page |
 | `sessionStorage` | `pageState:/loot:*` | Item History search text and sort. Results are not cached; `/loot` queries `raid_loot_history` one page at a time (`LootSearch.jsx`). Deploy the view with `docs/sql-archive/superseded/supabase-raid-loot-history.sql`. |
-| `sessionStorage` | `pageState:/mobs:query`, `pageState:/mobs:filterSlot`, `pageState:/mobs:filterClass`, `pageState:/mobs:groups` | Raid Items search, slot, class, user-opened and user-closed mobs, and Show more counts |
 | TTL cache | `raids_month_*` | Raids calendar month blobs (`web/src/lib/cache.js`) |
 | TTL cache | `accounts_list_v7` | Accounts list (`web/src/pages/Accounts.jsx`, 10 minutes), including the Claimed by column from `account_claim_labels()`. The page refetches on load and overwrites this key. Character “spent” is loot for that account, same buyer fallback as the account page (assignee, else `character_name`, else `char_id`). It is not the DKP leaderboard total. |
 
@@ -151,7 +152,7 @@ Clearing a search clears only that field. It does not collapse sections or reset
 - **API:** `const [x, setX] = usePersistedState('key', initialValue, normalize?, options?)`
 - **Storage:** `sessionStorage` key `pageState:` + your key. This survives navigation, reload, and a mobile browser discarding the page in the same tab. It does not survive closing the tab. Guild exploration state stays unscoped so existing keys keep working. It is not personal data.
 - **Personalized drafts:** `options.userScope` stores `pageState:user:<userId>:` + key. `migrateUnscoped: true` copies a legacy unscoped value once, then deletes it.
-- **localStorage:** `options.storage: 'local'` writes `{ v, exp, value }` (default version 1, optional `ttlMs`). Use it only for a display preference that should outlive the tab. This app does not put exploration filters there, because a shared guild computer should not keep them after the tab closes. Corrupt JSON, a failed `normalize`, an unknown `v`, or a passed `exp` falls back to `initialValue`.
+- **localStorage:** `options.storage: 'local'` writes `{ v, exp, value }` (default version 1, optional `ttlMs`). Raid Items uses this, scoped to the signed-in user, so a second tab and a reload keep that user's view. Other exploration filters stay in `sessionStorage`. Corrupt JSON, a failed `normalize`, an unknown `v`, or a passed `exp` falls back to `initialValue`. `migrateFromSession: true` copies a legacy unscoped session value into the user slot once and deletes the session key. `listenStorage: true` applies a newer local write from another tab.
 - **Dynamic keys:** When the key changes (e.g. per `accountId` or `raidId`), the hook reloads that storage slot.
 - **Normalize:** Optional third argument. It runs on the parsed value when the slot is read. If it throws, the hook uses `initialValue`.
 
@@ -159,23 +160,24 @@ Clearing a search clears only that field. It does not collapse sections or reset
 
 `web/src/lib/routeScroll.js` and `web/src/lib/routeScrollView.jsx`. While the app is mounted, `history.scrollRestoration` is `manual`.
 
-- Key: `pageState:scroll:<pathname>`, plus `?tab=` on account and profile pages. `/dkp` cannot restore `/mobs`.
-- Value: `{ anchorId, itemId, top }`. Rows use `data-scroll-anchor` and optional `data-scroll-item`. Item History's virtual list restores `top` inside its scroller (`useScrollPixelMode`).
-- Save on a short throttle and on `pagehide` / `visibilitychange`.
-- Restore once, after `useScrollContentReady(true)` and the row is in the layout. Wheel, touch, or a key before that cancels it. A missing anchor scrolls to the top once. A hash (or `useLeaveScrollToPage`, used when an item URL asks for the second-place section) is left to the page.
+- Key: `pageState:scroll:<pathname>`, plus `?tab=` on account and profile pages. `/dkp` cannot restore `/mobs`. Raid Items uses `pageState:user:<userId>:scroll:/mobs` in `localStorage` instead.
+- Value: `{ anchorId, itemId, top, offset, savedAt }`. `offset` is the anchor's position relative to the scrollport. Rows use `data-scroll-anchor` and optional `data-scroll-item`. Item History's virtual list restores `top` inside its scroller (`useScrollPixelMode`).
+- The visible route is marked `data-scroll-route`. Scroll events update an in-memory snapshot immediately. Storage is written on a short throttle, on `pagehide` / `visibilitychange`, and when the listener unmounts. Leaving a page writes that snapshot. It does not measure the next page, and it does not replace a saved position with zero when the snapshot was never measured. An older `savedAt` does not overwrite a newer one.
+- Restore waits until `useScrollContentReady(true)` and, when an item id was saved, until that item row exists. It then places the anchor at the saved `offset` and keeps it there across layout changes until the user wheels, touches, or presses a key. A missing anchor falls back to the section header, then to the top. A hash (or `useLeaveScrollToPage`, used when an item URL asks for the second-place section) is left to the page.
 
 ### Raid Items (`/mobs`)
 
-Search, slot, and class stay in `pageState:/mobs:query`, `pageState:/mobs:filterSlot`, and `pageState:/mobs:filterClass`.
+Search, slot, and class stay in the signed-in user's local slot: `pageState:user:<userId>:/mobs:query`, `filterSlot`, and `filterClass`.
 
-Group memory is `pageState:/mobs:groups` (`web/src/lib/mobLootViewState.js`):
+Group memory is `pageState:user:<userId>:/mobs:groups` (`web/src/lib/mobLootViewState.js`):
 
 - `expanded[mobKey] === true` means the user opened that mob. `false` means the user closed it. A missing key is not a choice.
 - While a slot or class filter is on, a mob with one or two matching items opens for that visit only. That open state is not stored, and it does not override an explicit `false`.
-- `itemsShown[mobKey]` is how many loot rows Show more has revealed (20, 40, …). Keys are the stable mob group keys, not array indexes.
-- Clearing the search box clears only the query.
+- `itemsShown[mobKey]` is how many loot rows Show more has revealed (20, 40, …). A single mob keeps its JSON key. A merged group is keyed by sorted mob names plus the JSON zones, not the inferred display zone. Older keys still open the group and are moved onto the canonical key.
+- A write rebases onto the newest stored revision, so another open tab does not lose its expansion when this tab saves. `rev` counts those writes.
+- Clearing the search box clears only the query. Signing out does not delete the slot. Another signed-in user has a different key.
 
-Scroll uses the shared restorer (`pageState:scroll:/mobs`), not a MobLoot-only key. Changing search, slot, or class drops that route's anchor. Last-3 DKP figures are loaded again and are not part of the saved view.
+Scroll uses `pageState:user:<userId>:scroll:/mobs`. Changing search, slot, or class drops that user's anchor. Last-3 DKP figures are loaded again and are not part of the saved view. Other routes still use one shared session scroll record. Two tabs do not live-sync scroll while both stay open; a newly opened tab reads the latest saved anchor.
 
 ### Other exploration pages
 

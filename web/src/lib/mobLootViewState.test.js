@@ -5,11 +5,15 @@ import {
   EMPTY_GROUP_STATE,
   ITEMS_PER_PAGE,
   SCROLL_ANCHOR_STORAGE_KEY,
+  canonicalMobGroupKey,
   chooseScrollAnchor,
   clearScrollAnchor,
   findScrollAnchorElement,
   isMobOpen,
   itemsShownLimit,
+  mergeGroupRevision,
+  migrateGroupKeys,
+  mobGroupAliases,
   normalizeGroupState,
   normalizeScrollAnchor,
   readScrollAnchor,
@@ -115,8 +119,62 @@ describe('mob group memory', () => {
     assert.equal(itemsShownLimit(normalized, 'stale'), 60)
 
     for (const raw of [null, undefined, [], 'nope', 3, { expanded: [], itemsShown: 'x' }]) {
-      assert.deepEqual(normalizeGroupState(raw), { expanded: {}, itemsShown: {} })
+      assert.deepEqual(normalizeGroupState(raw), { expanded: {}, itemsShown: {}, rev: 0 })
     }
+  })
+
+  it('keeps a merged group id stable when the display zone arrives later', () => {
+    const before = mobGroupAliases({
+      sourceKeys: ['Split_Anar|Old'],
+      mobs: ['Split_Anar'],
+      zones: ['Old Zone'],
+      displayZone: 'Old Zone',
+      forceMerged: false,
+    })
+    const after = mobGroupAliases({
+      sourceKeys: ['Split_Anar|Old', 'Split_Anar|'],
+      mobs: ['Split_Anar'],
+      zones: ['Old Zone', ''],
+      displayZone: 'Plane of Time',
+      forceMerged: true,
+    })
+    assert.equal(before.canonical, 'Split_Anar|Old')
+    assert.equal(after.canonical, canonicalMobGroupKey({
+      sourceKeys: ['Split_Anar|Old', 'Split_Anar|'],
+      mobs: ['Split_Anar'],
+      zones: ['Old Zone', ''],
+      forceMerged: true,
+    }))
+    assert.notEqual(after.canonical, 'Split_Anar|Plane of Time|merged')
+    assert.equal(isMobOpen(
+      { expanded: { 'Split_Anar|Old': true }, itemsShown: {} },
+      after.canonical,
+      { aliases: after.aliases },
+    ), true)
+    assert.equal(isMobOpen(
+      { expanded: { 'Split_Anar|Plane of Time|merged': false }, itemsShown: {} },
+      after.canonical,
+      { aliases: after.aliases, filtersActive: true, matchCount: 1 },
+    ), false)
+    const migrated = migrateGroupKeys(
+      { expanded: { 'Split_Anar|Old': true }, itemsShown: { 'Split_Anar|Old': 40 }, rev: 1 },
+      [{ canonical: after.canonical, aliases: after.aliases }],
+    )
+    assert.equal(migrated.expanded[after.canonical], true)
+    assert.equal(migrated.expanded['Split_Anar|Old'], undefined)
+    assert.equal(migrated.itemsShown[after.canonical], 40)
+    assert.equal(migrateGroupKeys(migrated, [{ canonical: after.canonical, aliases: after.aliases }]), migrated)
+  })
+
+  it('merges one tab\'s edit onto a newer snapshot from another tab', () => {
+    const stored = { expanded: { a: true, b: true }, itemsShown: { a: 40 }, rev: 3 }
+    const previous = { expanded: { a: true }, itemsShown: {}, rev: 1 }
+    const next = toggleMobGroup(previous, 'a', true)
+    const merged = mergeGroupRevision(stored, previous, next)
+    assert.equal(merged.expanded.a, false)
+    assert.equal(merged.expanded.b, true)
+    assert.equal(merged.itemsShown.a, 40)
+    assert.equal(merged.rev, 4)
   })
 })
 
@@ -186,6 +244,9 @@ describe('Raid Items page wiring', () => {
     const source = readFileSync(new URL('../pages/MobLoot.jsx', import.meta.url), 'utf8')
     const scroll = readFileSync(new URL('./routeScrollView.jsx', import.meta.url), 'utf8')
     assert.match(source, /usePersistedState\(\s*'\/mobs:groups'/)
+    assert.match(source, /storage:\s*'local'/)
+    assert.match(source, /userScope:\s*true/)
+    assert.match(source, /mergeGroupRevision/)
     assert.match(source, /normalizeGroupState/)
     assert.match(source, /isMobOpen\(/)
     assert.match(source, /data-mob-key=\{e\.key\}/)

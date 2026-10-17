@@ -119,6 +119,29 @@ export function writePageState(storage, key, value, options = {}) {
   }
 }
 
+/**
+ * Copy an unscoped session slot into a user-scoped local slot once.
+ * Removes the session key so the next signed-in user does not inherit it.
+ * @returns {boolean} true when a value was moved
+ */
+export function migrateSessionKeyToUserLocal(sessionStore, localStore, key, userId, options = {}) {
+  if (!sessionStore || !localStore || !userId) return false
+  if (typeof sessionStore.getItem !== 'function' || typeof localStore.getItem !== 'function') return false
+  const version = options.version ?? 1
+  const dest = pageStateFullKey(key, { userId })
+  try {
+    if (localStore.getItem(dest) != null) return false
+    const legacy = sessionStore.getItem(pageStateFullKey(key, {}))
+    if (legacy == null) return false
+    const parsed = JSON.parse(legacy)
+    writePageState(localStore, key, parsed, { userId, version })
+    sessionStore.removeItem(pageStateFullKey(key, {}))
+    return true
+  } catch {
+    return false
+  }
+}
+
 export function browserStorage(kind) {
   try {
     if (kind === 'local') return localStorage
