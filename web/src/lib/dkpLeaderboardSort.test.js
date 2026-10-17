@@ -5,6 +5,7 @@ import {
   ATTENDANCE_RED,
   ATTENDANCE_YELLOW,
   attendanceShareColor,
+  attendanceShareEarned,
   attendanceSharePercent,
   compareLeaderboardRows,
   nextLeaderboardSort,
@@ -70,6 +71,17 @@ describe('attendance share colors', () => {
     assert.equal(attendanceSharePercent(94, 1000), 9)
     assert.equal(attendanceShareColor(attendanceSharePercent(94, 1000)), ATTENDANCE_RED)
     assert.equal(attendanceSharePercent(0, 0), null)
+  })
+
+  it('caps the share at 100 when window DKP is above the pool', () => {
+    assert.equal(attendanceSharePercent(120, 100), 100)
+    assert.equal(attendanceSharePercent(100, 100), 100)
+    assert.equal(attendanceSharePercent(456, 1000), 46)
+    assert.equal(attendanceSharePercent(0, 100), 0)
+    assert.equal(attendanceSharePercent(-5, 100), 0)
+    assert.equal(attendanceShareEarned(120, 100), 100)
+    assert.equal(attendanceShareEarned(46, 100), 46)
+    assert.equal(attendanceShareEarned(0, 100), 0)
   })
 })
 

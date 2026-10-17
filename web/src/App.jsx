@@ -204,7 +204,7 @@ export default function App() {
         <Route path="/loot" element={<RequireAuth><LootSearch /></RequireAuth>} />
         <Route path="/loot-recipients" element={<RequireAuth><LootRecipients /></RequireAuth>} />
         <Route path="/mobs" element={<RequireAuth><MobLoot /></RequireAuth>} />
-        <Route path="/accounts" element={<RequireAuth><Accounts /></RequireAuth>} />
+        <Route path="/accounts" element={<RequireAuth><Accounts profile={profile} /></RequireAuth>} />
         <Route path="/accounts/:accountId" element={<RequireAuth><AccountDetail isOfficer={isOfficer} profile={profile} session={session} onProfileUpdate={() => session?.user?.id && fetchProfile(session.user.id)} /></RequireAuth>} />
         <Route path="/profile" element={<RequireAuth><Profile profile={profile} onProfileUpdate={() => session?.user?.id && fetchProfile(session.user.id)} /></RequireAuth>} />
         <Route path="/items/:itemNameEncoded" element={<RequireAuth><ItemPage isOfficer={isOfficer} /></RequireAuth>} />
