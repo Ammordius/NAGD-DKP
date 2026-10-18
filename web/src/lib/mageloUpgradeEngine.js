@@ -625,6 +625,80 @@ export function scoreItemForUpgrade(itemStats, itemId, norm, focusWeights, focus
   return statScore + focusScore
 }
 
+const MOD2_STATS = ['accuracy', 'avoidance', 'combat_effects', 'damage_shield', 'dot_shielding', 'shielding', 'spell_shielding', 'strikethrough', 'stun_resist']
+
+function mod2Empty() {
+  const out = {}
+  MOD2_STATS.forEach((stat) => { out[stat] = 0 })
+  return out
+}
+
+function mod2Sum(itemIds, table) {
+  const total = mod2Empty()
+  const items = (table && table.items) || {}
+  ;(itemIds || []).forEach((itemId) => {
+    if (itemId == null || itemId === '') return
+    const mods = (items[String(itemId)] && items[String(itemId)].mods) || {}
+    MOD2_STATS.forEach((stat) => { total[stat] += Number(mods[stat]) || 0 })
+  })
+  return total
+}
+
+function mod2ActiveWeights(className, config, scenario) {
+  const row = config && config.classes && config.classes[className]
+  if (!row) return null
+  const roleThreat = Number(row.role && row.role.threat) || 0
+  const threatFactor = scenario && Object.prototype.hasOwnProperty.call(scenario, 'threat_limitation')
+    ? Number(scenario.threat_limitation)
+    : roleThreat
+  const defaultStun = Number(config.default_scenario && config.default_scenario.stun_exposure) || 0.2
+  const stunExposure = scenario && Object.prototype.hasOwnProperty.call(scenario, 'stun_exposure')
+    ? Number(scenario.stun_exposure)
+    : defaultStun
+  const out = {}
+  MOD2_STATS.forEach((stat) => {
+    const parts = row.weights[stat] || { other: 0, threat: 0 }
+    let threat = Number(parts.threat) || 0
+    if (roleThreat <= 0 || threatFactor <= 0) threat = 0
+    else threat *= threatFactor / roleThreat
+    if (stat === 'stun_resist') {
+      if (stunExposure <= 0) threat = 0
+      else threat *= stunExposure / defaultStun
+    }
+    out[stat] = (Number(parts.other) || 0) + threat
+  })
+  return out
+}
+
+function mod2Points(className, itemIds, config, table, scenario) {
+  const caps = (config && config.caps) || {}
+  const weights = mod2ActiveWeights(className, config, scenario)
+  if (!weights) return 0
+  const raw = mod2Sum(itemIds, table)
+  let points = 0
+  MOD2_STATS.forEach((stat) => {
+    const cap = Number(caps[stat]) || 0
+    const value = Math.max(0, Number(raw[stat]) || 0)
+    const u = cap > 0 ? Math.min(value, cap) / cap : 0
+    points += 100 * weights[stat] * u
+  })
+  return points
+}
+
+/** Item-scale Mod2 delta. Zero unless ctx.mod2 is true. Does not affect DKP price math. */
+export function mod2UpgradeAdjustment(className, equipped, slotId, candidateId, is2h, ctx) {
+  if (!ctx || ctx.mod2 !== true || !ctx.mod2Config || !ctx.mod2Table) return 0
+  const worn = (equipped || []).filter((row) => Number(row.slot_id) >= 1 && Number(row.slot_id) <= 22)
+  const before = worn.map((row) => row.item_id)
+  const after = worn
+    .filter((row) => Number(row.slot_id) !== Number(slotId) && !(is2h && Number(row.slot_id) === 14))
+    .map((row) => row.item_id)
+  after.push(candidateId)
+  const display = mod2Points(className, after, ctx.mod2Config, ctx.mod2Table) - mod2Points(className, before, ctx.mod2Config, ctx.mod2Table)
+  const scale = Number(ctx.mod2Config.classes && ctx.mod2Config.classes[className] && ctx.mod2Config.classes[className].upgrade_scale) || 0
+  return display * scale
+}
+
 /**
  * Shared class weights + focus maps for upgrade scoring (Magelo class_rankings parity).
  * @param {object} ctx - itemStats, classWeights, focusCandidates, optional spellFociiList, elementalDisplayNames, focusMultiplier
@@ -754,7 +828,7 @@ export function computeUpgradesForCharacter(char, maxPerSlot, includeDowngrades,
       } else {
         deltas = getItemStatDeltas(currentStats, stats)
       }
-      const delta = score - baselineScore
+      const delta = score - baselineScore + mod2UpgradeAdjustment(char.class, equippedOnly, slotId, id, is2her, ctx)
       if (!includeDowngrades && delta <= 0) continue
 
       const focusSpellName =
@@ -813,7 +887,7 @@ export function computeUpgradesForCharacter(char, maxPerSlot, includeDowngrades,
       if (isItemLore(stats) && otherEquippedIds.has(id)) continue
       const score = scoreItemForUpgrade(stats, id, norm, focusWeights, focusValuesByItem)
       const deltas = getItemStatDeltas(null, stats)
-      const delta = score
+      const delta = score + mod2UpgradeAdjustment(char.class, equippedOnly, slotId, id, false, ctx)
       if (!includeDowngrades && delta <= 0) continue
       const focusSpellName =
         stats.focusSpellName != null && stats.focusSpellName !== '' ? String(stats.focusSpellName) : ''
@@ -934,7 +1008,7 @@ export function evaluateItemUpgradeForCharacter(char, candidateItemId, ctx) {
     } else {
       deltas = getItemStatDeltas(currentStats, candidateStats)
     }
-    const delta = score - baselineScore
+    const delta = score - baselineScore + mod2UpgradeAdjustment(charClass, equippedOnly, slotId, candNum, is2her, ctx)
 
     const candidateName =
       candidateStats.name || elementalDisplayNames[String(candNum)] || `Item ${candNum}`
