@@ -313,7 +313,7 @@ export default function LootRecipients() {
       <p><Link to="/">← Home</Link></p>
       <h1>Character History</h1>
       <p style={{ color: '#a1a1aa', marginBottom: '1rem' }}>
-        Characters who received loot {months === 0 ? ' (all time)' : `in the last ${months} month${months !== 1 ? 's' : ''}`}. Loot and DKP spent are for this window. Acct DKP balance is the account&apos;s current balance (earned minus spent), the same number as Balance on the DKP page.
+        Characters who received loot {months === 0 ? ' (all time)' : `in the last ${months} month${months !== 1 ? 's' : ''}`}. Loot and DKP spent are for this window. DKP balance is the account&apos;s current balance (earned minus spent), the same number as Balance on the DKP page.
       </p>
       <p style={{ color: '#eab308', marginBottom: '1rem', fontSize: '0.9rem' }}>
         Note: This page shows data from at most the last 1,000 raids. Loot lists and window DKP are based on that set; sorting when &quot;All time&quot; uses full backend totals.
@@ -339,7 +339,7 @@ export default function LootRecipients() {
         <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           <span>Sort by:</span>
           <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} style={{ padding: '0.35rem 0.5rem' }}>
-            <option value="accountDkpTotal">Acct DKP balance (default)</option>
+            <option value="accountDkpTotal">DKP balance (default)</option>
             <option value="dkpSpentToon">DKP spent on character</option>
             <option value="lastLootFirst">Most recent loot first</option>
           </select>
@@ -347,7 +347,7 @@ export default function LootRecipients() {
       </div>
       <div className="card">
         <p style={{ color: '#a1a1aa', fontSize: '0.875rem', marginTop: 0 }}>
-          Showing <strong>{recipients.length}</strong> character{recipients.length !== 1 ? 's' : ''} {classFilter ? `(${classFilter})` : ''}. Sorted by {sortBy === 'accountDkpTotal' ? 'Acct DKP balance' : sortBy === 'lastLootFirst' ? 'most recent loot first' : 'DKP spent on character'} (desc).
+          Showing <strong>{recipients.length}</strong> character{recipients.length !== 1 ? 's' : ''} {classFilter ? `(${classFilter})` : ''}. Sorted by {sortBy === 'accountDkpTotal' ? 'DKP balance' : sortBy === 'lastLootFirst' ? 'most recent loot first' : 'DKP spent on character'} (desc).
         </p>
         <AssignedLootDisclaimer />
         <div>
@@ -371,7 +371,7 @@ export default function LootRecipients() {
                   (window)
                 </th>
                 <th className="num">
-                  <span>Char DKP spent</span>
+                  <span>Character DKP</span>
                   <br />
                   (all time)
                 </th>
@@ -379,7 +379,7 @@ export default function LootRecipients() {
                   className="num"
                   title="Current balance for the whole account: DKP earned minus DKP spent, including adjustments. Same number as Balance on the DKP page. Every character on the account shares it."
                 >
-                  <span>Acct DKP balance</span>
+                  <span>DKP balance</span>
                   <br />
                   (current)
                 </th>
