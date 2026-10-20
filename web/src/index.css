@@ -41,6 +41,7 @@ th { color: #a1a1aa; font-weight: 600; }
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
+  white-space: nowrap;
 }
 .dkp-sort-label { text-decoration: underline; }
 .dkp-sort-triangle {

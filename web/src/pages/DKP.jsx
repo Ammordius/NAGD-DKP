@@ -154,7 +154,7 @@ export default function DKP({ isOfficer, profile }) {
             <tr>
               {LEADERBOARD_SORT_COLUMNS.map((column) => {
                 const active = sort.key === column
-                const label = column === 'account' ? colLabel : column === '30d' ? '30d' : column === '60d' ? '60d' : column[0].toUpperCase() + column.slice(1)
+                const label = column === 'account' ? colLabel : column === '30d' ? 'Last 30 days' : column === '60d' ? 'Last 60 days' : column[0].toUpperCase() + column.slice(1)
                 const title = column === '30d' || column === '60d'
                   ? 'DKP earned / total DKP in period; % = share in period. Sort uses DKP earned in the period.'
                   : `Sort by ${label}`
