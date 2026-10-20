@@ -38,13 +38,12 @@ th { color: #a1a1aa; font-weight: 600; }
 .loot-recipients-table .col-account { width: 11rem; }
 .loot-recipients-table .col-class { width: 4.6rem; }
 .loot-recipients-table .col-loot { width: auto; }
-.loot-recipients-table .col-window { width: 4.6rem; }
-.loot-recipients-table .col-char { width: 9.25rem; }
-.loot-recipients-table .col-account-dkp { width: 5.25rem; }
+.loot-recipients-table .col-window { width: 6rem; }
+.loot-recipients-table .col-char { width: 8.15rem; }
+.loot-recipients-table .col-account-dkp { width: 9rem; }
 .loot-recipients-table th.num {
   white-space: normal;
   line-height: 1.2;
-  font-size: 0.75rem;
   font-weight: 600;
 }
 .loot-recipients-table th.num span { white-space: nowrap; }
