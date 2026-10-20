@@ -30,6 +30,29 @@ nav .role { margin-left: auto; font-size: 0.875rem; color: #71717a; }
 table { width: 100%; border-collapse: collapse; }
 th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #27272a; }
 th { color: #a1a1aa; font-weight: 600; }
+
+/* Character History: keep the DKP columns narrow so the row fits the page */
+.loot-recipients-table { table-layout: fixed; }
+.loot-recipients-table th,
+.loot-recipients-table td { padding: 0.4rem 0.4rem; vertical-align: top; }
+.loot-recipients-table .col-account { width: 11rem; }
+.loot-recipients-table .col-class { width: 4.6rem; }
+.loot-recipients-table .col-loot { width: auto; }
+.loot-recipients-table .col-window { width: 4.6rem; }
+.loot-recipients-table .col-char { width: 9.25rem; }
+.loot-recipients-table .col-account-dkp { width: 5.25rem; }
+.loot-recipients-table th.num {
+  white-space: normal;
+  line-height: 1.2;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+.loot-recipients-table th.num span { white-space: nowrap; }
+.loot-recipients-table td.num {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.loot-recipients-table .loot-list { font-size: 0.85rem; overflow-wrap: break-word; }
 .dkp-sort-btn {
   background: none;
   border: none;

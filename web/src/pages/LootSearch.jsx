@@ -316,6 +316,7 @@ export default function LootSearch() {
   })
 
   const baseCell = { ...cellStyle, padding: '0.5rem 0.75rem', borderBottom: '1px solid var(--border, #27272a)' }
+  const costCell = { ...baseCell, paddingLeft: '0.25rem', paddingRight: '0.25rem' }
   const renderRow = (row) => {
     const dateStr = (row.date_iso && String(row.date_iso).trim()) ? String(row.date_iso).slice(0, 10) : (row.date || '—')
     const charName = row.character_name || row.char_id || '—'
@@ -326,10 +327,10 @@ export default function LootSearch() {
     const raidName = row.raid_name || row.raid_id
     return (
       <>
-        <div className="loot-cell" style={{ ...baseCell, color: '#a1a1aa', fontSize: '0.875rem' }} title={dateStr}>{dateStr}</div>
-        <div className="loot-cell" style={baseCell} title={row.item_name || ''}><ItemLink itemName={row.item_name || ''} itemId={itemIdMap[(row.item_name || '').trim().toLowerCase()]}>{row.item_name || '—'}</ItemLink></div>
-        <div className="loot-cell" style={baseCell}>{row.cost ?? '—'}</div>
-        <div className="loot-cell" style={baseCell} title={label}><Link to={to}>{label}</Link></div>
+        <div className="loot-cell" style={{ ...baseCell, color: '#a1a1aa', fontSize: '0.75rem' }} title={dateStr}>{dateStr}</div>
+        <div className="loot-cell" style={{ ...baseCell, fontSize: '0.8125rem' }} title={row.item_name || ''}><ItemLink itemName={row.item_name || ''} itemId={itemIdMap[(row.item_name || '').trim().toLowerCase()]}>{row.item_name || '—'}</ItemLink></div>
+        <div className="loot-cell" style={costCell}>{row.cost ?? '—'}</div>
+        <div className="loot-cell" style={{ ...baseCell, fontSize: '0.75rem' }} title={label}><Link to={to}>{label}</Link></div>
         <div className="loot-cell" style={{ ...baseCell, color: '#a1a1aa', fontSize: '0.875rem' }} title={row.assigned_character_name || row.assigned_char_id || 'Unassigned'}>
           {(row.assigned_character_name || row.assigned_char_id) ? (
             <Link to={`/characters/${encodeURIComponent(row.assigned_character_name || row.assigned_char_id)}`}>{row.assigned_character_name || row.assigned_char_id}</Link>
@@ -337,15 +338,18 @@ export default function LootSearch() {
             <span style={{ color: '#71717a' }}>Unassigned</span>
           )}
         </div>
-        <div className="loot-cell" style={baseCell} title={raidName}><Link to={`/raids/${row.raid_id}`}>{raidName}</Link></div>
-        <div className="loot-cell" style={{ ...baseCell, color: '#a1a1aa', fontSize: '0.875rem' }} title={itemSourceLabel(itemSources, row.item_name, row.raid_id, raidName, raidToMobs) ?? ''}>
+        <div className="loot-cell" style={{ ...baseCell, fontSize: '0.75rem' }} title={raidName}><Link to={`/raids/${row.raid_id}`}>{raidName}</Link></div>
+        <div className="loot-cell" style={{ ...baseCell, color: '#a1a1aa', fontSize: '0.75rem' }} title={itemSourceLabel(itemSources, row.item_name, row.raid_id, raidName, raidToMobs) ?? ''}>
           {itemSourceLabel(itemSources, row.item_name, row.raid_id, raidName, raidToMobs) ?? '—'}
         </div>
       </>
     )
   }
 
-  const gridStyle = { display: 'grid', gridTemplateColumns: '100px minmax(120px, 1fr) 60px minmax(100px, 1fr) minmax(100px, 1fr) minmax(100px, 1fr) minmax(120px, 1fr)', minWidth: 700 }
+  // Item is the only flexible column, so width freed from Cost, Buyer, and On char goes to the item name.
+  // Raid and Drops from stay near their previous share (~148px inside the 960px page).
+  const gridStyle = { display: 'grid', gridTemplateColumns: '90px minmax(180px, 1fr) 48px 112px 106px 148px 148px', minWidth: 760 }
+  const headerCell = { ...cellStyle, padding: '0.5rem 0.75rem', fontWeight: 600, borderBottom: '1px solid var(--border, #27272a)', background: 'var(--card-bg, #18181b)' }
   const countLabel = totalCount == null
     ? (loading ? 'Loading…' : '')
     : `${totalCount.toLocaleString()} row${totalCount === 1 ? '' : 's'}`
@@ -379,7 +383,7 @@ export default function LootSearch() {
             <option value="item">Item</option>
             <option value="cost">Cost</option>
             <option value="buyer">Buyer</option>
-            <option value="toon">On toon</option>
+            <option value="toon">On char</option>
           </select>
         </label>
         <label>
@@ -400,17 +404,17 @@ export default function LootSearch() {
         {loadingMore ? ' · loading more…' : ''}
       </p>
       {error ? <p className="error">{error}</p> : null}
-      <AssignedLootDisclaimer compact />
+      <AssignedLootDisclaimer compact columnLabel="On char" />
       <div className="card">
         <div style={{ overflowX: 'auto' }}>
           <div style={gridStyle} role="row" aria-rowindex={0}>
-            <div className="loot-cell" style={{ ...cellStyle, padding: '0.5rem 0.75rem', fontWeight: 600, borderBottom: '1px solid var(--border, #27272a)', background: 'var(--card-bg, #18181b)' }}>Date</div>
-            <div className="loot-cell" style={{ ...cellStyle, padding: '0.5rem 0.75rem', fontWeight: 600, borderBottom: '1px solid var(--border, #27272a)', background: 'var(--card-bg, #18181b)' }}>Item</div>
-            <div className="loot-cell" style={{ ...cellStyle, padding: '0.5rem 0.75rem', fontWeight: 600, borderBottom: '1px solid var(--border, #27272a)', background: 'var(--card-bg, #18181b)' }}>Cost</div>
-            <div className="loot-cell" style={{ ...cellStyle, padding: '0.5rem 0.75rem', fontWeight: 600, borderBottom: '1px solid var(--border, #27272a)', background: 'var(--card-bg, #18181b)' }}>Buyer</div>
-            <div className="loot-cell" style={{ ...cellStyle, padding: '0.5rem 0.75rem', fontWeight: 600, borderBottom: '1px solid var(--border, #27272a)', background: 'var(--card-bg, #18181b)' }}>On toon</div>
-            <div className="loot-cell" style={{ ...cellStyle, padding: '0.5rem 0.75rem', fontWeight: 600, borderBottom: '1px solid var(--border, #27272a)', background: 'var(--card-bg, #18181b)' }}>Raid</div>
-            <div className="loot-cell" style={{ ...cellStyle, padding: '0.5rem 0.75rem', fontWeight: 600, borderBottom: '1px solid var(--border, #27272a)', background: 'var(--card-bg, #18181b)' }}>Drops from</div>
+            <div className="loot-cell" style={headerCell}>Date</div>
+            <div className="loot-cell" style={headerCell}>Item</div>
+            <div className="loot-cell" style={{ ...headerCell, paddingLeft: '0.25rem', paddingRight: '0.25rem' }}>Cost</div>
+            <div className="loot-cell" style={headerCell}>Buyer</div>
+            <div className="loot-cell" style={headerCell}>On char</div>
+            <div className="loot-cell" style={headerCell}>Raid</div>
+            <div className="loot-cell" style={headerCell}>Drops from</div>
           </div>
           <div
             ref={parentRef}

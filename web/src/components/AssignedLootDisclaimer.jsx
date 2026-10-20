@@ -2,11 +2,11 @@
  * Shown on pages that display loot assigned to characters. Assignments are
  * derived automatically from Magelo and heuristics and may be inaccurate.
  */
-export default function AssignedLootDisclaimer({ compact = false }) {
+export default function AssignedLootDisclaimer({ compact = false, columnLabel = 'On toon' }) {
   if (compact) {
     return (
       <p style={{ color: '#71717a', fontSize: '0.8125rem', marginTop: 0, marginBottom: '0.75rem' }}>
-        “On toon” / assigned character is set automatically from Magelo data and best-effort rules; it may be wrong.
+        “{columnLabel}” / assigned character is set automatically from Magelo data and best-effort rules; it may be wrong.
       </p>
     )
   }
