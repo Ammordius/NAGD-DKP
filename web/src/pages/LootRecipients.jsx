@@ -364,7 +364,7 @@ export default function LootRecipients() {
               <tr>
                 <th>Account (Character)</th>
                 <th>Class</th>
-                <th>Loot received ({months === 0 ? 'all time' : `last ${months}m`})</th>
+                <th>Loot received ({months === 0 ? 'all time' : `last ${months}${months === 1 ? 'month' : 'months'}`})</th>
                 <th className="num">
                   <span>DKP spent</span>
                   <br />

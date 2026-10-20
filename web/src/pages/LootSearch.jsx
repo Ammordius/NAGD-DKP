@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
@@ -29,6 +29,7 @@ const cellStyle = {
   overflow: 'hidden',
   textOverflow: 'ellipsis',
   whiteSpace: 'nowrap',
+  textAlign: 'left',
 }
 
 const PAGE_SIZE = 100
@@ -129,6 +130,22 @@ export default function LootSearch() {
   const [error, setError] = useState('')
 
   const parentRef = useRef(null)
+  // The body scroller's vertical scrollbar narrows only the rows. Item is the flexible
+  // column, so that shrink shifts Cost, Buyer, On char, Raid, and Drops from. Reserve
+  // the same width on the header so those columns stay left-aligned with their values.
+  const [headerScrollbarPad, setHeaderScrollbarPad] = useState(0)
+  useLayoutEffect(() => {
+    const el = parentRef.current
+    if (!el) return undefined
+    const measure = () => {
+      const pad = Math.max(0, el.offsetWidth - el.clientWidth)
+      setHeaderScrollbarPad((prev) => (prev === pad ? prev : pad))
+    }
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [rows.length, loading])
   const pagesRef = useRef(pagesLoaded)
   const querySeenRef = useRef(null)
   const requestId = useRef(0)
@@ -316,7 +333,7 @@ export default function LootSearch() {
   })
 
   const baseCell = { ...cellStyle, padding: '0.5rem 0.75rem', borderBottom: '1px solid var(--border, #27272a)' }
-  const costCell = { ...baseCell, paddingLeft: '0.25rem', paddingRight: '0.25rem' }
+  const costCell = { ...baseCell, paddingLeft: '0.125rem', paddingRight: '0.125rem' }
   const renderRow = (row) => {
     const dateStr = (row.date_iso && String(row.date_iso).trim()) ? String(row.date_iso).slice(0, 10) : (row.date || '—')
     const charName = row.character_name || row.char_id || '—'
@@ -348,7 +365,8 @@ export default function LootSearch() {
 
   // Item is the only flexible column, so width freed from Cost, Buyer, and On char goes to the item name.
   // Raid and Drops from stay near their previous share (~148px inside the 960px page).
-  const gridStyle = { display: 'grid', gridTemplateColumns: '90px minmax(180px, 1fr) 48px 112px 106px 148px 148px', minWidth: 760 }
+  // Cost is just wide enough for a 4-digit DKP value, left-aligned.
+  const gridStyle = { display: 'grid', gridTemplateColumns: '90px minmax(180px, 1fr) 42px 112px 106px 148px 148px', minWidth: 760 }
   const headerCell = { ...cellStyle, padding: '0.5rem 0.75rem', fontWeight: 600, borderBottom: '1px solid var(--border, #27272a)', background: 'var(--card-bg, #18181b)' }
   const countLabel = totalCount == null
     ? (loading ? 'Loading…' : '')
@@ -407,10 +425,10 @@ export default function LootSearch() {
       <AssignedLootDisclaimer compact columnLabel="On char" />
       <div className="card">
         <div style={{ overflowX: 'auto' }}>
-          <div style={gridStyle} role="row" aria-rowindex={0}>
+          <div style={{ ...gridStyle, paddingRight: headerScrollbarPad }} role="row" aria-rowindex={0}>
             <div className="loot-cell" style={headerCell}>Date</div>
             <div className="loot-cell" style={headerCell}>Item</div>
-            <div className="loot-cell" style={{ ...headerCell, paddingLeft: '0.25rem', paddingRight: '0.25rem' }}>Cost</div>
+            <div className="loot-cell" style={{ ...headerCell, paddingLeft: '0.125rem', paddingRight: '0.125rem' }}>Cost</div>
             <div className="loot-cell" style={headerCell}>Buyer</div>
             <div className="loot-cell" style={headerCell}>On char</div>
             <div className="loot-cell" style={headerCell}>Raid</div>

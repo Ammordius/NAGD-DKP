@@ -135,7 +135,8 @@ label { display: block; margin-bottom: 0.25rem; font-size: 0.875rem; color: #a1a
 .mob-loot-gear-score { display: inline-block; margin-right: 0.5rem; padding: 0.15rem 0.4rem; font-size: 0.7rem; font-weight: 600; background: #3730a3; color: #c4b5fd; border-radius: 4px; }
 
 /* Item History grid: keep cell content from overflowing into adjacent rows */
-.loot-cell a { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.loot-cell { text-align: left; }
+.loot-cell a { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
 
 .attendee-list { max-height: 200px; overflow-y: auto; font-size: 0.9rem; display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: flex-start; }
 .attendee-list a { display: inline-block; padding: 0.2rem 0.5rem; background: #27272a; border-radius: 4px; color: #a78bfa; }
