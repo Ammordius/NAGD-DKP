@@ -93,16 +93,38 @@ function findDkpPrices(text) {
  * When the line has one amount for several names, each name gets that amount.
  * Further names past the last amount also get that last amount.
  */
+
 function assignCharacterPrices(nameHits, prices) {
-  const ordered = [...nameHits].sort((a, b) => a.index - b.index || b.length - a.length)
+  const ordered = [...nameHits].sort(
+    (a, b) => a.index - b.index || b.length - a.length
+  )
+
+  if (!ordered.length) return []
+
   if (!prices.length) {
-    return ordered.map((hit) => ({ characterName: hit.name, cost: 0, hasDkp: false }))
+    return ordered.map((hit) => ({
+      characterName: hit.name,
+      cost: 0,
+      hasDkp: false,
+    }))
   }
-  return ordered.map((hit, i) => {
-    const price = prices[Math.min(i, prices.length - 1)]
-    return { characterName: hit.name, cost: price.cost, hasDkp: true }
+
+  // Determine whether prices generally appear before or after names.
+  const pricesLead = prices[0].index < ordered[0].index
+
+  return ordered.map((hit) => {
+    const price = pricesLead
+      ? [...prices].reverse().find((p) => p.index < hit.index) ?? prices[0]
+      : prices.find((p) => p.index > hit.index) ?? prices.at(-1)
+
+    return {
+      characterName: hit.name,
+      cost: price.cost,
+      hasDkp: true,
+    }
   })
 }
+
 
 /**
  * Parse loot log by matching against known character names and item names.
