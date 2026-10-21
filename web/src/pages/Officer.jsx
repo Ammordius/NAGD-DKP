@@ -902,26 +902,30 @@ export default function Officer({ isOfficer, profile, userId }) {
     const insertedItems = []
     let inserted = 0
     for (const line of lineResults) {
-      const characterNames = line.characterNames.length > 0 ? line.characterNames : ['']
-      for (const characterName of characterNames) {
+      const awards = line.awards.length > 0
+        ? line.awards
+        : [{ characterName: '', cost: line.cost, hasDkp: line.hasDkp }]
+      for (const award of awards) {
+        const characterName = award.characterName || ''
+        const cost = Number.isNaN(Number(award.cost)) ? 0 : award.cost
         const char = characterName ? nameToChar[characterName.toLowerCase()] : null
         const hasChar = !!char
         const itemKey = (line.itemName || '').trim().toLowerCase()
         const hasItem = !!line.itemName && knownItemSet.has(itemKey)
         const canonicalItemName = itemNameByLower[itemKey] || line.itemName
         if (hasChar && hasItem) {
-          if (!line.hasDkp && line.cost === 0) missingDkpAmount.push({ itemName: canonicalItemName, characterName: char.name })
+          if (!award.hasDkp && cost === 0) missingDkpAmount.push({ itemName: canonicalItemName, characterName: char.name })
           const { error: err } = await supabase.from('raid_loot').insert({
             raid_id: selectedRaidId,
             event_id,
             item_name: canonicalItemName,
             char_id: char.char_id,
             character_name: char.name,
-            cost: String(line.cost),
+            cost: String(cost),
           })
           if (!err) {
             inserted++
-            insertedItems.push({ i: canonicalItemName, c: char.name, cost: String(line.cost) })
+            insertedItems.push({ i: canonicalItemName, c: char.name, cost: String(cost) })
           }
           continue
         }
@@ -929,7 +933,7 @@ export default function Officer({ isOfficer, profile, userId }) {
         if (!hasItem) itemNotFound.push({ itemName: line.itemName || line.rawLine, characterName: char?.name || characterName || '?' })
       }
     }
-    const totalRows = lineResults.reduce((sum, l) => sum + (l.characterNames.length > 0 ? l.characterNames.length : 1), 0)
+    const totalRows = lineResults.reduce((sum, l) => sum + (l.awards.length > 0 ? l.awards.length : 1), 0)
     const parts = []
     if (playerNotFound.length > 0) {
       parts.push(`Missing character (${playerNotFound.length}): ${playerNotFound.map((r) => `${r.characterName} (${r.itemName})`).join('; ')}. Character must be on DKP list.`)
@@ -1945,7 +1949,7 @@ export default function Officer({ isOfficer, profile, userId }) {
               rows={3}
             />
             <button type="button" className="btn" onClick={handleAddLootFromLog} disabled={mutating || !lootLogPaste.trim()} style={{ marginTop: '0.5rem' }}>
-              Add from log
+              Add loot from log
             </button>
             {lootResult && (
               <div className="officer-result">

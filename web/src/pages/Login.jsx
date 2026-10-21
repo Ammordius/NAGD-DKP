@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Navigate, useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { siteTitle } from '../lib/siteTitle'
 
 function safeNextPath(value) {
   if (!value || typeof value !== 'string') return '/'
@@ -74,7 +75,7 @@ export default function Login({ session }) {
   return (
     <div className="container" style={{ maxWidth: 360, paddingTop: '3rem' }}>
       <div className="card">
-        <h1 style={{ marginTop: 0 }}>Guild DKP</h1>
+        <h1 style={{ marginTop: 0 }}>{siteTitle()}</h1>
         <p style={{ color: '#71717a', marginBottom: '1.5rem' }}>
           {isSignUp ? 'Create an account' : 'Sign in'}
         </p>

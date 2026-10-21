@@ -7,6 +7,7 @@ import { usePersistedState } from '../lib/usePersistedState'
 import { buildAccountAdminRows, buildAccountColumnRows, buildCharacterRows, characterMatchesQuery, filterAccountAdminRows, accountColumnLabel, claimAccountChoices, resolveClaimSubmitAccountId } from '../lib/siteAdminCharacters'
 import { normalizeUiPreferences } from '../lib/uiPreferences'
 import { canRemoveSiteUser, removalBlockReason } from '../lib/siteAdminRemoveUser'
+import { siteTitle } from '../lib/siteTitle'
 
 const SUGGEST_LIMIT = 80
 
@@ -506,7 +507,7 @@ export default function OfficerClaimCooldowns({ isOfficer, isSiteAdmin = false, 
   return (
     <div className="container">
       <p><Link to="/officer/RaidAdmin">← Raid Admin</Link></p>
-      <h1>Site Admin</h1>
+      <h1>Site Admin - {siteTitle()}</h1>
 
       <section className="card" style={{ marginBottom: '1.5rem' }}>
         <h2 style={{ marginTop: 0 }}>Set accounts as active or inactive</h2>

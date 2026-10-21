@@ -5,6 +5,22 @@ import react from '@vitejs/plugin-react'
 import deleteSiteUser from './api/delete-site-user.js'
 
 const rootDir = path.dirname(fileURLToPath(import.meta.url))
+const DEFAULT_SITE_TITLE = 'NAGD DKP - Development'
+
+function escapeHtml(value) {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+}
+
+function resolveSiteTitle(mode) {
+  const webEnv = loadEnv(mode, rootDir, '')
+  const repoEnv = loadEnv(mode, path.resolve(rootDir, '..'), '')
+  const value = (process.env.VITE_SITE_TITLE || webEnv.VITE_SITE_TITLE || repoEnv.VITE_SITE_TITLE || '').trim()
+  return value || DEFAULT_SITE_TITLE
+}
 
 function applyServerEnv(mode) {
   const webEnv = loadEnv(mode, rootDir, '')
@@ -24,9 +40,20 @@ function applyServerEnv(mode) {
 
 export default defineConfig(({ mode }) => {
   applyServerEnv(mode)
+  const title = resolveSiteTitle(mode)
+  if (!(process.env.VITE_SITE_TITLE || '').trim()) process.env.VITE_SITE_TITLE = title
   return {
     plugins: [
       react(),
+      {
+        name: 'site-title-html',
+        transformIndexHtml: {
+          order: 'post',
+          handler(html) {
+            return html.replace(/<title>[\s\S]*?<\/title>/i, `<title>${escapeHtml(title)}</title>`)
+          },
+        },
+      },
       {
         name: 'delete-site-user-api',
         configureServer(server) {

@@ -70,7 +70,7 @@ export default function LootRecipients() {
   const [accounts, setAccounts] = useState({})
   const [accountChars, setAccountChars] = useState([]) // { account_id, char_id, name }
   const [characterDkpSpent, setCharacterDkpSpent] = useState({}) // key (id or name) -> total_spent on that character (from backend table)
-  const { accountBalanceByAccountId } = useDkpData() // single source of truth for Account DKP total (same cache as DKP page)
+  const { accountBalanceByAccountId, accountTotalsByAccountId } = useDkpData() // same cache as the DKP page Balance column
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   useScrollContentReady(!loading)
@@ -272,7 +272,11 @@ export default function LootRecipients() {
       list = list.filter((r) => (r.class_name || '').toLowerCase() === classFilter.toLowerCase())
     }
     list.forEach((r) => {
-      r.accountDkpTotal = r.account_id ? (accountBalanceByAccountId[r.account_id] ?? 0) : 0
+      const accountId = r.account_id != null && r.account_id !== '' ? String(r.account_id).trim() : ''
+      const accountTotals = accountId ? accountTotalsByAccountId[accountId] : null
+      r.accountDkpTotal = accountId ? (accountBalanceByAccountId[accountId] ?? accountTotals?.balance ?? 0) : 0
+      r.accountDkpEarned = accountTotals?.earned ?? null
+      r.accountDkpSpent = accountTotals?.spent ?? null
       const toKey = (v) => (v != null && v !== '') ? String(v).trim() : ''
       const charRow = characters.find((c) => toKey(c.name) === toKey(r.character_name || r.character_key) || toKey(c.char_id) === toKey(r.char_id))
       const spent =
@@ -299,7 +303,7 @@ export default function LootRecipients() {
       return (a.account_display_name || a.character_name || '').localeCompare(b.account_display_name || b.character_name || '')
     })
     return list
-  }, [loot, raids, characters, accounts, accountBalanceByAccountId, characterDkpSpent, classFilter, sortBy, months, getAccountId])
+  }, [loot, raids, characters, accounts, accountBalanceByAccountId, accountTotalsByAccountId, characterDkpSpent, classFilter, sortBy, months, getAccountId])
 
   if (loading && loot.length === 0) return <div className="container">Loading…</div>
   if (error) return <div className="container"><span className="error">{error}</span> <Link to="/">← Home</Link></div>
@@ -309,7 +313,7 @@ export default function LootRecipients() {
       <p><Link to="/">← Home</Link></p>
       <h1>Character History</h1>
       <p style={{ color: '#a1a1aa', marginBottom: '1rem' }}>
-        Characters who received loot {months === 0 ? ' (all time)' : `in the last ${months} month${months !== 1 ? 's' : ''}`}. Loot and DKP spent are for this window. Account DKP total is current.
+        Characters who received loot {months === 0 ? ' (all time)' : `in the last ${months} month${months !== 1 ? 's' : ''}`}. Loot and DKP spent are for this window. DKP balance is the account&apos;s current balance (earned minus spent), the same number as Balance on the DKP page.
       </p>
       <p style={{ color: '#eab308', marginBottom: '1rem', fontSize: '0.9rem' }}>
         Note: This page shows data from at most the last 1,000 raids. Loot lists and window DKP are based on that set; sorting when &quot;All time&quot; uses full backend totals.
@@ -335,7 +339,7 @@ export default function LootRecipients() {
         <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           <span>Sort by:</span>
           <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} style={{ padding: '0.35rem 0.5rem' }}>
-            <option value="accountDkpTotal">Account DKP total (default)</option>
+            <option value="accountDkpTotal">DKP balance (default)</option>
             <option value="dkpSpentToon">DKP spent on character</option>
             <option value="lastLootFirst">Most recent loot first</option>
           </select>
@@ -343,19 +347,42 @@ export default function LootRecipients() {
       </div>
       <div className="card">
         <p style={{ color: '#a1a1aa', fontSize: '0.875rem', marginTop: 0 }}>
-          Showing <strong>{recipients.length}</strong> character{recipients.length !== 1 ? 's' : ''} {classFilter ? `(${classFilter})` : ''}. Sorted by {sortBy === 'accountDkpTotal' ? 'account DKP total' : sortBy === 'lastLootFirst' ? 'most recent loot first' : 'DKP spent on character'} (desc).
+          Showing <strong>{recipients.length}</strong> character{recipients.length !== 1 ? 's' : ''} {classFilter ? `(${classFilter})` : ''}. Sorted by {sortBy === 'accountDkpTotal' ? 'DKP balance' : sortBy === 'lastLootFirst' ? 'most recent loot first' : 'DKP spent on character'} (desc).
         </p>
         <AssignedLootDisclaimer />
-        <div style={{ overflowX: 'auto' }}>
-          <table>
+        <div>
+          <table className="loot-recipients-table">
+            <colgroup>
+              <col className="col-account" />
+              <col className="col-class" />
+              <col className="col-loot" />
+              <col className="col-window" />
+              <col className="col-char" />
+              <col className="col-account-dkp" />
+            </colgroup>
             <thead>
               <tr>
                 <th>Account (Character)</th>
                 <th>Class</th>
-                <th>Loot received ({months === 0 ? 'all time' : `last ${months}m`})</th>
-                <th style={{ whiteSpace: 'nowrap' }}>DKP spent (window)</th>
-                <th style={{ whiteSpace: 'nowrap' }}>Character DKP spent (all time)</th>
-                <th style={{ whiteSpace: 'nowrap' }}>Account DKP total</th>
+                <th>Loot received ({months === 0 ? 'all time' : `last ${months}${months === 1 ? 'month' : 'months'}`})</th>
+                <th className="num">
+                  <span>DKP spent</span>
+                  <br />
+                  (window)
+                </th>
+                <th className="num">
+                  <span>Character DKP</span>
+                  <br />
+                  (all time)
+                </th>
+                <th
+                  className="num"
+                  title="Current balance for the whole account: DKP earned minus DKP spent, including adjustments. Same number as Balance on the DKP page. Every character on the account shares it."
+                >
+                  <span>DKP balance</span>
+                  <br />
+                  (current)
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -388,7 +415,7 @@ export default function LootRecipients() {
                       )}
                     </td>
                     <td style={{ color: '#a1a1aa' }}>{r.class_name || '—'}</td>
-                    <td style={{ maxWidth: '20rem', fontSize: '0.9rem' }}>
+                    <td className="loot-list">
                       {lootCount === 0 ? '—' : showCollapsed ? (
                         <button type="button" onClick={toggleLoot} style={{ background: 'none', border: 'none', color: 'var(--link-color, #3b82f6)', cursor: 'pointer', padding: 0, textDecoration: 'underline', fontSize: 'inherit' }}>
                           {lootCount} items (click to expand)
@@ -414,9 +441,18 @@ export default function LootRecipients() {
                         </>
                       )}
                     </td>
-                    <td style={{ whiteSpace: 'nowrap' }}>{Number(r.dkpSpentOnToon || 0).toFixed(0)}</td>
-                    <td style={{ whiteSpace: 'nowrap' }}>{Number(r.characterDkpSpentTotal ?? 0).toFixed(0)}</td>
-                    <td style={{ whiteSpace: 'nowrap' }}>{Number(r.accountDkpTotal ?? 0).toFixed(0)}</td>
+                    <td className="num">{Number(r.dkpSpentOnToon || 0).toFixed(0)}</td>
+                    <td className="num">{Number(r.characterDkpSpentTotal ?? 0).toFixed(0)}</td>
+                    <td
+                      className="num"
+                      title={
+                        r.accountDkpEarned == null
+                          ? 'Current account balance (earned minus spent), same as Balance on the DKP page'
+                          : `Current account balance ${Number(r.accountDkpTotal ?? 0).toFixed(0)} (earned ${Number(r.accountDkpEarned).toFixed(0)} minus spent ${Number(r.accountDkpSpent ?? 0).toFixed(0)}). Same as Balance on the DKP page.`
+                      }
+                    >
+                      {Number(r.accountDkpTotal ?? 0).toFixed(0)}
+                    </td>
                   </tr>
                 )
               })}

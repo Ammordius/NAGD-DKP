@@ -30,6 +30,28 @@ nav .role { margin-left: auto; font-size: 0.875rem; color: #71717a; }
 table { width: 100%; border-collapse: collapse; }
 th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #27272a; }
 th { color: #a1a1aa; font-weight: 600; }
+
+/* Character History: keep the DKP columns narrow so the row fits the page */
+.loot-recipients-table { table-layout: fixed; }
+.loot-recipients-table th,
+.loot-recipients-table td { padding: 0.4rem 0.4rem; vertical-align: top; }
+.loot-recipients-table .col-account { width: 11rem; }
+.loot-recipients-table .col-class { width: 8.1rem; }
+.loot-recipients-table .col-loot { width: auto; }
+.loot-recipients-table .col-window { width: 6rem; }
+.loot-recipients-table .col-char { width: 8.15rem; }
+.loot-recipients-table .col-account-dkp { width: 7.25rem; }
+.loot-recipients-table th.num {
+  white-space: normal;
+  line-height: 1.2;
+  font-weight: 600;
+}
+.loot-recipients-table th.num span { white-space: nowrap; }
+.loot-recipients-table td.num {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.loot-recipients-table .loot-list { font-size: 0.85rem; overflow-wrap: break-word; }
 .dkp-sort-btn {
   background: none;
   border: none;
@@ -41,6 +63,7 @@ th { color: #a1a1aa; font-weight: 600; }
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
+  white-space: nowrap;
 }
 .dkp-sort-label { text-decoration: underline; }
 .dkp-sort-triangle {
@@ -112,7 +135,8 @@ label { display: block; margin-bottom: 0.25rem; font-size: 0.875rem; color: #a1a
 .mob-loot-gear-score { display: inline-block; margin-right: 0.5rem; padding: 0.15rem 0.4rem; font-size: 0.7rem; font-weight: 600; background: #3730a3; color: #c4b5fd; border-radius: 4px; }
 
 /* Item History grid: keep cell content from overflowing into adjacent rows */
-.loot-cell a { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.loot-cell { text-align: left; }
+.loot-cell a { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
 
 .attendee-list { max-height: 200px; overflow-y: auto; font-size: 0.9rem; display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: flex-start; }
 .attendee-list a { display: inline-block; padding: 0.2rem 0.5rem; background: #27272a; border-radius: 4px; color: #a78bfa; }
