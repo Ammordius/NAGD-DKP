@@ -70,10 +70,46 @@ function blankSpan(text, index, length) {
   return text.slice(0, index) + ' '.repeat(length) + text.slice(index + length)
 }
 
+/** Every "N dkp" amount, left to right. "5dkp" and "6 dkp" both count, including 0. */
+function findDkpPrices(text) {
+  const prices = []
+  const re = /(\d+)\s*dkp/gi
+  let match
+  while ((match = re.exec(text)) !== null) {
+    const cost = parseInt(match[1], 10)
+    prices.push({
+      cost: Number.isNaN(cost) ? 0 : cost,
+      index: match.index,
+      length: match[0].length,
+    })
+  }
+  return prices
+}
+
+/**
+ * Pair names and prices in the order they are written.
+ * The first name gets the first amount, the second name the second amount, and so on.
+ * An item between a name and its amount does not change that pairing.
+ * When the line has one amount for several names, each name gets that amount.
+ * Further names past the last amount also get that last amount.
+ */
+function assignCharacterPrices(nameHits, prices) {
+  const ordered = [...nameHits].sort((a, b) => a.index - b.index || b.length - a.length)
+  if (!prices.length) {
+    return ordered.map((hit) => ({ characterName: hit.name, cost: 0, hasDkp: false }))
+  }
+  return ordered.map((hit, i) => {
+    const price = prices[Math.min(i, prices.length - 1)]
+    return { characterName: hit.name, cost: price.cost, hasDkp: true }
+  })
+}
+
 /**
  * Parse loot log by matching against known character names and item names.
  * Longest whole item match wins. Character names are matched only after the item
  * text is removed, and only as whole tokens, so "deepmind" does not also add "mind".
+ * Names and DKP amounts are paired in written order: the first name gets the
+ * first amount, the second name gets the second amount, and so on.
  */
 export function parseLootLogByMatch(paste, characterNamesList, itemNamesList) {
   const lines = (paste || '').split(/\r?\n/).map((l) => l.trim()).filter(Boolean)
@@ -96,17 +132,19 @@ export function parseLootLogByMatch(paste, characterNamesList, itemNamesList) {
     let search = itemIndex >= 0
       ? blankSpan(quoted, itemIndex, itemName.length)
       : quoted
-    const characterNames = []
+    const prices = findDkpPrices(search)
+    const nameHits = []
     for (const name of chars) {
       const idx = wholeTokenIndex(search, name)
       if (idx < 0) continue
-      characterNames.push(name)
+      nameHits.push({ name, index: idx, length: name.length })
       search = blankSpan(search, idx, name.length)
     }
-    const dkpMatch = quoted.match(/(\d+)\s*dkp/i)
-    const cost = dkpMatch ? parseInt(dkpMatch[1], 10) : 0
-    const hasDkp = !!dkpMatch
-    results.push({ rawLine: quoted, itemName, characterNames, cost: isNaN(cost) ? 0 : cost, hasDkp })
+    const awards = assignCharacterPrices(nameHits, prices)
+    const characterNames = awards.map((award) => award.characterName)
+    const cost = prices.length ? prices[0].cost : 0
+    const hasDkp = prices.length > 0
+    results.push({ rawLine: quoted, itemName, characterNames, awards, cost, hasDkp })
   }
   return results
 }
