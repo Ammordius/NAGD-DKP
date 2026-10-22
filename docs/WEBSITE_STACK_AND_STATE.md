@@ -6,7 +6,7 @@ Single reference for the **player/officer web UI** in this repo. The deployable 
 
 | Piece | Technology | Notes |
 |--------|------------|--------|
-| Bundler / dev server | **Vite 5** | `npm run dev` → http://localhost:5173 |
+| Bundler / dev server | **Vite 7** | `npm run dev` → http://localhost:5173 |
 | UI | **React 18** | Function components |
 | Routing | **react-router-dom v6** | `BrowserRouter` in `web/src/main.jsx` |
 | Live data | **Supabase JS** (`@supabase/supabase-js`) | Anon key + RLS; client in `web/src/lib/supabase.js` |

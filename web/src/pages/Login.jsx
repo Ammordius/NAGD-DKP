@@ -1,13 +1,8 @@
 import { useState } from 'react'
 import { Navigate, useNavigate, useSearchParams } from 'react-router-dom'
+import { safeNextPath } from '../lib/safeNextPath'
 import { supabase } from '../lib/supabase'
 import { siteTitle } from '../lib/siteTitle'
-
-function safeNextPath(value) {
-  if (!value || typeof value !== 'string') return '/'
-  if (!value.startsWith('/') || value.startsWith('//')) return '/'
-  return value
-}
 
 export default function Login({ session }) {
   const navigate = useNavigate()
