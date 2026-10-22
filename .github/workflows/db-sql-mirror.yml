@@ -1,0 +1,208 @@
+# One-way mirror from a configured source into this repository's database.
+# Daily schedule is gated by SQL_MIRROR_SCHEDULE=enabled.
+# Source is repository variable SQL_MIRROR_SOURCE (owner/name only).
+# Soft-skips if the latest sql-backup-* is stale or already mirrored, then
+# dispatches DB SQL restore with a pinned artifact id.
+# See docs/CI-DB-SQL-RESTORE.md.
+
+name: DB SQL mirror
+
+on:
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Re-dispatch even if this artifact was already mirrored"
+        required: false
+        type: boolean
+        default: false
+  schedule:
+    - cron: '17 10 * * *'
+
+concurrency:
+  group: db-sql-mirror
+  cancel-in-progress: false
+
+jobs:
+  mirror:
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'workflow_dispatch' || vars.SQL_MIRROR_SCHEDULE == 'enabled')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Resolve mirror source
+        id: source
+        env:
+          SQL_MIRROR_SOURCE: ${{ vars.SQL_MIRROR_SOURCE }}
+        run: |
+          set -euo pipefail
+          python scripts/sql_mirror_gate.py --parse-source "$SQL_MIRROR_SOURCE"
+
+      - name: Restore last mirrored artifact id
+        uses: actions/cache/restore@v4
+        with:
+          path: .sql-mirror-state
+          key: sql-mirror-state-v1-${{ steps.source.outputs.cache_key }}-${{ github.run_id }}
+          restore-keys: |
+            sql-mirror-state-v1-${{ steps.source.outputs.cache_key }}-
+
+      - name: Resolve source latest checkpoint
+        id: select
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
+          BACKUP_ARTIFACT_READ_TOKEN_STAGING: ${{ secrets.BACKUP_ARTIFACT_READ_TOKEN_STAGING }}
+          BACKUP_FORK_READ_TOKEN: ${{ secrets.BACKUP_FORK_READ_TOKEN }}
+          BACKUP_FORK_READ_TOKEN_2: ${{ secrets.BACKUP_FORK_READ_TOKEN_2 }}
+          BACKUP_FORK_READ_TOKEN_3: ${{ secrets.BACKUP_FORK_READ_TOKEN_3 }}
+          BACKUP_FORK_READ_TOKEN_4: ${{ secrets.BACKUP_FORK_READ_TOKEN_4 }}
+          CURRENT_REPOSITORY: ${{ github.repository }}
+          SOURCE_REPOSITORY: ${{ steps.source.outputs.source_repository }}
+          SOURCE_REPOSITORY_NAME: ${{ steps.source.outputs.source_repository_name }}
+        run: |
+          set -uo pipefail
+          set +e
+          python scripts/sql_restore_checkpoint.py \
+            --source "$SOURCE_REPOSITORY" \
+            --source-name "$SOURCE_REPOSITORY_NAME" \
+            --current-repository "$CURRENT_REPOSITORY" \
+            --checkpoint "Latest available backup"
+          rc=$?
+          set -e
+          if [ "$rc" -eq 0 ]; then
+            echo "resolve_ok=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "resolve_ok=false" >> "$GITHUB_OUTPUT"
+            echo "artifact_id=" >> "$GITHUB_OUTPUT"
+            echo "snapshot_created_at=" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Gate mirror dispatch
+        id: gate
+        env:
+          FORCE: ${{ github.event_name == 'workflow_dispatch' && inputs.force && 'true' || 'false' }}
+        run: |
+          set -euo pipefail
+          previous=""
+          if [ -f .sql-mirror-state/last-artifact-id ]; then
+            previous="$(tr -d '[:space:]' < .sql-mirror-state/last-artifact-id)"
+          fi
+          python scripts/sql_mirror_gate.py \
+            --resolve-ok "${{ steps.select.outputs.resolve_ok }}" \
+            --artifact-id "${{ steps.select.outputs.artifact_id }}" \
+            --snapshot-created-at "${{ steps.select.outputs.snapshot_created_at }}" \
+            --previous-artifact-id "$previous" \
+            --max-age-hours 36 \
+            --force "$FORCE"
+
+      - name: Require destination name
+        if: steps.gate.outputs.decision == 'proceed'
+        env:
+          DESTINATION_NAME: ${{ vars.SQL_RESTORE_DESTINATION_NAME }}
+        run: |
+          set -euo pipefail
+          if [ -z "${DESTINATION_NAME}" ]; then
+            echo "SQL_RESTORE_DESTINATION_NAME is not set." >&2
+            exit 1
+          fi
+
+      - name: Dispatch DB SQL restore
+        id: dispatch
+        if: steps.gate.outputs.decision == 'proceed'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_ID: ${{ steps.select.outputs.artifact_id }}
+          DESTINATION_NAME: ${{ vars.SQL_RESTORE_DESTINATION_NAME }}
+          SOURCE_REPOSITORY: ${{ steps.source.outputs.source_repository }}
+          SOURCE_REPOSITORY_NAME: ${{ steps.source.outputs.source_repository_name }}
+        run: |
+          set -euo pipefail
+          before="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          echo "dispatch_after=${before}" >> "$GITHUB_OUTPUT"
+          gh workflow run db-restore-sql.yml --ref main \
+            -f operation=Restore \
+            -f source_repository="${SOURCE_REPOSITORY}" \
+            -f source_repository_name="${SOURCE_REPOSITORY_NAME}" \
+            -f checkpoint="Latest available backup" \
+            -f artifact_id="${ARTIFACT_ID}" \
+            -f destination_name="${DESTINATION_NAME}" \
+            -f confirm="RESTORE ${DESTINATION_NAME}"
+          echo "Dispatched DB SQL restore from ${SOURCE_REPOSITORY} artifact ${ARTIFACT_ID}."
+
+      - name: Wait for restore workflow
+        id: wait
+        if: steps.gate.outputs.decision == 'proceed'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DISPATCH_AFTER: ${{ steps.dispatch.outputs.dispatch_after }}
+        run: |
+          set -euo pipefail
+          run_id=""
+          for _ in $(seq 1 30); do
+            run_id="$(gh run list \
+              --workflow=db-restore-sql.yml \
+              --event=workflow_dispatch \
+              --branch=main \
+              --limit=5 \
+              --json databaseId,createdAt,status,conclusion \
+              --jq "[.[] | select(.createdAt >= \"$DISPATCH_AFTER\")] | sort_by(.createdAt) | reverse | .[0].databaseId // empty")"
+            if [ -n "$run_id" ]; then
+              break
+            fi
+            sleep 5
+          done
+          if [ -z "$run_id" ]; then
+            echo "Timed out waiting for the dispatched DB SQL restore run to appear." >&2
+            exit 1
+          fi
+          echo "restore_run_id=${run_id}" >> "$GITHUB_OUTPUT"
+          echo "Watching DB SQL restore run ${run_id}."
+          status="unknown"
+          # Bounded wait: restore plus optional environment queue, about 45 minutes.
+          for _ in $(seq 1 90); do
+            status="$(gh run view "$run_id" --json status,conclusion --jq '"\(.status):\(.conclusion // "")"')"
+            case "$status" in
+              completed:success)
+                echo "Restore run ${run_id} succeeded."
+                exit 0
+                ;;
+              completed:*)
+                echo "Restore run ${run_id} finished with ${status}." >&2
+                gh run view "$run_id" --log-failed || true
+                exit 1
+                ;;
+            esac
+            sleep 30
+          done
+          echo "Timed out waiting for restore run ${run_id} (still ${status})." >&2
+          echo "If the sql-restore environment requires reviewers, remove them before enabling SQL_MIRROR_SCHEDULE." >&2
+          exit 1
+
+      - name: Record mirrored artifact id
+        if: steps.gate.outputs.decision == 'proceed' && success()
+        env:
+          ARTIFACT_ID: ${{ steps.select.outputs.artifact_id }}
+        run: |
+          set -euo pipefail
+          mkdir -p .sql-mirror-state
+          printf '%s\n' "$ARTIFACT_ID" > .sql-mirror-state/last-artifact-id
+
+      - name: Save last mirrored artifact id
+        if: steps.gate.outputs.decision == 'proceed' && success()
+        uses: actions/cache/save@v4
+        with:
+          path: .sql-mirror-state
+          key: sql-mirror-state-v1-${{ steps.source.outputs.cache_key }}-${{ github.run_id }}
+
+      - name: Mirror skipped
+        if: steps.gate.outputs.decision == 'skip'
+        run: |
+          echo "Mirror skipped: ${{ steps.gate.outputs.reason }}"
