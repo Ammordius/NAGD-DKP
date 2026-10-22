@@ -1,12 +1,7 @@
 import { useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
+import { safeNextPath } from '../lib/safeNextPath'
 import { supabase } from '../lib/supabase'
-
-function safeNextPath(value) {
-  if (!value || typeof value !== 'string') return '/'
-  if (!value.startsWith('/') || value.startsWith('//')) return '/'
-  return value
-}
 
 export default function AuthCallback({ session }) {
   const navigate = useNavigate()
