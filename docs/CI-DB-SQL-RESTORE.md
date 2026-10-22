@@ -99,10 +99,42 @@ Create the `sql-restore` environment before the first destructive restore so the
 
 Set `SQL_BACKUP_SCHEDULE` to `enabled` only after a manual backup has succeeded and an officer has authorized the scheduled read of production. This repository does not set that variable by itself.
 
+## One-way mirror schedule (opt-in)
+
+Workflow: [`.github/workflows/db-sql-mirror.yml`](../.github/workflows/db-sql-mirror.yml).
+
+When repository variable `SQL_MIRROR_SCHEDULE` is `enabled`, this repository can run as an independently hosted, approximately one-day-behind mirror of another NAGD SQL backup source. The job runs daily at **10:17 UTC** (after the usual 07:30 UTC source backup) and can also be started by hand from `main`. A manual run does not require the schedule variable. Leave `SQL_MIRROR_SCHEDULE` unset (or set to anything other than `enabled`) to keep the schedule off. This repository does not set these variables by itself.
+
+Set repository variable **`SQL_MIRROR_SOURCE`** to the source repository as `owner/name` (for example `SomeOrg/Some-Fork`). Any NAGD-network fork the configured fork-read tokens can see is valid. There is no special alias for Rimi or the current repository—use that repository’s GitHub `owner/name`.
+
+The variable is required for every mirror run (scheduled or manual). An empty or invalid value fails the job before any restore is dispatched.
+
+The mirror job:
+
+1. Resolves that source’s latest successful `sql-backup-*` artifact with `scripts/sql_restore_checkpoint.py`.
+2. Soft-skips (job succeeds, no restore) when the source is unavailable, older than **36 hours**, or the same artifact id was already mirrored successfully for that source.
+3. Pins that numeric artifact id and dispatches **DB SQL restore** with `operation=Restore`, the configured source, and `confirm=RESTORE <SQL_RESTORE_DESTINATION_NAME>`.
+4. Waits for that restore run. It does not look up “latest” again after dispatch.
+
+It reuses the existing restore secrets and variables (`BACKUP_ARTIFACT_READ_TOKEN_STAGING` and the other fork-read slots for discovery; `SQL_BACKUP_AGE_IDENTITY`, `SQL_BACKUP_AGE_RECIPIENT`, `SUPABASE_DB_URL`, and `SQL_RESTORE_DESTINATION_*` on the restore workflow). No new backup architecture or credentials are required.
+
+This is a replacement snapshot, not bidirectional sync. Guild-data edits made only on this instance are overwritten on the next successful mirror. Destination auth, profiles, claims, and the officer audit log stay in place, so Discord users who signed up only on the source site are not created here. `bid_portfolio_auction_fact` is cleared by restore and is not rebuilt by the mirror.
+
+### Enable checklist
+
+1. Set `SQL_MIRROR_SOURCE` to the source `owner/name`.
+2. Confirm that repository has recent successful `sql-backup-*` artifacts (`SQL_BACKUP_SCHEDULE=enabled` on the source when using its schedule).
+3. Confirm a manual restore from that source into this database still works (dry-run with **Other discovered fork** and the same `owner/name`, then restore).
+4. Confirm the `sql-restore` environment has **no required reviewers**. Scheduled restores wait for approval until that policy is removed; the mirror job will time out and fail if a run stays queued.
+5. Set repository variable `SQL_MIRROR_SCHEDULE` to `enabled`.
+
+Use **Actions → DB SQL mirror → Run workflow** with **force** to re-dispatch the same artifact after a successful mirror. Intentional restores of older checkpoints stay on **DB SQL restore**.
+
 ## Local test
 
 ```bash
 python scripts/test_sql_restore_checkpoint.py
+python scripts/test_sql_mirror_gate.py
 python scripts/test_sql_backup_fetch.py
 python scripts/test_sql_restore.py
 ```

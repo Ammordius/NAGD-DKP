@@ -44,6 +44,9 @@ jobs:
           DKP_PG_TEST: '1'
         run: python3 scripts/test_sql_restore_checkpoint.py
 
+      - name: SQL mirror gate test
+        run: python3 scripts/test_sql_mirror_gate.py
+
       - name: SQL restore test
         env:
           DKP_PG_TEST: '1'
