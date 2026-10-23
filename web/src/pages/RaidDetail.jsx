@@ -1,7 +1,8 @@
 import { useEffect, useState, useMemo, useCallback, Fragment } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import useSWR from 'swr'
+import useSWR, { useSWRConfig } from 'swr'
 import { supabase } from '../lib/supabase'
+import { DKP_DATA_KEY } from '../lib/dkpLeaderboard'
 import { useCharToAccountMap } from '../lib/useCharToAccountMap'
 import { logOfficerAudit } from '../lib/officerAudit'
 import AssignedLootDisclaimer from '../components/AssignedLootDisclaimer'
@@ -30,14 +31,6 @@ async function fetchRaidDetail(raidId) {
     supabase.from('raid_event_attendance').select('event_id, char_id, character_name').eq('raid_id', raidId),
   ])
   if (r.error) throw new Error(r.error.message)
-  const attendanceList = a.data || []
-  if (r.data && attendanceList.length > 0) {
-    const expected = String(attendanceList.length)
-    const current = r.data.attendees
-    if (current == null || current === '' || String(Math.round(Number(current))) !== expected) {
-      supabase.from('raids').update({ attendees: expected }).eq('raid_id', raidId).then(() => {})
-    }
-  }
   return {
     raid: r.data,
     events: e.data || [],
@@ -51,11 +44,17 @@ export default function RaidDetail({ isOfficer, profile }) {
   const { raidId } = useParams()
   const { getAccountId, getAccountDisplayName, accounts, characterAccount, characters } = useCharToAccountMap()
   const useCharacterAdminSelectors = normalizeUiPreferences(profile?.ui_preferences).useCharacterAdminSelectors
+  const { mutate: globalMutate } = useSWRConfig()
   const { data, error: swrError, isLoading, mutate } = useSWR(
     raidId ? `raid-detail-${raidId}` : null,
     () => fetchRaidDetail(raidId),
     { dedupingInterval: RAID_DEDUPING_INTERVAL_MS, revalidateOnFocus: false, revalidateOnReconnect: false }
   )
+
+  function invalidateDkpCache() {
+    try { sessionStorage.removeItem('dkp_leaderboard_v2') } catch (_) {}
+    globalMutate(DKP_DATA_KEY)
+  }
   const raid = data?.raid ?? null
   const events = data?.events ?? []
   const loot = data?.loot ?? []
@@ -205,27 +204,6 @@ export default function RaidDetail({ isOfficer, profile }) {
     [lootSections, itemIdMap, mobLookups]
   )
 
-  // When attendees are derived from current events only, keep raid.attendees and raid_attendance in sync (fixes count after a tic was deleted).
-  useEffect(() => {
-    if (!raid?.raid_id || effectiveAttendance == null) return
-    const expectedCount = effectiveAttendance.length
-    const currentCount = raid.attendees != null && raid.attendees !== '' ? Math.round(Number(raid.attendees)) : null
-    const charIdsInCurrentEvents = new Set(effectiveAttendance.map((a) => String(a.char_id ?? '').trim()).filter(Boolean))
-    const needsSync = currentCount !== expectedCount || attendance.some((a) => !charIdsInCurrentEvents.has(String(a.char_id ?? '').trim()))
-    if (!needsSync) return
-    const cleanup = async () => {
-      for (const row of attendance) {
-        const cid = String(row.char_id ?? '').trim()
-        if (cid && !charIdsInCurrentEvents.has(cid)) {
-          await supabase.from('raid_attendance').delete().eq('raid_id', raid.raid_id).eq('char_id', row.char_id)
-        }
-      }
-      await supabase.from('raids').update({ attendees: String(expectedCount) }).eq('raid_id', raid.raid_id)
-      mutate()
-    }
-    cleanup()
-  }, [raid?.raid_id, raid?.attendees, effectiveAttendance, attendance, mutate])
-
   // Account-aware: an account is "present" for an event if any of its characters is in that event.
   // "Not present for all events" = accounts (or unlinked chars) that missed at least one event.
   const notPresentForAllEvents = useMemo(() => {
@@ -274,6 +252,7 @@ export default function RaidDetail({ isOfficer, profile }) {
         delta: { r: raidId, e: eventId, v: val },
       })
       setEditingEventId(null)
+      invalidateDkpCache()
       mutate()
     }
   }
@@ -330,8 +309,8 @@ export default function RaidDetail({ isOfficer, profile }) {
       const accountId = getAccountId(row.assigned_character_name || row.assigned_char_id || row.character_name || row.char_id)
       if (accountId) {
         await supabase.rpc('refresh_account_dkp_summary_for_raid', { p_raid_id: raidId, p_extra_account_ids: [String(accountId)] })
-        try { sessionStorage.removeItem('dkp_leaderboard_v2') } catch (_) {}
       }
+      invalidateDkpCache()
       mutate()
     }
   }
@@ -353,8 +332,8 @@ export default function RaidDetail({ isOfficer, profile }) {
       })
       if (accountId) {
         await supabase.rpc('refresh_account_dkp_summary_for_raid', { p_raid_id: raidId, p_extra_account_ids: [String(accountId)] })
-        try { sessionStorage.removeItem('dkp_leaderboard_v2') } catch (_) {}
       }
+      invalidateDkpCache()
       mutate()
     }
   }
@@ -411,7 +390,7 @@ export default function RaidDetail({ isOfficer, profile }) {
     })
     setAddToTicResult(char.name)
     setAddToTicCharQuery('')
-    try { sessionStorage.removeItem('dkp_leaderboard_v2') } catch (_) {}
+    invalidateDkpCache()
     await mutate()
     setMutating(false)
   }
@@ -438,7 +417,7 @@ export default function RaidDetail({ isOfficer, profile }) {
       target_id: eventId,
       delta: { r: raidId, e: eventId, c: charName },
     })
-    try { sessionStorage.removeItem('dkp_leaderboard_v2') } catch (_) {}
+    invalidateDkpCache()
     mutate()
     setMutating(false)
   }

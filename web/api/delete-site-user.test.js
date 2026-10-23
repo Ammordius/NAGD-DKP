@@ -106,7 +106,8 @@ describe('removeSiteAuthUser', () => {
       },
     })
     assert.equal(result.status, 403)
-    assert.equal(result.body.error, 'Profile not found')
+    assert.equal(result.body.error, 'Could not remove user')
+    assert.equal(JSON.stringify(result).includes('Profile not found'), false)
     assert.equal(called, false)
   })
 
@@ -197,7 +198,8 @@ describe('removeSiteAuthUser', () => {
       deleteAuthUser: async () => ({ error: { message: 'delete failed', status: 500 } }),
     })
     assert.equal(result.status, 502)
-    assert.equal(result.body.error, 'delete failed')
+    assert.equal(result.body.error, 'Could not delete the login account')
+    assert.equal(JSON.stringify(result).includes('delete failed'), false)
     assert.equal(JSON.stringify(result).includes('service-role-key'), false)
     assert.equal(JSON.stringify(result).includes('site profile was removed'), false)
   })
@@ -212,7 +214,8 @@ describe('removeSiteAuthUser', () => {
       deleteAuthUser: async () => ({ error: { message: 'User not found', status: 404 } }),
     })
     assert.equal(result.status, 502)
-    assert.equal(result.body.error, 'User not found')
+    assert.equal(result.body.error, 'Could not delete the login account')
+    assert.equal(JSON.stringify(result).includes('User not found'), false)
     assert.equal(calls.some((call) => call.href.includes('siteadmin_confirm_auth_deleted')), false)
   })
 

@@ -3,7 +3,7 @@ import { Routes, Route, Navigate, Link, useLocation, useNavigate } from 'react-r
 import { Analytics } from '@vercel/analytics/react'
 import { nextAuthGate } from './lib/authGate'
 import { safeNextPath } from './lib/safeNextPath'
-import { isProductionSite } from './lib/siteTitle'
+import { documentTitleForPath, isProductionSite } from './lib/siteTitle'
 import { supabase } from './lib/supabase'
 import { clearUserPageState } from './lib/pageState'
 import { PageStateUserProvider } from './lib/pageStateUser'
@@ -99,6 +99,7 @@ function consumeLastPath(userId) {
 export default function App() {
   const [session, setSession] = useState(null)
   const [profile, setProfile] = useState(null)
+  const [profileLoadFailed, setProfileLoadFailed] = useState(false)
   const [loading, setLoading] = useState(true)
   const location = useLocation()
   const navigate = useNavigate()
@@ -106,6 +107,10 @@ export default function App() {
   const profileUserIdRef = useRef(null)
   const profileRequestRef = useRef(null)
   const sessionUserIdRef = useRef(null)
+
+  useEffect(() => {
+    document.title = documentTitleForPath(location.pathname)
+  }, [location.pathname])
 
   // Persist current route so reopening the app keeps this user on the same page
   useEffect(() => {
@@ -154,6 +159,7 @@ export default function App() {
         profileRequestRef.current = null
         setSession(null)
         setProfile(null)
+        setProfileLoadFailed(false)
         setLoading(false)
         return
       }
@@ -163,7 +169,10 @@ export default function App() {
       noteUserChange(decision.userId)
       profileRequestRef.current = decision.userId
       setSession(session)
-      if (profileUserIdRef.current !== decision.userId) setLoading(true)
+      if (profileUserIdRef.current !== decision.userId) {
+        setLoading(true)
+        setProfileLoadFailed(false)
+      }
       const userId = decision.userId
       // The auth client awaits this callback while it holds its session lock.
       // A Supabase query here deadlocks that lock when the tab becomes visible.
@@ -192,11 +201,14 @@ export default function App() {
       if (error) throw error
       setProfile(data)
       profileUserIdRef.current = userId
+      setProfileLoadFailed(false)
     } catch {
       failed = true
       // Allow a later auth event to try again. Leaving the request marked
       // in flight would ignore every future SIGNED_IN for this user.
       if (profileRequestRef.current === userId) profileRequestRef.current = null
+      // A failed read is not a player. Keep a profile we already loaded.
+      if (profileUserIdRef.current !== userId) setProfileLoadFailed(true)
     } finally {
       if (failed || profileRequestRef.current === userId || profileUserIdRef.current === userId) setLoading(false)
     }
@@ -207,6 +219,34 @@ export default function App() {
       <SiteChrome>
         <div className="container" style={{ paddingTop: '2rem', textAlign: 'center' }}>
           Loading…
+        </div>
+      </SiteChrome>
+    )
+  }
+
+  if (session && profileLoadFailed) {
+    return (
+      <SiteChrome>
+        <div className="container" style={{ paddingTop: '2rem' }}>
+          <p className="error" role="alert">Could not load your profile.</p>
+          <button
+            type="button"
+            className="btn"
+            onClick={() => {
+              setLoading(true)
+              fetchProfile(session.user.id)
+            }}
+          >
+            Retry
+          </button>
+          <button
+            type="button"
+            className="btn btn-ghost"
+            style={{ marginLeft: '0.5rem' }}
+            onClick={() => supabase.auth.signOut()}
+          >
+            Sign out
+          </button>
         </div>
       </SiteChrome>
     )

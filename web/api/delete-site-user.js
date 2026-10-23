@@ -133,8 +133,8 @@ export async function removeSiteAuthUser({
     url.searchParams.set('select', 'id,role')
     const res = await fetchJson(fetchImpl, url, { headers: { ...userHeaders, Accept: 'application/json' } })
     if (!res.ok) {
-      const message = res.body?.message || 'Could not read profiles'
-      return { error: { status: res.status >= 500 ? 502 : 403, message } }
+      console.error('delete-site-user: could not read profiles', res.body?.message || res.status)
+      return { error: { status: res.status >= 500 ? 502 : 403, message: 'Could not read profiles' } }
     }
     const row = Array.isArray(res.body) ? res.body[0] : null
     return { row: row || null }
@@ -160,8 +160,8 @@ export async function removeSiteAuthUser({
     body: JSON.stringify({ p_profile_id: targetLoaded.row.id }),
   })
   if (!rpcRes.ok) {
-    const message = rpcRes.body?.message || 'Could not remove user'
-    return { status: rpcRes.status >= 500 ? 502 : 403, body: { error: message } }
+    console.error('delete-site-user: could not remove user', rpcRes.body?.message || rpcRes.status)
+    return { status: rpcRes.status >= 500 ? 502 : 403, body: { error: 'Could not remove user' } }
   }
 
   const removeAuth = deleteAuthUser || (async (userId) => {
@@ -175,11 +175,12 @@ export async function removeSiteAuthUser({
   try {
     deleted = await removeAuth(targetLoaded.row.id)
   } catch (err) {
-    return { status: 502, body: { error: err?.message || 'Could not delete the login account' } }
+    console.error('delete-site-user: could not delete the login account', err?.message || err)
+    return { status: 502, body: { error: 'Could not delete the login account' } }
   }
   if (deleted?.error) {
-    const detail = deleted.error.message || 'Could not delete the login account'
-    return { status: 502, body: { error: detail } }
+    console.error('delete-site-user: could not delete the login account', deleted.error.message || deleted.error)
+    return { status: 502, body: { error: 'Could not delete the login account' } }
   }
 
   // Auth deletion already succeeded. A failed audit confirmation leaves the pending row.

@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo, useCallback } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { fetchAllByRange } from '../lib/fetchAllByRange'
 import { usePersistedState } from '../lib/usePersistedState'
 import ClassCoveragePills from '../components/ClassCoveragePills'
 import {
@@ -198,13 +199,10 @@ export default function OfficerRaiderActivity({ isOfficer }) {
       const rankingsData = await rankingsRes.json()
       const rankingsChars = rankingsData.characters || []
 
-      const [{ data: links, error: linkErr }, { data: characters, error: charErr }] =
-        await Promise.all([
-          supabase.from('character_account').select('char_id, account_id'),
-          supabase.from('characters').select('char_id, name, class_name'),
-        ])
-      if (linkErr) throw new Error(linkErr.message)
-      if (charErr) throw new Error(charErr.message)
+      const [links, characters] = await Promise.all([
+        fetchAllByRange('character_account', 'char_id, account_id', ['char_id', 'account_id']),
+        fetchAllByRange('characters', 'char_id, name, class_name', 'char_id'),
+      ])
 
       const built = buildAccountCoverage({
         links: links || [],
