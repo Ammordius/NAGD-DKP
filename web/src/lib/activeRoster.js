@@ -110,11 +110,16 @@ export function charactersForInput(characters, characterAccount, accounts) {
  * Active accounts, their character links, and the characters officers can type
  * into raid and loot entry. Characters with no account link are included.
  * Characters on Site Admin inactive accounts are not downloaded.
+ *
+ * `includeInactive` also returns those inactive accounts and their characters
+ * for the Accounts list. It does not write `accounts.inactive`. Raid and loot
+ * entry leave the flag off.
  */
 export async function fetchActiveRoster(client, {
   accountColumns,
   characterColumns,
   includeUnlinked = true,
+  includeInactive = false,
 } = {}) {
   if (!client?.from) throw new Error('fetchActiveRoster requires a Supabase client')
   const db = client
@@ -144,16 +149,18 @@ export async function fetchActiveRoster(client, {
     ['char_id'],
   )
 
-  let unlinkedCharacters = []
-  if (includeUnlinked) {
-    const inactiveAccounts = await fetchPaged(
+  let inactiveAccounts = []
+  let inactiveLinks = []
+  let inactiveCharacters = []
+  if (includeUnlinked || includeInactive) {
+    inactiveAccounts = await fetchPaged(
       db,
       'accounts',
-      'account_id',
+      includeInactive ? accountColumns : 'account_id',
       (query) => query.eq('inactive', true),
       ['account_id'],
     )
-    const inactiveLinks = await fetchInPaged(
+    inactiveLinks = await fetchInPaged(
       db,
       'character_account',
       'char_id, account_id',
@@ -161,6 +168,23 @@ export async function fetchActiveRoster(client, {
       idList(inactiveAccounts, 'account_id'),
       ['char_id', 'account_id'],
     )
+  }
+  if (includeInactive) {
+    inactiveCharacters = await fetchInPaged(
+      db,
+      'characters',
+      characterColumns,
+      'char_id',
+      idList(inactiveLinks, 'char_id'),
+      ['char_id'],
+    )
+    inactiveAccounts = inactiveAccounts.map((row) => (
+      row?.inactive === true ? row : { ...row, inactive: true }
+    ))
+  }
+
+  let unlinkedCharacters = []
+  if (includeUnlinked) {
     const linkedIds = new Set([
       ...activeLinks.map((row) => (row?.char_id != null ? String(row.char_id) : '')),
       ...inactiveLinks.map((row) => (row?.char_id != null ? String(row.char_id) : '')),
@@ -182,7 +206,7 @@ export async function fetchActiveRoster(client, {
 
   const seen = new Set()
   const characters = []
-  for (const row of [...activeCharacters, ...unlinkedCharacters]) {
+  for (const row of [...activeCharacters, ...inactiveCharacters, ...unlinkedCharacters]) {
     const id = row?.char_id != null ? String(row.char_id) : ''
     if (!id || seen.has(id)) continue
     seen.add(id)
@@ -190,8 +214,8 @@ export async function fetchActiveRoster(client, {
   }
 
   return {
-    accounts: activeAccounts,
-    characterAccount: activeLinks,
+    accounts: includeInactive ? [...activeAccounts, ...inactiveAccounts] : activeAccounts,
+    characterAccount: includeInactive ? [...activeLinks, ...inactiveLinks] : activeLinks,
     characters,
   }
 }

@@ -132,4 +132,45 @@ describe('fetchActiveRoster', () => {
     assert.equal(client.calls.some((call) => call.select === 'char_id'), false)
     assert.equal(client.calls.some((call) => call.filters.some((filter) => filter[2] === true)), false)
   })
+
+  it('returns inactive accounts and their characters only when asked', async () => {
+    const client = pageClient((call) => {
+      if (call.table === 'accounts' && call.filters.some((filter) => filter[2] === false)) {
+        return [{ account_id: 'a1', display_name: 'Ada', inactive: false }]
+      }
+      if (call.table === 'accounts') return [{ account_id: 'a2', display_name: 'Old' }]
+      if (call.table === 'character_account' && call.filters.some((filter) => filter[0] === 'in' && filter[2].includes('a1'))) {
+        return [{ char_id: 'c1', account_id: 'a1' }]
+      }
+      if (call.table === 'character_account') return [{ char_id: 'c2', account_id: 'a2' }]
+      if (call.filters.some((filter) => filter[0] === 'in' && filter[2].includes('c2'))) {
+        return [{ char_id: 'c2', name: 'Oldmain', class_name: 'Warrior', level: 60 }]
+      }
+      return [{ char_id: 'c1', name: 'Ada', class_name: 'Cleric', level: 60 }]
+    })
+
+    const hidden = await fetchActiveRoster(client, {
+      accountColumns: 'account_id, toon_count, display_name, inactive',
+      characterColumns: 'char_id, name, class_name, level',
+      includeUnlinked: false,
+    })
+    assert.deepEqual(hidden.accounts.map((row) => row.account_id), ['a1'])
+    assert.deepEqual(hidden.characterAccount.map((row) => row.char_id), ['c1'])
+    assert.equal(hidden.characters.some((row) => row.char_id === 'c2'), false)
+
+    client.calls.length = 0
+    const shown = await fetchActiveRoster(client, {
+      accountColumns: 'account_id, toon_count, display_name, inactive',
+      characterColumns: 'char_id, name, class_name, level',
+      includeUnlinked: false,
+      includeInactive: true,
+    })
+    assert.deepEqual(shown.accounts.map((row) => [row.account_id, row.inactive]), [
+      ['a1', false],
+      ['a2', true],
+    ])
+    assert.deepEqual(shown.characterAccount.map((row) => row.char_id), ['c1', 'c2'])
+    assert.deepEqual(shown.characters.map((row) => row.name).sort(), ['Ada', 'Oldmain'])
+    assert.equal(client.calls.some((call) => call.table === 'characters' && call.select === 'char_id' && call.filters.length === 0), false)
+  })
 })
