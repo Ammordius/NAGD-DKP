@@ -109,7 +109,7 @@ Fetched with `fetch('/…')` from `public/` or CDN:
 | `localStorage` | `pageState:user:<userId>:/officer/RaidAdmin:ticDraft:<raid id>` | Unsaved tic paste for that officer and raid. A legacy session key is moved here once, then deleted. Never auto-submitted. |
 | `sessionStorage` | `account-detail-cache-${accountId}` | SWR fallback for account page. Not the saved view. |
 | TTL cache | `raids_month_*` | Raids calendar month blobs (`web/src/lib/cache.js`) |
-| TTL cache | `accounts_list_v9` | Accounts list (`web/src/pages/Accounts.jsx`, 10 minutes), sorted by account name ascending. Includes the Claimed by column from `account_claim_labels()` and Last Raid Date from `account_dkp_summary.last_activity_date` plus every linked character's `dkp_summary.last_activity_date` (the newest date on the account, not the one alt name). The page refetches on load and overwrites this key. Character “spent” is loot for that account, same buyer fallback as the account page (assignee, else `character_name`, else `char_id`). It is not the DKP leaderboard total. |
+| TTL cache | `accounts_list_v10` | Accounts list (`web/src/pages/Accounts.jsx`, 10 minutes), sorted by account name ascending. Includes inactive accounts and the Claimed by column from `account_claim_labels()` and Last Raid Date from `account_dkp_summary.last_activity_date` plus every linked character's `dkp_summary.last_activity_date` (the newest date on the account, not the one alt name). The page hides inactive rows unless that viewer’s Show inactive accounts toggle is on (`pageState:user:<userId>:/accounts:showInactive`, default off). The toggle does not write `accounts.inactive`. The page refetches on load and overwrites this key. Character “spent” is loot for that account, same buyer fallback as the account page (assignee, else `character_name`, else `char_id`). It is not the DKP leaderboard total. |
 
 ### Refreshing DKP totals
 
@@ -179,7 +179,7 @@ Scroll uses `pageState:user:<userId>:scroll:/mobs`. Changing search, slot, or cl
 
 ### Other exploration pages
 
-Those fields use the same per-user local slot: DKP search and sort, raids month, accounts search, item history query, sort, and loaded page count, character history window, sort, and expanded rows, account activity page and missing-raid toggles, raid detail expanded tics, raider-activity filters, changelog loaded page count, item elemental class, per-account bidding dates, and Raid Admin expanded tics and raid-picker query. Item History still loads `raid_loot_history` one page at a time; the saved fields are the query and sort, not the result rows. Server rows are still fetched again.
+Those fields use the same per-user local slot: DKP search and sort, raids month, accounts search, the accounts Show inactive accounts toggle, item history query, sort, and loaded page count, character history window, sort, and expanded rows, account activity page and missing-raid toggles, raid detail expanded tics, raider-activity filters, changelog loaded page count, item elemental class, per-account bidding dates, and Raid Admin expanded tics and raid-picker query. Item History still loads `raid_loot_history` one page at a time; the saved fields are the query and sort, not the result rows. Server rows are still fetched again.
 
 ### Intentionally not persisted
 

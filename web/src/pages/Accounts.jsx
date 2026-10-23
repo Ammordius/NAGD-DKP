@@ -25,6 +25,10 @@ function claimedByLabel(names) {
   return names.map((name) => (name || '').trim() || '—').join(', ')
 }
 
+function showInactiveFlag(value) {
+  return value === true
+}
+
 function loadSummaryRows(table, columns, orderColumn) {
   return fetchAllByRange(table, columns, orderColumn).then(
     (data) => ({ data, error: null }),
@@ -37,6 +41,7 @@ export default function Accounts({ profile }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [search, setSearch] = usePersistedState('/accounts:search', '')
+  const [showInactive, setShowInactive] = usePersistedState('/accounts:showInactive', false, showInactiveFlag)
   useScrollContentReady(!loading)
 
   useEffect(() => {
@@ -52,6 +57,7 @@ export default function Accounts({ profile }) {
         accountColumns: 'account_id, toon_count, display_name, inactive',
         characterColumns: 'char_id, name, class_name, level',
         includeUnlinked: false,
+        includeInactive: true,
       }),
       fetchAllRpcByRange(
         supabase,
@@ -130,7 +136,7 @@ export default function Accounts({ profile }) {
         characterAccount: ca.data,
       })
       const spentByAccount = foldAccountCharacterSpentRows(lootRes.data)
-      const accList = (a.data || []).filter((acc) => !acc.inactive).map((acc) => {
+      const accList = (a.data || []).map((acc) => {
         const rawChars = (byAccount[acc.account_id] || []).map((cid) => charMap[cid]).filter(Boolean)
         const spentMap = spentByAccount[String(acc.account_id)] || {}
         const withSpent = rawChars.map((c) => ({
@@ -149,6 +155,7 @@ export default function Accounts({ profile }) {
           last_raid_date: lastRaidByAccount.get(String(acc.account_id)) || null,
           char_ids: byAccount[acc.account_id] || [],
           characters,
+          inactive: acc.inactive === true,
         }
       })
       accList.sort(compareAccountsByName)
@@ -162,15 +169,16 @@ export default function Accounts({ profile }) {
   }, [])
 
   const filteredAccounts = useMemo(() => {
-    if (!search.trim()) return accounts
+    const visible = showInactive ? accounts : accounts.filter((acc) => acc.inactive !== true)
+    if (!search.trim()) return visible
     const q = search.trim().toLowerCase()
-    return accounts.filter((acc) => {
+    return visible.filter((acc) => {
       if ((acc.account_id || '').toLowerCase().includes(q)) return true
       if ((acc.display_name || '').toLowerCase().includes(q)) return true
       if ((acc.claimed_by || '').toLowerCase().includes(q)) return true
       return (acc.characters || []).some((c) => (c.name || c.char_id || '').toLowerCase().includes(q))
     })
-  }, [accounts, search])
+  }, [accounts, search, showInactive])
 
   if (loading) return <div className="container">Loading accounts…</div>
   if (error) return <div className="container"><span className="error">{error}</span></div>
@@ -181,9 +189,9 @@ export default function Accounts({ profile }) {
       <DkpSiteDisclaimer />
       <MyDkpStandings accountId={profile?.account_id} />
       <p style={{ color: '#71717a', marginBottom: '1rem' }}>
-        All accounts with full character lists. Type a name to find who it is.
+        All accounts with full character lists. Type a name to find who it is. Inactive accounts stay hidden until you show them on this page. That choice is only this list. Open an account to claim it.
       </p>
-      <div style={{ marginBottom: '1rem' }}>
+      <div style={{ marginBottom: '1rem', display: 'flex', flexWrap: 'wrap', gap: '0.75rem', alignItems: 'center' }}>
         <input
           type="search"
           placeholder="Search by account, display name, claimed by, or character name…"
@@ -201,8 +209,16 @@ export default function Accounts({ profile }) {
           }}
           aria-label="Search accounts and characters"
         />
+        <button
+          type="button"
+          className="btn btn-ghost"
+          aria-pressed={showInactive}
+          onClick={() => setShowInactive((on) => !on)}
+        >
+          {showInactive ? 'Hide inactive accounts' : 'Show inactive accounts'}
+        </button>
         {search.trim() && (
-          <span style={{ marginLeft: '0.5rem', color: '#71717a', fontSize: '0.875rem' }}>
+          <span style={{ color: '#71717a', fontSize: '0.875rem' }}>
             {filteredAccounts.length} account{filteredAccounts.length !== 1 ? 's' : ''}
           </span>
         )}

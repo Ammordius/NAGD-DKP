@@ -61,13 +61,14 @@ function StatusBadge({ status }) {
 
 function TrendCell({ delta }) {
   const { text, direction } = formatTrendDelta(delta)
+  const style = { whiteSpace: 'nowrap' }
   if (direction === 'up') {
-    return <span style={{ color: '#22c55e' }}>↑ {text}</span>
+    return <span style={{ ...style, color: '#22c55e' }}>↑ {text}</span>
   }
   if (direction === 'down') {
-    return <span style={{ color: '#f87171' }}>↓ {text}</span>
+    return <span style={{ ...style, color: '#f87171' }}>↓ {text}</span>
   }
-  return <span style={{ color: '#71717a' }}>{text}</span>
+  return <span style={{ ...style, color: '#71717a' }}>{text}</span>
 }
 
 function SummaryCard({ label, value, hint }) {
@@ -540,7 +541,7 @@ export default function OfficerRaiderActivity({ isOfficer }) {
                     <td>{formatRaPercent(r.ra30)}</td>
                     <td>{formatRaPercent(r.ra60)}</td>
                     <td>{formatRaPercent(r.ra90)}</td>
-                    <td>
+                    <td style={{ whiteSpace: 'nowrap' }}>
                       <TrendCell delta={r.trendDelta} />
                     </td>
                     <td style={{ whiteSpace: 'nowrap' }}>
