@@ -35,7 +35,6 @@ export default function DKP({ isOfficer, profile }) {
 
   const usingCache = Boolean(accountLeaderboard?.length)
   const loading = isLoading
-  const error = hookError ?? mutationError ?? ''
 
   const handleRefreshTotals = useCallback(async () => {
     setRefreshing(true)
@@ -90,13 +89,13 @@ export default function DKP({ isOfficer, profile }) {
   }
 
   if (loading && !showList.length) return <div className="container">Loading DKP…</div>
-  if (error && !showList.length) return <div className="container"><span className="error">{error}</span></div>
+  if (hookError && !showList.length) return <div className="container"><span className="error">{hookError}</span></div>
 
   return (
     <div className="container">
       <h1>DKP Leaderboard</h1>
-      <MyDkpStandingsView {...myDkp} />
       <DkpSiteDisclaimer />
+      <MyDkpStandingsView {...myDkp} />
       <p style={{ color: '#71717a' }}>
         One row per account (one human). Earned, spent, and balance are the account totals. Adjustments are included.
         {usingCache && summaryUpdatedAt && (
@@ -130,11 +129,12 @@ export default function DKP({ isOfficer, profile }) {
           </span>
         )}
         {isOfficer && (
-          <button type="button" onClick={handleRefreshTotals} disabled={refreshing} style={{ marginLeft: 'auto' }}>
+          <button type="button" className="btn" onClick={handleRefreshTotals} disabled={refreshing} style={{ marginLeft: 'auto' }}>
             {refreshing ? 'Refreshing…' : 'Refresh DKP totals'}
           </button>
         )}
       </div>
+      {mutationError && <p className="error" style={{ marginBottom: '1rem' }}>{mutationError}</p>}
       {accountLeaderboard.length === 0 && (
         <p style={{ color: '#f59e0b', marginBottom: '1rem' }}>
           No DKP data. Make sure you’re logged in and the app is using the same Supabase project where you imported the CSVs (check Vercel env: VITE_SUPABASE_URL).

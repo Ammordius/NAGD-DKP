@@ -12,6 +12,7 @@ export default function Login({ session }) {
   const [password, setPassword] = useState('')
   const [displayName, setDisplayName] = useState('')
   const [error, setError] = useState(searchParams.get('error') || '')
+  const [notice, setNotice] = useState('')
   const [loading, setLoading] = useState(false)
   const [isSignUp, setIsSignUp] = useState(false)
 
@@ -22,6 +23,7 @@ export default function Login({ session }) {
   async function handleSubmit(e) {
     e.preventDefault()
     setError('')
+    setNotice('')
     setLoading(true)
     try {
       if (isSignUp) {
@@ -36,7 +38,7 @@ export default function Login({ session }) {
           options: { data: { display_name: name } },
         })
         if (err) throw err
-        setError('Check your email to confirm sign up, then sign in.')
+        setNotice('Check your email to confirm sign up, then sign in.')
       } else {
         const { error: err } = await supabase.auth.signInWithPassword({ email, password })
         if (err) throw err
@@ -51,6 +53,7 @@ export default function Login({ session }) {
 
   async function handleDiscord() {
     setError('')
+    setNotice('')
     setLoading(true)
     try {
       const { error: err } = await supabase.auth.signInWithOAuth({
@@ -74,7 +77,8 @@ export default function Login({ session }) {
         <p style={{ color: '#71717a', marginBottom: '1.5rem' }}>
           {isSignUp ? 'Create an account' : 'Sign in'}
         </p>
-        {error && <div className="error" style={{ marginBottom: '1rem' }}>{error}</div>}
+        {notice && <div className="notice" role="status" style={{ marginBottom: '1rem' }}>{notice}</div>}
+        {error && <div className="error" role="alert" style={{ marginBottom: '1rem' }}>{error}</div>}
         <button
           type="button"
           className="btn btn-discord"
@@ -130,7 +134,7 @@ export default function Login({ session }) {
             type="button"
             className="btn btn-ghost"
             style={{ marginTop: '1rem', width: '100%' }}
-            onClick={() => { setIsSignUp((v) => !v); setError(''); }}
+            onClick={() => { setIsSignUp((v) => !v); setError(''); setNotice(''); }}
           >
             {isSignUp ? 'Already have an account? Sign in' : 'Need an account? Sign up'}
           </button>

@@ -350,7 +350,7 @@ export default function LootRecipients() {
           Showing <strong>{recipients.length}</strong> character{recipients.length !== 1 ? 's' : ''} {classFilter ? `(${classFilter})` : ''}. Sorted by {sortBy === 'accountDkpTotal' ? 'DKP balance' : sortBy === 'lastLootFirst' ? 'most recent loot first' : 'DKP spent on character'} (desc).
         </p>
         <AssignedLootDisclaimer />
-        <div>
+        <div style={{ overflowX: 'auto' }}>
           <table className="loot-recipients-table">
             <colgroup>
               <col className="col-account" />

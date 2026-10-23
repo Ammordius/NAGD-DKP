@@ -3,6 +3,18 @@
  * "CharacterName (accounts.display_name)". Unlinked characters show the name only.
  * Duplicate labels append char_id.
  */
+import { isoDay } from './accountEarned.js'
+
+function raidDay(value) {
+  if (value == null || value === '') return ''
+  return isoDay(value) || ''
+}
+
+function latestRaidDay(map, key, day) {
+  if (!key || !day) return
+  const prev = map.get(key)
+  if (!prev || day > prev) map.set(key, day)
+}
 
 export function accountColumnLabel(account) {
   if (!account) return ''
@@ -302,4 +314,155 @@ export function buildAccountColumnRows(accountIds, accountsById) {
   }
   rows.sort((a, b) => a.label.localeCompare(b.label))
   return rows
+}
+
+/** Accounts already listed under Active accounts or Inactive accounts. */
+export function classifiedAccountIdSet(activeAccounts, accounts) {
+  const ids = new Set()
+  for (const row of activeAccounts || []) {
+    const id = row?.account_id != null ? String(row.account_id).trim() : ''
+    if (id) ids.add(id)
+  }
+  for (const account of accounts || []) {
+    if (account?.inactive !== true) continue
+    const id = account?.account_id != null ? String(account.account_id).trim() : ''
+    if (id) ids.add(id)
+  }
+  return ids
+}
+
+/** Drop picker rows whose account is already active or inactive. Unlinked characters stay. */
+export function omitClassifiedPickerRows(rows, classifiedIds) {
+  const ids = classifiedIds || new Set()
+  return (rows || []).filter((row) => {
+    if (row?.account_id == null || String(row.account_id).trim() === '') return true
+    return !ids.has(String(row.account_id))
+  })
+}
+
+/** Latest raid day keyed by dkp_summary.character_key (char id, or name when there is no id). */
+export function lastRaidDateByCharacterKey(dkpSummary) {
+  const map = new Map()
+  for (const row of dkpSummary || []) {
+    const key = row?.character_key != null ? String(row.character_key).trim() : ''
+    latestRaidDay(map, key, raidDay(row?.last_activity_date))
+  }
+  return map
+}
+
+/** Latest raid day keyed by account_id from account_dkp_summary. */
+export function lastRaidDateByAccountId(accountSummary) {
+  const map = new Map()
+  for (const row of accountSummary || []) {
+    const id = row?.account_id != null ? String(row.account_id).trim() : ''
+    latestRaidDay(map, id, raidDay(row?.last_activity_date))
+  }
+  return map
+}
+
+function characterAccountIndex(characters, characterAccount) {
+  const charIdToAccount = new Map()
+  for (const row of characterAccount || []) {
+    const charId = row?.char_id != null ? String(row.char_id).trim() : ''
+    const accountId = row?.account_id != null ? String(row.account_id).trim() : ''
+    if (charId && accountId) charIdToAccount.set(charId, accountId)
+  }
+  const nameToAccount = new Map()
+  const ambiguousNames = new Set()
+  for (const character of characters || []) {
+    const charId = character?.char_id != null ? String(character.char_id).trim() : ''
+    const name = (character?.name || '').trim()
+    const accountId = charIdToAccount.get(charId)
+    if (!name || !accountId || ambiguousNames.has(name)) continue
+    const existing = nameToAccount.get(name)
+    if (existing && existing !== accountId) {
+      nameToAccount.delete(name)
+      ambiguousNames.add(name)
+      continue
+    }
+    nameToAccount.set(name, accountId)
+  }
+  return { charIdToAccount, nameToAccount }
+}
+
+/**
+ * Newest last_activity_date for an account.
+ * Account summary plus every linked character. A name is used only when one account has it,
+ * so an alt recorded under the main still counts and a shared alt name does not cross accounts.
+ */
+export function accountRaidDates({ accountSummary, dkpSummary, characters, characterAccount } = {}) {
+  const dates = lastRaidDateByAccountId(accountSummary)
+  const { charIdToAccount, nameToAccount } = characterAccountIndex(characters, characterAccount)
+  for (const row of dkpSummary || []) {
+    const key = row?.character_key != null ? String(row.character_key).trim() : ''
+    const name = (row?.character_name || '').trim()
+    const accountId = (key && charIdToAccount.get(key))
+      || (key && nameToAccount.get(key))
+      || (name && nameToAccount.get(name))
+      || ''
+    if (accountId) latestRaidDay(dates, accountId, raidDay(row?.last_activity_date))
+  }
+  return dates
+}
+
+export function characterLastRaidDate(row, byKey) {
+  if (!row || !byKey) return ''
+  const id = row.char_id != null ? String(row.char_id).trim() : ''
+  if (id && byKey.get(id)) return byKey.get(id)
+  const name = (row.name || row.characterName || '').trim()
+  if (name && byKey.get(name)) return byKey.get(name)
+  return ''
+}
+
+/**
+ * Linked rows use the account date (every character on that account, including the main).
+ * An unlinked character uses its own character key.
+ */
+export function withPickerLastRaidDates(rows, dkpSummary, accountSummary, { characters, characterAccount } = {}) {
+  const byKey = lastRaidDateByCharacterKey(dkpSummary)
+  const byAccount = accountRaidDates({ accountSummary, dkpSummary, characters, characterAccount })
+  return (rows || []).map((row) => {
+    const unlinked = row?.account_id == null || String(row.account_id).trim() === ''
+    const lastRaidDate = unlinked
+      ? characterLastRaidDate(row, byKey)
+      : (byAccount.get(String(row.account_id)) || '')
+    return { ...row, lastRaidDate }
+  })
+}
+
+export function withAccountLastRaidDates(rows, accountSummary, { dkpSummary, characters, characterAccount } = {}) {
+  const byAccount = accountRaidDates({ accountSummary, dkpSummary, characters, characterAccount })
+  return (rows || []).map((row) => ({
+    ...row,
+    lastRaidDate: row?.account_id != null ? (byAccount.get(String(row.account_id)) || '') : '',
+  }))
+}
+
+function compareAdminLabel(a, b) {
+  return (a?.label || '').localeCompare(b?.label || '', undefined, { sensitivity: 'base' })
+}
+
+/** Sort by character/account label or last raid. A missing raid date sorts as the oldest. */
+export function sortSiteAdminRows(rows, sort) {
+  const key = sort?.key === 'lastRaid' ? 'lastRaid' : 'name'
+  const dir = sort?.dir === 'desc' ? -1 : 1
+  return [...(rows || [])].sort((a, b) => {
+    if (key === 'lastRaid') {
+      const ad = a?.lastRaidDate || ''
+      const bd = b?.lastRaidDate || ''
+      if (ad !== bd) {
+        if (!ad) return dir === 1 ? -1 : 1
+        if (!bd) return dir === 1 ? 1 : -1
+        return ad.localeCompare(bd) * dir
+      }
+      return compareAdminLabel(a, b)
+    }
+    return compareAdminLabel(a, b) * dir
+  })
+}
+
+export function normalizeSiteAdminSort(value) {
+  const key = value && value.key === 'lastRaid' ? 'lastRaid' : 'name'
+  const dir = value && value.dir === 'desc' ? 'desc' : 'asc'
+  return { key, dir }
 }

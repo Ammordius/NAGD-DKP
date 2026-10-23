@@ -2,6 +2,9 @@ import { useEffect, useState, useRef } from 'react'
 import { Routes, Route, Navigate, Link, useLocation, useNavigate } from 'react-router-dom'
 import { Analytics } from '@vercel/analytics/react'
 import { nextAuthGate } from './lib/authGate'
+import { consumeLastPath, persistLastPath } from './lib/lastPath'
+import { safeNextPath } from './lib/safeNextPath'
+import { documentTitleForPath, isProductionSite } from './lib/siteTitle'
 import { supabase } from './lib/supabase'
 import { clearUserPageState } from './lib/pageState'
 import { PageStateUserProvider } from './lib/pageStateUser'
@@ -41,33 +44,39 @@ function RedirectPreserve({ to }) {
   return <Navigate to={`${to}${search}${hash}`} replace />
 }
 
-function persistLastPath(userId, path) {
-  try {
-    if (userId) localStorage.setItem(`dkp-last-path:${userId}`, path)
-  } catch {
-    // ignore quota or private mode
-  }
+function RequireOfficer({ isOfficer, children }) {
+  if (!isOfficer) return <Navigate to="/" replace />
+  return children
 }
 
-function consumeLastPath(userId) {
-  try {
-    const scopedKey = `dkp-last-path:${userId}`
-    let saved = localStorage.getItem(scopedKey)
-    if (!saved) {
-      saved = sessionStorage.getItem('dkp-last-path') || localStorage.getItem('dkp-last-path')
-      if (saved) localStorage.setItem(scopedKey, saved)
-    }
-    sessionStorage.removeItem('dkp-last-path')
-    localStorage.removeItem('dkp-last-path')
-    return saved
-  } catch {
-    return null
-  }
+function NotFound() {
+  return (
+    <div className="container">
+      <h1>Page not found</h1>
+      <p style={{ color: '#a1a1aa' }}>That address is not part of this site.</p>
+      <p><Link to="/">Go to Home</Link></p>
+    </div>
+  )
+}
+
+function SiteChrome({ children }) {
+  return (
+    <div className="app-shell">
+      {!isProductionSite() && (
+        <div className="dev-site-banner" role="status">THIS IS A DEVELOPMENT / MIRROR SITE</div>
+      )}
+      <div className="app-shell-main">{children}</div>
+      <footer className="site-footer">
+        NAGD is an EverQuest guild on the TAKP emulator server. This site was created by Ammordius, with contributions from Rimidal.
+      </footer>
+    </div>
+  )
 }
 
 export default function App() {
   const [session, setSession] = useState(null)
   const [profile, setProfile] = useState(null)
+  const [profileLoadFailed, setProfileLoadFailed] = useState(false)
   const [loading, setLoading] = useState(true)
   const location = useLocation()
   const navigate = useNavigate()
@@ -76,12 +85,16 @@ export default function App() {
   const profileRequestRef = useRef(null)
   const sessionUserIdRef = useRef(null)
 
+  useEffect(() => {
+    document.title = documentTitleForPath(location.pathname)
+  }, [location.pathname])
+
   // Persist current route so reopening the app keeps this user on the same page
   useEffect(() => {
     const path = location.pathname + location.search
     const userId = session?.user?.id
     if (path && userId && location.pathname !== '/login' && location.pathname !== '/auth/callback') {
-      persistLastPath(userId, path)
+      persistLastPath(userId, path, localStorage)
     }
   }, [location.pathname, location.search, session])
 
@@ -91,8 +104,8 @@ export default function App() {
     if (location.pathname !== '/') return
     if (hasRestoredRef.current) return
     hasRestoredRef.current = true
-    const saved = consumeLastPath(session.user.id)
-    if (saved && saved.startsWith('/') && saved !== '/' && !saved.startsWith('/login') && !saved.startsWith('/auth/callback')) {
+    const saved = safeNextPath(consumeLastPath(session.user.id, localStorage, sessionStorage))
+    if (saved !== '/' && !saved.startsWith('/login') && !saved.startsWith('/auth/callback')) {
       navigate(saved, { replace: true })
     }
   }, [loading, session, location.pathname, navigate])
@@ -123,6 +136,7 @@ export default function App() {
         profileRequestRef.current = null
         setSession(null)
         setProfile(null)
+        setProfileLoadFailed(false)
         setLoading(false)
         return
       }
@@ -132,7 +146,10 @@ export default function App() {
       noteUserChange(decision.userId)
       profileRequestRef.current = decision.userId
       setSession(session)
-      if (profileUserIdRef.current !== decision.userId) setLoading(true)
+      if (profileUserIdRef.current !== decision.userId) {
+        setLoading(true)
+        setProfileLoadFailed(false)
+      }
       const userId = decision.userId
       // The auth client awaits this callback while it holds its session lock.
       // A Supabase query here deadlocks that lock when the tab becomes visible.
@@ -161,11 +178,14 @@ export default function App() {
       if (error) throw error
       setProfile(data)
       profileUserIdRef.current = userId
+      setProfileLoadFailed(false)
     } catch {
       failed = true
       // Allow a later auth event to try again. Leaving the request marked
       // in flight would ignore every future SIGNED_IN for this user.
       if (profileRequestRef.current === userId) profileRequestRef.current = null
+      // A failed read is not a player. Keep a profile we already loaded.
+      if (profileUserIdRef.current !== userId) setProfileLoadFailed(true)
     } finally {
       if (failed || profileRequestRef.current === userId || profileUserIdRef.current === userId) setLoading(false)
     }
@@ -173,9 +193,39 @@ export default function App() {
 
   if (loading) {
     return (
-      <div className="container" style={{ paddingTop: '2rem', textAlign: 'center' }}>
-        Loading…
-      </div>
+      <SiteChrome>
+        <div className="container" style={{ paddingTop: '2rem', textAlign: 'center' }}>
+          Loading…
+        </div>
+      </SiteChrome>
+    )
+  }
+
+  if (session && profileLoadFailed) {
+    return (
+      <SiteChrome>
+        <div className="container" style={{ paddingTop: '2rem' }}>
+          <p className="error" role="alert">Could not load your profile.</p>
+          <button
+            type="button"
+            className="btn"
+            onClick={() => {
+              setLoading(true)
+              fetchProfile(session.user.id)
+            }}
+          >
+            Retry
+          </button>
+          <button
+            type="button"
+            className="btn btn-ghost"
+            style={{ marginLeft: '0.5rem' }}
+            onClick={() => supabase.auth.signOut()}
+          >
+            Sign out
+          </button>
+        </div>
+      </SiteChrome>
     )
   }
 
@@ -186,7 +236,7 @@ export default function App() {
   return (
     <PageStateUserProvider userId={session?.user?.id || null}>
     <RouteScrollProvider>
-    <>
+    <SiteChrome>
       <nav>
         <Link to="/">Home</Link>
         <Link to="/dkp">DKP</Link>
@@ -224,12 +274,12 @@ export default function App() {
         <Route path="/raids/:raidId" element={<RequireAuth session={session}><RaidDetail isOfficer={isOfficer} profile={profile} /></RequireAuth>} />
         <Route path="/dkp" element={<RequireAuth session={session}><DKP isOfficer={isOfficer} profile={profile} /></RequireAuth>} />
         <Route path="/officer" element={<RedirectPreserve to="/officer/RaidAdmin" />} />
-        <Route path="/officer/RaidAdmin" element={<RequireAuth session={session}><Officer isOfficer={isOfficer} profile={profile} userId={session?.user?.id || null} /></RequireAuth>} />
-        <Route path="/officer/dkp-changelog" element={<RequireAuth session={session}><DkpChangelog isOfficer={isOfficer} /></RequireAuth>} />
-        <Route path="/officer/who-parser" element={<RequireAuth session={session}><OfficerWhoParser isOfficer={isOfficer} /></RequireAuth>} />
+        <Route path="/officer/RaidAdmin" element={<RequireAuth session={session}><RequireOfficer isOfficer={isOfficer}><Officer isOfficer={isOfficer} profile={profile} userId={session?.user?.id || null} /></RequireOfficer></RequireAuth>} />
+        <Route path="/officer/dkp-changelog" element={<RequireAuth session={session}><RequireOfficer isOfficer={isOfficer}><DkpChangelog isOfficer={isOfficer} /></RequireOfficer></RequireAuth>} />
+        <Route path="/officer/who-parser" element={<RequireAuth session={session}><RequireOfficer isOfficer={isOfficer}><OfficerWhoParser isOfficer={isOfficer} /></RequireOfficer></RequireAuth>} />
         <Route path="/officer/claim-cooldowns" element={<RedirectPreserve to="/officer/SiteAdmin" />} />
-        <Route path="/officer/SiteAdmin" element={<RequireAuth session={session}><OfficerClaimCooldowns isOfficer={isOfficer} isSiteAdmin={isSiteAdmin} profile={profile} /></RequireAuth>} />
-        <Route path="/officer/raider-activity" element={<RequireAuth session={session}><OfficerRaiderActivity isOfficer={isOfficer} /></RequireAuth>} />
+        <Route path="/officer/SiteAdmin" element={<RequireAuth session={session}><RequireOfficer isOfficer={isOfficer}><OfficerClaimCooldowns isOfficer={isOfficer} isSiteAdmin={isSiteAdmin} profile={profile} /></RequireOfficer></RequireAuth>} />
+        <Route path="/officer/raider-activity" element={<RequireAuth session={session}><RequireOfficer isOfficer={isOfficer}><OfficerRaiderActivity isOfficer={isOfficer} /></RequireOfficer></RequireAuth>} />
         <Route path="/tools/discord-schedule" element={<RequireAuth session={session}><DiscordSchedule /></RequireAuth>} />
         <Route path="/loot" element={<RequireAuth session={session}><LootSearch /></RequireAuth>} />
         <Route path="/loot-recipients" element={<RequireAuth session={session}><LootRecipients /></RequireAuth>} />
@@ -239,10 +289,10 @@ export default function App() {
         <Route path="/profile" element={<RequireAuth session={session}><Profile profile={profile} onProfileUpdate={() => session?.user?.id && fetchProfile(session.user.id)} /></RequireAuth>} />
         <Route path="/items/:itemNameEncoded" element={<RequireAuth session={session}><ItemPage isOfficer={isOfficer} /></RequireAuth>} />
         <Route path="/characters/:charKey" element={<RequireAuth session={session}><CharacterPage /></RequireAuth>} />
-        <Route path="*" element={<Navigate to="/" replace />} />
+        <Route path="*" element={<NotFound />} />
       </Routes>
       <Analytics />
-    </>
+    </SiteChrome>
     </RouteScrollProvider>
     </PageStateUserProvider>
   )

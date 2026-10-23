@@ -1,17 +1,21 @@
 import { useEffect, useState, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { ACCOUNTS_LIST_CACHE_KEY, createCache } from '../lib/cache'
-import { fetchAll } from '../lib/accountData'
+import { fetchActiveRoster } from '../lib/activeRoster'
+import { fetchAllByRange } from '../lib/fetchAllByRange'
+import { accountRaidDates } from '../lib/siteAdminCharacters'
 import { supabase } from '../lib/supabase'
 import { usePersistedState } from '../lib/usePersistedState'
 import { compareAccountsByName } from '../lib/accountSort'
 import { useScrollContentReady } from '../lib/routeScrollView'
+import DkpSiteDisclaimer from '../components/DkpSiteDisclaimer'
 import MyDkpStandings from '../components/MyDkpStandings'
 import {
   formatCharacterClassSpentLine,
-  buildSpentByAccountFromLoot,
   spentForCharacterFromLootMap,
 } from '../lib/formatAccountCharacter'
+import { fetchAllRpcByRange } from '../lib/fetchAllRpcByRange'
+import { foldAccountCharacterSpentRows } from '../lib/accountCharacterSpent'
 
 const CACHE_TTL = 10 * 60 * 1000
 const MAGELO_BASE = 'https://www.takproject.net/magelo/character.php?char='
@@ -19,6 +23,13 @@ const MAGELO_BASE = 'https://www.takproject.net/magelo/character.php?char='
 function claimedByLabel(names) {
   if (!names?.length) return 'unclaimed'
   return names.map((name) => (name || '').trim() || '—').join(', ')
+}
+
+function loadSummaryRows(table, columns, orderColumn) {
+  return fetchAllByRange(table, columns, orderColumn).then(
+    (data) => ({ data, error: null }),
+    (error) => ({ data: null, error }),
+  )
 }
 
 export default function Accounts({ profile }) {
@@ -37,17 +48,32 @@ export default function Accounts({ profile }) {
     }
 
     Promise.all([
-      fetchAll('accounts', 'account_id, toon_count, display_name, inactive'),
-      fetchAll('character_account', 'account_id, char_id'),
-      fetchAll('characters', 'char_id, name, class_name, level'),
-      fetchAll(
-        'raid_loot_with_assignment',
-        'id, char_id, character_name, cost, assigned_char_id, assigned_character_name',
-        undefined,
-        { order: { column: 'id', ascending: true } },
+      fetchActiveRoster(supabase, {
+        accountColumns: 'account_id, toon_count, display_name, inactive',
+        characterColumns: 'char_id, name, class_name, level',
+        includeUnlinked: false,
+      }),
+      fetchAllRpcByRange(
+        supabase,
+        'account_character_spent',
+        {},
+        {
+          orderColumns: [
+            { column: 'account_id', ascending: true },
+            { column: 'character_key', ascending: true },
+          ],
+        },
+      ).then(
+        (data) => ({ data, error: null }),
+        (error) => ({ data: null, error }),
       ),
       supabase.rpc('account_claim_labels'),
-    ]).then(([a, ca, ch, lootRes, claimsRes]) => {
+      loadSummaryRows('account_dkp_summary', 'account_id, last_activity_date', 'account_id'),
+      loadSummaryRows('dkp_summary', 'character_key, character_name, last_activity_date', 'character_key'),
+    ]).then(([roster, lootRes, claimsRes, accountSummaryRes, dkpSummaryRes]) => {
+      const a = { data: roster.accounts, error: null }
+      const ca = { data: roster.characterAccount, error: null }
+      const ch = { data: roster.characters, error: null }
       if (a.error) {
         setError(a.error.message)
         setLoading(false)
@@ -73,6 +99,16 @@ export default function Accounts({ profile }) {
         setLoading(false)
         return
       }
+      if (accountSummaryRes.error) {
+        setError(accountSummaryRes.error.message)
+        setLoading(false)
+        return
+      }
+      if (dkpSummaryRes.error) {
+        setError(dkpSummaryRes.error.message)
+        setLoading(false)
+        return
+      }
       const claimsByAccount = {}
       ;(claimsRes.data || []).forEach((row) => {
         const id = row.account_id != null ? String(row.account_id) : ''
@@ -83,17 +119,17 @@ export default function Accounts({ profile }) {
       const charMap = {}
       ;(ch.data || []).forEach((c) => { charMap[c.char_id] = c })
       const byAccount = {}
-      const buyerCharIdToAccountId = {}
       ;(ca.data || []).forEach((row) => {
         if (!byAccount[row.account_id]) byAccount[row.account_id] = []
         byAccount[row.account_id].push(row.char_id)
-        const accountId = String(row.account_id)
-        const cid = row.char_id != null ? String(row.char_id).trim() : ''
-        if (cid) buyerCharIdToAccountId[cid] = accountId
-        const cname = (charMap[row.char_id]?.name || '').trim()
-        if (cname) buyerCharIdToAccountId[cname] = accountId
       })
-      const spentByAccount = buildSpentByAccountFromLoot(lootRes.data || [], buyerCharIdToAccountId)
+      const lastRaidByAccount = accountRaidDates({
+        accountSummary: accountSummaryRes.data,
+        dkpSummary: dkpSummaryRes.data,
+        characters: ch.data,
+        characterAccount: ca.data,
+      })
+      const spentByAccount = foldAccountCharacterSpentRows(lootRes.data)
       const accList = (a.data || []).filter((acc) => !acc.inactive).map((acc) => {
         const rawChars = (byAccount[acc.account_id] || []).map((cid) => charMap[cid]).filter(Boolean)
         const spentMap = spentByAccount[String(acc.account_id)] || {}
@@ -110,6 +146,7 @@ export default function Accounts({ profile }) {
           toon_count: acc.toon_count,
           display_name: acc.display_name,
           claimed_by: claimedByLabel(claimsByAccount[String(acc.account_id)]),
+          last_raid_date: lastRaidByAccount.get(String(acc.account_id)) || null,
           char_ids: byAccount[acc.account_id] || [],
           characters,
         }
@@ -118,6 +155,9 @@ export default function Accounts({ profile }) {
       setAccounts(accList)
       setLoading(false)
       cache.set(accList)
+    }).catch((err) => {
+      setError(err.message || 'Failed to load accounts')
+      setLoading(false)
     })
   }, [])
 
@@ -138,6 +178,7 @@ export default function Accounts({ profile }) {
   return (
     <div className="container">
       <h1>Accounts &amp; characters</h1>
+      <DkpSiteDisclaimer />
       <MyDkpStandings accountId={profile?.account_id} />
       <p style={{ color: '#71717a', marginBottom: '1rem' }}>
         All accounts with full character lists. Type a name to find who it is.
@@ -171,12 +212,14 @@ export default function Accounts({ profile }) {
           <colgroup>
             <col style={{ width: '10rem' }} />
             <col style={{ width: '14rem' }} />
+            <col style={{ width: '9rem' }} />
             <col />
           </colgroup>
           <thead>
             <tr>
               <th>Claimed by</th>
               <th>Account</th>
+              <th>Last Raid Date</th>
               <th>Characters</th>
             </tr>
           </thead>
@@ -196,6 +239,9 @@ export default function Accounts({ profile }) {
                       <code>{acc.account_id}</code>
                       {` · ${chars.length} toons`}
                     </span>
+                  </td>
+                  <td style={{ verticalAlign: 'top', whiteSpace: 'nowrap', color: acc.last_raid_date ? undefined : '#71717a' }}>
+                    {acc.last_raid_date || '—'}
                   </td>
                   <td style={{ verticalAlign: 'top', minWidth: 0 }}>
                     {chars.length === 0 ? (

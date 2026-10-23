@@ -1,8 +1,9 @@
 import { useEffect, useState, useMemo, useCallback, Fragment } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import useSWR from 'swr'
+import useSWR, { useSWRConfig } from 'swr'
 import { supabase } from '../lib/supabase'
-import { fetchAllByRange } from '../lib/fetchAllByRange'
+import { DKP_DATA_KEY } from '../lib/dkpLeaderboard'
+import { fetchRaidDetail } from '../lib/fetchRaidDetail'
 import { useCharToAccountMap } from '../lib/useCharToAccountMap'
 import { logOfficerAudit } from '../lib/officerAudit'
 import AssignedLootDisclaimer from '../components/AssignedLootDisclaimer'
@@ -17,46 +18,27 @@ import { displayTicEventName, eventFieldsForTimeSave, eventTimeToStore, fieldsFo
 import TicDateTimeFields from '../components/TicDateTimeFields'
 import { normalizeUiPreferences } from '../lib/uiPreferences'
 import { buildAccountAdminRows, filterAccountAdminRows } from '../lib/siteAdminCharacters'
+import { accountsForInput, charactersForInput, linksForInput } from '../lib/activeRoster'
 import AttendeeCountCell from '../components/AttendeeCountCell'
 
 /** SWR deduplication: 60s so revisiting the same raid or multiple components don't each hit the DB. */
 const RAID_DEDUPING_INTERVAL_MS = 60_000
 
-async function fetchRaidDetail(raidId) {
-  const [r, e, l, a, ea] = await Promise.all([
-    supabase.from('raids').select('raid_id, raid_name, date_iso, date, attendees').eq('raid_id', raidId).maybeSingle(),
-    supabase.from('raid_events').select('id, raid_id, event_id, event_order, event_name, dkp_value, attendee_count, event_time').eq('raid_id', raidId).order('event_order'),
-    supabase.from('raid_loot_with_assignment').select('id, raid_id, event_id, item_name, char_id, character_name, cost, assigned_char_id, assigned_character_name').eq('raid_id', raidId),
-    supabase.from('raid_attendance').select('id, raid_id, char_id, character_name').eq('raid_id', raidId).order('character_name'),
-    supabase.from('raid_event_attendance').select('event_id, char_id, character_name').eq('raid_id', raidId),
-  ])
-  if (r.error) throw new Error(r.error.message)
-  const attendanceList = a.data || []
-  if (r.data && attendanceList.length > 0) {
-    const expected = String(attendanceList.length)
-    const current = r.data.attendees
-    if (current == null || current === '' || String(Math.round(Number(current))) !== expected) {
-      supabase.from('raids').update({ attendees: expected }).eq('raid_id', raidId).then(() => {})
-    }
-  }
-  return {
-    raid: r.data,
-    events: e.data || [],
-    loot: l.data || [],
-    attendance: a.data || [],
-    eventAttendance: ea.data || [],
-  }
-}
-
 export default function RaidDetail({ isOfficer, profile }) {
   const { raidId } = useParams()
-  const { getAccountId, getAccountDisplayName, accounts, characterAccount } = useCharToAccountMap()
+  const { getAccountId, getAccountDisplayName, accounts, characterAccount, characters } = useCharToAccountMap()
   const useCharacterAdminSelectors = normalizeUiPreferences(profile?.ui_preferences).useCharacterAdminSelectors
+  const { mutate: globalMutate } = useSWRConfig()
   const { data, error: swrError, isLoading, mutate } = useSWR(
     raidId ? `raid-detail-${raidId}` : null,
-    () => fetchRaidDetail(raidId),
+    () => fetchRaidDetail(supabase, raidId),
     { dedupingInterval: RAID_DEDUPING_INTERVAL_MS, revalidateOnFocus: false, revalidateOnReconnect: false }
   )
+
+  function invalidateDkpCache() {
+    try { sessionStorage.removeItem('dkp_leaderboard_v2') } catch (_) {}
+    globalMutate(DKP_DATA_KEY)
+  }
   const raid = data?.raid ?? null
   const events = data?.events ?? []
   const loot = data?.loot ?? []
@@ -78,7 +60,6 @@ export default function RaidDetail({ isOfficer, profile }) {
   const [editingLootId, setEditingLootId] = useState(null)
   const [editingLootCost, setEditingLootCost] = useState('')
   const [mutating, setMutating] = useState(false)
-  const [characters, setCharacters] = useState([])
   const [addToTicEventId, setAddToTicEventId] = useState('')
   const [addToTicCharQuery, setAddToTicCharQuery] = useState('')
   const [addToTicCharId, setAddToTicCharId] = useState('')
@@ -93,21 +74,6 @@ export default function RaidDetail({ isOfficer, profile }) {
   }, [])
 
   useEffect(() => {
-    if (!isOfficer || !raidId) return
-    let cancelled = false
-    ;(async () => {
-      try {
-        const rows = await fetchAllByRange('characters', 'char_id, name')
-        if (!cancelled) setCharacters(rows || [])
-      } catch (e) {
-        console.error('RaidDetail: failed to load characters list', e)
-        if (!cancelled) setCharacters([])
-      }
-    })()
-    return () => { cancelled = true }
-  }, [isOfficer, raidId])
-
-  useEffect(() => {
     if (events.length > 0 && (!addToTicEventId || !events.some((e) => e.event_id === addToTicEventId))) {
       setAddToTicEventId(events[0].event_id)
     } else if (events.length === 0 && addToTicEventId) {
@@ -117,23 +83,32 @@ export default function RaidDetail({ isOfficer, profile }) {
 
   const itemIdMap = useMemo(() => buildItemNameToIdMap(mobLoot), [mobLoot])
 
+  const inputCharacters = useMemo(
+    () => charactersForInput(characters, characterAccount, accounts),
+    [characters, characterAccount, accounts],
+  )
+  const inputAccounts = useMemo(() => accountsForInput(accounts), [accounts])
+  const inputLinks = useMemo(
+    () => linksForInput(characterAccount, accounts),
+    [characterAccount, accounts],
+  )
   const nameToChar = useMemo(() => {
     const m = {}
-    characters.forEach((c) => {
+    inputCharacters.forEach((c) => {
       const n = (c.name || '').trim()
       if (n) m[n.toLowerCase()] = { char_id: c.char_id, name: n }
     })
     return m
-  }, [characters])
-  const characterNamesList = useMemo(() => characters.map((c) => (c.name || '').trim()).filter(Boolean).sort((a, b) => a.localeCompare(b)), [characters])
+  }, [inputCharacters])
+  const characterNamesList = useMemo(() => inputCharacters.map((c) => (c.name || '').trim()).filter(Boolean).sort((a, b) => a.localeCompare(b)), [inputCharacters])
   const filteredCharacterNames = useMemo(() => {
     const q = addToTicCharQuery.toLowerCase().trim()
     if (!q) return characterNamesList.slice(0, 200)
     return characterNamesList.filter((n) => n.toLowerCase().includes(q)).slice(0, 200)
   }, [characterNamesList, addToTicCharQuery])
   const accountAdminRows = useMemo(
-    () => buildAccountAdminRows(characters, characterAccount, accounts),
-    [characters, characterAccount, accounts]
+    () => buildAccountAdminRows(inputCharacters, inputLinks, inputAccounts),
+    [inputCharacters, inputLinks, inputAccounts]
   )
   const filteredAccountRows = useMemo(
     () => filterAccountAdminRows(accountAdminRows, addToTicCharQuery).slice(0, 200),
@@ -222,27 +197,6 @@ export default function RaidDetail({ isOfficer, profile }) {
     [lootSections, itemIdMap, mobLookups]
   )
 
-  // When attendees are derived from current events only, keep raid.attendees and raid_attendance in sync (fixes count after a tic was deleted).
-  useEffect(() => {
-    if (!raid?.raid_id || effectiveAttendance == null) return
-    const expectedCount = effectiveAttendance.length
-    const currentCount = raid.attendees != null && raid.attendees !== '' ? Math.round(Number(raid.attendees)) : null
-    const charIdsInCurrentEvents = new Set(effectiveAttendance.map((a) => String(a.char_id ?? '').trim()).filter(Boolean))
-    const needsSync = currentCount !== expectedCount || attendance.some((a) => !charIdsInCurrentEvents.has(String(a.char_id ?? '').trim()))
-    if (!needsSync) return
-    const cleanup = async () => {
-      for (const row of attendance) {
-        const cid = String(row.char_id ?? '').trim()
-        if (cid && !charIdsInCurrentEvents.has(cid)) {
-          await supabase.from('raid_attendance').delete().eq('raid_id', raid.raid_id).eq('char_id', row.char_id)
-        }
-      }
-      await supabase.from('raids').update({ attendees: String(expectedCount) }).eq('raid_id', raid.raid_id)
-      mutate()
-    }
-    cleanup()
-  }, [raid?.raid_id, raid?.attendees, effectiveAttendance, attendance, mutate])
-
   // Account-aware: an account is "present" for an event if any of its characters is in that event.
   // "Not present for all events" = accounts (or unlinked chars) that missed at least one event.
   const notPresentForAllEvents = useMemo(() => {
@@ -291,6 +245,7 @@ export default function RaidDetail({ isOfficer, profile }) {
         delta: { r: raidId, e: eventId, v: val },
       })
       setEditingEventId(null)
+      invalidateDkpCache()
       mutate()
     }
   }
@@ -347,8 +302,8 @@ export default function RaidDetail({ isOfficer, profile }) {
       const accountId = getAccountId(row.assigned_character_name || row.assigned_char_id || row.character_name || row.char_id)
       if (accountId) {
         await supabase.rpc('refresh_account_dkp_summary_for_raid', { p_raid_id: raidId, p_extra_account_ids: [String(accountId)] })
-        try { sessionStorage.removeItem('dkp_leaderboard_v2') } catch (_) {}
       }
+      invalidateDkpCache()
       mutate()
     }
   }
@@ -370,8 +325,8 @@ export default function RaidDetail({ isOfficer, profile }) {
       })
       if (accountId) {
         await supabase.rpc('refresh_account_dkp_summary_for_raid', { p_raid_id: raidId, p_extra_account_ids: [String(accountId)] })
-        try { sessionStorage.removeItem('dkp_leaderboard_v2') } catch (_) {}
       }
+      invalidateDkpCache()
       mutate()
     }
   }
@@ -380,7 +335,7 @@ export default function RaidDetail({ isOfficer, profile }) {
     if (!raidId || !addToTicEventId) return
     const name = addToTicCharQuery.trim()
     const picked = addToTicCharId
-      ? characters.find((row) => String(row.char_id) === String(addToTicCharId) && (row.name || '').trim())
+      ? inputCharacters.find((row) => String(row.char_id) === String(addToTicCharId) && (row.name || '').trim())
       : null
     const char = picked
       ? { char_id: picked.char_id, name: picked.name.trim() }
@@ -428,7 +383,7 @@ export default function RaidDetail({ isOfficer, profile }) {
     })
     setAddToTicResult(char.name)
     setAddToTicCharQuery('')
-    try { sessionStorage.removeItem('dkp_leaderboard_v2') } catch (_) {}
+    invalidateDkpCache()
     await mutate()
     setMutating(false)
   }
@@ -455,7 +410,7 @@ export default function RaidDetail({ isOfficer, profile }) {
       target_id: eventId,
       delta: { r: raidId, e: eventId, c: charName },
     })
-    try { sessionStorage.removeItem('dkp_leaderboard_v2') } catch (_) {}
+    invalidateDkpCache()
     mutate()
     setMutating(false)
   }
@@ -653,7 +608,7 @@ export default function RaidDetail({ isOfficer, profile }) {
                           role="option"
                           onMouseDown={(e) => {
                             e.preventDefault()
-                            const matches = characters.filter((row) => (row.name || '').trim().toLowerCase() === n.toLowerCase())
+                            const matches = inputCharacters.filter((row) => (row.name || '').trim().toLowerCase() === n.toLowerCase())
                             setAddToTicCharQuery(n)
                             setAddToTicCharId(matches.length === 1 ? String(matches[0].char_id) : '')
                             setTimeout(() => setShowCharDropdown(false), 0)

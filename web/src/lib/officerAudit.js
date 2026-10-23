@@ -8,28 +8,13 @@
  */
 export async function logOfficerAudit(supabase, { action, target_type, target_id = null, delta = null }) {
   try {
-    const { data: { user } } = await supabase.auth.getUser()
-    const actor_id = user?.id ?? null
-    const actor_email = (user?.email ?? '').trim() || null
-    let actor_display_name = null
-    if (actor_id) {
-      const { data: profile } = await supabase.from('profiles').select('account_id').eq('id', actor_id).single()
-      if (profile?.account_id) {
-        const { data: account } = await supabase.from('accounts').select('display_name').eq('account_id', profile.account_id).single()
-        const name = (account?.display_name ?? '').trim()
-        if (name) actor_display_name = name
-      }
-    }
-    const row = {
-      action,
-      target_type,
-      target_id: target_id ?? null,
-      delta: delta && Object.keys(delta).length > 0 ? delta : null,
-      actor_id,
-      actor_email,
-      actor_display_name,
-    }
-    await supabase.from('officer_audit_log').insert(row)
+    const { error } = await supabase.rpc('log_officer_audit', {
+      p_action: action,
+      p_target_type: target_type,
+      p_target_id: target_id ?? null,
+      p_delta: delta && Object.keys(delta).length > 0 ? delta : null,
+    })
+    if (error) console.warn('Officer audit log failed:', error.message)
   } catch (err) {
     console.warn('Officer audit log failed:', err)
   }

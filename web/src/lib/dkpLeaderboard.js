@@ -13,12 +13,15 @@ export const DKP_DATA_KEY = 'dkp-payload'
 const PAGE_SIZE = 1000
 const DEDUPING_INTERVAL_MS = 60 * 1000
 
-async function fetchAll(supabaseClient, table, select) {
+async function fetchAll(supabaseClient, table, select, orderColumn) {
+  const columns = (Array.isArray(orderColumn) ? orderColumn : [orderColumn]).filter(Boolean)
   const all = []
   let from = 0
   while (true) {
     const to = from + PAGE_SIZE - 1
-    const { data, error } = await supabaseClient.from(table).select(select).range(from, to)
+    let query = supabaseClient.from(table).select(select)
+    for (const column of columns) query = query.order(column, { ascending: true })
+    const { data, error } = await query.range(from, to)
     if (error) throw new Error(error.message || `Failed to fetch ${table}`)
     const rows = data ?? []
     all.push(...rows)
@@ -30,23 +33,17 @@ async function fetchAll(supabaseClient, table, select) {
 
 /** Fetch same payload as former /api/get-dkp using authenticated Supabase client (required after requiring sign-in). */
 export async function fetchDkpPayloadFromSupabase() {
-  const [summary, accountSummaryRes, adjRes, activeRaiders, activeAccountsRes, periodRes, charAccount, accounts, characters] = await Promise.all([
-    fetchAll(supabase, 'dkp_summary', 'character_key, character_name, earned, spent, earned_30d, earned_60d, last_activity_date, updated_at'),
-    supabase.from('account_dkp_summary').select('account_id, display_name, earned, spent, earned_30d, earned_60d, last_activity_date, updated_at'),
-    supabase.from('dkp_adjustments').select('character_name, account_id, earned_delta, spent_delta').limit(1000),
-    fetchAll(supabase, 'active_raiders', 'character_key'),
-    supabase.from('active_accounts').select('account_id'),
-    supabase.from('dkp_period_totals').select('period, total_dkp'),
-    fetchAll(supabase, 'character_account', 'char_id, account_id'),
-    fetchAll(supabase, 'accounts', 'account_id, toon_names, display_name, inactive'),
-    fetchAll(supabase, 'characters', 'char_id, name, class_name'),
+  const [summary, accountSummary, adjustments, activeRaiders, activeAccounts, periodTotals, charAccount, accounts, characters] = await Promise.all([
+    fetchAll(supabase, 'dkp_summary', 'character_key, character_name, earned, spent, earned_30d, earned_60d, last_activity_date, updated_at', 'character_key'),
+    fetchAll(supabase, 'account_dkp_summary', 'account_id, display_name, earned, spent, earned_30d, earned_60d, last_activity_date, updated_at', 'account_id'),
+    fetchAll(supabase, 'dkp_adjustments', 'character_name, account_id, earned_delta, spent_delta', 'character_name'),
+    fetchAll(supabase, 'active_raiders', 'character_key', 'character_key'),
+    fetchAll(supabase, 'active_accounts', 'account_id', 'account_id'),
+    fetchAll(supabase, 'dkp_period_totals', 'period, total_dkp', 'period'),
+    fetchAll(supabase, 'character_account', 'char_id, account_id', ['char_id', 'account_id']),
+    fetchAll(supabase, 'accounts', 'account_id, toon_names, display_name, inactive', 'account_id'),
+    fetchAll(supabase, 'characters', 'char_id, name, class_name', 'char_id'),
   ])
-  if (adjRes.error) throw new Error(adjRes.error.message || 'Failed to fetch dkp_adjustments')
-  if (periodRes.error) throw new Error(periodRes.error.message || 'Failed to fetch dkp_period_totals')
-  const accountSummary = accountSummaryRes?.error ? [] : (accountSummaryRes?.data ?? [])
-  const activeAccounts = activeAccountsRes?.error ? [] : (activeAccountsRes?.data ?? [])
-  const adjustments = adjRes.data ?? []
-  const periodTotals = periodRes.data ?? []
   return {
     dkp_summary: summary,
     account_dkp_summary: accountSummary,

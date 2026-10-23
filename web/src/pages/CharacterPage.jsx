@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { fetchAllByRange } from '../lib/fetchAllByRange'
+import { useCharToAccountMap } from '../lib/useCharToAccountMap'
 import AssignedLootDisclaimer from '../components/AssignedLootDisclaimer'
 import ItemLink from '../components/ItemLink'
 import { getDkpMobLoot } from '../lib/staticData'
@@ -26,6 +26,7 @@ function buildItemIdMap(mobLoot) {
 export default function CharacterPage() {
   const { charKey } = useParams()
   const charIdOrName = useMemo(() => (charKey ? decodeURIComponent(charKey) : ''), [charKey])
+  const { getAccountId, characters, loading: mapLoading } = useCharToAccountMap()
   const [accountId, setAccountId] = useState(null)
   const [charId, setCharId] = useState(null)
   const [displayName, setDisplayName] = useState(charIdOrName)
@@ -45,46 +46,29 @@ export default function CharacterPage() {
       setLoading(false)
       return
     }
-    setLoading(true)
+    if (mapLoading) return
     setError('')
-    ;(async () => {
-      try {
-        const [caRows, chRows] = await Promise.all([
-          fetchAllByRange('character_account', 'char_id, account_id'),
-          fetchAllByRange('characters', 'char_id, name'),
-        ])
-        const charToAcc = {}
-        ;(caRows || []).forEach((r) => {
-          if (r.char_id != null && r.account_id != null) {
-            charToAcc[String(r.char_id).trim()] = r.account_id
-          }
-        })
-        const key = String(charIdOrName).trim()
-        let accId = charToAcc[key] ?? null
-        let name = key
-        let resolvedCharId = null
-        if (!accId) {
-          const byName = (chRows || []).find((c) => (c.name || '').trim().toLowerCase() === key.toLowerCase())
-          if (byName) {
-            accId = charToAcc[String(byName.char_id).trim()] ?? null
-            name = (byName.name || '').trim() || name
-            resolvedCharId = String(byName.char_id).trim()
-          }
-        } else {
-          const ch = (chRows || []).find((c) => String(c.char_id).trim() === key)
-          if (ch?.name) name = (ch.name || '').trim()
-          resolvedCharId = key
-        }
-        setAccountId(accId)
-        setCharId(resolvedCharId)
-        setDisplayName(name || charIdOrName)
-      } catch (err) {
-        setError(err?.message || 'Failed to load')
-      } finally {
-        setLoading(false)
+    const key = String(charIdOrName).trim()
+    let accId = getAccountId(key)
+    let name = key
+    let resolvedCharId = null
+    const byId = (characters || []).find((c) => String(c.char_id).trim() === key)
+    if (byId) {
+      name = (byId.name || '').trim() || name
+      resolvedCharId = key
+    } else {
+      const byName = (characters || []).find((c) => (c.name || '').trim().toLowerCase() === key.toLowerCase())
+      if (byName) {
+        resolvedCharId = String(byName.char_id).trim()
+        name = (byName.name || '').trim() || name
+        accId = getAccountId(resolvedCharId) || accId
       }
-    })()
-  }, [charIdOrName])
+    }
+    setAccountId(accId)
+    setCharId(resolvedCharId)
+    setDisplayName(name || charIdOrName)
+    setLoading(false)
+  }, [charIdOrName, mapLoading, characters, getAccountId])
 
   // Loot assigned to this character (from Magelo assignment)
   useEffect(() => {

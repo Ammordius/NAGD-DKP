@@ -17,7 +17,7 @@ async function fetchAllAccounts() {
   for (;;) {
     const { data, error } = await supabase
       .from('accounts')
-      .select('account_id, display_name, toon_names')
+      .select('account_id, display_name, toon_names, inactive')
       .order('account_id')
       .range(offset, offset + ACCOUNTS_PAGE - 1)
     if (error) throw error
@@ -31,8 +31,8 @@ async function fetchAllAccounts() {
 
 async function fetchCharToAccountMap() {
   const [caRows, chRows, accRows] = await Promise.all([
-    fetchAllByRange('character_account', 'char_id, account_id'),
-    fetchAllByRange('characters', 'char_id, name'),
+    fetchAllByRange('character_account', 'char_id, account_id', ['char_id', 'account_id']),
+    fetchAllByRange('characters', 'char_id, name', 'char_id'),
     fetchAllAccounts(),
   ])
   const map = {}

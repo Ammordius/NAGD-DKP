@@ -23,6 +23,11 @@ import { useScrollContentReady } from '../lib/routeScrollView'
 import { fetchLootForAccountChars } from '../lib/accountData'
 import { aggregateLootSpent, sumCharacterSpent } from '../lib/characterSpent'
 import { distinctTicsByRaid, raidTicAttendance } from '../lib/raidTicIdentity'
+import {
+  accountDetailSessionKey,
+  accountDetailSwrKey,
+  needsMissingRaidUniverse,
+} from '../lib/accountDetailMissingScope'
 
 const MAGELO_BASE = 'https://www.takproject.net/magelo/character.php?char='
 
@@ -86,26 +91,27 @@ async function fetchByChunkedIn(table, select, column, values) {
 
 /** SWR deduplication: 60s so revisiting the same account shows cached data without full reload. */
 const ACCOUNT_DEDUPING_INTERVAL_MS = 60_000
-const ACCOUNT_CACHE_KEY = 'account-detail-cache'
 
-function getAccountDetailFromSession(accountId) {
-  if (!accountId) return undefined
+function getAccountDetailFromSession(accountId, includeMissing = false) {
+  const key = accountDetailSessionKey(accountId, includeMissing)
+  if (!key) return undefined
   try {
-    const raw = sessionStorage.getItem(`${ACCOUNT_CACHE_KEY}-${accountId}`)
+    const raw = sessionStorage.getItem(key)
     return raw ? JSON.parse(raw) : undefined
   } catch {
     return undefined
   }
 }
 
-function setAccountDetailInSession(accountId, data) {
-  if (!accountId || !data) return
+function setAccountDetailInSession(accountId, data, includeMissing = false) {
+  const key = accountDetailSessionKey(accountId, includeMissing)
+  if (!key || !data) return
   try {
-    sessionStorage.setItem(`${ACCOUNT_CACHE_KEY}-${accountId}`, JSON.stringify(data))
+    sessionStorage.setItem(key, JSON.stringify(data))
   } catch (_) { /* ignore */ }
 }
 
-async function fetchAccountDetail(accountId) {
+async function fetchAccountDetail(accountId, includeMissing = false) {
   const accRes = await supabase.from('accounts').select('account_id, toon_names, display_name, toon_count').eq('account_id', accountId).single()
   if (accRes.error || !accRes.data) throw new Error(accRes.error?.message || 'Account not found')
   const caRes = await supabase.from('character_account').select('char_id').eq('account_id', accountId)
@@ -179,7 +185,9 @@ async function fetchAccountDetail(accountId) {
     fetchByChunkedIn('raids', 'raid_id, raid_name, date_iso', 'raid_id', raidList),
     fetchByChunkedIn('raid_dkp_totals', 'raid_id, total_dkp', 'raid_id', raidList),
     fetchByChunkedIn('raid_events', 'id, raid_id, event_id, event_order, event_name, dkp_value', 'raid_id', raidList),
-    fetchAll('raid_events', 'id, raid_id, event_id, event_order, event_name, dkp_value', (q) => q.gt('dkp_value', 0)),
+    includeMissing
+      ? fetchAll('raid_events', 'id, raid_id, event_id, event_order, event_name, dkp_value', (q) => q.gt('dkp_value', 0), { order: { column: 'id', ascending: true } })
+      : Promise.resolve({ data: [], error: null }),
   ])
   if (rRes?.error) throw new Error(rRes.error?.message || 'Failed to load raids')
   if (totalsRes?.error) throw new Error(totalsRes.error?.message || 'Failed to load raid totals')
@@ -298,17 +306,29 @@ export default function AccountDetail({ isOfficer, profile, session, onProfileUp
   )
   const { getAccountDisplayName } = useCharToAccountMap()
   const { mutate: globalMutate } = useSWRConfig()
-  const cacheKey = accountId ? `account-detail-${accountId}` : null
-  const fallbackData = cacheKey ? getAccountDetailFromSession(accountId) : undefined
+  const [onlyMissingRaids, setOnlyMissingRaids] = usePersistedState(
+    accountId ? `/accounts/detail:${accountId}:onlyMissingRaids` : '/accounts/detail:none:onlyMissingRaids',
+    false
+  )
+  const [showMissingDetails, setShowMissingDetails] = usePersistedState(
+    accountId ? `/accounts/detail:${accountId}:showMissingDetails` : '/accounts/detail:none:showMissingDetails',
+    false
+  )
+  // Either control needs the positive-DKP raid universe (missing absences / tic details).
+  const includeMissing = needsMissingRaidUniverse(showMissingDetails, onlyMissingRaids)
+  const cacheKey = accountDetailSwrKey(accountId, includeMissing)
+  const fallbackData = cacheKey ? getAccountDetailFromSession(accountId, includeMissing) : undefined
   const { data: swrData, error: swrError, isLoading, mutate } = useSWR(
     cacheKey,
-    () => fetchAccountDetail(accountId),
+    () => fetchAccountDetail(accountId, includeMissing),
     {
       fallbackData,
       dedupingInterval: ACCOUNT_DEDUPING_INTERVAL_MS,
       revalidateOnFocus: false,
       revalidateOnReconnect: false,
-      onSuccess: (data) => { if (accountId && data) setAccountDetailInSession(accountId, data) },
+      onSuccess: (data) => {
+        if (accountId && data) setAccountDetailInSession(accountId, data, includeMissing)
+      },
     }
   )
   const account = swrData?.account ?? null
@@ -322,14 +342,6 @@ export default function AccountDetail({ isOfficer, profile, session, onProfileUp
   const [activityPage, setActivityPage] = usePersistedState(
     accountId ? `/accounts/detail:${accountId}:activityPage` : '/accounts/detail:none:activityPage',
     1
-  )
-  const [showMissingDetails, setShowMissingDetails] = usePersistedState(
-    accountId ? `/accounts/detail:${accountId}:showMissingDetails` : '/accounts/detail:none:showMissingDetails',
-    false
-  )
-  const [onlyMissingRaids, setOnlyMissingRaids] = usePersistedState(
-    accountId ? `/accounts/detail:${accountId}:onlyMissingRaids` : '/accounts/detail:none:onlyMissingRaids',
-    false
   )
   const [addCharOpen, setAddCharOpen] = useState(false)
   const [addCharInput, setAddCharInput] = useState('')
@@ -474,7 +486,10 @@ export default function AccountDetail({ isOfficer, profile, session, onProfileUp
       setDisplayNameError(rpcErr.message)
       return
     }
-    try { sessionStorage.removeItem(`${ACCOUNT_CACHE_KEY}-${accountId}`) } catch (_) {}
+    try {
+      sessionStorage.removeItem(accountDetailSessionKey(accountId, false))
+      sessionStorage.removeItem(accountDetailSessionKey(accountId, true))
+    } catch (_) {}
     try { sessionStorage.removeItem(ACCOUNTS_LIST_CACHE_KEY) } catch (_) {}
     setDisplayNameEditorOpen(false)
     setDisplayNameQuery('')
@@ -531,7 +546,7 @@ export default function AccountDetail({ isOfficer, profile, session, onProfileUp
           patched = patchLootAssignment(current, row.id, cid, cname)
           return patched
         }, { revalidate: false })
-        if (accountId && patched) setAccountDetailInSession(accountId, patched)
+        if (accountId && patched) setAccountDetailInSession(accountId, patched, includeMissing)
 
         // Assignment does not change account DKP. Skip refresh_account_dkp_summary_for_raid
         // so the click is not blocked on a raid-wide summary rebuild.
@@ -553,7 +568,7 @@ export default function AccountDetail({ isOfficer, profile, session, onProfileUp
           )
           return reverted
         }, { revalidate: false })
-        if (accountId && reverted) setAccountDetailInSession(accountId, reverted)
+        if (accountId && reverted) setAccountDetailInSession(accountId, reverted, includeMissing)
       } finally {
         setPendingAssign((prev) => {
           if (!Object.prototype.hasOwnProperty.call(prev, lootKey)) return prev

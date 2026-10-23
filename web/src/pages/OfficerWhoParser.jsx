@@ -1,24 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, Navigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { usePersistedState } from '../lib/usePersistedState'
-
-const PAGE_SIZE = 1000
-
-async function fetchAllRows(table, select) {
-  const all = []
-  let from = 0
-  while (true) {
-    const to = from + PAGE_SIZE - 1
-    const { data, error } = await supabase.from(table).select(select).range(from, to)
-    if (error) throw error
-    const rows = data || []
-    all.push(...rows)
-    if (rows.length < PAGE_SIZE) break
-    from += PAGE_SIZE
-  }
-  return all
-}
+import { fetchActiveRoster } from '../lib/activeRoster'
 
 function parseWhoNames(paste) {
   const names = []
@@ -51,7 +35,6 @@ function parseWhoNames(paste) {
 }
 
 export default function OfficerWhoParser({ isOfficer }) {
-  const navigate = useNavigate()
   const [paste, setPaste] = usePersistedState('/officer/who-parser:paste', '', undefined, {
     userScope: true,
     migrateUnscoped: true,
@@ -65,21 +48,20 @@ export default function OfficerWhoParser({ isOfficer }) {
   const [copyStatus, setCopyStatus] = useState('')
 
   useEffect(() => {
-    if (!isOfficer) {
-      navigate('/')
-      return
-    }
+    if (!isOfficer) return undefined
     let cancelled = false
     async function load() {
       setLoading(true)
       setError('')
       try {
-        const [charsData, caData, accountsData] = await Promise.all([
-          fetchAllRows('characters', 'char_id, name, class_name'),
-          fetchAllRows('character_account', 'char_id, account_id'),
-          fetchAllRows('accounts', 'account_id, display_name'),
-        ])
+        const roster = await fetchActiveRoster(supabase, {
+          accountColumns: 'account_id, display_name, inactive',
+          characterColumns: 'char_id, name, class_name',
+        })
         if (cancelled) return
+        const charsData = roster.characters
+        const caData = roster.characterAccount
+        const accountsData = roster.accounts
         setCharacters(charsData || [])
         const caMap = {}
         ;(caData || []).forEach((row) => {
@@ -105,7 +87,7 @@ export default function OfficerWhoParser({ isOfficer }) {
     return () => {
       cancelled = true
     }
-  }, [isOfficer, navigate])
+  }, [isOfficer])
 
   const nameToChar = useMemo(() => {
     const out = {}
@@ -217,7 +199,7 @@ export default function OfficerWhoParser({ isOfficer }) {
     }
   }
 
-  if (!isOfficer) return null
+  if (!isOfficer) return <Navigate to="/" replace />
 
   return (
     <div className="container">

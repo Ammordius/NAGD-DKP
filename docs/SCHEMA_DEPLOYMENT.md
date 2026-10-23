@@ -53,6 +53,14 @@ Run these checks before `psql`. They only read.
 SELECT id, role FROM public.profiles
 WHERE role NOT IN ('siteadmin', 'officer', 'player');
 
+-- Two profiles on one game account are left in place. claim_account rejects new duplicates.
+-- Do not add a unique index until this returns no rows.
+SELECT account_id, count(*)
+FROM public.profiles
+WHERE account_id IS NOT NULL AND btrim(account_id) <> ''
+GROUP BY account_id
+HAVING count(*) > 1;
+
 -- Duplicate tic attendance aborts the upgrade. This file will not delete the rows.
 SELECT raid_id, event_id, char_id, count(*)
 FROM public.raid_event_attendance

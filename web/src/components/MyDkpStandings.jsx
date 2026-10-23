@@ -46,7 +46,7 @@ export function MyDkpStandingsView({ accountId, totals, recentRaid, loading, fai
     if (!showClaimPrompt) return null
     return (
       <p style={{ color: '#a1a1aa' }}>
-        Claim your account on the <Link to="/dkp">DKP page</Link> to display your current DKP standings.
+        Claim your account from <Link to="/accounts">Game Accounts</Link> to display your current DKP standings. Open your game account and choose Claim this account.
       </p>
     )
   }

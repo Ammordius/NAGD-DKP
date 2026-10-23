@@ -85,6 +85,9 @@ CREATE TABLE IF NOT EXISTS raid_loot (
   character_name TEXT,
   cost TEXT
 );
+CREATE INDEX IF NOT EXISTS idx_raids_date_iso ON public.raids (date_iso);
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+CREATE INDEX IF NOT EXISTS idx_raid_loot_item_name_trgm ON public.raid_loot USING gin (item_name gin_trgm_ops);
 
 CREATE TABLE IF NOT EXISTS raid_attendance (
   id BIGSERIAL PRIMARY KEY,
@@ -483,6 +486,12 @@ BEGIN
   END IF;
 
   IF v_char_id IS NOT NULL THEN
+    IF EXISTS (
+      SELECT 1 FROM public.character_account ca
+      WHERE ca.char_id = v_char_id AND ca.account_id <> v_account_id
+    ) THEN
+      RAISE EXCEPTION 'That character is already linked to another account';
+    END IF;
     INSERT INTO character_account (char_id, account_id) VALUES (v_char_id, v_account_id)
     ON CONFLICT (char_id, account_id) DO NOTHING;
   ELSE
@@ -504,6 +513,12 @@ BEGIN
           RAISE EXCEPTION 'Character with this ID already exists; use a different name or char_id';
         END IF;
     END;
+    IF EXISTS (
+      SELECT 1 FROM public.character_account ca
+      WHERE ca.char_id = v_char_id AND ca.account_id <> v_account_id
+    ) THEN
+      RAISE EXCEPTION 'That character is already linked to another account';
+    END IF;
     INSERT INTO character_account (char_id, account_id) VALUES (v_char_id, v_account_id)
     ON CONFLICT (char_id, account_id) DO NOTHING;
   END IF;
@@ -688,6 +703,7 @@ END;
 $$;
 
 -- RPC: claim an account for the current user. Fails if user is on cooldown (unclaim_cooldown_until > now()). Officers bypass cooldown.
+-- The account must exist, the caller must not already have one, and no other profile may hold it.
 CREATE OR REPLACE FUNCTION public.claim_account(p_account_id text)
 RETURNS void
 LANGUAGE plpgsql
@@ -697,10 +713,20 @@ AS $$
 DECLARE
   v_uid uuid;
   v_until timestamptz;
+  v_account text;
+  v_existing text;
 BEGIN
   v_uid := auth.uid();
   IF v_uid IS NULL THEN
     RAISE EXCEPTION 'Not authenticated';
+  END IF;
+
+  v_account := trim(coalesce(p_account_id, ''));
+  IF v_account = '' THEN
+    RAISE EXCEPTION 'Account is required';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM public.accounts WHERE account_id = v_account) THEN
+    RAISE EXCEPTION 'Account not found';
   END IF;
 
   IF NOT public.is_officer() THEN
@@ -710,11 +736,28 @@ BEGIN
     END IF;
   END IF;
 
-  PERFORM set_config('nagddkp.allow_sensitive_profile_write', '1', true);
-  UPDATE public.profiles SET account_id = trim(p_account_id), updated_at = now() WHERE id = v_uid;
+  SELECT account_id INTO v_existing
+  FROM public.profiles
+  WHERE id = v_uid
+  FOR UPDATE;
   IF NOT FOUND THEN
     RAISE EXCEPTION 'Profile not found';
   END IF;
+  IF v_existing IS NOT NULL AND btrim(v_existing) <> '' THEN
+    RAISE EXCEPTION 'You already have a claimed account';
+  END IF;
+
+  PERFORM pg_advisory_xact_lock(hashtext('claim-account:' || v_account));
+  IF EXISTS (
+    SELECT 1 FROM public.profiles
+    WHERE account_id = v_account
+      AND id <> v_uid
+  ) THEN
+    RAISE EXCEPTION 'That account is already claimed';
+  END IF;
+
+  PERFORM set_config('nagddkp.allow_sensitive_profile_write', '1', true);
+  UPDATE public.profiles SET account_id = v_account, updated_at = now() WHERE id = v_uid;
 END;
 $$;
 
@@ -895,7 +938,10 @@ INSERT INTO public.restore_in_progress (id, in_progress) VALUES (1, false) ON CO
 
 ALTER TABLE public.restore_in_progress ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Authenticated read restore_in_progress" ON public.restore_in_progress;
-CREATE POLICY "Authenticated read restore_in_progress" ON public.restore_in_progress FOR SELECT TO authenticated USING (true);
+DROP POLICY IF EXISTS "Officers read restore_in_progress" ON public.restore_in_progress;
+CREATE POLICY "Officers read restore_in_progress" ON public.restore_in_progress
+  FOR SELECT TO authenticated
+  USING (public.is_officer());
 DROP POLICY IF EXISTS "Service role full restore_in_progress" ON public.restore_in_progress;
 CREATE POLICY "Service role full restore_in_progress" ON public.restore_in_progress FOR ALL TO service_role USING (true) WITH CHECK (true);
 
@@ -2604,8 +2650,9 @@ CREATE POLICY "Officers manage active_raiders" ON active_raiders FOR ALL TO auth
 -- Officer audit log: officers only (no anon, no authenticated read for non-officers). Append-only.
 DROP POLICY IF EXISTS "Officer audit log select" ON officer_audit_log;
 CREATE POLICY "Officer audit log select" ON officer_audit_log FOR SELECT USING (public.is_officer());
+-- Inserts go through log_officer_audit, which sets the actor from auth.uid().
 DROP POLICY IF EXISTS "Officer audit log insert" ON officer_audit_log;
-CREATE POLICY "Officer audit log insert" ON officer_audit_log FOR INSERT WITH CHECK (public.is_officer());
+REVOKE INSERT ON TABLE public.officer_audit_log FROM PUBLIC, anon, authenticated;
 
 -- Data tables: no anon read. Only authenticated users (and officers) can read (see "Authenticated read" policies above).
 -- Anon key is used only for auth handshake and sign-in; all data access requires a signed-in user.
@@ -2659,7 +2706,7 @@ FROM raid_loot rl
 LEFT JOIN loot_assignment la ON la.loot_id = rl.id;
 COMMENT ON VIEW raid_loot_with_assignment IS 'raid_loot plus assignment columns. Use for reads; write loot to raid_loot, assignment via RPC or loot_assignment.';
 GRANT SELECT ON raid_loot_with_assignment TO authenticated;
-GRANT SELECT ON raid_loot_with_assignment TO anon;
+REVOKE ALL ON raid_loot_with_assignment FROM anon;
 
 -- Item History (/loot): loot + assignment + raid date/name, with a numeric cost for sorting.
 -- raid_loot.raid_id has no FK, so PostgREST cannot embed raids; this view is the join.
@@ -2687,7 +2734,115 @@ LEFT JOIN loot_assignment la ON la.loot_id = rl.id
 LEFT JOIN raids r ON r.raid_id = rl.raid_id;
 COMMENT ON VIEW raid_loot_history IS 'Item History reads. raid_loot plus assignment, raid name/date, and cost_num for numeric sort. security_invoker so RLS on the base tables applies.';
 GRANT SELECT ON raid_loot_history TO authenticated;
-GRANT SELECT ON raid_loot_history TO anon;
+REVOKE ALL ON raid_loot_history FROM anon;
+
+-- Last three sale prices per item for Raid Items. Replaces a full raid_loot download.
+CREATE OR REPLACE FUNCTION public.recent_item_sale_costs(p_limit integer DEFAULT 3)
+RETURNS TABLE(item_name text, loot_id bigint, cost text, sale_date text)
+LANGUAGE sql
+STABLE
+SECURITY INVOKER
+SET search_path = public
+AS $$
+  SELECT ranked.item_name, ranked.loot_id, ranked.cost, ranked.sale_date
+  FROM (
+    SELECT
+      lower(btrim(rl.item_name)) AS item_name,
+      rl.id AS loot_id,
+      rl.cost,
+      resolved.sale_date,
+      row_number() OVER (
+        PARTITION BY lower(btrim(rl.item_name))
+        ORDER BY
+          CASE
+            WHEN resolved.sale_date ~ '^\d{4}-\d{2}-\d{2}' THEN left(resolved.sale_date, 10)
+            ELSE '9999-99-99'
+          END DESC,
+          rl.id DESC
+      ) AS rn
+    FROM public.raid_loot rl
+    LEFT JOIN public.raids r ON r.raid_id = rl.raid_id
+    CROSS JOIN LATERAL (
+      SELECT CASE
+        WHEN btrim(coalesce(r.date_iso, '')) ~ '^\d{4}-\d{2}-\d{2}' THEN left(btrim(r.date_iso), 10)
+        ELSE btrim(coalesce(r.date, ''))
+      END AS sale_date
+    ) resolved
+    WHERE btrim(coalesce(rl.item_name, '')) <> ''
+  ) ranked
+  WHERE ranked.rn <= GREATEST(1, LEAST(COALESCE(p_limit, 3), 10))
+  ORDER BY ranked.item_name ASC, ranked.sale_date DESC, ranked.loot_id DESC;
+$$;
+
+COMMENT ON FUNCTION public.recent_item_sale_costs(integer) IS
+  'Newest sales per item name. Resolves date_iso then date (same as the prior Raid Items client); ISO dates rank by calendar, non-ISO as newest, then loot id. Result order is deterministic for PostgREST range pagination.';
+
+REVOKE ALL ON FUNCTION public.recent_item_sale_costs(integer) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.recent_item_sale_costs(integer) TO authenticated;
+
+-- Per-account character spent for the Accounts list. Same character key and buyer account as the page helper.
+CREATE OR REPLACE FUNCTION public.account_character_spent()
+RETURNS TABLE(account_id text, character_key text, total_spent numeric)
+LANGUAGE sql
+STABLE
+SECURITY INVOKER
+SET search_path = public
+AS $$
+  WITH buyer_name AS (
+    -- Case-sensitive name keys match buildSpentByAccountFromLoot / prior Accounts map.
+    -- When two characters share a name, prefer the highest char_id (same as last write when
+    -- character_account is walked in ascending char_id order).
+    SELECT DISTINCT ON (btrim(c.name))
+      btrim(c.name) AS name_key,
+      ca.account_id
+    FROM public.character_account ca
+    JOIN public.characters c ON c.char_id = ca.char_id
+    WHERE btrim(coalesce(c.name, '')) <> ''
+    ORDER BY btrim(c.name), ca.char_id DESC
+  ),
+  rows AS (
+    SELECT
+      COALESCE(ca.account_id, bn.account_id) AS account_id,
+      btrim(COALESCE(
+        NULLIF(btrim(la.assigned_character_name), ''),
+        NULLIF(btrim(la.assigned_char_id), ''),
+        NULLIF(btrim(rl.character_name), ''),
+        NULLIF(btrim(rl.char_id::text), '')
+      )) AS character_key,
+      CASE
+        WHEN btrim(coalesce(rl.cost, '')) ~ '^-?[0-9]+(\.[0-9]+)?$' THEN btrim(rl.cost)::numeric
+        ELSE NULL
+      END AS cost_num
+    FROM public.raid_loot rl
+    LEFT JOIN public.loot_assignment la ON la.loot_id = rl.id
+    LEFT JOIN LATERAL (
+      SELECT ca_one.account_id
+      FROM public.character_account ca_one
+      WHERE btrim(coalesce(rl.char_id::text, '')) <> ''
+        AND ca_one.char_id = btrim(rl.char_id::text)
+      ORDER BY ca_one.account_id
+      LIMIT 1
+    ) ca ON true
+    LEFT JOIN buyer_name bn
+      ON ca.account_id IS NULL
+     AND btrim(coalesce(rl.character_name, '')) <> ''
+     AND bn.name_key = btrim(rl.character_name)
+  )
+  SELECT rows.account_id, rows.character_key, SUM(rows.cost_num) AS total_spent
+  FROM rows
+  WHERE rows.account_id IS NOT NULL
+    AND rows.character_key IS NOT NULL
+    AND rows.character_key <> ''
+    AND rows.cost_num IS NOT NULL
+  GROUP BY rows.account_id, rows.character_key
+  ORDER BY rows.account_id ASC, rows.character_key ASC;
+$$;
+
+COMMENT ON FUNCTION public.account_character_spent() IS
+  'Spent by buyer account and assignee-first character key. Matches buildSpentByAccountFromLoot (case-sensitive buyer name fallback; duplicate names prefer highest char_id). Not character_dkp_spent. Result order is deterministic for PostgREST range pagination.';
+
+REVOKE ALL ON FUNCTION public.account_character_spent() FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.account_character_spent() TO authenticated;
 
 CREATE OR REPLACE VIEW character_loot_assignment_count WITH (security_invoker = true) AS
 SELECT
@@ -3148,8 +3303,20 @@ CREATE POLICY "Profiles update" ON profiles
 
 -- Table-wide UPDATE would cover role, account_id, email, and unclaim fields.
 -- Callers change those only through SECURITY DEFINER RPCs (table owner).
+-- email is not in the column grant. Site admins read cooldown emails via siteadmin_claim_cooldowns.
 REVOKE INSERT, UPDATE, DELETE ON TABLE public.profiles FROM PUBLIC, anon, authenticated, service_role;
-GRANT SELECT ON TABLE public.profiles TO authenticated;
+REVOKE SELECT ON TABLE public.profiles FROM PUBLIC, anon, authenticated;
+GRANT SELECT (
+  id,
+  role,
+  display_name,
+  created_at,
+  updated_at,
+  account_id,
+  unclaim_cooldown_until,
+  unclaim_count,
+  ui_preferences
+) ON TABLE public.profiles TO authenticated;
 
 -- Officer-only write policies (use is_officer() for consistency)
 DROP POLICY IF EXISTS "Officers manage raids" ON raids;
@@ -3975,7 +4142,7 @@ COMMENT ON VIEW public.guild_loot_sale_enriched IS
   'Guild sales. buyer_account_id is the raid_loot buyer (char_id / character_name). loot_assignment does not change the buyer.';
 
 GRANT SELECT ON public.guild_loot_sale_enriched TO authenticated;
-GRANT SELECT ON public.guild_loot_sale_enriched TO anon;
+REVOKE ALL ON public.guild_loot_sale_enriched FROM anon;
 
 -- Attendee resolution for bidding portfolio (tic-scoped when that event has attendance).
 CREATE OR REPLACE FUNCTION public.bid_forecast_attendees_resolved_for_scope(
@@ -5197,7 +5364,7 @@ ALTER TABLE character_dkp_spent ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Authenticated read character_dkp_spent" ON character_dkp_spent;
 CREATE POLICY "Authenticated read character_dkp_spent" ON character_dkp_spent FOR SELECT TO authenticated USING (true);
 DROP POLICY IF EXISTS "Anon read character_dkp_spent" ON character_dkp_spent;
-CREATE POLICY "Anon read character_dkp_spent" ON character_dkp_spent FOR SELECT TO anon USING (true);
+REVOKE ALL ON TABLE public.character_dkp_spent FROM anon;
 
 -- If an older database still has assignment columns on raid_loot, copy them once, then drop them.
 DO $$
@@ -5338,7 +5505,7 @@ ALTER TABLE loot_assignment ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Authenticated read loot_assignment" ON loot_assignment;
 CREATE POLICY "Authenticated read loot_assignment" ON loot_assignment FOR SELECT TO authenticated USING (true);
 DROP POLICY IF EXISTS "Anon read loot_assignment" ON loot_assignment;
-CREATE POLICY "Anon read loot_assignment" ON loot_assignment FOR SELECT TO anon USING (true);
+REVOKE ALL ON TABLE public.loot_assignment FROM anon;
 DROP POLICY IF EXISTS "Officers manage loot_assignment" ON loot_assignment;
 CREATE POLICY "Officers manage loot_assignment" ON loot_assignment FOR ALL TO authenticated
   USING (public.is_officer())
@@ -5820,6 +5987,47 @@ $$;
 
 REVOKE ALL ON FUNCTION public.write_site_admin_audit(text, text, text, jsonb) FROM PUBLIC;
 
+-- Client audit writes. Actor columns come from the signed-in officer, not the request.
+CREATE OR REPLACE FUNCTION public.log_officer_audit(
+  p_action text,
+  p_target_type text,
+  p_target_id text,
+  p_delta jsonb
+)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  IF auth.uid() IS NULL THEN
+    RAISE EXCEPTION 'Not authenticated';
+  END IF;
+  IF NOT public.is_officer() THEN
+    RAISE EXCEPTION 'Only officers can write the audit log';
+  END IF;
+  IF p_action IS NULL OR btrim(p_action) = '' OR char_length(btrim(p_action)) > 80 THEN
+    RAISE EXCEPTION 'Audit action is required';
+  END IF;
+  IF p_target_type IS NULL OR btrim(p_target_type) = '' OR char_length(btrim(p_target_type)) > 80 THEN
+    RAISE EXCEPTION 'Audit target is required';
+  END IF;
+
+  PERFORM public.write_site_admin_audit(
+    btrim(p_action),
+    btrim(p_target_type),
+    NULLIF(btrim(coalesce(p_target_id, '')), ''),
+    CASE WHEN p_delta IS NULL OR p_delta = 'null'::jsonb OR p_delta = '{}'::jsonb THEN NULL ELSE p_delta END
+  );
+END;
+$$;
+
+COMMENT ON FUNCTION public.log_officer_audit(text, text, text, jsonb) IS
+  'Officer-only audit insert. actor_id and actor_email are taken from auth.uid(), not from the caller.';
+
+REVOKE ALL ON FUNCTION public.log_officer_audit(text, text, text, jsonb) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.log_officer_audit(text, text, text, jsonb) TO authenticated;
+
 CREATE OR REPLACE FUNCTION public.set_my_display_name(p_display_name text)
 RETURNS text
 LANGUAGE plpgsql
@@ -6065,6 +6273,33 @@ COMMENT ON FUNCTION public.siteadmin_claim_profile(uuid, text) IS
 
 REVOKE ALL ON FUNCTION public.siteadmin_claim_profile(uuid, text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.siteadmin_claim_profile(uuid, text) TO authenticated;
+
+-- Claim cooldown rows including email. Officers read profiles without the email column.
+CREATE OR REPLACE FUNCTION public.siteadmin_claim_cooldowns()
+RETURNS TABLE (
+  id uuid,
+  email text,
+  display_name text,
+  unclaim_cooldown_until timestamptz,
+  unclaim_count integer
+)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT p.id, p.email, p.display_name, p.unclaim_cooldown_until, p.unclaim_count
+  FROM public.profiles p
+  WHERE public.is_site_admin()
+    AND p.unclaim_cooldown_until IS NOT NULL
+  ORDER BY p.unclaim_cooldown_until ASC;
+$$;
+
+COMMENT ON FUNCTION public.siteadmin_claim_cooldowns() IS
+  'Siteadmin: profiles on an unclaim cooldown, including email. Returns no rows for anyone else.';
+
+REVOKE ALL ON FUNCTION public.siteadmin_claim_cooldowns() FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.siteadmin_claim_cooldowns() TO authenticated;
 
 CREATE OR REPLACE FUNCTION public.siteadmin_set_role(p_profile_id uuid, p_role text)
 RETURNS text
@@ -6424,4 +6659,15 @@ GRANT EXECUTE ON FUNCTION public.officer_account_bidding_portfolio(text, date, d
 GRANT EXECUTE ON FUNCTION public.officer_backfill_bid_portfolio_batch(bigint, bigint, boolean) TO authenticated;
 
 REVOKE INSERT, UPDATE, DELETE ON TABLE public.profiles FROM PUBLIC, anon, authenticated, service_role;
-GRANT SELECT ON TABLE public.profiles TO authenticated;
+REVOKE SELECT ON TABLE public.profiles FROM PUBLIC, anon, authenticated;
+GRANT SELECT (
+  id,
+  role,
+  display_name,
+  created_at,
+  updated_at,
+  account_id,
+  unclaim_cooldown_until,
+  unclaim_count,
+  ui_preferences
+) ON TABLE public.profiles TO authenticated;

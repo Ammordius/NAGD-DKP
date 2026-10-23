@@ -24,8 +24,9 @@ Set in `.env.local` (local) and Vercel project settings (production):
 |----------|---------|
 | `VITE_SUPABASE_URL` | Supabase project URL |
 | `VITE_SUPABASE_ANON_KEY` | Supabase anon (public) key |
-| `VITE_SITE_TITLE` | Browser tab title. Also the sign-in heading, the Home (`/`) heading, and the suffix on Site Admin (`Site Admin - …`). Set per deployment so development, staging, and production stay distinguishable while the git code stays the same. Falls back to `NAGD DKP - Development` when unset. |
-| `VITE_CLASS_RANKINGS_URL` | Optional; Raider Activity “Reload coverage” falls back to `/class_rankings.json`. Guild export: `https://ammordius.github.io/NAGD-spell-inventory/class_rankings.json` (set GitHub secret `CLASS_RANKINGS_URL` to the same for CI). |
+| `VITE_SITE_TITLE` | Deployment display name. Also the sign-in heading, the Home (`/`) heading, and the suffix on Site Admin (`Site Admin - …`). Each route sets the browser tab to `Page · <title>` (for example `DKP · NAGD DKP - Staging Site`). Set per deployment so development, staging, and production stay distinguishable while the git code stays the same. Falls back to `NAGD DKP - Development` when unset. Display text only — does not control development warnings. The site footer is always shown. |
+| `VITE_SITE_ENV` | Deployment environment: `production`, `staging`, or `development`. Only `production` (case-insensitive exact match) hides the development banner and the DKP/account warning. Missing, blank, or any other value defaults to non-production (warnings shown). |
+| `VITE_CLASS_RANKINGS_URL` | Optional; Raider Activity “Reload coverage” falls back to `/class_rankings.json`. Guild export: `https://ammordius.github.io/NAGD-spell-inventory/class_rankings.json` (set GitHub secret `CLASS_RANKINGS_URL` to the same for CI). CSP `connect-src` allows `https://ammordius.github.io` for this fetch. |
 | `SUPABASE_SERVICE_ROLE_KEY` | Server-only. Used by `POST /api/delete-site-user` to call `auth.admin.deleteUser`. Set it in Vercel and in `web/.env.local` (or the repo root `.env`) for `npm run dev`. Do not prefix it with `VITE_` — Vite would expose it to the browser. |
 
 Access in client code: `import.meta.env.VITE_*` (Vite convention). The service role key is read only in `web/api/delete-site-user.js` from `process.env`.
@@ -40,8 +41,8 @@ Access in client code: `import.meta.env.VITE_*` (Vite convention). The service r
 | `web/src/components/*.jsx` | Shared UI (links, disclaimers, cards) |
 | `web/src/lib/*.js` | Supabase client, DKP math, static JSON helpers, `usePersistedState`, caches |
 | `web/public/` | Static assets served at site root (`/item_stats.json`, `/dkp_mob_loot.json`, etc.) |
-| `web/api/` | Vercel serverless. `delete-site-user.js` removes an auth user (service role). `get-dkp.ts` is a legacy leaderboard proxy. |
-| `web/vercel.json` | SPA rewrites (`/*` → `/index.html`), cache headers for selected JSON |
+| `web/api/` | Vercel serverless. `delete-site-user.js` removes an auth user (service role). |
+| `web/vercel.json` | SPA rewrites (`/*` → `/index.html`), cache headers for selected JSON, and a content security policy plus `nosniff`, frame denial, and referrer policy on every response |
 
 Repo-level SQL/docs (schema, imports) live under `docs/` at the **repository** root; this file is the **web app** map.
 
@@ -68,9 +69,9 @@ Defined in `web/src/App.jsx`.
 | `/profile` | `Profile` | Signed in |
 | `/items/:itemNameEncoded` | `ItemPage` | Signed in |
 | `/characters/:charKey` | `CharacterPage` | Signed in |
-| `*` | Redirect to `/` | — |
+| `*` | Page not found | Public |
 
-**Roles:** `App` loads `profiles.role` for the signed-in user. `player`, `officer`, and `siteadmin` are allowed. `isOfficer` is true for `officer` and `siteadmin` and toggles officer nav links; individual pages may also `navigate('/')` if not officer. `isSiteAdmin` is true only for `siteadmin`. On `/officer/SiteAdmin`, officers and site admins see Site Profile Accounts. Unclaim, claim-on-behalf, and role changes are siteadmin only. Claim sets `profiles.account_id` from an unclaimed `accounts` row (`account_id` and `display_name`) and does not clear an unclaim cooldown. Remove user is `POST /api/delete-site-user`: it deletes the profile, then `auth.admin.deleteUser` with the server-only service role key. Officers may remove players. Site admins may remove players and officers. Nobody may remove a site admin or themselves. `profiles.display_name` is the site name (email sign-up field, or the Discord username). It is separate from `accounts.display_name`. Nav labels are Game Accounts (`/accounts`) and My Site Profile (`/profile`).
+**Roles:** `App` loads `profiles.role` for the signed-in user. `player`, `officer`, and `siteadmin` are allowed. `isOfficer` is true for `officer` and `siteadmin` and toggles officer nav links; `RequireOfficer` sends anyone else home before the officer page renders. If that profile read fails and no profile is already loaded, the app shows a retry instead of treating the user as a player. `isSiteAdmin` is true only for `siteadmin`. On `/officer/SiteAdmin`, officers and site admins see Site Profile Accounts. Unclaim, claim-on-behalf, and role changes are siteadmin only. Claim sets `profiles.account_id` from an unclaimed `accounts` row (`account_id` and `display_name`) and does not clear an unclaim cooldown. Remove user is `POST /api/delete-site-user`: it deletes the profile, then `auth.admin.deleteUser` with the server-only service role key. Officers may remove players. Site admins may remove players and officers. Nobody may remove a site admin or themselves. `profiles.display_name` is the site name (email sign-up field, or the Discord username). It is separate from `accounts.display_name`. Nav labels are Game Accounts (`/accounts`) and My Site Profile (`/profile`).
 
 **Site time** is Eastern for everyone. There is no timezone setting on My Site Profile. The clock is Eastern Standard Time (EST, UTC-5), and Eastern Daylight Time (EDT, UTC-4) while daylight saving is in effect (`America/New_York`). Raid dates stored as an offset instant, tic clocks, and the raids calendar use that zone. A date-only raid stays on that calendar date. A new raid with no Discord date stores the current Eastern date and time as an offset instant. Discord raid-line parsing is unchanged.
 
@@ -102,13 +103,13 @@ Fetched with `fetch('/…')` from `public/` or CDN:
 
 | Mechanism | Key pattern | Purpose |
 |-----------|------------|---------|
-| `localStorage` | `dkp-last-path:<userId>` | Last visited path for that signed-in user (see below). A legacy unscoped session or local value is moved here once, then deleted. |
+| `localStorage` | `dkp-last-path:<userId>` | Last visited path for that signed-in user (see below). A legacy unscoped `dkp-last-path` value is deleted and is not copied onto the next user. |
 | `localStorage` | `pageState:user:<userId>:…` | `usePersistedState` viewing state: search, filters, expansion, show-more, calendar month, loaded page counts, and personalized drafts. Versioned `{ v, exp, value }`. A legacy session key is moved here once for that user, then deleted. Signing out does not delete the slot. Another user has a different key. |
 | `localStorage` | `pageState:user:<userId>:scroll:<pathname>` | Per-route scroll anchor for that user. Account and profile keys include `?tab=`. |
 | `localStorage` | `pageState:user:<userId>:/officer/RaidAdmin:ticDraft:<raid id>` | Unsaved tic paste for that officer and raid. A legacy session key is moved here once, then deleted. Never auto-submitted. |
 | `sessionStorage` | `account-detail-cache-${accountId}` | SWR fallback for account page. Not the saved view. |
 | TTL cache | `raids_month_*` | Raids calendar month blobs (`web/src/lib/cache.js`) |
-| TTL cache | `accounts_list_v8` | Accounts list (`web/src/pages/Accounts.jsx`, 10 minutes), sorted by account name ascending. Includes the Claimed by column from `account_claim_labels()`. The page refetches on load and overwrites this key. Character “spent” is loot for that account, same buyer fallback as the account page (assignee, else `character_name`, else `char_id`). It is not the DKP leaderboard total. |
+| TTL cache | `accounts_list_v9` | Accounts list (`web/src/pages/Accounts.jsx`, 10 minutes), sorted by account name ascending. Includes the Claimed by column from `account_claim_labels()` and Last Raid Date from `account_dkp_summary.last_activity_date` plus every linked character's `dkp_summary.last_activity_date` (the newest date on the account, not the one alt name). The page refetches on load and overwrites this key. Character “spent” is loot for that account, same buyer fallback as the account page (assignee, else `character_name`, else `char_id`). It is not the DKP leaderboard total. |
 
 ### Refreshing DKP totals
 
@@ -189,7 +190,8 @@ Login email, password, and display name. Loading and error flags. Hover cards an
 In `web/src/App.jsx`:
 
 - On each navigation (except bare `/login` and `/auth/callback`), the app stores `pathname + search` in `localStorage['dkp-last-path:<userId>']`.
-- When the user is signed in and lands on **`/`** the **first time** in that session, the app may `replace` navigate to the saved path (`hasRestoredRef` ensures this runs once). **Clicking “Home” later stays on `/`** because the restore effect does not run again.
+- When the user is signed in and lands on **`/`** the **first time** in that session, the app may `replace` navigate to that user's saved path (`hasRestoredRef` ensures this runs once). **Clicking “Home” later stays on `/`** because the restore effect does not run again.
+- An older unscoped `localStorage` or `sessionStorage` key named `dkp-last-path` is removed on that restore and is not given to whoever signs in next.
 
 If a bookmark to `/` unexpectedly jumps elsewhere, this behavior is why.
 
@@ -229,7 +231,7 @@ npm run build
 npm run preview   # optional local preview of production build
 ```
 
-Vercel: set root to **`web`**, add `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, and `VITE_SITE_TITLE`.
+Vercel: set root to **`web`**, add `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_SITE_TITLE`, and `VITE_SITE_ENV` (`production` only on the live site).
 
 ## Debugging cheatsheet
 

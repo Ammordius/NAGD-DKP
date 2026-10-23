@@ -7,6 +7,13 @@ import { createClient } from '@supabase/supabase-js'
 import { removalBlockReason } from '../src/lib/siteAdminRemoveUser.js'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+const MAX_BODY_BYTES = 1024
+
+function bodyTooLarge(byteLength) {
+  const err = new Error('Request body is too large')
+  err.statusCode = 413
+  return byteLength > MAX_BODY_BYTES ? err : null
+}
 
 function send(res, status, body) {
   res.statusCode = status
@@ -23,16 +30,35 @@ function header(req, name) {
 
 function readJsonBody(req) {
   if (req.body != null && req.body !== '') {
-    if (typeof req.body === 'string') return JSON.parse(req.body)
+    if (typeof req.body === 'string') {
+      const tooLarge = bodyTooLarge(Buffer.byteLength(req.body))
+      if (tooLarge) throw tooLarge
+      return JSON.parse(req.body)
+    }
     if (typeof Buffer !== 'undefined' && Buffer.isBuffer(req.body)) {
+      const tooLarge = bodyTooLarge(req.body.length)
+      if (tooLarge) throw tooLarge
       const text = req.body.toString('utf8').trim()
       return text ? JSON.parse(text) : {}
     }
-    if (typeof req.body === 'object') return req.body
+    if (typeof req.body === 'object') {
+      const tooLarge = bodyTooLarge(Buffer.byteLength(JSON.stringify(req.body)))
+      if (tooLarge) throw tooLarge
+      return req.body
+    }
   }
   return new Promise((resolve, reject) => {
     const chunks = []
-    req.on('data', (chunk) => chunks.push(chunk))
+    let size = 0
+    req.on('data', (chunk) => {
+      size += chunk.length
+      if (size > MAX_BODY_BYTES) {
+        reject(bodyTooLarge(size))
+        req.destroy()
+        return
+      }
+      chunks.push(chunk)
+    })
     req.on('end', () => {
       const text = Buffer.concat(chunks).toString('utf8').trim()
       if (!text) {
@@ -107,8 +133,8 @@ export async function removeSiteAuthUser({
     url.searchParams.set('select', 'id,role')
     const res = await fetchJson(fetchImpl, url, { headers: { ...userHeaders, Accept: 'application/json' } })
     if (!res.ok) {
-      const message = res.body?.message || 'Could not read profiles'
-      return { error: { status: res.status >= 500 ? 502 : 403, message } }
+      console.error('delete-site-user: could not read profiles', res.body?.message || res.status)
+      return { error: { status: res.status >= 500 ? 502 : 403, message: 'Could not read profiles' } }
     }
     const row = Array.isArray(res.body) ? res.body[0] : null
     return { row: row || null }
@@ -134,8 +160,8 @@ export async function removeSiteAuthUser({
     body: JSON.stringify({ p_profile_id: targetLoaded.row.id }),
   })
   if (!rpcRes.ok) {
-    const message = rpcRes.body?.message || 'Could not remove user'
-    return { status: rpcRes.status >= 500 ? 502 : 403, body: { error: message } }
+    console.error('delete-site-user: could not remove user', rpcRes.body?.message || rpcRes.status)
+    return { status: rpcRes.status >= 500 ? 502 : 403, body: { error: 'Could not remove user' } }
   }
 
   const removeAuth = deleteAuthUser || (async (userId) => {
@@ -149,11 +175,12 @@ export async function removeSiteAuthUser({
   try {
     deleted = await removeAuth(targetLoaded.row.id)
   } catch (err) {
-    return { status: 502, body: { error: err?.message || 'Could not delete the login account' } }
+    console.error('delete-site-user: could not delete the login account', err?.message || err)
+    return { status: 502, body: { error: 'Could not delete the login account' } }
   }
   if (deleted?.error) {
-    const detail = deleted.error.message || 'Could not delete the login account'
-    return { status: 502, body: { error: detail } }
+    console.error('delete-site-user: could not delete the login account', deleted.error.message || deleted.error)
+    return { status: 502, body: { error: 'Could not delete the login account' } }
   }
 
   // Auth deletion already succeeded. A failed audit confirmation leaves the pending row.
@@ -178,7 +205,11 @@ export default async function handler(req, res) {
   let body
   try {
     body = await readJsonBody(req)
-  } catch {
+  } catch (err) {
+    if (err?.statusCode === 413) {
+      send(res, 413, { error: 'Request body is too large' })
+      return
+    }
     send(res, 400, { error: 'Invalid request' })
     return
   }

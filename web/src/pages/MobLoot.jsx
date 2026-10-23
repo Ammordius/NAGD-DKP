@@ -20,6 +20,8 @@ import {
   toggleMobGroup,
 } from '../lib/mobLootViewState'
 import { useForgetScrollOnChange, useScrollContentReady, useScrollListIds } from '../lib/routeScrollView'
+import { fetchAllRpcByRange } from '../lib/fetchAllRpcByRange'
+import { buildItemLast3FromSaleRows } from '../lib/recentItemSaleCosts'
 
 /** EQ slot options for filter (order for dropdown). */
 const SLOT_OPTIONS = ['HEAD', 'FACE', 'NECK', 'SHOULDERS', 'ARMS', 'BACK', 'CHEST', 'WRIST', 'HANDS', 'WAIST', 'LEGS', 'FEET', 'PRIMARY', 'SECONDARY', 'RANGE', 'EAR', 'FINGERS', 'AMMO']
@@ -261,6 +263,7 @@ export default function MobLoot() {
   })
   const [loading, setLoading] = useState(true)
   const [itemLast3, setItemLast3] = useState({})
+  const [last3Error, setLast3Error] = useState('')
   const [mobZoneFromRaids, setMobZoneFromRaids] = useState({})
   const [itemStatsReady, setItemStatsReady] = useState(false)
   const [armorReady, setArmorReady] = useState(false)
@@ -292,7 +295,16 @@ export default function MobLoot() {
     let cancelled = false
     const run = async () => {
       try {
-        const { data: raidRows } = await supabase.from('raids').select('raid_id, raid_name')
+        const raidRows = []
+        let raidFrom = 0
+        while (true) {
+          const { data: raidChunk } = await supabase.from('raids').select('raid_id, raid_name').order('raid_id', { ascending: true }).range(raidFrom, raidFrom + 999)
+          if (cancelled) return
+          if (!raidChunk?.length) break
+          raidRows.push(...raidChunk)
+          if (raidChunk.length < 1000) break
+          raidFrom += 1000
+        }
         if (cancelled) return
         const raidIdToName = {}
         ;(raidRows || []).forEach((r) => { raidIdToName[r.raid_id] = (r.raid_name || '').trim() })
@@ -301,7 +313,7 @@ export default function MobLoot() {
         let from = 0
         const PAGE = 2000
         while (true) {
-          const { data: chunk } = await supabase.from('raid_classifications').select('raid_id, mob, zone').range(from, from + PAGE - 1)
+          const { data: chunk } = await supabase.from('raid_classifications').select('raid_id, mob, zone').order('raid_id', { ascending: true }).order('mob', { ascending: true }).range(from, from + PAGE - 1)
           if (cancelled) return
           if (!chunk?.length) break
           allClass.push(...chunk)
@@ -349,56 +361,29 @@ export default function MobLoot() {
       setItemLast3(cached)
     }
 
-    const PAGE = 1000
     const run = async () => {
-      const allLoot = []
-      let from = 0
-      while (true) {
-        const to = from + PAGE - 1
-        const { data: chunk } = await supabase.from('raid_loot').select('id, raid_id, item_name, cost').order('id', { ascending: false }).range(from, to)
+      try {
+        const rows = await fetchAllRpcByRange(
+          supabase,
+          'recent_item_sale_costs',
+          { p_limit: 3 },
+          {
+            orderColumns: [
+              { column: 'item_name', ascending: true },
+              { column: 'sale_date', ascending: false },
+              { column: 'loot_id', ascending: false },
+            ],
+          },
+        )
         if (cancelled) return
-        if (!chunk?.length) break
-        allLoot.push(...chunk)
-        if (chunk.length < PAGE) break
-        from += PAGE
-      }
-      if (cancelled || allLoot.length === 0) return
-      const raidIds = [...new Set(allLoot.map((r) => r.raid_id).filter(Boolean))]
-      const dateByRaid = {}
-      const CHUNK = 500
-      for (let i = 0; i < raidIds.length; i += CHUNK) {
-        const { data: raidRows } = await supabase.from('raids').select('raid_id, date_iso, date').in('raid_id', raidIds.slice(i, i + CHUNK))
-        if (cancelled) return
-        ;(raidRows || []).forEach((row) => {
-          const iso = (row.date_iso || '').trim().slice(0, 10)
-          const isIso = /^\d{4}-\d{2}-\d{2}/.test(iso)
-          dateByRaid[row.raid_id] = isIso ? iso : (row.date || '').trim() || ''
-        })
-      }
-      const byItem = {}
-      allLoot.forEach((row) => {
-        const name = (row.item_name || '').trim().toLowerCase()
-        if (!name) return
-        if (!byItem[name]) byItem[name] = []
-        byItem[name].push({ id: row.id, cost: row.cost, date: dateByRaid[row.raid_id] || '' })
-      })
-      const last3Map = {}
-      Object.entries(byItem).forEach(([key, arr]) => {
-        arr.sort((a, b) => {
-          const da = /^\d{4}-\d{2}-\d{2}/.test(String(a.date || '').trim()) ? String(a.date).slice(0, 10) : '9999-99-99'
-          const db = /^\d{4}-\d{2}-\d{2}/.test(String(b.date || '').trim()) ? String(b.date).slice(0, 10) : '9999-99-99'
-          const cmp = db.localeCompare(da)
-          if (cmp !== 0) return cmp
-          return (b.id ?? 0) - (a.id ?? 0)
-        })
-        const recent = arr.slice(0, 3)
-        const costs = recent.map((r) => Number(r.cost))
-        const avg = costs.length ? (costs.reduce((s, c) => s + c, 0) / costs.length).toFixed(1) : null
-        last3Map[key] = { values: recent.map((r) => r.cost ?? '—'), avg }
-      })
-      if (!cancelled) {
+        const last3Map = buildItemLast3FromSaleRows(rows)
+        setLast3Error('')
         setItemLast3(last3Map)
         cache.set(last3Map)
+      } catch (err) {
+        if (!cancelled) {
+          setLast3Error(err?.message || 'Failed to load recent sale prices')
+        }
       }
     }
     run()
@@ -697,6 +682,7 @@ export default function MobLoot() {
   return (
     <div className="container">
       <h1>Raid Items</h1>
+      {last3Error && <p className="error">{last3Error}</p>}
       <p style={{ color: '#71717a', marginBottom: '1rem' }}>
         DKP loot table per mob. Search by item, mob, or zone; filter by slot and class; items sorted by gear score (saves + AC + HP/3).
       </p>

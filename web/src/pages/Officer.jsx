@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useMemo, useRef, Fragment } from 'react'
-import { Link, useNavigate, useLocation, useSearchParams } from 'react-router-dom'
+import { Link, Navigate, useLocation, useSearchParams } from 'react-router-dom'
 import useSWRConfig from 'swr'
 import { supabase } from '../lib/supabase'
 import { getDkpMobLoot, getRaidItemSources } from '../lib/staticData'
@@ -40,6 +40,7 @@ import { normalizeUiPreferences, readBrowserTicDraft, writeBrowserTicDraft } fro
 import { usePersistedState } from '../lib/usePersistedState'
 import { useScrollContentReady } from '../lib/routeScrollView'
 import { buildAccountAdminRows, filterAccountAdminRows } from '../lib/siteAdminCharacters'
+import { fetchActiveRoster } from '../lib/activeRoster'
 
 /** Generate a unique raid_id for officer-created raids (string, no collision with numeric imports). */
 function generateRaidId() {
@@ -79,7 +80,6 @@ function ResultNames({ label, names, tone }) {
 }
 
 export default function Officer({ isOfficer, profile, userId }) {
-  const navigate = useNavigate()
   const location = useLocation()
   const [searchParams, setSearchParams] = useSearchParams()
   const selectedRaidId = (searchParams.get('raid') || '').trim()
@@ -336,40 +336,30 @@ export default function Officer({ isOfficer, profile, userId }) {
     setLoading(true)
     setError('')
     await loadRaids()
-    // Load all characters (paginate so newly added / account-linked characters are never excluded)
-    const allChars = []
-    let charFrom = 0
-    const charPageSize = 1000
-    while (true) {
-      const { data: charPage } = await supabase.from('characters').select('char_id, name').range(charFrom, charFrom + charPageSize - 1)
-      if (!charPage?.length) break
-      allChars.push(...charPage)
-      if (charPage.length < charPageSize) break
-      charFrom += charPageSize
+    try {
+      const roster = await fetchActiveRoster(supabase, {
+        accountColumns: 'account_id, display_name, toon_names, inactive',
+        characterColumns: 'char_id, name',
+      })
+      setCharacters(roster.characters)
+      const map = {}
+      roster.characterAccount.forEach((row) => {
+        if (row.char_id && row.account_id && map[row.char_id] == null) map[row.char_id] = row.account_id
+      })
+      setCharIdToAccountId(map)
+      const accNames = {}
+      roster.accounts.forEach((account) => {
+        if (account?.account_id) accNames[account.account_id] = (account.display_name || '').trim() || account.account_id
+      })
+      setAccounts(roster.accounts)
+      setAccountIdToDisplayName(accNames)
+    } catch (err) {
+      setError(err.message || 'Failed to load characters')
+      setCharacters([])
+      setCharIdToAccountId({})
+      setAccounts([])
+      setAccountIdToDisplayName({})
     }
-    setCharacters(allChars)
-    const allCa = []
-    let caFrom = 0
-    const caPageSize = 1000
-    while (true) {
-      const { data: caPage } = await supabase.from('character_account').select('char_id, account_id').range(caFrom, caFrom + caPageSize - 1)
-      if (!caPage?.length) break
-      allCa.push(...caPage)
-      if (caPage.length < caPageSize) break
-      caFrom += caPageSize
-    }
-    const map = {}
-    allCa.forEach((r) => {
-      if (r.char_id && r.account_id && map[r.char_id] == null) map[r.char_id] = r.account_id
-    })
-    setCharIdToAccountId(map)
-    const accRes = await supabase.from('accounts').select('account_id, display_name, toon_names').limit(5000)
-    const accNames = {}
-    ;(accRes.data || []).forEach((a) => {
-      if (a?.account_id) accNames[a.account_id] = (a.display_name || '').trim() || a.account_id
-    })
-    setAccounts(accRes.data || [])
-    setAccountIdToDisplayName(accNames)
     // Fetch all distinct item_name from raid_loot (paginate; Supabase returns max 1000 per request)
     const allItemRows = []
     let from = 0
@@ -411,12 +401,9 @@ export default function Officer({ isOfficer, profile, userId }) {
   }, [loadRaids])
 
   useEffect(() => {
-    if (!isOfficer) {
-      navigate('/')
-      return
-    }
+    if (!isOfficer) return
     loadOfficerData()
-  }, [isOfficer, navigate, loadOfficerData])
+  }, [isOfficer, loadOfficerData])
 
   // When linked from Raids "+" with #add-raid, open the create panel
   useEffect(() => {
@@ -1414,7 +1401,7 @@ export default function Officer({ isOfficer, profile, userId }) {
     }, 50)
   }
 
-  if (!isOfficer) return null
+  if (!isOfficer) return <Navigate to="/" replace />
 
   const appendEvent = events.find((e) => e.event_id === appendEventId) || null
   const showTicPreview = ticPreview.resolved.length > 0
