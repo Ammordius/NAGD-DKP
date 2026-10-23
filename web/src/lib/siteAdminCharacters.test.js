@@ -7,10 +7,16 @@ import {
   buildCharacterRows,
   characterMatchesQuery,
   claimAccountChoices,
+  classifiedAccountIdSet,
   filterAccountAdminRows,
+  normalizeSiteAdminSort,
+  omitClassifiedPickerRows,
   resolveAdminCharacter,
   resolveClaimSubmitAccountId,
   sortClaimAccounts,
+  sortSiteAdminRows,
+  withAccountLastRaidDates,
+  withPickerLastRaidDates,
 } from './siteAdminCharacters.js'
 
 const accounts = [
@@ -216,5 +222,97 @@ describe('sortClaimAccounts', () => {
     })
     assert.equal(submitted, 'acct-b')
     assert.equal(choices[indexB].label, 'Alpha Two')
+  })
+})
+
+describe('site admin last raid', () => {
+  const dkpSummary = [
+    { character_key: '1', character_name: 'Altman', last_activity_date: '2024-01-02T00:00:00+00:00' },
+    { character_key: '1', last_activity_date: '2023-05-01' },
+    { character_key: 'Altman', last_activity_date: '2020-01-01' },
+    { character_key: '3', last_activity_date: '2025-06-15' },
+    { character_key: 'Ghost', last_activity_date: '2019-08-08' },
+    { character_key: '', last_activity_date: '2025-01-01' },
+  ]
+  const accountSummary = [
+    { account_id: 'a1', last_activity_date: '2024-11-01' },
+    { account_id: 'a3', last_activity_date: null },
+  ]
+
+  it('omits active and inactive accounts and keeps an unlinked character', () => {
+    const classified = classifiedAccountIdSet(
+      [{ account_id: 'a1' }, { account_id: 'a1' }, { account_id: '  ' }],
+      accounts,
+    )
+    assert.deepEqual([...classified].sort(), ['a1', 'a2', 'a3'])
+    const rows = buildCharacterRows(characters, characterAccount, accounts)
+    const picker = omitClassifiedPickerRows(rows, classified)
+    assert.deepEqual(picker.map((row) => row.char_id), ['3'])
+    const accountRows = buildAccountAdminRows(characters, characterAccount, accounts)
+    const accountPicker = omitClassifiedPickerRows(accountRows, classified)
+    assert.deepEqual(accountPicker.map((row) => row.char_id), ['3'])
+    assert.equal(accountPicker[0].unlinked, true)
+
+    const stillOpen = classifiedAccountIdSet(
+      [{ account_id: 'a1' }],
+      [{ account_id: 'a2', inactive: false }],
+    )
+    assert.deepEqual([...stillOpen], ['a1'])
+  })
+
+  it('uses the character date on the character picker and the account date on account rows', () => {
+    const characterDated = withPickerLastRaidDates(
+      buildCharacterRows(characters, characterAccount, accounts),
+      dkpSummary,
+      accountSummary,
+      { byCharacter: true },
+    )
+    assert.equal(characterDated.find((row) => row.char_id === '1').lastRaidDate, '2024-01-02')
+    assert.equal(characterDated.find((row) => row.char_id === '2').lastRaidDate, '')
+    assert.equal(characterDated.find((row) => row.char_id === '3').lastRaidDate, '2025-06-15')
+    assert.equal(
+      withPickerLastRaidDates(
+        [{ char_id: '99', name: 'Ghost' }],
+        dkpSummary,
+        accountSummary,
+        { byCharacter: true },
+      )[0].lastRaidDate,
+      '2019-08-08',
+    )
+
+    const accountDated = withPickerLastRaidDates(
+      buildAccountAdminRows(characters, characterAccount, accounts),
+      dkpSummary,
+      accountSummary,
+    )
+    assert.equal(accountDated.find((row) => row.account_id === 'a1').lastRaidDate, '2024-11-01')
+    assert.equal(accountDated.find((row) => row.char_id === '3').lastRaidDate, '2025-06-15')
+
+    const columns = withAccountLastRaidDates(
+      buildAccountColumnRows(['a1', 'a3'], new Map(accounts.map((account) => [account.account_id, account]))),
+      accountSummary,
+    )
+    assert.equal(columns.find((row) => row.account_id === 'a1').lastRaidDate, '2024-11-01')
+    assert.equal(columns.find((row) => row.account_id === 'a3').lastRaidDate, '')
+  })
+
+  it('sorts by name and treats a missing last raid as the oldest date', () => {
+    const rows = [
+      { label: 'Zed', lastRaidDate: '2024-01-01' },
+      { label: 'Amy', lastRaidDate: '' },
+      { label: 'Bea', lastRaidDate: '2025-02-02' },
+      { label: 'Cara', lastRaidDate: '' },
+    ]
+    assert.deepEqual(sortSiteAdminRows(rows, { key: 'name', dir: 'asc' }).map((row) => row.label), ['Amy', 'Bea', 'Cara', 'Zed'])
+    assert.deepEqual(sortSiteAdminRows(rows, { key: 'name', dir: 'desc' }).map((row) => row.label), ['Zed', 'Cara', 'Bea', 'Amy'])
+    assert.deepEqual(sortSiteAdminRows(rows, { key: 'lastRaid', dir: 'asc' }).map((row) => row.label), ['Amy', 'Cara', 'Zed', 'Bea'])
+    assert.deepEqual(sortSiteAdminRows(rows, { key: 'lastRaid', dir: 'desc' }).map((row) => row.label), ['Bea', 'Zed', 'Amy', 'Cara'])
+    assert.deepEqual(
+      sortSiteAdminRows(rows, null).map((row) => row.label),
+      ['Amy', 'Bea', 'Cara', 'Zed'],
+    )
+    assert.deepEqual(normalizeSiteAdminSort({ key: 'nope', dir: 'desc' }), { key: 'name', dir: 'desc' })
+    assert.deepEqual(normalizeSiteAdminSort(null), { key: 'name', dir: 'asc' })
+    assert.deepEqual(normalizeSiteAdminSort({ key: 'lastRaid', dir: 'asc' }), { key: 'lastRaid', dir: 'asc' })
   })
 })

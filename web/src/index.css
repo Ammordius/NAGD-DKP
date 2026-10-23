@@ -563,6 +563,55 @@ label { display: block; margin-bottom: 0.25rem; font-size: 0.875rem; color: #a1a
 }
 .officer-member-avail-list button.is-highlighted:hover { background: #4ade80; color: #052e16; }
 .officer-member-empty { margin: 0; color: #71717a; font-size: 0.8rem; padding: 0.4rem 0.55rem; }
+.officer-member-sort { margin: 0.35rem 0 0.2rem; padding: 0 1px; }
+.officer-member-sort.is-flush { margin-top: 0; }
+.officer-member-sort.has-view {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+.officer-member-split-head,
+.officer-member-list button.officer-member-split,
+.officer-suggest li.officer-suggest-choice {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 6.5rem;
+  column-gap: 0.5rem;
+  align-items: baseline;
+}
+.officer-member-split-head { padding: 0 0.55rem; }
+.officer-member-list button.officer-member-split { text-overflow: clip; }
+.officer-member-split-head .dkp-sort-btn {
+  width: 100%;
+  font-size: 0.75rem;
+  color: #a1a1aa;
+}
+.officer-member-split-head .dkp-sort-btn.is-end { justify-content: flex-end; }
+.officer-member-split-head .dkp-sort-btn[aria-sort="ascending"],
+.officer-member-split-head .dkp-sort-btn[aria-sort="descending"] { color: #e4e4e7; }
+.officer-member-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.officer-member-date {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: #a1a1aa;
+  white-space: nowrap;
+}
+.officer-member-list button.is-highlighted .officer-member-date,
+.officer-suggest li.officer-suggest-choice:hover .officer-member-date { color: inherit; }
+.officer-member-account-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+.officer-member-view-spacer {
+  visibility: hidden;
+  font-size: 0.8rem;
+  padding: 0 0.45rem;
+}
 .officer-member-moves { grid-area: moves; display: flex; flex-direction: column; gap: 0.35rem; }
 .officer-member-moves .btn { min-width: 2.75rem; padding: 0.35rem 0.5rem; }
 .officer-member-moves .btn:disabled { opacity: 0.4; cursor: not-allowed; }

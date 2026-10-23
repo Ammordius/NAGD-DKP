@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase'
 import { fetchAllByRange } from '../lib/fetchAllByRange'
 import { useDkpData } from '../lib/dkpLeaderboard'
 import { usePersistedState } from '../lib/usePersistedState'
-import { buildAccountAdminRows, buildAccountColumnRows, buildCharacterRows, characterMatchesQuery, filterAccountAdminRows, accountColumnLabel, claimAccountChoices, resolveClaimSubmitAccountId } from '../lib/siteAdminCharacters'
+import { buildAccountAdminRows, buildAccountColumnRows, buildCharacterRows, characterMatchesQuery, classifiedAccountIdSet, filterAccountAdminRows, accountColumnLabel, claimAccountChoices, normalizeSiteAdminSort, omitClassifiedPickerRows, resolveClaimSubmitAccountId, sortSiteAdminRows, withAccountLastRaidDates, withPickerLastRaidDates } from '../lib/siteAdminCharacters'
 import { normalizeUiPreferences } from '../lib/uiPreferences'
 import { canRemoveSiteUser, removalBlockReason } from '../lib/siteAdminRemoveUser'
 import { siteTitle } from '../lib/siteTitle'
@@ -29,6 +29,60 @@ function gameAccountLabel(account) {
 function accountListLabel(row) {
   if (!row?.account_id || row.label === row.account_id) return row?.label || ''
   return `${row.label} (${row.account_id})`
+}
+
+function lastRaidText(date) {
+  return date || '—'
+}
+
+function rowTitle(label, lastRaidDate) {
+  return lastRaidDate ? `${label} · ${lastRaidDate}` : (label || '')
+}
+
+function toggleSiteAdminSort(current, column) {
+  const key = column === 'lastRaid' ? 'lastRaid' : 'name'
+  if (current?.key === key) return { key, dir: current.dir === 'asc' ? 'desc' : 'asc' }
+  return { key, dir: 'asc' }
+}
+
+function SiteAdminSortButton({ column, label, sort, onSort, alignEnd = false }) {
+  const active = sort.key === column
+  const title = `Sort by ${label}`
+  return (
+    <button
+      type="button"
+      className={alignEnd ? 'dkp-sort-btn is-end' : 'dkp-sort-btn'}
+      onClick={() => onSort(column)}
+      title={title}
+      aria-sort={active ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'}
+      aria-label={`${title}. ${active ? `Sorted ${sort.dir === 'asc' ? 'ascending' : 'descending'}` : 'Not sorted'}.`}
+    >
+      <span className="dkp-sort-label">{label}</span>
+      {active && (
+        <span
+          className={`dkp-sort-triangle ${sort.dir === 'asc' ? 'dkp-sort-triangle-asc' : 'dkp-sort-triangle-desc'}`}
+          aria-hidden="true"
+        />
+      )}
+    </button>
+  )
+}
+
+function SiteAdminSortHeader({ sort, onSort, nameLabel, reserveView = false, flush = false }) {
+  const className = [
+    'officer-member-sort',
+    reserveView ? 'has-view' : '',
+    flush ? 'is-flush' : '',
+  ].filter(Boolean).join(' ')
+  return (
+    <div className={className}>
+      <div className="officer-member-split-head">
+        <SiteAdminSortButton column="name" label={nameLabel} sort={sort} onSort={onSort} />
+        <SiteAdminSortButton column="lastRaid" label="Last raid" sort={sort} onSort={onSort} alignEnd />
+      </div>
+      {reserveView ? <span className="officer-member-view-spacer" aria-hidden="true">View</span> : null}
+    </div>
+  )
 }
 
 
@@ -59,6 +113,9 @@ export default function OfficerClaimCooldowns({ isOfficer, isSiteAdmin = false, 
 
   const { apiData, isLoading: dkpLoading, mutate } = useDkpData()
   const [charQuery, setCharQuery] = usePersistedState('/officer/SiteAdmin:charQuery', '')
+  const [pickerSort, setPickerSort] = usePersistedState('/officer/SiteAdmin:pickerSort', { key: 'name', dir: 'asc' }, normalizeSiteAdminSort)
+  const [activeSort, setActiveSort] = usePersistedState('/officer/SiteAdmin:activeSort', { key: 'name', dir: 'asc' }, normalizeSiteAdminSort)
+  const [inactiveSort, setInactiveSort] = usePersistedState('/officer/SiteAdmin:inactiveSort', { key: 'name', dir: 'asc' }, normalizeSiteAdminSort)
   const [selectedCharId, setSelectedCharId] = useState(null)
   const [selectedAccountId, setSelectedAccountId] = useState(null)
   const useCharacterAdminSelectors = normalizeUiPreferences(profile?.ui_preferences).useCharacterAdminSelectors
@@ -79,14 +136,28 @@ export default function OfficerClaimCooldowns({ isOfficer, isSiteAdmin = false, 
     return map
   }, [apiData?.accounts])
 
+  const classifiedAccountIds = useMemo(
+    () => classifiedAccountIdSet(apiData?.active_accounts, apiData?.accounts),
+    [apiData?.active_accounts, apiData?.accounts],
+  )
+
   const characterRows = useMemo(
-    () => buildCharacterRows(apiData?.characters, apiData?.character_account, apiData?.accounts),
-    [apiData?.characters, apiData?.character_account, apiData?.accounts]
+    () => withPickerLastRaidDates(
+      buildCharacterRows(apiData?.characters, apiData?.character_account, apiData?.accounts),
+      apiData?.dkp_summary,
+      apiData?.account_dkp_summary,
+      { byCharacter: true },
+    ),
+    [apiData?.characters, apiData?.character_account, apiData?.accounts, apiData?.dkp_summary, apiData?.account_dkp_summary],
   )
 
   const accountAdminRows = useMemo(
-    () => buildAccountAdminRows(apiData?.characters, apiData?.character_account, apiData?.accounts),
-    [apiData?.characters, apiData?.character_account, apiData?.accounts]
+    () => withPickerLastRaidDates(
+      buildAccountAdminRows(apiData?.characters, apiData?.character_account, apiData?.accounts),
+      apiData?.dkp_summary,
+      apiData?.account_dkp_summary,
+    ),
+    [apiData?.characters, apiData?.character_account, apiData?.accounts, apiData?.dkp_summary, apiData?.account_dkp_summary],
   )
 
   const filteredRows = useMemo(
@@ -97,7 +168,11 @@ export default function OfficerClaimCooldowns({ isOfficer, isSiteAdmin = false, 
     () => filterAccountAdminRows(accountAdminRows, charQuery),
     [accountAdminRows, charQuery]
   )
-  const pickerRows = useCharacterAdminSelectors ? filteredRows : filteredAccountRows
+  const pickerSource = useCharacterAdminSelectors ? filteredRows : filteredAccountRows
+  const pickerRows = useMemo(
+    () => sortSiteAdminRows(omitClassifiedPickerRows(pickerSource, classifiedAccountIds), pickerSort),
+    [pickerSource, classifiedAccountIds, pickerSort],
+  )
 
   const suggestRows = pickerRows.slice(0, SUGGEST_LIMIT)
   const selectedCharacter = useMemo(
@@ -109,19 +184,31 @@ export default function OfficerClaimCooldowns({ isOfficer, isSiteAdmin = false, 
   const actionAccountLabel = actionAccount ? accountColumnLabel(actionAccount) : (actionAccountId || '')
 
   const activeCharRows = useMemo(
-    () => buildAccountColumnRows(
-      (apiData?.active_accounts ?? []).map((row) => row.account_id),
-      accountsById
+    () => sortSiteAdminRows(
+      withAccountLastRaidDates(
+        buildAccountColumnRows(
+          (apiData?.active_accounts ?? []).map((row) => row.account_id),
+          accountsById,
+        ),
+        apiData?.account_dkp_summary,
+      ),
+      activeSort,
     ),
-    [apiData?.active_accounts, accountsById]
+    [apiData?.active_accounts, apiData?.account_dkp_summary, accountsById, activeSort],
   )
 
   const inactiveCharRows = useMemo(
-    () => buildAccountColumnRows(
-      (apiData?.accounts ?? []).filter((account) => account.inactive === true).map((account) => account.account_id),
-      accountsById
+    () => sortSiteAdminRows(
+      withAccountLastRaidDates(
+        buildAccountColumnRows(
+          (apiData?.accounts ?? []).filter((account) => account.inactive === true).map((account) => account.account_id),
+          accountsById,
+        ),
+        apiData?.account_dkp_summary,
+      ),
+      inactiveSort,
     ),
-    [apiData?.accounts, accountsById]
+    [apiData?.accounts, apiData?.account_dkp_summary, accountsById, inactiveSort],
   )
 
   useEffect(() => {
@@ -515,6 +602,7 @@ export default function OfficerClaimCooldowns({ isOfficer, isSiteAdmin = false, 
           {useCharacterAdminSelectors
             ? ' Search by character name. The account in the label is the one that changes.'
             : ' Search by account, character, alt, or account id. Each account is listed once.'}
+          {' '}Anyone already active or inactive is listed only in those columns. Last raid is the latest raid with attendance or loot.
         </p>
         {charError && <p className="error" style={{ marginBottom: '0.75rem' }}>{charError}</p>}
         {actionAccountId && (
@@ -530,7 +618,7 @@ export default function OfficerClaimCooldowns({ isOfficer, isSiteAdmin = false, 
             Set account inactive
           </button>
         </div>
-        <div className="officer-suggest-wrap" style={{ maxWidth: '28rem' }}>
+        <div className="officer-suggest-wrap" style={{ maxWidth: '36rem' }}>
           <input
             type="search"
             value={charQuery}
@@ -566,6 +654,7 @@ export default function OfficerClaimCooldowns({ isOfficer, isSiteAdmin = false, 
                 suggestRows.map((row, index) => (
                   <li
                     key={row.key || row.char_id}
+                    className="officer-suggest-choice"
                     role="option"
                     aria-selected={index === suggestIndex || (row.account_id ? row.account_id === actionAccountId : row.char_id === selectedCharId)}
                     style={index === suggestIndex ? { background: '#27272a' } : undefined}
@@ -575,7 +664,8 @@ export default function OfficerClaimCooldowns({ isOfficer, isSiteAdmin = false, 
                     }}
                     onMouseEnter={() => setSuggestIndex(index)}
                   >
-                    {row.label}
+                    <span className="officer-member-name">{row.label}</span>
+                    <span className="officer-member-date">{lastRaidText(row.lastRaidDate)}</span>
                   </li>
                 ))
               )}
@@ -587,64 +677,81 @@ export default function OfficerClaimCooldowns({ isOfficer, isSiteAdmin = false, 
             </ul>
           )}
         </div>
-        <div
-          className="officer-member-list"
-          role="listbox"
-          aria-label={useCharacterAdminSelectors ? 'Characters' : 'Accounts'}
-          style={{ maxWidth: '28rem', marginTop: '0.5rem' }}
-        >
-          {pickerRows.length === 0 ? (
-            <p className="officer-member-empty">
-              {dkpLoading || !apiData
-                ? (useCharacterAdminSelectors ? 'Loading characters…' : 'Loading accounts…')
-                : (query
-                  ? (useCharacterAdminSelectors ? 'No matching characters' : 'No matching accounts')
-                  : (useCharacterAdminSelectors ? 'No characters' : 'No accounts'))}
-            </p>
-          ) : (
-            pickerRows.map((row) => {
-              const selected = row.account_id ? row.account_id === actionAccountId : row.char_id === selectedCharId
-              return (
-                <button
-                  key={row.key || row.char_id}
-                  ref={selected ? selectedCharRef : null}
-                  type="button"
-                  role="option"
-                  aria-selected={selected}
-                  className={selected ? 'is-highlighted' : undefined}
-                  title={row.label}
-                  onClick={() => selectCharacter(row)}
-                >
-                  {row.label}
-                </button>
-              )
-            })
-          )}
+        <div style={{ maxWidth: '36rem', marginTop: '0.5rem' }}>
+          <SiteAdminSortHeader
+            sort={pickerSort}
+            onSort={(column) => setPickerSort((current) => toggleSiteAdminSort(current, column))}
+            nameLabel={useCharacterAdminSelectors ? 'Char name' : 'Account'}
+            flush
+          />
+          <div
+            className="officer-member-list"
+            role="listbox"
+            aria-label={useCharacterAdminSelectors ? 'Characters' : 'Accounts'}
+          >
+            {pickerRows.length === 0 ? (
+              <p className="officer-member-empty">
+                {dkpLoading || !apiData
+                  ? (useCharacterAdminSelectors ? 'Loading characters…' : 'Loading accounts…')
+                  : (query
+                    ? (useCharacterAdminSelectors ? 'No matching characters' : 'No matching accounts')
+                    : (useCharacterAdminSelectors ? 'No characters' : 'No accounts'))}
+              </p>
+            ) : (
+              pickerRows.map((row) => {
+                const selected = row.account_id ? row.account_id === actionAccountId : row.char_id === selectedCharId
+                return (
+                  <button
+                    key={row.key || row.char_id}
+                    ref={selected ? selectedCharRef : null}
+                    type="button"
+                    role="option"
+                    aria-selected={selected}
+                    className={selected ? 'officer-member-split is-highlighted' : 'officer-member-split'}
+                    title={rowTitle(row.label, row.lastRaidDate)}
+                    onClick={() => selectCharacter(row)}
+                  >
+                    <span className="officer-member-name">{row.label}</span>
+                    <span className="officer-member-date">{lastRaidText(row.lastRaidDate)}</span>
+                  </button>
+                )
+              })
+            )}
+          </div>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(16rem, 1fr))', gap: '1rem', marginTop: '1rem' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(20rem, 1fr))', gap: '1rem', marginTop: '1rem' }}>
           <div>
             <strong>Active accounts</strong>
-            <div className="officer-member-list" role="listbox" aria-label="Active accounts" style={{ marginTop: '0.35rem' }}>
+            <SiteAdminSortHeader
+              sort={activeSort}
+              onSort={(column) => setActiveSort((current) => toggleSiteAdminSort(current, column))}
+              nameLabel="Account"
+              reserveView
+            />
+            <div className="officer-member-list" role="listbox" aria-label="Active accounts">
               {activeCharRows.length === 0 ? (
                 <p className="officer-member-empty">None</p>
               ) : (
-                activeCharRows.map((row) => (
-                  <div key={row.account_id} style={{ display: 'flex', alignItems: 'center' }}>
-                    <button
-                      type="button"
-                      role="option"
-                      aria-selected={selectedActiveAccountId === row.account_id}
-                      className={selectedActiveAccountId === row.account_id ? 'is-highlighted' : undefined}
-                      title={accountListLabel(row)}
-                      onClick={() => setSelectedActiveAccountId(row.account_id)}
-                      style={{ flex: '1 1 auto', width: 'auto' }}
-                    >
-                      {accountListLabel(row)}
-                    </button>
-                    <Link to={`/accounts/${row.account_id}`} style={{ fontSize: '0.8rem', padding: '0 0.45rem', flex: '0 0 auto' }}>View</Link>
-                  </div>
-                ))
+                activeCharRows.map((row) => {
+                  const label = accountListLabel(row)
+                  return (
+                    <div key={row.account_id} className="officer-member-account-row">
+                      <button
+                        type="button"
+                        role="option"
+                        aria-selected={selectedActiveAccountId === row.account_id}
+                        className={selectedActiveAccountId === row.account_id ? 'officer-member-split is-highlighted' : 'officer-member-split'}
+                        title={rowTitle(label, row.lastRaidDate)}
+                        onClick={() => setSelectedActiveAccountId(row.account_id)}
+                      >
+                        <span className="officer-member-name">{label}</span>
+                        <span className="officer-member-date">{lastRaidText(row.lastRaidDate)}</span>
+                      </button>
+                      <Link to={`/accounts/${row.account_id}`} style={{ fontSize: '0.8rem', padding: '0 0.45rem' }}>View</Link>
+                    </div>
+                  )
+                })
               )}
             </div>
             <button
@@ -658,26 +765,35 @@ export default function OfficerClaimCooldowns({ isOfficer, isSiteAdmin = false, 
           </div>
           <div>
             <strong>Inactive accounts</strong>
-            <div className="officer-member-list" role="listbox" aria-label="Inactive accounts" style={{ marginTop: '0.35rem' }}>
+            <SiteAdminSortHeader
+              sort={inactiveSort}
+              onSort={(column) => setInactiveSort((current) => toggleSiteAdminSort(current, column))}
+              nameLabel="Account"
+              reserveView
+            />
+            <div className="officer-member-list" role="listbox" aria-label="Inactive accounts">
               {inactiveCharRows.length === 0 ? (
                 <p className="officer-member-empty">None</p>
               ) : (
-                inactiveCharRows.map((row) => (
-                  <div key={row.account_id} style={{ display: 'flex', alignItems: 'center' }}>
-                    <button
-                      type="button"
-                      role="option"
-                      aria-selected={selectedInactiveAccountId === row.account_id}
-                      className={selectedInactiveAccountId === row.account_id ? 'is-highlighted' : undefined}
-                      title={accountListLabel(row)}
-                      onClick={() => setSelectedInactiveAccountId(row.account_id)}
-                      style={{ flex: '1 1 auto', width: 'auto' }}
-                    >
-                      {accountListLabel(row)}
-                    </button>
-                    <Link to={`/accounts/${row.account_id}`} style={{ fontSize: '0.8rem', padding: '0 0.45rem', flex: '0 0 auto' }}>View</Link>
-                  </div>
-                ))
+                inactiveCharRows.map((row) => {
+                  const label = accountListLabel(row)
+                  return (
+                    <div key={row.account_id} className="officer-member-account-row">
+                      <button
+                        type="button"
+                        role="option"
+                        aria-selected={selectedInactiveAccountId === row.account_id}
+                        className={selectedInactiveAccountId === row.account_id ? 'officer-member-split is-highlighted' : 'officer-member-split'}
+                        title={rowTitle(label, row.lastRaidDate)}
+                        onClick={() => setSelectedInactiveAccountId(row.account_id)}
+                      >
+                        <span className="officer-member-name">{label}</span>
+                        <span className="officer-member-date">{lastRaidText(row.lastRaidDate)}</span>
+                      </button>
+                      <Link to={`/accounts/${row.account_id}`} style={{ fontSize: '0.8rem', padding: '0 0.45rem' }}>View</Link>
+                    </div>
+                  )
+                })
               )}
             </div>
             <button
