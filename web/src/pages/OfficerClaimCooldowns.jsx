@@ -146,7 +146,7 @@ export default function OfficerClaimCooldowns({ isOfficer, isSiteAdmin = false, 
       buildCharacterRows(apiData?.characters, apiData?.character_account, apiData?.accounts),
       apiData?.dkp_summary,
       apiData?.account_dkp_summary,
-      { byCharacter: true },
+      { characters: apiData?.characters, characterAccount: apiData?.character_account },
     ),
     [apiData?.characters, apiData?.character_account, apiData?.accounts, apiData?.dkp_summary, apiData?.account_dkp_summary],
   )
@@ -156,6 +156,7 @@ export default function OfficerClaimCooldowns({ isOfficer, isSiteAdmin = false, 
       buildAccountAdminRows(apiData?.characters, apiData?.character_account, apiData?.accounts),
       apiData?.dkp_summary,
       apiData?.account_dkp_summary,
+      { characters: apiData?.characters, characterAccount: apiData?.character_account },
     ),
     [apiData?.characters, apiData?.character_account, apiData?.accounts, apiData?.dkp_summary, apiData?.account_dkp_summary],
   )
@@ -191,10 +192,15 @@ export default function OfficerClaimCooldowns({ isOfficer, isSiteAdmin = false, 
           accountsById,
         ),
         apiData?.account_dkp_summary,
+        {
+          dkpSummary: apiData?.dkp_summary,
+          characters: apiData?.characters,
+          characterAccount: apiData?.character_account,
+        },
       ),
       activeSort,
     ),
-    [apiData?.active_accounts, apiData?.account_dkp_summary, accountsById, activeSort],
+    [apiData?.active_accounts, apiData?.account_dkp_summary, apiData?.dkp_summary, apiData?.characters, apiData?.character_account, accountsById, activeSort],
   )
 
   const inactiveCharRows = useMemo(
@@ -205,10 +211,15 @@ export default function OfficerClaimCooldowns({ isOfficer, isSiteAdmin = false, 
           accountsById,
         ),
         apiData?.account_dkp_summary,
+        {
+          dkpSummary: apiData?.dkp_summary,
+          characters: apiData?.characters,
+          characterAccount: apiData?.character_account,
+        },
       ),
       inactiveSort,
     ),
-    [apiData?.accounts, apiData?.account_dkp_summary, accountsById, inactiveSort],
+    [apiData?.accounts, apiData?.account_dkp_summary, apiData?.dkp_summary, apiData?.characters, apiData?.character_account, accountsById, inactiveSort],
   )
 
   useEffect(() => {
@@ -602,7 +613,7 @@ export default function OfficerClaimCooldowns({ isOfficer, isSiteAdmin = false, 
           {useCharacterAdminSelectors
             ? ' Search by character name. The account in the label is the one that changes.'
             : ' Search by account, character, alt, or account id. Each account is listed once.'}
-          {' '}Anyone already active or inactive is listed only in those columns. Last raid is the latest raid with attendance or loot.
+          {' '}Anyone already active or inactive is listed only in those columns. Last raid is the newest attendance or loot date for the whole account, including the main. An alt uses that account date.
         </p>
         {charError && <p className="error" style={{ marginBottom: '0.75rem' }}>{charError}</p>}
         {actionAccountId && (

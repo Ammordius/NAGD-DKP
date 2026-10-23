@@ -350,7 +350,7 @@ export function lastRaidDateByCharacterKey(dkpSummary) {
   return map
 }
 
-/** Latest raid day keyed by account_id. */
+/** Latest raid day keyed by account_id from account_dkp_summary. */
 export function lastRaidDateByAccountId(accountSummary) {
   const map = new Map()
   for (const row of accountSummary || []) {
@@ -358,6 +358,51 @@ export function lastRaidDateByAccountId(accountSummary) {
     latestRaidDay(map, id, raidDay(row?.last_activity_date))
   }
   return map
+}
+
+function characterAccountIndex(characters, characterAccount) {
+  const charIdToAccount = new Map()
+  for (const row of characterAccount || []) {
+    const charId = row?.char_id != null ? String(row.char_id).trim() : ''
+    const accountId = row?.account_id != null ? String(row.account_id).trim() : ''
+    if (charId && accountId) charIdToAccount.set(charId, accountId)
+  }
+  const nameToAccount = new Map()
+  const ambiguousNames = new Set()
+  for (const character of characters || []) {
+    const charId = character?.char_id != null ? String(character.char_id).trim() : ''
+    const name = (character?.name || '').trim()
+    const accountId = charIdToAccount.get(charId)
+    if (!name || !accountId || ambiguousNames.has(name)) continue
+    const existing = nameToAccount.get(name)
+    if (existing && existing !== accountId) {
+      nameToAccount.delete(name)
+      ambiguousNames.add(name)
+      continue
+    }
+    nameToAccount.set(name, accountId)
+  }
+  return { charIdToAccount, nameToAccount }
+}
+
+/**
+ * Newest last_activity_date for an account.
+ * Account summary plus every linked character. A name is used only when one account has it,
+ * so an alt recorded under the main still counts and a shared alt name does not cross accounts.
+ */
+export function accountRaidDates({ accountSummary, dkpSummary, characters, characterAccount } = {}) {
+  const dates = lastRaidDateByAccountId(accountSummary)
+  const { charIdToAccount, nameToAccount } = characterAccountIndex(characters, characterAccount)
+  for (const row of dkpSummary || []) {
+    const key = row?.character_key != null ? String(row.character_key).trim() : ''
+    const name = (row?.character_name || '').trim()
+    const accountId = (key && charIdToAccount.get(key))
+      || (key && nameToAccount.get(key))
+      || (name && nameToAccount.get(name))
+      || ''
+    if (accountId) latestRaidDay(dates, accountId, raidDay(row?.last_activity_date))
+  }
+  return dates
 }
 
 export function characterLastRaidDate(row, byKey) {
@@ -370,23 +415,23 @@ export function characterLastRaidDate(row, byKey) {
 }
 
 /**
- * Character picker uses that character's last raid.
- * Account picker uses the account's last raid, and an unlinked character's own date.
+ * Linked rows use the account date (every character on that account, including the main).
+ * An unlinked character uses its own character key.
  */
-export function withPickerLastRaidDates(rows, dkpSummary, accountSummary, { byCharacter = false } = {}) {
+export function withPickerLastRaidDates(rows, dkpSummary, accountSummary, { characters, characterAccount } = {}) {
   const byKey = lastRaidDateByCharacterKey(dkpSummary)
-  const byAccount = lastRaidDateByAccountId(accountSummary)
+  const byAccount = accountRaidDates({ accountSummary, dkpSummary, characters, characterAccount })
   return (rows || []).map((row) => {
     const unlinked = row?.account_id == null || String(row.account_id).trim() === ''
-    const lastRaidDate = byCharacter || unlinked
+    const lastRaidDate = unlinked
       ? characterLastRaidDate(row, byKey)
       : (byAccount.get(String(row.account_id)) || '')
     return { ...row, lastRaidDate }
   })
 }
 
-export function withAccountLastRaidDates(rows, accountSummary) {
-  const byAccount = lastRaidDateByAccountId(accountSummary)
+export function withAccountLastRaidDates(rows, accountSummary, { dkpSummary, characters, characterAccount } = {}) {
+  const byAccount = accountRaidDates({ accountSummary, dkpSummary, characters, characterAccount })
   return (rows || []).map((row) => ({
     ...row,
     lastRaidDate: row?.account_id != null ? (byAccount.get(String(row.account_id)) || '') : '',

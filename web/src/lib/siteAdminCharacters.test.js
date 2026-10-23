@@ -2,6 +2,7 @@ import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   accountColumnLabel,
+  accountRaidDates,
   buildAccountAdminRows,
   buildAccountColumnRows,
   buildCharacterRows,
@@ -260,22 +261,21 @@ describe('site admin last raid', () => {
     assert.deepEqual([...stillOpen], ['a1'])
   })
 
-  it('uses the character date on the character picker and the account date on account rows', () => {
+  it('uses the account date for every linked character, and the character date when unlinked', () => {
     const characterDated = withPickerLastRaidDates(
       buildCharacterRows(characters, characterAccount, accounts),
       dkpSummary,
       accountSummary,
-      { byCharacter: true },
+      { characters, characterAccount },
     )
-    assert.equal(characterDated.find((row) => row.char_id === '1').lastRaidDate, '2024-01-02')
-    assert.equal(characterDated.find((row) => row.char_id === '2').lastRaidDate, '')
+    assert.equal(characterDated.find((row) => row.char_id === '1').lastRaidDate, '2024-11-01')
+    assert.equal(characterDated.find((row) => row.char_id === '2').lastRaidDate, '2024-11-01')
     assert.equal(characterDated.find((row) => row.char_id === '3').lastRaidDate, '2025-06-15')
     assert.equal(
       withPickerLastRaidDates(
         [{ char_id: '99', name: 'Ghost' }],
         dkpSummary,
         accountSummary,
-        { byCharacter: true },
       )[0].lastRaidDate,
       '2019-08-08',
     )
@@ -294,6 +294,30 @@ describe('site admin last raid', () => {
     )
     assert.equal(columns.find((row) => row.account_id === 'a1').lastRaidDate, '2024-11-01')
     assert.equal(columns.find((row) => row.account_id === 'a3').lastRaidDate, '')
+  })
+
+  it('gives an alt the main character date when that is newer than the account summary', () => {
+    const dates = accountRaidDates({
+      accountSummary: [{ account_id: 'a1', last_activity_date: '2024-11-01' }],
+      dkpSummary: [
+        { character_key: '1', character_name: 'Altman', last_activity_date: '2024-01-02' },
+        { character_key: 'Ezram', character_name: 'Ezram', last_activity_date: '2026-10-01' },
+      ],
+      characters,
+      characterAccount,
+    })
+    assert.equal(dates.get('a1'), '2026-10-01')
+    const rows = withPickerLastRaidDates(
+      buildCharacterRows(characters, characterAccount, accounts),
+      [
+        { character_key: '1', character_name: 'Altman', last_activity_date: '2024-01-02' },
+        { character_key: 'Ezram', character_name: 'Ezram', last_activity_date: '2026-10-01' },
+      ],
+      [{ account_id: 'a1', last_activity_date: '2024-11-01' }],
+      { characters, characterAccount },
+    )
+    assert.equal(rows.find((row) => row.char_id === '1').lastRaidDate, '2026-10-01')
+    assert.equal(rows.find((row) => row.char_id === '2').lastRaidDate, '2026-10-01')
   })
 
   it('sorts by name and treats a missing last raid as the oldest date', () => {

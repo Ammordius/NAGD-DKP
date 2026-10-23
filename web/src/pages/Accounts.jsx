@@ -2,6 +2,8 @@ import { useEffect, useState, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { ACCOUNTS_LIST_CACHE_KEY, createCache } from '../lib/cache'
 import { fetchActiveRoster } from '../lib/activeRoster'
+import { fetchAllByRange } from '../lib/fetchAllByRange'
+import { accountRaidDates } from '../lib/siteAdminCharacters'
 import { supabase } from '../lib/supabase'
 import { usePersistedState } from '../lib/usePersistedState'
 import { compareAccountsByName } from '../lib/accountSort'
@@ -19,6 +21,13 @@ const MAGELO_BASE = 'https://www.takproject.net/magelo/character.php?char='
 function claimedByLabel(names) {
   if (!names?.length) return 'unclaimed'
   return names.map((name) => (name || '').trim() || '—').join(', ')
+}
+
+function loadSummaryRows(table, columns, orderColumn) {
+  return fetchAllByRange(table, columns, orderColumn).then(
+    (data) => ({ data, error: null }),
+    (error) => ({ data: null, error }),
+  )
 }
 
 export default function Accounts({ profile }) {
@@ -44,7 +53,9 @@ export default function Accounts({ profile }) {
       }),
       supabase.rpc('account_character_spent'),
       supabase.rpc('account_claim_labels'),
-    ]).then(([roster, lootRes, claimsRes]) => {
+      loadSummaryRows('account_dkp_summary', 'account_id, last_activity_date', 'account_id'),
+      loadSummaryRows('dkp_summary', 'character_key, character_name, last_activity_date', 'character_key'),
+    ]).then(([roster, lootRes, claimsRes, accountSummaryRes, dkpSummaryRes]) => {
       const a = { data: roster.accounts, error: null }
       const ca = { data: roster.characterAccount, error: null }
       const ch = { data: roster.characters, error: null }
@@ -73,6 +84,16 @@ export default function Accounts({ profile }) {
         setLoading(false)
         return
       }
+      if (accountSummaryRes.error) {
+        setError(accountSummaryRes.error.message)
+        setLoading(false)
+        return
+      }
+      if (dkpSummaryRes.error) {
+        setError(dkpSummaryRes.error.message)
+        setLoading(false)
+        return
+      }
       const claimsByAccount = {}
       ;(claimsRes.data || []).forEach((row) => {
         const id = row.account_id != null ? String(row.account_id) : ''
@@ -86,6 +107,12 @@ export default function Accounts({ profile }) {
       ;(ca.data || []).forEach((row) => {
         if (!byAccount[row.account_id]) byAccount[row.account_id] = []
         byAccount[row.account_id].push(row.char_id)
+      })
+      const lastRaidByAccount = accountRaidDates({
+        accountSummary: accountSummaryRes.data,
+        dkpSummary: dkpSummaryRes.data,
+        characters: ch.data,
+        characterAccount: ca.data,
       })
       const spentByAccount = {}
       ;(lootRes.data || []).forEach((row) => {
@@ -111,6 +138,7 @@ export default function Accounts({ profile }) {
           toon_count: acc.toon_count,
           display_name: acc.display_name,
           claimed_by: claimedByLabel(claimsByAccount[String(acc.account_id)]),
+          last_raid_date: lastRaidByAccount.get(String(acc.account_id)) || null,
           char_ids: byAccount[acc.account_id] || [],
           characters,
         }
@@ -176,12 +204,14 @@ export default function Accounts({ profile }) {
           <colgroup>
             <col style={{ width: '10rem' }} />
             <col style={{ width: '14rem' }} />
+            <col style={{ width: '9rem' }} />
             <col />
           </colgroup>
           <thead>
             <tr>
               <th>Claimed by</th>
               <th>Account</th>
+              <th>Last Raid Date</th>
               <th>Characters</th>
             </tr>
           </thead>
@@ -201,6 +231,9 @@ export default function Accounts({ profile }) {
                       <code>{acc.account_id}</code>
                       {` · ${chars.length} toons`}
                     </span>
+                  </td>
+                  <td style={{ verticalAlign: 'top', whiteSpace: 'nowrap', color: acc.last_raid_date ? undefined : '#71717a' }}>
+                    {acc.last_raid_date || '—'}
                   </td>
                   <td style={{ verticalAlign: 'top', minWidth: 0 }}>
                     {chars.length === 0 ? (

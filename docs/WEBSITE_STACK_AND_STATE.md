@@ -108,7 +108,7 @@ Fetched with `fetch('/…')` from `public/` or CDN:
 | `localStorage` | `pageState:user:<userId>:/officer/RaidAdmin:ticDraft:<raid id>` | Unsaved tic paste for that officer and raid. A legacy session key is moved here once, then deleted. Never auto-submitted. |
 | `sessionStorage` | `account-detail-cache-${accountId}` | SWR fallback for account page. Not the saved view. |
 | TTL cache | `raids_month_*` | Raids calendar month blobs (`web/src/lib/cache.js`) |
-| TTL cache | `accounts_list_v8` | Accounts list (`web/src/pages/Accounts.jsx`, 10 minutes), sorted by account name ascending. Includes the Claimed by column from `account_claim_labels()`. The page refetches on load and overwrites this key. Character “spent” is loot for that account, same buyer fallback as the account page (assignee, else `character_name`, else `char_id`). It is not the DKP leaderboard total. |
+| TTL cache | `accounts_list_v9` | Accounts list (`web/src/pages/Accounts.jsx`, 10 minutes), sorted by account name ascending. Includes the Claimed by column from `account_claim_labels()` and Last Raid Date from `account_dkp_summary.last_activity_date` plus every linked character's `dkp_summary.last_activity_date` (the newest date on the account, not the one alt name). The page refetches on load and overwrites this key. Character “spent” is loot for that account, same buyer fallback as the account page (assignee, else `character_name`, else `char_id`). It is not the DKP leaderboard total. |
 
 ### Refreshing DKP totals
 
