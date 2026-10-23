@@ -95,8 +95,8 @@ export default function DKP({ isOfficer, profile }) {
   return (
     <div className="container">
       <h1>DKP Leaderboard</h1>
-      <MyDkpStandingsView {...myDkp} />
       <DkpSiteDisclaimer />
+      <MyDkpStandingsView {...myDkp} />
       <p style={{ color: '#71717a' }}>
         One row per account (one human). Earned, spent, and balance are the account totals. Adjustments are included.
         {usingCache && summaryUpdatedAt && (

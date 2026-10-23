@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from 'react'
 import { Routes, Route, Navigate, Link, useLocation, useNavigate } from 'react-router-dom'
 import { Analytics } from '@vercel/analytics/react'
 import { nextAuthGate } from './lib/authGate'
+import { isProductionSite } from './lib/siteTitle'
 import { supabase } from './lib/supabase'
 import { clearUserPageState } from './lib/pageState'
 import { PageStateUserProvider } from './lib/pageStateUser'
@@ -39,6 +40,20 @@ function RequireAuth({ session, children }) {
 function RedirectPreserve({ to }) {
   const { search, hash } = useLocation()
   return <Navigate to={`${to}${search}${hash}`} replace />
+}
+
+function SiteChrome({ children }) {
+  return (
+    <div className="app-shell">
+      {!isProductionSite() && (
+        <div className="dev-site-banner" role="status">THIS IS A DEVELOPMENT / MIRROR SITE</div>
+      )}
+      <div className="app-shell-main">{children}</div>
+      <footer className="site-footer">
+        NAGD is an EverQuest guild on TAKP eqemulator server. This DKP site was created by Ammordius.
+      </footer>
+    </div>
+  )
 }
 
 function persistLastPath(userId, path) {
@@ -173,9 +188,11 @@ export default function App() {
 
   if (loading) {
     return (
-      <div className="container" style={{ paddingTop: '2rem', textAlign: 'center' }}>
-        Loading…
-      </div>
+      <SiteChrome>
+        <div className="container" style={{ paddingTop: '2rem', textAlign: 'center' }}>
+          Loading…
+        </div>
+      </SiteChrome>
     )
   }
 
@@ -186,7 +203,7 @@ export default function App() {
   return (
     <PageStateUserProvider userId={session?.user?.id || null}>
     <RouteScrollProvider>
-    <>
+    <SiteChrome>
       <nav>
         <Link to="/">Home</Link>
         <Link to="/dkp">DKP</Link>
@@ -242,7 +259,7 @@ export default function App() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
       <Analytics />
-    </>
+    </SiteChrome>
     </RouteScrollProvider>
     </PageStateUserProvider>
   )

@@ -24,7 +24,7 @@ Set in `.env.local` (local) and Vercel project settings (production):
 |----------|---------|
 | `VITE_SUPABASE_URL` | Supabase project URL |
 | `VITE_SUPABASE_ANON_KEY` | Supabase anon (public) key |
-| `VITE_SITE_TITLE` | Browser tab title. Also the sign-in heading, the Home (`/`) heading, and the suffix on Site Admin (`Site Admin - …`). Set per deployment so development, staging, and production stay distinguishable while the git code stays the same. Falls back to `NAGD DKP - Development` when unset. |
+| `VITE_SITE_TITLE` | Browser tab title. Also the sign-in heading, the Home (`/`) heading, and the suffix on Site Admin (`Site Admin - …`). Set per deployment so development, staging, and production stay distinguishable while the git code stays the same. Falls back to `NAGD DKP - Development` when unset. A title that contains `production` (any case) hides the development banner and the DKP/account warning. Any other title, including a blank value, shows them. The site footer is always shown. |
 | `VITE_CLASS_RANKINGS_URL` | Optional; Raider Activity “Reload coverage” falls back to `/class_rankings.json`. Guild export: `https://ammordius.github.io/NAGD-spell-inventory/class_rankings.json` (set GitHub secret `CLASS_RANKINGS_URL` to the same for CI). |
 | `SUPABASE_SERVICE_ROLE_KEY` | Server-only. Used by `POST /api/delete-site-user` to call `auth.admin.deleteUser`. Set it in Vercel and in `web/.env.local` (or the repo root `.env`) for `npm run dev`. Do not prefix it with `VITE_` — Vite would expose it to the browser. |
 
