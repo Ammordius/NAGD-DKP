@@ -24,8 +24,9 @@ Set in `.env.local` (local) and Vercel project settings (production):
 |----------|---------|
 | `VITE_SUPABASE_URL` | Supabase project URL |
 | `VITE_SUPABASE_ANON_KEY` | Supabase anon (public) key |
-| `VITE_SITE_TITLE` | Deployment name. Also the sign-in heading, the Home (`/`) heading, and the suffix on Site Admin (`Site Admin - …`). Each route sets the browser tab to `Page · <title>` (for example `DKP · NAGD DKP - Staging Site`). Set per deployment so development, staging, and production stay distinguishable while the git code stays the same. Falls back to `NAGD DKP - Development` when unset. A title that contains `production` (any case) hides the development banner and the DKP/account warning. Any other title, including a blank value, shows them. The site footer is always shown. |
-| `VITE_CLASS_RANKINGS_URL` | Optional; Raider Activity “Reload coverage” falls back to `/class_rankings.json`. Guild export: `https://ammordius.github.io/NAGD-spell-inventory/class_rankings.json` (set GitHub secret `CLASS_RANKINGS_URL` to the same for CI). |
+| `VITE_SITE_TITLE` | Deployment display name. Also the sign-in heading, the Home (`/`) heading, and the suffix on Site Admin (`Site Admin - …`). Each route sets the browser tab to `Page · <title>` (for example `DKP · NAGD DKP - Staging Site`). Set per deployment so development, staging, and production stay distinguishable while the git code stays the same. Falls back to `NAGD DKP - Development` when unset. Display text only — does not control development warnings. The site footer is always shown. |
+| `VITE_SITE_ENV` | Deployment environment: `production`, `staging`, or `development`. Only `production` (case-insensitive exact match) hides the development banner and the DKP/account warning. Missing, blank, or any other value defaults to non-production (warnings shown). |
+| `VITE_CLASS_RANKINGS_URL` | Optional; Raider Activity “Reload coverage” falls back to `/class_rankings.json`. Guild export: `https://ammordius.github.io/NAGD-spell-inventory/class_rankings.json` (set GitHub secret `CLASS_RANKINGS_URL` to the same for CI). CSP `connect-src` allows `https://ammordius.github.io` for this fetch. |
 | `SUPABASE_SERVICE_ROLE_KEY` | Server-only. Used by `POST /api/delete-site-user` to call `auth.admin.deleteUser`. Set it in Vercel and in `web/.env.local` (or the repo root `.env`) for `npm run dev`. Do not prefix it with `VITE_` — Vite would expose it to the browser. |
 
 Access in client code: `import.meta.env.VITE_*` (Vite convention). The service role key is read only in `web/api/delete-site-user.js` from `process.env`.
@@ -230,7 +231,7 @@ npm run build
 npm run preview   # optional local preview of production build
 ```
 
-Vercel: set root to **`web`**, add `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, and `VITE_SITE_TITLE`.
+Vercel: set root to **`web`**, add `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_SITE_TITLE`, and `VITE_SITE_ENV` (`production` only on the live site).
 
 ## Debugging cheatsheet
 

@@ -1,9 +1,19 @@
 export const DEFAULT_SITE_TITLE = 'NAGD DKP - Development'
 
-function readSiteTitleEnv() {
+const SITE_ENVS = new Set(['production', 'staging', 'development'])
+
+function readEnvString(name) {
   const env = import.meta.env
-  const raw = env && env.VITE_SITE_TITLE
+  const raw = env && env[name]
   return typeof raw === 'string' ? raw : ''
+}
+
+function readSiteTitleEnv() {
+  return readEnvString('VITE_SITE_TITLE')
+}
+
+function readSiteEnv() {
+  return readEnvString('VITE_SITE_ENV')
 }
 
 /** Browser tab title from VITE_SITE_TITLE, so each deployment can name itself. */
@@ -13,12 +23,13 @@ export function siteTitle() {
 }
 
 /**
- * Live production only when the raw title contains "production".
- * Blank, unset, development, and staging titles are not production.
+ * Live production only when VITE_SITE_ENV is exactly "production".
+ * Missing, blank, invalid, staging, and development are not production.
+ * VITE_SITE_TITLE is display text only and does not affect this.
  */
-export function isProductionSite(raw = readSiteTitleEnv()) {
-  const value = typeof raw === 'string' ? raw.trim() : ''
-  return /production/i.test(value)
+export function isProductionSite(raw = readSiteEnv()) {
+  const value = typeof raw === 'string' ? raw.trim().toLowerCase() : ''
+  return value === 'production' && SITE_ENVS.has(value)
 }
 
 const PAGE_TITLES = {

@@ -2767,11 +2767,12 @@ AS $$
     LEFT JOIN public.raids r ON r.raid_id = rl.raid_id
     WHERE btrim(coalesce(rl.item_name, '')) <> ''
   ) ranked
-  WHERE ranked.rn <= GREATEST(1, LEAST(COALESCE(p_limit, 3), 10));
+  WHERE ranked.rn <= GREATEST(1, LEAST(COALESCE(p_limit, 3), 10))
+  ORDER BY ranked.item_name ASC, ranked.sale_date DESC, ranked.loot_id DESC;
 $$;
 
 COMMENT ON FUNCTION public.recent_item_sale_costs(integer) IS
-  'Newest sales per item name (ISO date, then loot id). Non-ISO dates sort as newest, matching the Raid Items page.';
+  'Newest sales per item name (ISO date, then loot id). Non-ISO dates sort as newest, matching the Raid Items page. Result order is deterministic for PostgREST range pagination.';
 
 REVOKE ALL ON FUNCTION public.recent_item_sale_costs(integer) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.recent_item_sale_costs(integer) TO authenticated;
@@ -2827,11 +2828,12 @@ AS $$
     AND rows.character_key IS NOT NULL
     AND rows.character_key <> ''
     AND rows.cost_num IS NOT NULL
-  GROUP BY rows.account_id, rows.character_key;
+  GROUP BY rows.account_id, rows.character_key
+  ORDER BY rows.account_id ASC, rows.character_key ASC;
 $$;
 
 COMMENT ON FUNCTION public.account_character_spent() IS
-  'Spent by buyer account and assignee-first character key. Matches buildSpentByAccountFromLoot. Not character_dkp_spent, which is guild-wide and prefers assigned char_id.';
+  'Spent by buyer account and assignee-first character key. Matches buildSpentByAccountFromLoot. Not character_dkp_spent, which is guild-wide and prefers assigned char_id. Result order is deterministic for PostgREST range pagination.';
 
 REVOKE ALL ON FUNCTION public.account_character_spent() FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.account_character_spent() TO authenticated;

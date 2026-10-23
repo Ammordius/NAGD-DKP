@@ -20,6 +20,8 @@ import {
   toggleMobGroup,
 } from '../lib/mobLootViewState'
 import { useForgetScrollOnChange, useScrollContentReady, useScrollListIds } from '../lib/routeScrollView'
+import { fetchAllRpcByRange } from '../lib/fetchAllRpcByRange'
+import { buildItemLast3FromSaleRows } from '../lib/recentItemSaleCosts'
 
 /** EQ slot options for filter (order for dropdown). */
 const SLOT_OPTIONS = ['HEAD', 'FACE', 'NECK', 'SHOULDERS', 'ARMS', 'BACK', 'CHEST', 'WRIST', 'HANDS', 'WAIST', 'LEGS', 'FEET', 'PRIMARY', 'SECONDARY', 'RANGE', 'EAR', 'FINGERS', 'AMMO']
@@ -261,6 +263,7 @@ export default function MobLoot() {
   })
   const [loading, setLoading] = useState(true)
   const [itemLast3, setItemLast3] = useState({})
+  const [last3Error, setLast3Error] = useState('')
   const [mobZoneFromRaids, setMobZoneFromRaids] = useState({})
   const [itemStatsReady, setItemStatsReady] = useState(false)
   const [armorReady, setArmorReady] = useState(false)
@@ -359,32 +362,28 @@ export default function MobLoot() {
     }
 
     const run = async () => {
-      const { data: rows, error } = await supabase.rpc('recent_item_sale_costs', { p_limit: 3 })
-      if (cancelled || error) return
-      const byItem = {}
-      ;(rows || []).forEach((row) => {
-        const name = (row.item_name || '').trim().toLowerCase()
-        if (!name) return
-        if (!byItem[name]) byItem[name] = []
-        byItem[name].push({ id: row.loot_id, cost: row.cost, date: row.sale_date || '' })
-      })
-      const last3Map = {}
-      Object.entries(byItem).forEach(([key, arr]) => {
-        arr.sort((a, b) => {
-          const da = /^\d{4}-\d{2}-\d{2}/.test(String(a.date || '').trim()) ? String(a.date).slice(0, 10) : '9999-99-99'
-          const db = /^\d{4}-\d{2}-\d{2}/.test(String(b.date || '').trim()) ? String(b.date).slice(0, 10) : '9999-99-99'
-          const cmp = db.localeCompare(da)
-          if (cmp !== 0) return cmp
-          return (b.id ?? 0) - (a.id ?? 0)
-        })
-        const recent = arr.slice(0, 3)
-        const costs = recent.map((r) => Number(r.cost))
-        const avg = costs.length ? (costs.reduce((s, c) => s + c, 0) / costs.length).toFixed(1) : null
-        last3Map[key] = { values: recent.map((r) => r.cost ?? '—'), avg }
-      })
-      if (!cancelled) {
+      try {
+        const rows = await fetchAllRpcByRange(
+          supabase,
+          'recent_item_sale_costs',
+          { p_limit: 3 },
+          {
+            orderColumns: [
+              { column: 'item_name', ascending: true },
+              { column: 'sale_date', ascending: false },
+              { column: 'loot_id', ascending: false },
+            ],
+          },
+        )
+        if (cancelled) return
+        const last3Map = buildItemLast3FromSaleRows(rows)
+        setLast3Error('')
         setItemLast3(last3Map)
         cache.set(last3Map)
+      } catch (err) {
+        if (!cancelled) {
+          setLast3Error(err?.message || 'Failed to load recent sale prices')
+        }
       }
     }
     run()
@@ -683,6 +682,7 @@ export default function MobLoot() {
   return (
     <div className="container">
       <h1>Raid Items</h1>
+      {last3Error && <p className="error">{last3Error}</p>}
       <p style={{ color: '#71717a', marginBottom: '1rem' }}>
         DKP loot table per mob. Search by item, mob, or zone; filter by slot and class; items sorted by gear score (saves + AC + HP/3).
       </p>

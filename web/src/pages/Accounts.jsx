@@ -14,6 +14,8 @@ import {
   formatCharacterClassSpentLine,
   spentForCharacterFromLootMap,
 } from '../lib/formatAccountCharacter'
+import { fetchAllRpcByRange } from '../lib/fetchAllRpcByRange'
+import { foldAccountCharacterSpentRows } from '../lib/accountCharacterSpent'
 
 const CACHE_TTL = 10 * 60 * 1000
 const MAGELO_BASE = 'https://www.takproject.net/magelo/character.php?char='
@@ -51,7 +53,20 @@ export default function Accounts({ profile }) {
         characterColumns: 'char_id, name, class_name, level',
         includeUnlinked: false,
       }),
-      supabase.rpc('account_character_spent'),
+      fetchAllRpcByRange(
+        supabase,
+        'account_character_spent',
+        {},
+        {
+          orderColumns: [
+            { column: 'account_id', ascending: true },
+            { column: 'character_key', ascending: true },
+          ],
+        },
+      ).then(
+        (data) => ({ data, error: null }),
+        (error) => ({ data: null, error }),
+      ),
       supabase.rpc('account_claim_labels'),
       loadSummaryRows('account_dkp_summary', 'account_id, last_activity_date', 'account_id'),
       loadSummaryRows('dkp_summary', 'character_key, character_name, last_activity_date', 'character_key'),
@@ -114,14 +129,7 @@ export default function Accounts({ profile }) {
         characters: ch.data,
         characterAccount: ca.data,
       })
-      const spentByAccount = {}
-      ;(lootRes.data || []).forEach((row) => {
-        const aid = row.account_id != null ? String(row.account_id) : ''
-        const key = (row.character_key || '').trim()
-        if (!aid || !key) return
-        if (!spentByAccount[aid]) spentByAccount[aid] = {}
-        spentByAccount[aid][key] = Number(row.total_spent) || 0
-      })
+      const spentByAccount = foldAccountCharacterSpentRows(lootRes.data)
       const accList = (a.data || []).filter((acc) => !acc.inactive).map((acc) => {
         const rawChars = (byAccount[acc.account_id] || []).map((cid) => charMap[cid]).filter(Boolean)
         const spentMap = spentByAccount[String(acc.account_id)] || {}

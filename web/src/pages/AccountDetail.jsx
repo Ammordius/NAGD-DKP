@@ -88,20 +88,27 @@ async function fetchByChunkedIn(table, select, column, values) {
 const ACCOUNT_DEDUPING_INTERVAL_MS = 60_000
 const ACCOUNT_CACHE_KEY = 'account-detail-cache'
 
-function getAccountDetailFromSession(accountId) {
-  if (!accountId) return undefined
+function accountDetailSessionKey(accountId, includeMissing) {
+  if (!accountId) return null
+  return `${ACCOUNT_CACHE_KEY}-${accountId}${includeMissing ? ':missing' : ''}`
+}
+
+function getAccountDetailFromSession(accountId, includeMissing = false) {
+  const key = accountDetailSessionKey(accountId, includeMissing)
+  if (!key) return undefined
   try {
-    const raw = sessionStorage.getItem(`${ACCOUNT_CACHE_KEY}-${accountId}`)
+    const raw = sessionStorage.getItem(key)
     return raw ? JSON.parse(raw) : undefined
   } catch {
     return undefined
   }
 }
 
-function setAccountDetailInSession(accountId, data) {
-  if (!accountId || !data) return
+function setAccountDetailInSession(accountId, data, includeMissing = false) {
+  const key = accountDetailSessionKey(accountId, includeMissing)
+  if (!key || !data) return
   try {
-    sessionStorage.setItem(`${ACCOUNT_CACHE_KEY}-${accountId}`, JSON.stringify(data))
+    sessionStorage.setItem(key, JSON.stringify(data))
   } catch (_) { /* ignore */ }
 }
 
@@ -304,17 +311,25 @@ export default function AccountDetail({ isOfficer, profile, session, onProfileUp
     accountId ? `/accounts/detail:${accountId}:onlyMissingRaids` : '/accounts/detail:none:onlyMissingRaids',
     false
   )
-  const cacheKey = accountId ? `account-detail-${accountId}${onlyMissingRaids ? ':missing' : ''}` : null
-  const fallbackData = cacheKey ? getAccountDetailFromSession(accountId) : undefined
+  const [showMissingDetails, setShowMissingDetails] = usePersistedState(
+    accountId ? `/accounts/detail:${accountId}:showMissingDetails` : '/accounts/detail:none:showMissingDetails',
+    false
+  )
+  // Either control needs the positive-DKP raid universe (missing absences / tic details).
+  const includeMissing = Boolean(showMissingDetails || onlyMissingRaids)
+  const cacheKey = accountId ? `account-detail-${accountId}${includeMissing ? ':missing' : ''}` : null
+  const fallbackData = cacheKey ? getAccountDetailFromSession(accountId, includeMissing) : undefined
   const { data: swrData, error: swrError, isLoading, mutate } = useSWR(
     cacheKey,
-    () => fetchAccountDetail(accountId, onlyMissingRaids),
+    () => fetchAccountDetail(accountId, includeMissing),
     {
       fallbackData,
       dedupingInterval: ACCOUNT_DEDUPING_INTERVAL_MS,
       revalidateOnFocus: false,
       revalidateOnReconnect: false,
-      onSuccess: (data) => { if (accountId && data) setAccountDetailInSession(accountId, data) },
+      onSuccess: (data) => {
+        if (accountId && data) setAccountDetailInSession(accountId, data, includeMissing)
+      },
     }
   )
   const account = swrData?.account ?? null
@@ -328,10 +343,6 @@ export default function AccountDetail({ isOfficer, profile, session, onProfileUp
   const [activityPage, setActivityPage] = usePersistedState(
     accountId ? `/accounts/detail:${accountId}:activityPage` : '/accounts/detail:none:activityPage',
     1
-  )
-  const [showMissingDetails, setShowMissingDetails] = usePersistedState(
-    accountId ? `/accounts/detail:${accountId}:showMissingDetails` : '/accounts/detail:none:showMissingDetails',
-    false
   )
   const [addCharOpen, setAddCharOpen] = useState(false)
   const [addCharInput, setAddCharInput] = useState('')
@@ -476,7 +487,10 @@ export default function AccountDetail({ isOfficer, profile, session, onProfileUp
       setDisplayNameError(rpcErr.message)
       return
     }
-    try { sessionStorage.removeItem(`${ACCOUNT_CACHE_KEY}-${accountId}`) } catch (_) {}
+    try {
+      sessionStorage.removeItem(accountDetailSessionKey(accountId, false))
+      sessionStorage.removeItem(accountDetailSessionKey(accountId, true))
+    } catch (_) {}
     try { sessionStorage.removeItem(ACCOUNTS_LIST_CACHE_KEY) } catch (_) {}
     setDisplayNameEditorOpen(false)
     setDisplayNameQuery('')
@@ -533,7 +547,7 @@ export default function AccountDetail({ isOfficer, profile, session, onProfileUp
           patched = patchLootAssignment(current, row.id, cid, cname)
           return patched
         }, { revalidate: false })
-        if (accountId && patched) setAccountDetailInSession(accountId, patched)
+        if (accountId && patched) setAccountDetailInSession(accountId, patched, includeMissing)
 
         // Assignment does not change account DKP. Skip refresh_account_dkp_summary_for_raid
         // so the click is not blocked on a raid-wide summary rebuild.
@@ -555,7 +569,7 @@ export default function AccountDetail({ isOfficer, profile, session, onProfileUp
           )
           return reverted
         }, { revalidate: false })
-        if (accountId && reverted) setAccountDetailInSession(accountId, reverted)
+        if (accountId && reverted) setAccountDetailInSession(accountId, reverted, includeMissing)
       } finally {
         setPendingAssign((prev) => {
           if (!Object.prototype.hasOwnProperty.call(prev, lootKey)) return prev
