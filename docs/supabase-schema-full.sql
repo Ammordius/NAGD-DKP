@@ -2750,21 +2750,24 @@ AS $$
       lower(btrim(rl.item_name)) AS item_name,
       rl.id AS loot_id,
       rl.cost,
-      CASE
-        WHEN btrim(coalesce(r.date_iso, '')) ~ '^\d{4}-\d{2}-\d{2}' THEN left(btrim(r.date_iso), 10)
-        ELSE btrim(coalesce(r.date, ''))
-      END AS sale_date,
+      resolved.sale_date,
       row_number() OVER (
         PARTITION BY lower(btrim(rl.item_name))
         ORDER BY
           CASE
-            WHEN btrim(coalesce(r.date_iso, '')) ~ '^\d{4}-\d{2}-\d{2}' THEN left(btrim(r.date_iso), 10)
+            WHEN resolved.sale_date ~ '^\d{4}-\d{2}-\d{2}' THEN left(resolved.sale_date, 10)
             ELSE '9999-99-99'
           END DESC,
           rl.id DESC
       ) AS rn
     FROM public.raid_loot rl
     LEFT JOIN public.raids r ON r.raid_id = rl.raid_id
+    CROSS JOIN LATERAL (
+      SELECT CASE
+        WHEN btrim(coalesce(r.date_iso, '')) ~ '^\d{4}-\d{2}-\d{2}' THEN left(btrim(r.date_iso), 10)
+        ELSE btrim(coalesce(r.date, ''))
+      END AS sale_date
+    ) resolved
     WHERE btrim(coalesce(rl.item_name, '')) <> ''
   ) ranked
   WHERE ranked.rn <= GREATEST(1, LEAST(COALESCE(p_limit, 3), 10))
@@ -2772,7 +2775,7 @@ AS $$
 $$;
 
 COMMENT ON FUNCTION public.recent_item_sale_costs(integer) IS
-  'Newest sales per item name (ISO date, then loot id). Non-ISO dates sort as newest, matching the Raid Items page. Result order is deterministic for PostgREST range pagination.';
+  'Newest sales per item name. Resolves date_iso then date (same as the prior Raid Items client); ISO dates rank by calendar, non-ISO as newest, then loot id. Result order is deterministic for PostgREST range pagination.';
 
 REVOKE ALL ON FUNCTION public.recent_item_sale_costs(integer) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.recent_item_sale_costs(integer) TO authenticated;
@@ -2786,13 +2789,16 @@ SECURITY INVOKER
 SET search_path = public
 AS $$
   WITH buyer_name AS (
-    SELECT DISTINCT ON (lower(btrim(c.name)))
-      lower(btrim(c.name)) AS name_key,
+    -- Case-sensitive name keys match buildSpentByAccountFromLoot / prior Accounts map.
+    -- When two characters share a name, prefer the highest char_id (same as last write when
+    -- character_account is walked in ascending char_id order).
+    SELECT DISTINCT ON (btrim(c.name))
+      btrim(c.name) AS name_key,
       ca.account_id
     FROM public.character_account ca
     JOIN public.characters c ON c.char_id = ca.char_id
     WHERE btrim(coalesce(c.name, '')) <> ''
-    ORDER BY lower(btrim(c.name)), ca.account_id, ca.char_id
+    ORDER BY btrim(c.name), ca.char_id DESC
   ),
   rows AS (
     SELECT
@@ -2820,7 +2826,7 @@ AS $$
     LEFT JOIN buyer_name bn
       ON ca.account_id IS NULL
      AND btrim(coalesce(rl.character_name, '')) <> ''
-     AND bn.name_key = lower(btrim(rl.character_name))
+     AND bn.name_key = btrim(rl.character_name)
   )
   SELECT rows.account_id, rows.character_key, SUM(rows.cost_num) AS total_spent
   FROM rows
@@ -2833,7 +2839,7 @@ AS $$
 $$;
 
 COMMENT ON FUNCTION public.account_character_spent() IS
-  'Spent by buyer account and assignee-first character key. Matches buildSpentByAccountFromLoot. Not character_dkp_spent, which is guild-wide and prefers assigned char_id. Result order is deterministic for PostgREST range pagination.';
+  'Spent by buyer account and assignee-first character key. Matches buildSpentByAccountFromLoot (case-sensitive buyer name fallback; duplicate names prefer highest char_id). Not character_dkp_spent. Result order is deterministic for PostgREST range pagination.';
 
 REVOKE ALL ON FUNCTION public.account_character_spent() FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.account_character_spent() TO authenticated;

@@ -73,6 +73,67 @@ async function waitForPostgres() {
   throw new Error('Postgres did not become ready')
 }
 
+/**
+ * Compare live account_character_spent() output to buildSpentByAccountFromLoot
+ * on the same fixture. Exact equality for integer and decimal totals.
+ */
+async function assertAccountCharacterSpentMatchesJs() {
+  const { buildSpentByAccountFromLoot } = await import('../../src/lib/formatAccountCharacter.js')
+  const {
+    characterAccount,
+    characters,
+    lootRowsForJs,
+  } = await import('./accountCharacterSpent.fixture.js')
+
+  const buyerCharIdToAccountId = {}
+  for (const row of characterAccount) {
+    const cid = String(row.char_id || '').trim()
+    const accountId = row.account_id
+    if (cid) buyerCharIdToAccountId[cid] = accountId
+    const cname = (characters.find((c) => c.char_id === row.char_id)?.name || '').trim()
+    if (cname) buyerCharIdToAccountId[cname] = accountId
+  }
+
+  const jsSpent = buildSpentByAccountFromLoot(lootRowsForJs(), buyerCharIdToAccountId)
+  const out = await psql(`
+COPY (
+  SELECT account_id, character_key, total_spent::text
+  FROM public.account_character_spent()
+  WHERE account_id IN ('parity-acct-1', 'parity-acct-2')
+  ORDER BY account_id, character_key
+) TO STDOUT WITH (FORMAT csv);
+`)
+  /** @type {Record<string, Record<string, number>>} */
+  const sqlSpent = {}
+  for (const line of out.split(/\r?\n/).filter(Boolean)) {
+    const [accountId, characterKey, totalText] = line.split(',')
+    if (!sqlSpent[accountId]) sqlSpent[accountId] = {}
+    sqlSpent[accountId][characterKey] = Number(totalText)
+  }
+
+  const jsKeys = Object.keys(jsSpent).sort()
+  const sqlKeys = Object.keys(sqlSpent).sort()
+  if (jsKeys.join('\0') !== sqlKeys.join('\0')) {
+    throw new Error(
+      `account_character_spent account keys differ: js=${JSON.stringify(jsSpent)} sql=${JSON.stringify(sqlSpent)}`,
+    )
+  }
+  for (const accountId of jsKeys) {
+    const jsMap = jsSpent[accountId]
+    const sqlMap = sqlSpent[accountId]
+    const keys = [...new Set([...Object.keys(jsMap), ...Object.keys(sqlMap)])].sort()
+    for (const key of keys) {
+      const jsVal = jsMap[key]
+      const sqlVal = sqlMap[key]
+      if (jsVal !== sqlVal) {
+        throw new Error(
+          `account_character_spent mismatch ${accountId}/${key}: js=${jsVal} sql=${sqlVal}`,
+        )
+      }
+    }
+  }
+}
+
 async function waitForHeldLock() {
   for (let attempt = 0; attempt < 40; attempt += 1) {
     const result = await psqlAllowFail(`
@@ -201,6 +262,9 @@ async function main() {
   await assertReapplyPreservesRows()
   await psql(readFileSync(join(here, 'dkp-calculation.sql'), 'utf8'))
   await psql(readFileSync(join(here, 'character-spent.sql'), 'utf8'))
+  await psql(readFileSync(join(here, 'account-character-spent-parity.sql'), 'utf8'))
+  await assertAccountCharacterSpentMatchesJs()
+  await psql(readFileSync(join(here, 'recent-item-sale-costs.sql'), 'utf8'))
   console.log('PostgreSQL authorization and DKP calculation tests passed')
 }
 

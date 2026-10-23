@@ -23,6 +23,11 @@ import { useScrollContentReady } from '../lib/routeScrollView'
 import { fetchLootForAccountChars } from '../lib/accountData'
 import { aggregateLootSpent, sumCharacterSpent } from '../lib/characterSpent'
 import { distinctTicsByRaid, raidTicAttendance } from '../lib/raidTicIdentity'
+import {
+  accountDetailSessionKey,
+  accountDetailSwrKey,
+  needsMissingRaidUniverse,
+} from '../lib/accountDetailMissingScope'
 
 const MAGELO_BASE = 'https://www.takproject.net/magelo/character.php?char='
 
@@ -86,12 +91,6 @@ async function fetchByChunkedIn(table, select, column, values) {
 
 /** SWR deduplication: 60s so revisiting the same account shows cached data without full reload. */
 const ACCOUNT_DEDUPING_INTERVAL_MS = 60_000
-const ACCOUNT_CACHE_KEY = 'account-detail-cache'
-
-function accountDetailSessionKey(accountId, includeMissing) {
-  if (!accountId) return null
-  return `${ACCOUNT_CACHE_KEY}-${accountId}${includeMissing ? ':missing' : ''}`
-}
 
 function getAccountDetailFromSession(accountId, includeMissing = false) {
   const key = accountDetailSessionKey(accountId, includeMissing)
@@ -316,8 +315,8 @@ export default function AccountDetail({ isOfficer, profile, session, onProfileUp
     false
   )
   // Either control needs the positive-DKP raid universe (missing absences / tic details).
-  const includeMissing = Boolean(showMissingDetails || onlyMissingRaids)
-  const cacheKey = accountId ? `account-detail-${accountId}${includeMissing ? ':missing' : ''}` : null
+  const includeMissing = needsMissingRaidUniverse(showMissingDetails, onlyMissingRaids)
+  const cacheKey = accountDetailSwrKey(accountId, includeMissing)
   const fallbackData = cacheKey ? getAccountDetailFromSession(accountId, includeMissing) : undefined
   const { data: swrData, error: swrError, isLoading, mutate } = useSWR(
     cacheKey,
