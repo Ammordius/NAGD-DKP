@@ -2,23 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { usePersistedState } from '../lib/usePersistedState'
-
-const PAGE_SIZE = 1000
-
-async function fetchAllRows(table, select) {
-  const all = []
-  let from = 0
-  while (true) {
-    const to = from + PAGE_SIZE - 1
-    const { data, error } = await supabase.from(table).select(select).range(from, to)
-    if (error) throw error
-    const rows = data || []
-    all.push(...rows)
-    if (rows.length < PAGE_SIZE) break
-    from += PAGE_SIZE
-  }
-  return all
-}
+import { fetchActiveRoster } from '../lib/activeRoster'
 
 function parseWhoNames(paste) {
   const names = []
@@ -70,12 +54,14 @@ export default function OfficerWhoParser({ isOfficer }) {
       setLoading(true)
       setError('')
       try {
-        const [charsData, caData, accountsData] = await Promise.all([
-          fetchAllRows('characters', 'char_id, name, class_name'),
-          fetchAllRows('character_account', 'char_id, account_id'),
-          fetchAllRows('accounts', 'account_id, display_name'),
-        ])
+        const roster = await fetchActiveRoster(supabase, {
+          accountColumns: 'account_id, display_name, inactive',
+          characterColumns: 'char_id, name, class_name',
+        })
         if (cancelled) return
+        const charsData = roster.characters
+        const caData = roster.characterAccount
+        const accountsData = roster.accounts
         setCharacters(charsData || [])
         const caMap = {}
         ;(caData || []).forEach((row) => {

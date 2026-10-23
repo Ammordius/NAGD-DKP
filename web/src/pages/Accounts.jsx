@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { ACCOUNTS_LIST_CACHE_KEY, createCache } from '../lib/cache'
-import { fetchAll } from '../lib/accountData'
+import { fetchActiveRoster } from '../lib/activeRoster'
 import { supabase } from '../lib/supabase'
 import { usePersistedState } from '../lib/usePersistedState'
 import { compareAccountsByName } from '../lib/accountSort'
@@ -37,12 +37,17 @@ export default function Accounts({ profile }) {
     }
 
     Promise.all([
-      fetchAll('accounts', 'account_id, toon_count, display_name, inactive', undefined, { order: { column: 'account_id', ascending: true } }),
-      fetchAll('character_account', 'account_id, char_id', undefined, { order: { column: 'char_id', ascending: true }, order2: { column: 'account_id', ascending: true } }),
-      fetchAll('characters', 'char_id, name, class_name, level', undefined, { order: { column: 'char_id', ascending: true } }),
+      fetchActiveRoster(supabase, {
+        accountColumns: 'account_id, toon_count, display_name, inactive',
+        characterColumns: 'char_id, name, class_name, level',
+        includeUnlinked: false,
+      }),
       supabase.rpc('account_character_spent'),
       supabase.rpc('account_claim_labels'),
-    ]).then(([a, ca, ch, lootRes, claimsRes]) => {
+    ]).then(([roster, lootRes, claimsRes]) => {
+      const a = { data: roster.accounts, error: null }
+      const ca = { data: roster.characterAccount, error: null }
+      const ch = { data: roster.characters, error: null }
       if (a.error) {
         setError(a.error.message)
         setLoading(false)
@@ -114,6 +119,9 @@ export default function Accounts({ profile }) {
       setAccounts(accList)
       setLoading(false)
       cache.set(accList)
+    }).catch((err) => {
+      setError(err.message || 'Failed to load accounts')
+      setLoading(false)
     })
   }, [])
 

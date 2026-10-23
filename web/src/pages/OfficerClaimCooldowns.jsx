@@ -511,7 +511,7 @@ export default function OfficerClaimCooldowns({ isOfficer, isSiteAdmin = false, 
       <section className="card" style={{ marginBottom: '1.5rem' }}>
         <h2 style={{ marginTop: 0 }}>Set accounts as active or inactive</h2>
         <p style={{ color: '#71717a', fontSize: '0.9rem', marginTop: 0 }}>
-          Active and inactive apply to a whole game account, including every linked character. Accounts on the DKP leaderboard are hidden when they have no attendance or loot in the last 120 days. Set an account active so it always shows, or inactive so it stays hidden.
+          Active and inactive apply to a whole game account, including every linked character. Accounts on the DKP leaderboard are hidden when they have no attendance or loot in the last 120 days. Set an account inactive to hide it from Game Accounts and from officer raid and loot entry. Attendance and loot already recorded stay on past raids. Set it active to show it again.
           {useCharacterAdminSelectors
             ? ' Search by character name. The account in the label is the one that changes.'
             : ' Search by account, character, alt, or account id. Each account is listed once.'}

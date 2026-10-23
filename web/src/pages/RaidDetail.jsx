@@ -18,6 +18,7 @@ import { displayTicEventName, eventFieldsForTimeSave, eventTimeToStore, fieldsFo
 import TicDateTimeFields from '../components/TicDateTimeFields'
 import { normalizeUiPreferences } from '../lib/uiPreferences'
 import { buildAccountAdminRows, filterAccountAdminRows } from '../lib/siteAdminCharacters'
+import { accountsForInput, charactersForInput, linksForInput } from '../lib/activeRoster'
 import AttendeeCountCell from '../components/AttendeeCountCell'
 
 /** SWR deduplication: 60s so revisiting the same raid or multiple components don't each hit the DB. */
@@ -82,23 +83,32 @@ export default function RaidDetail({ isOfficer, profile }) {
 
   const itemIdMap = useMemo(() => buildItemNameToIdMap(mobLoot), [mobLoot])
 
+  const inputCharacters = useMemo(
+    () => charactersForInput(characters, characterAccount, accounts),
+    [characters, characterAccount, accounts],
+  )
+  const inputAccounts = useMemo(() => accountsForInput(accounts), [accounts])
+  const inputLinks = useMemo(
+    () => linksForInput(characterAccount, accounts),
+    [characterAccount, accounts],
+  )
   const nameToChar = useMemo(() => {
     const m = {}
-    characters.forEach((c) => {
+    inputCharacters.forEach((c) => {
       const n = (c.name || '').trim()
       if (n) m[n.toLowerCase()] = { char_id: c.char_id, name: n }
     })
     return m
-  }, [characters])
-  const characterNamesList = useMemo(() => characters.map((c) => (c.name || '').trim()).filter(Boolean).sort((a, b) => a.localeCompare(b)), [characters])
+  }, [inputCharacters])
+  const characterNamesList = useMemo(() => inputCharacters.map((c) => (c.name || '').trim()).filter(Boolean).sort((a, b) => a.localeCompare(b)), [inputCharacters])
   const filteredCharacterNames = useMemo(() => {
     const q = addToTicCharQuery.toLowerCase().trim()
     if (!q) return characterNamesList.slice(0, 200)
     return characterNamesList.filter((n) => n.toLowerCase().includes(q)).slice(0, 200)
   }, [characterNamesList, addToTicCharQuery])
   const accountAdminRows = useMemo(
-    () => buildAccountAdminRows(characters, characterAccount, accounts),
-    [characters, characterAccount, accounts]
+    () => buildAccountAdminRows(inputCharacters, inputLinks, inputAccounts),
+    [inputCharacters, inputLinks, inputAccounts]
   )
   const filteredAccountRows = useMemo(
     () => filterAccountAdminRows(accountAdminRows, addToTicCharQuery).slice(0, 200),
@@ -325,7 +335,7 @@ export default function RaidDetail({ isOfficer, profile }) {
     if (!raidId || !addToTicEventId) return
     const name = addToTicCharQuery.trim()
     const picked = addToTicCharId
-      ? characters.find((row) => String(row.char_id) === String(addToTicCharId) && (row.name || '').trim())
+      ? inputCharacters.find((row) => String(row.char_id) === String(addToTicCharId) && (row.name || '').trim())
       : null
     const char = picked
       ? { char_id: picked.char_id, name: picked.name.trim() }
@@ -598,7 +608,7 @@ export default function RaidDetail({ isOfficer, profile }) {
                           role="option"
                           onMouseDown={(e) => {
                             e.preventDefault()
-                            const matches = characters.filter((row) => (row.name || '').trim().toLowerCase() === n.toLowerCase())
+                            const matches = inputCharacters.filter((row) => (row.name || '').trim().toLowerCase() === n.toLowerCase())
                             setAddToTicCharQuery(n)
                             setAddToTicCharId(matches.length === 1 ? String(matches[0].char_id) : '')
                             setTimeout(() => setShowCharDropdown(false), 0)
