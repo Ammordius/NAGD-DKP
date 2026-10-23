@@ -253,6 +253,17 @@ describe('delete-site-user handler', () => {
     assert.equal(res.statusCode, 405)
   })
 
+  it('rejects a body over 1 KB', async () => {
+    const res = mockRes()
+    await handler({
+      method: 'POST',
+      headers: { authorization: 'Bearer token' },
+      body: `{"profileId":"${'x'.repeat(1100)}"}`,
+    }, res)
+    assert.equal(res.statusCode, 413)
+    assert.equal(JSON.parse(res.body).error, 'Request body is too large')
+  })
+
   it('rejects a missing token', async () => {
     const res = mockRes()
     await handler({ method: 'POST', headers: {}, body: { profileId: TARGET } }, res)

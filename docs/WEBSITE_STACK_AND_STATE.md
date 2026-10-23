@@ -40,7 +40,7 @@ Access in client code: `import.meta.env.VITE_*` (Vite convention). The service r
 | `web/src/components/*.jsx` | Shared UI (links, disclaimers, cards) |
 | `web/src/lib/*.js` | Supabase client, DKP math, static JSON helpers, `usePersistedState`, caches |
 | `web/public/` | Static assets served at site root (`/item_stats.json`, `/dkp_mob_loot.json`, etc.) |
-| `web/api/` | Vercel serverless. `delete-site-user.js` removes an auth user (service role). `get-dkp.ts` is a legacy leaderboard proxy. |
+| `web/api/` | Vercel serverless. `delete-site-user.js` removes an auth user (service role). |
 | `web/vercel.json` | SPA rewrites (`/*` → `/index.html`), cache headers for selected JSON |
 
 Repo-level SQL/docs (schema, imports) live under `docs/` at the **repository** root; this file is the **web app** map.
@@ -68,9 +68,9 @@ Defined in `web/src/App.jsx`.
 | `/profile` | `Profile` | Signed in |
 | `/items/:itemNameEncoded` | `ItemPage` | Signed in |
 | `/characters/:charKey` | `CharacterPage` | Signed in |
-| `*` | Redirect to `/` | — |
+| `*` | Page not found | Public |
 
-**Roles:** `App` loads `profiles.role` for the signed-in user. `player`, `officer`, and `siteadmin` are allowed. `isOfficer` is true for `officer` and `siteadmin` and toggles officer nav links; individual pages may also `navigate('/')` if not officer. `isSiteAdmin` is true only for `siteadmin`. On `/officer/SiteAdmin`, officers and site admins see Site Profile Accounts. Unclaim, claim-on-behalf, and role changes are siteadmin only. Claim sets `profiles.account_id` from an unclaimed `accounts` row (`account_id` and `display_name`) and does not clear an unclaim cooldown. Remove user is `POST /api/delete-site-user`: it deletes the profile, then `auth.admin.deleteUser` with the server-only service role key. Officers may remove players. Site admins may remove players and officers. Nobody may remove a site admin or themselves. `profiles.display_name` is the site name (email sign-up field, or the Discord username). It is separate from `accounts.display_name`. Nav labels are Game Accounts (`/accounts`) and My Site Profile (`/profile`).
+**Roles:** `App` loads `profiles.role` for the signed-in user. `player`, `officer`, and `siteadmin` are allowed. `isOfficer` is true for `officer` and `siteadmin` and toggles officer nav links; `RequireOfficer` sends anyone else home before the officer page renders. `isSiteAdmin` is true only for `siteadmin`. On `/officer/SiteAdmin`, officers and site admins see Site Profile Accounts. Unclaim, claim-on-behalf, and role changes are siteadmin only. Claim sets `profiles.account_id` from an unclaimed `accounts` row (`account_id` and `display_name`) and does not clear an unclaim cooldown. Remove user is `POST /api/delete-site-user`: it deletes the profile, then `auth.admin.deleteUser` with the server-only service role key. Officers may remove players. Site admins may remove players and officers. Nobody may remove a site admin or themselves. `profiles.display_name` is the site name (email sign-up field, or the Discord username). It is separate from `accounts.display_name`. Nav labels are Game Accounts (`/accounts`) and My Site Profile (`/profile`).
 
 **Site time** is Eastern for everyone. There is no timezone setting on My Site Profile. The clock is Eastern Standard Time (EST, UTC-5), and Eastern Daylight Time (EDT, UTC-4) while daylight saving is in effect (`America/New_York`). Raid dates stored as an offset instant, tic clocks, and the raids calendar use that zone. A date-only raid stays on that calendar date. A new raid with no Discord date stores the current Eastern date and time as an offset instant. Discord raid-line parsing is unchanged.
 

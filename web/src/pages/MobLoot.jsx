@@ -292,7 +292,16 @@ export default function MobLoot() {
     let cancelled = false
     const run = async () => {
       try {
-        const { data: raidRows } = await supabase.from('raids').select('raid_id, raid_name')
+        const raidRows = []
+        let raidFrom = 0
+        while (true) {
+          const { data: raidChunk } = await supabase.from('raids').select('raid_id, raid_name').order('raid_id', { ascending: true }).range(raidFrom, raidFrom + 999)
+          if (cancelled) return
+          if (!raidChunk?.length) break
+          raidRows.push(...raidChunk)
+          if (raidChunk.length < 1000) break
+          raidFrom += 1000
+        }
         if (cancelled) return
         const raidIdToName = {}
         ;(raidRows || []).forEach((r) => { raidIdToName[r.raid_id] = (r.raid_name || '').trim() })
@@ -301,7 +310,7 @@ export default function MobLoot() {
         let from = 0
         const PAGE = 2000
         while (true) {
-          const { data: chunk } = await supabase.from('raid_classifications').select('raid_id, mob, zone').range(from, from + PAGE - 1)
+          const { data: chunk } = await supabase.from('raid_classifications').select('raid_id, mob, zone').order('raid_id', { ascending: true }).order('mob', { ascending: true }).range(from, from + PAGE - 1)
           if (cancelled) return
           if (!chunk?.length) break
           allClass.push(...chunk)
@@ -349,38 +358,15 @@ export default function MobLoot() {
       setItemLast3(cached)
     }
 
-    const PAGE = 1000
     const run = async () => {
-      const allLoot = []
-      let from = 0
-      while (true) {
-        const to = from + PAGE - 1
-        const { data: chunk } = await supabase.from('raid_loot').select('id, raid_id, item_name, cost').order('id', { ascending: false }).range(from, to)
-        if (cancelled) return
-        if (!chunk?.length) break
-        allLoot.push(...chunk)
-        if (chunk.length < PAGE) break
-        from += PAGE
-      }
-      if (cancelled || allLoot.length === 0) return
-      const raidIds = [...new Set(allLoot.map((r) => r.raid_id).filter(Boolean))]
-      const dateByRaid = {}
-      const CHUNK = 500
-      for (let i = 0; i < raidIds.length; i += CHUNK) {
-        const { data: raidRows } = await supabase.from('raids').select('raid_id, date_iso, date').in('raid_id', raidIds.slice(i, i + CHUNK))
-        if (cancelled) return
-        ;(raidRows || []).forEach((row) => {
-          const iso = (row.date_iso || '').trim().slice(0, 10)
-          const isIso = /^\d{4}-\d{2}-\d{2}/.test(iso)
-          dateByRaid[row.raid_id] = isIso ? iso : (row.date || '').trim() || ''
-        })
-      }
+      const { data: rows, error } = await supabase.rpc('recent_item_sale_costs', { p_limit: 3 })
+      if (cancelled || error) return
       const byItem = {}
-      allLoot.forEach((row) => {
+      ;(rows || []).forEach((row) => {
         const name = (row.item_name || '').trim().toLowerCase()
         if (!name) return
         if (!byItem[name]) byItem[name] = []
-        byItem[name].push({ id: row.id, cost: row.cost, date: dateByRaid[row.raid_id] || '' })
+        byItem[name].push({ id: row.loot_id, cost: row.cost, date: row.sale_date || '' })
       })
       const last3Map = {}
       Object.entries(byItem).forEach(([key, arr]) => {

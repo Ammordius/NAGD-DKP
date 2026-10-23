@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, Navigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { usePersistedState } from '../lib/usePersistedState'
 
@@ -51,7 +51,6 @@ function parseWhoNames(paste) {
 }
 
 export default function OfficerWhoParser({ isOfficer }) {
-  const navigate = useNavigate()
   const [paste, setPaste] = usePersistedState('/officer/who-parser:paste', '', undefined, {
     userScope: true,
     migrateUnscoped: true,
@@ -65,10 +64,7 @@ export default function OfficerWhoParser({ isOfficer }) {
   const [copyStatus, setCopyStatus] = useState('')
 
   useEffect(() => {
-    if (!isOfficer) {
-      navigate('/')
-      return
-    }
+    if (!isOfficer) return undefined
     let cancelled = false
     async function load() {
       setLoading(true)
@@ -105,7 +101,7 @@ export default function OfficerWhoParser({ isOfficer }) {
     return () => {
       cancelled = true
     }
-  }, [isOfficer, navigate])
+  }, [isOfficer])
 
   const nameToChar = useMemo(() => {
     const out = {}
@@ -217,7 +213,7 @@ export default function OfficerWhoParser({ isOfficer }) {
     }
   }
 
-  if (!isOfficer) return null
+  if (!isOfficer) return <Navigate to="/" replace />
 
   return (
     <div className="container">

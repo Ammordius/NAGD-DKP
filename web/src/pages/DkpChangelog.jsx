@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, Navigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { usePersistedState } from '../lib/usePersistedState'
 import { useScrollContentReady } from '../lib/routeScrollView'
@@ -14,8 +14,8 @@ function normalizeChangelogPages(raw) {
 }
 
 export default function DkpChangelog({ isOfficer }) {
-  const navigate = useNavigate()
   const [auditLog, setAuditLog] = useState([])
+  const [loadError, setLoadError] = useState('')
   const [loading, setLoading] = useState(false)
   const [page, setPage] = useState(0)
   const [hasMore, setHasMore] = useState(true)
@@ -25,6 +25,7 @@ export default function DkpChangelog({ isOfficer }) {
 
   const loadPage = useCallback(async (pageNum = 0, append = false) => {
     setLoading(true)
+    setLoadError('')
     const from = pageNum * PAGE_SIZE
     const to = from + PAGE_SIZE - 1
     const { data, error } = await supabase
@@ -33,7 +34,10 @@ export default function DkpChangelog({ isOfficer }) {
       .order('created_at', { ascending: false })
       .range(from, to)
     setLoading(false)
-    if (error) return
+    if (error) {
+      setLoadError(error.message || 'Could not load the changelog')
+      return
+    }
     const rows = data ?? []
     setAuditLog((prev) => (append ? [...prev, ...rows] : rows))
     setHasMore(rows.length === PAGE_SIZE)
@@ -42,14 +46,12 @@ export default function DkpChangelog({ isOfficer }) {
   }, [setPagesLoaded])
 
   useEffect(() => {
-    if (!isOfficer) {
-      navigate('/')
-      return undefined
-    }
+    if (!isOfficer) return undefined
     const pages = initialPages.current
     let cancelled = false
     ;(async () => {
       setLoading(true)
+      setLoadError('')
       const { data, error } = await supabase
         .from('officer_audit_log')
         .select('id,created_at,actor_display_name,action,target_type,target_id,delta')
@@ -57,16 +59,19 @@ export default function DkpChangelog({ isOfficer }) {
         .range(0, pages * PAGE_SIZE - 1)
       if (cancelled) return
       setLoading(false)
-      if (error) return
+      if (error) {
+        setLoadError(error.message || 'Could not load the changelog')
+        return
+      }
       const rows = data ?? []
       setAuditLog(rows)
       setHasMore(rows.length >= pages * PAGE_SIZE)
       setPage(Math.max(0, pages - 1))
     })()
     return () => { cancelled = true }
-  }, [isOfficer, navigate])
+  }, [isOfficer])
 
-  if (!isOfficer) return null
+  if (!isOfficer) return <Navigate to="/" replace />
 
   return (
     <div className="container">
@@ -74,6 +79,7 @@ export default function DkpChangelog({ isOfficer }) {
       <p style={{ color: '#a1a1aa', marginBottom: '1rem' }}>
         Who made which sensitive changes: add/delete raid, tics, loot, manual DKP edits. Officer-only. <Link to="/officer/RaidAdmin">← Raid Admin</Link>
       </p>
+      {loadError && <p className="error" style={{ marginBottom: '1rem' }}>{loadError}</p>}
       <div style={{ overflowX: 'auto' }}>
         <table>
           <thead>
@@ -86,7 +92,7 @@ export default function DkpChangelog({ isOfficer }) {
             </tr>
           </thead>
           <tbody>
-            {auditLog.length === 0 && !loading && (
+            {auditLog.length === 0 && !loading && !loadError && (
               <tr><td colSpan={5} style={{ color: '#71717a' }}>No audit entries yet.</td></tr>
             )}
             {auditLog.map((entry) => {

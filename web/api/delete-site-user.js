@@ -7,6 +7,13 @@ import { createClient } from '@supabase/supabase-js'
 import { removalBlockReason } from '../src/lib/siteAdminRemoveUser.js'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+const MAX_BODY_BYTES = 1024
+
+function bodyTooLarge(byteLength) {
+  const err = new Error('Request body is too large')
+  err.statusCode = 413
+  return byteLength > MAX_BODY_BYTES ? err : null
+}
 
 function send(res, status, body) {
   res.statusCode = status
@@ -23,16 +30,35 @@ function header(req, name) {
 
 function readJsonBody(req) {
   if (req.body != null && req.body !== '') {
-    if (typeof req.body === 'string') return JSON.parse(req.body)
+    if (typeof req.body === 'string') {
+      const tooLarge = bodyTooLarge(Buffer.byteLength(req.body))
+      if (tooLarge) throw tooLarge
+      return JSON.parse(req.body)
+    }
     if (typeof Buffer !== 'undefined' && Buffer.isBuffer(req.body)) {
+      const tooLarge = bodyTooLarge(req.body.length)
+      if (tooLarge) throw tooLarge
       const text = req.body.toString('utf8').trim()
       return text ? JSON.parse(text) : {}
     }
-    if (typeof req.body === 'object') return req.body
+    if (typeof req.body === 'object') {
+      const tooLarge = bodyTooLarge(Buffer.byteLength(JSON.stringify(req.body)))
+      if (tooLarge) throw tooLarge
+      return req.body
+    }
   }
   return new Promise((resolve, reject) => {
     const chunks = []
-    req.on('data', (chunk) => chunks.push(chunk))
+    let size = 0
+    req.on('data', (chunk) => {
+      size += chunk.length
+      if (size > MAX_BODY_BYTES) {
+        reject(bodyTooLarge(size))
+        req.destroy()
+        return
+      }
+      chunks.push(chunk)
+    })
     req.on('end', () => {
       const text = Buffer.concat(chunks).toString('utf8').trim()
       if (!text) {
@@ -178,7 +204,11 @@ export default async function handler(req, res) {
   let body
   try {
     body = await readJsonBody(req)
-  } catch {
+  } catch (err) {
+    if (err?.statusCode === 413) {
+      send(res, 413, { error: 'Request body is too large' })
+      return
+    }
     send(res, 400, { error: 'Invalid request' })
     return
   }

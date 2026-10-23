@@ -2,7 +2,6 @@ import { useEffect, useState, useMemo, useCallback, Fragment } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import useSWR from 'swr'
 import { supabase } from '../lib/supabase'
-import { fetchAllByRange } from '../lib/fetchAllByRange'
 import { useCharToAccountMap } from '../lib/useCharToAccountMap'
 import { logOfficerAudit } from '../lib/officerAudit'
 import AssignedLootDisclaimer from '../components/AssignedLootDisclaimer'
@@ -50,7 +49,7 @@ async function fetchRaidDetail(raidId) {
 
 export default function RaidDetail({ isOfficer, profile }) {
   const { raidId } = useParams()
-  const { getAccountId, getAccountDisplayName, accounts, characterAccount } = useCharToAccountMap()
+  const { getAccountId, getAccountDisplayName, accounts, characterAccount, characters } = useCharToAccountMap()
   const useCharacterAdminSelectors = normalizeUiPreferences(profile?.ui_preferences).useCharacterAdminSelectors
   const { data, error: swrError, isLoading, mutate } = useSWR(
     raidId ? `raid-detail-${raidId}` : null,
@@ -78,7 +77,6 @@ export default function RaidDetail({ isOfficer, profile }) {
   const [editingLootId, setEditingLootId] = useState(null)
   const [editingLootCost, setEditingLootCost] = useState('')
   const [mutating, setMutating] = useState(false)
-  const [characters, setCharacters] = useState([])
   const [addToTicEventId, setAddToTicEventId] = useState('')
   const [addToTicCharQuery, setAddToTicCharQuery] = useState('')
   const [addToTicCharId, setAddToTicCharId] = useState('')
@@ -91,21 +89,6 @@ export default function RaidDetail({ isOfficer, profile }) {
     getDkpMobLoot().then(setMobLoot)
     getRaidItemSources().then(setRaidItemSources)
   }, [])
-
-  useEffect(() => {
-    if (!isOfficer || !raidId) return
-    let cancelled = false
-    ;(async () => {
-      try {
-        const rows = await fetchAllByRange('characters', 'char_id, name')
-        if (!cancelled) setCharacters(rows || [])
-      } catch (e) {
-        console.error('RaidDetail: failed to load characters list', e)
-        if (!cancelled) setCharacters([])
-      }
-    })()
-    return () => { cancelled = true }
-  }, [isOfficer, raidId])
 
   useEffect(() => {
     if (events.length > 0 && (!addToTicEventId || !events.some((e) => e.event_id === addToTicEventId))) {

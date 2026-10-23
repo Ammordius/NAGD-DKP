@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useState, useCallback, useMemo, useRef } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, Navigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { fetchAllByRange } from '../lib/fetchAllByRange'
 import { useDkpData } from '../lib/dkpLeaderboard'
@@ -33,7 +33,6 @@ function accountListLabel(row) {
 
 
 export default function OfficerClaimCooldowns({ isOfficer, isSiteAdmin = false, profile }) {
-  const navigate = useNavigate()
   const [profiles, setProfiles] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -134,10 +133,7 @@ export default function OfficerClaimCooldowns({ isOfficer, isSiteAdmin = false, 
   }, [selectedCharId])
 
   useEffect(() => {
-    if (!isOfficer) {
-      navigate('/', { replace: true })
-      return
-    }
+    if (!isOfficer) return undefined
     let cancelled = false
     supabase.auth.getSession().then(({ data }) => {
       if (!cancelled) setCurrentUserId(data.session?.user?.id ?? null)
@@ -145,16 +141,19 @@ export default function OfficerClaimCooldowns({ isOfficer, isSiteAdmin = false, 
     loadCooldowns()
     loadSiteUsers()
     return () => { cancelled = true }
-  }, [isOfficer, isSiteAdmin, navigate])
+  }, [isOfficer, isSiteAdmin])
 
   async function loadCooldowns() {
     setLoading(true)
     setError('')
-    const { data, error: e } = await supabase
-      .from('profiles')
-      .select('id, email, unclaim_cooldown_until, unclaim_count')
-      .not('unclaim_cooldown_until', 'is', null)
-      .order('unclaim_cooldown_until', { ascending: true })
+    const query = isSiteAdmin
+      ? supabase.rpc('siteadmin_claim_cooldowns')
+      : supabase
+        .from('profiles')
+        .select('id, display_name, unclaim_cooldown_until, unclaim_count')
+        .not('unclaim_cooldown_until', 'is', null)
+        .order('unclaim_cooldown_until', { ascending: true })
+    const { data, error: e } = await query
     setLoading(false)
     if (e) {
       setError(e.message)
@@ -226,7 +225,7 @@ export default function OfficerClaimCooldowns({ isOfficer, isSiteAdmin = false, 
     if (claimAccounts || claimAccountsLoading) return
     setClaimAccountsLoading(true)
     try {
-      const rows = await fetchAllByRange('accounts', 'account_id, display_name')
+      const rows = await fetchAllByRange('accounts', 'account_id, display_name', 'account_id')
       setClaimAccounts(rows)
     } catch (err) {
       setUserError(err?.message || 'Could not load accounts')
@@ -485,7 +484,7 @@ export default function OfficerClaimCooldowns({ isOfficer, isSiteAdmin = false, 
     }
   }
 
-  if (!isOfficer) return null
+  if (!isOfficer) return <Navigate to="/" replace />
 
   const actor = {
     id: currentUserId,
@@ -524,10 +523,10 @@ export default function OfficerClaimCooldowns({ isOfficer, isSiteAdmin = false, 
           </p>
         )}
         <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.75rem', marginBottom: '0.5rem' }}>
-          <button type="button" onClick={handleSetActive} disabled={charMutating || !actionAccountId}>
+          <button type="button" className="btn" onClick={handleSetActive} disabled={charMutating || !actionAccountId}>
             Set account active
           </button>
-          <button type="button" onClick={handleSetInactive} disabled={charMutating || !actionAccountId}>
+          <button type="button" className="btn btn-ghost" onClick={handleSetInactive} disabled={charMutating || !actionAccountId}>
             Set account inactive
           </button>
         </div>
@@ -708,7 +707,7 @@ export default function OfficerClaimCooldowns({ isOfficer, isSiteAdmin = false, 
           <table>
             <thead>
               <tr>
-                <th>Email</th>
+                <th>{isSiteAdmin ? 'Email' : 'Name'}</th>
                 <th>Cooldown until</th>
                 <th>Unclaim count</th>
                 <th style={{ width: '10rem' }}></th>
@@ -720,7 +719,7 @@ export default function OfficerClaimCooldowns({ isOfficer, isSiteAdmin = false, 
                 const isExpired = until && until <= new Date()
                 return (
                   <tr key={p.id}>
-                    <td>{p.email || <span style={{ color: '#71717a' }}>—</span>}</td>
+                    <td>{(isSiteAdmin ? p.email : p.display_name) || <span style={{ color: '#71717a' }}>—</span>}</td>
                     <td>
                       {until ? until.toLocaleString() : '—'}
                       {isExpired && <span style={{ color: '#71717a', marginLeft: '0.5rem' }}>(expired)</span>}

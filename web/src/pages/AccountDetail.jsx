@@ -105,7 +105,7 @@ function setAccountDetailInSession(accountId, data) {
   } catch (_) { /* ignore */ }
 }
 
-async function fetchAccountDetail(accountId) {
+async function fetchAccountDetail(accountId, includeMissing = false) {
   const accRes = await supabase.from('accounts').select('account_id, toon_names, display_name, toon_count').eq('account_id', accountId).single()
   if (accRes.error || !accRes.data) throw new Error(accRes.error?.message || 'Account not found')
   const caRes = await supabase.from('character_account').select('char_id').eq('account_id', accountId)
@@ -179,7 +179,9 @@ async function fetchAccountDetail(accountId) {
     fetchByChunkedIn('raids', 'raid_id, raid_name, date_iso', 'raid_id', raidList),
     fetchByChunkedIn('raid_dkp_totals', 'raid_id, total_dkp', 'raid_id', raidList),
     fetchByChunkedIn('raid_events', 'id, raid_id, event_id, event_order, event_name, dkp_value', 'raid_id', raidList),
-    fetchAll('raid_events', 'id, raid_id, event_id, event_order, event_name, dkp_value', (q) => q.gt('dkp_value', 0)),
+    includeMissing
+      ? fetchAll('raid_events', 'id, raid_id, event_id, event_order, event_name, dkp_value', (q) => q.gt('dkp_value', 0), { order: { column: 'id', ascending: true } })
+      : Promise.resolve({ data: [], error: null }),
   ])
   if (rRes?.error) throw new Error(rRes.error?.message || 'Failed to load raids')
   if (totalsRes?.error) throw new Error(totalsRes.error?.message || 'Failed to load raid totals')
@@ -298,11 +300,15 @@ export default function AccountDetail({ isOfficer, profile, session, onProfileUp
   )
   const { getAccountDisplayName } = useCharToAccountMap()
   const { mutate: globalMutate } = useSWRConfig()
-  const cacheKey = accountId ? `account-detail-${accountId}` : null
+  const [onlyMissingRaids, setOnlyMissingRaids] = usePersistedState(
+    accountId ? `/accounts/detail:${accountId}:onlyMissingRaids` : '/accounts/detail:none:onlyMissingRaids',
+    false
+  )
+  const cacheKey = accountId ? `account-detail-${accountId}${onlyMissingRaids ? ':missing' : ''}` : null
   const fallbackData = cacheKey ? getAccountDetailFromSession(accountId) : undefined
   const { data: swrData, error: swrError, isLoading, mutate } = useSWR(
     cacheKey,
-    () => fetchAccountDetail(accountId),
+    () => fetchAccountDetail(accountId, onlyMissingRaids),
     {
       fallbackData,
       dedupingInterval: ACCOUNT_DEDUPING_INTERVAL_MS,
@@ -325,10 +331,6 @@ export default function AccountDetail({ isOfficer, profile, session, onProfileUp
   )
   const [showMissingDetails, setShowMissingDetails] = usePersistedState(
     accountId ? `/accounts/detail:${accountId}:showMissingDetails` : '/accounts/detail:none:showMissingDetails',
-    false
-  )
-  const [onlyMissingRaids, setOnlyMissingRaids] = usePersistedState(
-    accountId ? `/accounts/detail:${accountId}:onlyMissingRaids` : '/accounts/detail:none:onlyMissingRaids',
     false
   )
   const [addCharOpen, setAddCharOpen] = useState(false)

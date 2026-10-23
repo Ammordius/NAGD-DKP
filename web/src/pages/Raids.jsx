@@ -105,44 +105,60 @@ async function fetchOneMonth(year, month) {
 
   if (raids.length > 0) {
     const raidIds = raids.map((r) => String(r.raid_id).trim()).filter(Boolean)
-    // Total DKP credited to characters for the raid (ledger-aligned).
-    for (let i = 0; i < raidIds.length; i += CHUNK) {
-      const chunk = raidIds.slice(i, i + CHUNK)
-      const { data: attRows, error: attErr } = await fetchAll(
-        'raid_attendance_dkp',
-        'raid_id, dkp_earned',
-        (q) => q.in('raid_id', chunk),
-        ORDER_BY_RAD_DKP
-      )
-      if (attErr) throw new Error(attErr.message || 'Failed to load raid attendance DKP')
-      ;(attRows || []).forEach((row) => {
-        const rid = String(row.raid_id ?? '').trim()
-        if (!rid) return
-        const v = parseFloat(row.dkp_earned || 0) || 0
-        paidOutByRaid[rid] = (paidOutByRaid[rid] || 0) + v
-      })
-    }
-    for (let i = 0; i < raidIds.length; i += CHUNK) {
-      const chunk = raidIds.slice(i, i + CHUNK)
-      const { data: eventRows, error: evErr } = await fetchAll('raid_events', 'raid_id', (q) => q.in('raid_id', chunk), ORDER_BY_ID)
-      if (evErr) throw new Error(evErr.message || 'Failed to load raid events')
-      ;(eventRows || []).forEach((row) => {
-        const rid = String(row.raid_id ?? '').trim()
-        if (!rid) return
-        ticsByRaid[rid] = (ticsByRaid[rid] || 0) + 1
-      })
-    }
-    for (let i = 0; i < raidIds.length; i += CHUNK) {
-      const chunk = raidIds.slice(i, i + CHUNK)
-      const { data: lootRows, error: lootErr } = await fetchAll('raid_loot', 'raid_id, cost', (q) => q.in('raid_id', chunk), ORDER_BY_ID)
-      if (lootErr) throw new Error(lootErr.message || 'Failed to load raid loot')
-      ;(lootRows || []).forEach((row) => {
-        const rid = String(row.raid_id ?? '').trim()
-        if (!rid) return
-        const c = parseFloat(row.cost || 0) || 0
-        spentByRaid[rid] = (spentByRaid[rid] || 0) + c
-      })
-    }
+    const [paidRows, eventRows, lootRows] = await Promise.all([
+      (async () => {
+        const rows = []
+        for (let i = 0; i < raidIds.length; i += CHUNK) {
+          const chunk = raidIds.slice(i, i + CHUNK)
+          const { data, error: attErr } = await fetchAll(
+            'raid_attendance_dkp',
+            'raid_id, dkp_earned',
+            (q) => q.in('raid_id', chunk),
+            ORDER_BY_RAD_DKP
+          )
+          if (attErr) throw new Error(attErr.message || 'Failed to load raid attendance DKP')
+          rows.push(...(data || []))
+        }
+        return rows
+      })(),
+      (async () => {
+        const rows = []
+        for (let i = 0; i < raidIds.length; i += CHUNK) {
+          const chunk = raidIds.slice(i, i + CHUNK)
+          const { data, error: evErr } = await fetchAll('raid_events', 'raid_id', (q) => q.in('raid_id', chunk), ORDER_BY_ID)
+          if (evErr) throw new Error(evErr.message || 'Failed to load raid events')
+          rows.push(...(data || []))
+        }
+        return rows
+      })(),
+      (async () => {
+        const rows = []
+        for (let i = 0; i < raidIds.length; i += CHUNK) {
+          const chunk = raidIds.slice(i, i + CHUNK)
+          const { data, error: lootErr } = await fetchAll('raid_loot', 'raid_id, cost', (q) => q.in('raid_id', chunk), ORDER_BY_ID)
+          if (lootErr) throw new Error(lootErr.message || 'Failed to load raid loot')
+          rows.push(...(data || []))
+        }
+        return rows
+      })(),
+    ])
+    paidRows.forEach((row) => {
+      const rid = String(row.raid_id ?? '').trim()
+      if (!rid) return
+      const v = parseFloat(row.dkp_earned || 0) || 0
+      paidOutByRaid[rid] = (paidOutByRaid[rid] || 0) + v
+    })
+    eventRows.forEach((row) => {
+      const rid = String(row.raid_id ?? '').trim()
+      if (!rid) return
+      ticsByRaid[rid] = (ticsByRaid[rid] || 0) + 1
+    })
+    lootRows.forEach((row) => {
+      const rid = String(row.raid_id ?? '').trim()
+      if (!rid) return
+      const c = parseFloat(row.cost || 0) || 0
+      spentByRaid[rid] = (spentByRaid[rid] || 0) + c
+    })
   }
 
   const result = { raids, paidOutByRaid, ticsByRaid, spentByRaid }

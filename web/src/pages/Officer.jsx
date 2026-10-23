@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useMemo, useRef, Fragment } from 'react'
-import { Link, useNavigate, useLocation, useSearchParams } from 'react-router-dom'
+import { Link, Navigate, useLocation, useSearchParams } from 'react-router-dom'
 import useSWRConfig from 'swr'
 import { supabase } from '../lib/supabase'
 import { getDkpMobLoot, getRaidItemSources } from '../lib/staticData'
@@ -79,7 +79,6 @@ function ResultNames({ label, names, tone }) {
 }
 
 export default function Officer({ isOfficer, profile, userId }) {
-  const navigate = useNavigate()
   const location = useLocation()
   const [searchParams, setSearchParams] = useSearchParams()
   const selectedRaidId = (searchParams.get('raid') || '').trim()
@@ -411,12 +410,9 @@ export default function Officer({ isOfficer, profile, userId }) {
   }, [loadRaids])
 
   useEffect(() => {
-    if (!isOfficer) {
-      navigate('/')
-      return
-    }
+    if (!isOfficer) return
     loadOfficerData()
-  }, [isOfficer, navigate, loadOfficerData])
+  }, [isOfficer, loadOfficerData])
 
   // When linked from Raids "+" with #add-raid, open the create panel
   useEffect(() => {
@@ -1414,7 +1410,7 @@ export default function Officer({ isOfficer, profile, userId }) {
     }, 50)
   }
 
-  if (!isOfficer) return null
+  if (!isOfficer) return <Navigate to="/" replace />
 
   const appendEvent = events.find((e) => e.event_id === appendEventId) || null
   const showTicPreview = ticPreview.resolved.length > 0

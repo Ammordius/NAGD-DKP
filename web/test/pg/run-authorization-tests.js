@@ -30,8 +30,12 @@ function run(command, args, input) {
 }
 
 async function dockerAvailable() {
-  const result = await run('docker', ['info'])
-  return result.code === 0
+  try {
+    const result = await run('docker', ['info'])
+    return result.code === 0
+  } catch {
+    return false
+  }
 }
 
 async function psql(sql) {

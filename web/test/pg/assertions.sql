@@ -109,11 +109,30 @@ BEGIN
      OR has_table_privilege('service_role', 'public.profiles', 'UPDATE') THEN
     RAISE EXCEPTION 'a browser or service role still has UPDATE on profiles';
   END IF;
-  IF NOT has_table_privilege('authenticated', 'public.profiles', 'SELECT') THEN
+  IF NOT has_column_privilege('authenticated', 'public.profiles', 'id', 'SELECT')
+     OR NOT has_column_privilege('authenticated', 'public.profiles', 'role', 'SELECT') THEN
     RAISE EXCEPTION 'authenticated cannot select profiles';
   END IF;
   IF has_column_privilege('authenticated', 'public.profiles', 'role', 'UPDATE') THEN
     RAISE EXCEPTION 'authenticated can update profiles.role';
+  END IF;
+  IF has_column_privilege('authenticated', 'public.profiles', 'email', 'SELECT') THEN
+    RAISE EXCEPTION 'authenticated can select profiles.email';
+  END IF;
+  IF NOT has_column_privilege('authenticated', 'public.profiles', 'display_name', 'SELECT') THEN
+    RAISE EXCEPTION 'authenticated cannot select profiles.display_name';
+  END IF;
+  IF has_table_privilege('anon', 'public.loot_assignment', 'SELECT')
+     OR has_table_privilege('anon', 'public.character_dkp_spent', 'SELECT')
+     OR has_table_privilege('anon', 'public.raid_loot_with_assignment', 'SELECT')
+     OR has_table_privilege('anon', 'public.raid_loot_history', 'SELECT') THEN
+    RAISE EXCEPTION 'anon can still select loot assignment or spent data';
+  END IF;
+  IF has_function_privilege('anon', 'public.log_officer_audit(text,text,text,jsonb)', 'EXECUTE')
+     OR has_function_privilege('anon', 'public.siteadmin_claim_cooldowns()', 'EXECUTE')
+     OR has_function_privilege('anon', 'public.recent_item_sale_costs(integer)', 'EXECUTE')
+     OR has_function_privilege('anon', 'public.account_character_spent()', 'EXECUTE') THEN
+    RAISE EXCEPTION 'anon can execute a member-only read or audit RPC';
   END IF;
 END $$;
 
@@ -270,6 +289,20 @@ BEGIN
     RAISE EXCEPTION 'claim_account did not set account_id';
   END IF;
 END $$;
+SELECT public._expect_error(
+  'SELECT public.claim_account(''acct-claim'')',
+  '%already have a claimed account%'
+);
+SELECT set_config('request.jwt.claim.sub', '66666666-6666-4666-8666-666666666666', false);
+SELECT public._expect_error(
+  'SELECT public.claim_account(''acct-claim'')',
+  '%already claimed%'
+);
+SELECT public._expect_error(
+  'SELECT public.claim_account(''missing-acct'')',
+  '%Account not found%'
+);
+SELECT set_config('request.jwt.claim.sub', '11111111-1111-4111-8111-111111111111', false);
 SELECT public.unclaim_account();
 DO $$
 BEGIN
@@ -316,6 +349,51 @@ SELECT public._expect_error(
   'SELECT public.siteadmin_claim_profile(''55555555-5555-4555-8555-555555555555''::uuid, ''acct-keep'')',
   '%already has a claimed account%'
 );
+
+-- A character already on another account cannot be linked again.
+RESET SESSION AUTHORIZATION;
+INSERT INTO public.accounts (account_id, display_name) VALUES ('acct-other', 'Other');
+SET SESSION AUTHORIZATION authenticated;
+SELECT set_config('request.jwt.claim.sub', '66666666-6666-4666-8666-666666666666', false);
+SELECT set_config('request.jwt.claim.role', 'authenticated', false);
+SELECT public._expect_error(
+  'SELECT public.add_character_to_my_account(''Kept'', NULL, ''acct-other'')',
+  '%already linked to another account%'
+);
+
+-- Audit actor fields come from the session, and players cannot insert the log.
+SELECT public.log_officer_audit('add_raid', 'raid', 'raid-audit', '{"r":"raid-audit"}'::jsonb);
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM public.officer_audit_log
+    WHERE action = 'add_raid'
+      AND target_id = 'raid-audit'
+      AND actor_id = '66666666-6666-4666-8666-666666666666'
+      AND actor_email = 'officer2@example.com'
+  ) THEN
+    RAISE EXCEPTION 'log_officer_audit did not store the session actor';
+  END IF;
+END $$;
+SELECT public._expect_error(
+  'INSERT INTO public.officer_audit_log (action, target_type, actor_id, actor_email) VALUES (''forged'', ''raid'', ''11111111-1111-4111-8111-111111111111'', ''forged@example.com'')',
+  '42501'
+);
+SELECT set_config('request.jwt.claim.sub', '11111111-1111-4111-8111-111111111111', false);
+SELECT public._expect_error(
+  'SELECT public.log_officer_audit(''add_raid'', ''raid'', ''x'', NULL)',
+  '%Only officers can write the audit log%'
+);
+SELECT set_config('request.jwt.claim.sub', '33333333-3333-4333-8333-333333333333', false);
+SELECT public.siteadmin_claim_cooldowns();
+SELECT set_config('request.jwt.claim.sub', '22222222-2222-4222-8222-222222222222', false);
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM public.siteadmin_claim_cooldowns()) THEN
+    RAISE EXCEPTION 'officer received claim cooldown emails';
+  END IF;
+END $$;
+SELECT set_config('request.jwt.claim.sub', '33333333-3333-4333-8333-333333333333', false);
 
 -- Authorize deletion without removing the profile, then cascade from auth.users.
 SELECT set_config('request.jwt.claim.sub', '22222222-2222-4222-8222-222222222222', false);

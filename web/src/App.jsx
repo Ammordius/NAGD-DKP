@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from 'react'
 import { Routes, Route, Navigate, Link, useLocation, useNavigate } from 'react-router-dom'
 import { Analytics } from '@vercel/analytics/react'
 import { nextAuthGate } from './lib/authGate'
+import { safeNextPath } from './lib/safeNextPath'
 import { isProductionSite } from './lib/siteTitle'
 import { supabase } from './lib/supabase'
 import { clearUserPageState } from './lib/pageState'
@@ -40,6 +41,21 @@ function RequireAuth({ session, children }) {
 function RedirectPreserve({ to }) {
   const { search, hash } = useLocation()
   return <Navigate to={`${to}${search}${hash}`} replace />
+}
+
+function RequireOfficer({ isOfficer, children }) {
+  if (!isOfficer) return <Navigate to="/" replace />
+  return children
+}
+
+function NotFound() {
+  return (
+    <div className="container">
+      <h1>Page not found</h1>
+      <p style={{ color: '#a1a1aa' }}>That address is not part of this site.</p>
+      <p><Link to="/">Go to Home</Link></p>
+    </div>
+  )
 }
 
 function SiteChrome({ children }) {
@@ -106,8 +122,8 @@ export default function App() {
     if (location.pathname !== '/') return
     if (hasRestoredRef.current) return
     hasRestoredRef.current = true
-    const saved = consumeLastPath(session.user.id)
-    if (saved && saved.startsWith('/') && saved !== '/' && !saved.startsWith('/login') && !saved.startsWith('/auth/callback')) {
+    const saved = safeNextPath(consumeLastPath(session.user.id))
+    if (saved !== '/' && !saved.startsWith('/login') && !saved.startsWith('/auth/callback')) {
       navigate(saved, { replace: true })
     }
   }, [loading, session, location.pathname, navigate])
@@ -241,12 +257,12 @@ export default function App() {
         <Route path="/raids/:raidId" element={<RequireAuth session={session}><RaidDetail isOfficer={isOfficer} profile={profile} /></RequireAuth>} />
         <Route path="/dkp" element={<RequireAuth session={session}><DKP isOfficer={isOfficer} profile={profile} /></RequireAuth>} />
         <Route path="/officer" element={<RedirectPreserve to="/officer/RaidAdmin" />} />
-        <Route path="/officer/RaidAdmin" element={<RequireAuth session={session}><Officer isOfficer={isOfficer} profile={profile} userId={session?.user?.id || null} /></RequireAuth>} />
-        <Route path="/officer/dkp-changelog" element={<RequireAuth session={session}><DkpChangelog isOfficer={isOfficer} /></RequireAuth>} />
-        <Route path="/officer/who-parser" element={<RequireAuth session={session}><OfficerWhoParser isOfficer={isOfficer} /></RequireAuth>} />
+        <Route path="/officer/RaidAdmin" element={<RequireAuth session={session}><RequireOfficer isOfficer={isOfficer}><Officer isOfficer={isOfficer} profile={profile} userId={session?.user?.id || null} /></RequireOfficer></RequireAuth>} />
+        <Route path="/officer/dkp-changelog" element={<RequireAuth session={session}><RequireOfficer isOfficer={isOfficer}><DkpChangelog isOfficer={isOfficer} /></RequireOfficer></RequireAuth>} />
+        <Route path="/officer/who-parser" element={<RequireAuth session={session}><RequireOfficer isOfficer={isOfficer}><OfficerWhoParser isOfficer={isOfficer} /></RequireOfficer></RequireAuth>} />
         <Route path="/officer/claim-cooldowns" element={<RedirectPreserve to="/officer/SiteAdmin" />} />
-        <Route path="/officer/SiteAdmin" element={<RequireAuth session={session}><OfficerClaimCooldowns isOfficer={isOfficer} isSiteAdmin={isSiteAdmin} profile={profile} /></RequireAuth>} />
-        <Route path="/officer/raider-activity" element={<RequireAuth session={session}><OfficerRaiderActivity isOfficer={isOfficer} /></RequireAuth>} />
+        <Route path="/officer/SiteAdmin" element={<RequireAuth session={session}><RequireOfficer isOfficer={isOfficer}><OfficerClaimCooldowns isOfficer={isOfficer} isSiteAdmin={isSiteAdmin} profile={profile} /></RequireOfficer></RequireAuth>} />
+        <Route path="/officer/raider-activity" element={<RequireAuth session={session}><RequireOfficer isOfficer={isOfficer}><OfficerRaiderActivity isOfficer={isOfficer} /></RequireOfficer></RequireAuth>} />
         <Route path="/tools/discord-schedule" element={<RequireAuth session={session}><DiscordSchedule /></RequireAuth>} />
         <Route path="/loot" element={<RequireAuth session={session}><LootSearch /></RequireAuth>} />
         <Route path="/loot-recipients" element={<RequireAuth session={session}><LootRecipients /></RequireAuth>} />
@@ -256,7 +272,7 @@ export default function App() {
         <Route path="/profile" element={<RequireAuth session={session}><Profile profile={profile} onProfileUpdate={() => session?.user?.id && fetchProfile(session.user.id)} /></RequireAuth>} />
         <Route path="/items/:itemNameEncoded" element={<RequireAuth session={session}><ItemPage isOfficer={isOfficer} /></RequireAuth>} />
         <Route path="/characters/:charKey" element={<RequireAuth session={session}><CharacterPage /></RequireAuth>} />
-        <Route path="*" element={<Navigate to="/" replace />} />
+        <Route path="*" element={<NotFound />} />
       </Routes>
       <Analytics />
     </SiteChrome>

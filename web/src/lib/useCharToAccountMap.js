@@ -31,8 +31,8 @@ async function fetchAllAccounts() {
 
 async function fetchCharToAccountMap() {
   const [caRows, chRows, accRows] = await Promise.all([
-    fetchAllByRange('character_account', 'char_id, account_id'),
-    fetchAllByRange('characters', 'char_id, name'),
+    fetchAllByRange('character_account', 'char_id, account_id', ['char_id', 'account_id']),
+    fetchAllByRange('characters', 'char_id, name', 'char_id'),
     fetchAllAccounts(),
   ])
   const map = {}

@@ -10,7 +10,6 @@ import DkpSiteDisclaimer from '../components/DkpSiteDisclaimer'
 import MyDkpStandings from '../components/MyDkpStandings'
 import {
   formatCharacterClassSpentLine,
-  buildSpentByAccountFromLoot,
   spentForCharacterFromLootMap,
 } from '../lib/formatAccountCharacter'
 
@@ -38,15 +37,10 @@ export default function Accounts({ profile }) {
     }
 
     Promise.all([
-      fetchAll('accounts', 'account_id, toon_count, display_name, inactive'),
-      fetchAll('character_account', 'account_id, char_id'),
-      fetchAll('characters', 'char_id, name, class_name, level'),
-      fetchAll(
-        'raid_loot_with_assignment',
-        'id, char_id, character_name, cost, assigned_char_id, assigned_character_name',
-        undefined,
-        { order: { column: 'id', ascending: true } },
-      ),
+      fetchAll('accounts', 'account_id, toon_count, display_name, inactive', undefined, { order: { column: 'account_id', ascending: true } }),
+      fetchAll('character_account', 'account_id, char_id', undefined, { order: { column: 'char_id', ascending: true }, order2: { column: 'account_id', ascending: true } }),
+      fetchAll('characters', 'char_id, name, class_name, level', undefined, { order: { column: 'char_id', ascending: true } }),
+      supabase.rpc('account_character_spent'),
       supabase.rpc('account_claim_labels'),
     ]).then(([a, ca, ch, lootRes, claimsRes]) => {
       if (a.error) {
@@ -84,17 +78,18 @@ export default function Accounts({ profile }) {
       const charMap = {}
       ;(ch.data || []).forEach((c) => { charMap[c.char_id] = c })
       const byAccount = {}
-      const buyerCharIdToAccountId = {}
       ;(ca.data || []).forEach((row) => {
         if (!byAccount[row.account_id]) byAccount[row.account_id] = []
         byAccount[row.account_id].push(row.char_id)
-        const accountId = String(row.account_id)
-        const cid = row.char_id != null ? String(row.char_id).trim() : ''
-        if (cid) buyerCharIdToAccountId[cid] = accountId
-        const cname = (charMap[row.char_id]?.name || '').trim()
-        if (cname) buyerCharIdToAccountId[cname] = accountId
       })
-      const spentByAccount = buildSpentByAccountFromLoot(lootRes.data || [], buyerCharIdToAccountId)
+      const spentByAccount = {}
+      ;(lootRes.data || []).forEach((row) => {
+        const aid = row.account_id != null ? String(row.account_id) : ''
+        const key = (row.character_key || '').trim()
+        if (!aid || !key) return
+        if (!spentByAccount[aid]) spentByAccount[aid] = {}
+        spentByAccount[aid][key] = Number(row.total_spent) || 0
+      })
       const accList = (a.data || []).filter((acc) => !acc.inactive).map((acc) => {
         const rawChars = (byAccount[acc.account_id] || []).map((cid) => charMap[cid]).filter(Boolean)
         const spentMap = spentByAccount[String(acc.account_id)] || {}

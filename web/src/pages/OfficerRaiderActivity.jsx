@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo, useCallback } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, Navigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { usePersistedState } from '../lib/usePersistedState'
 import ClassCoveragePills from '../components/ClassCoveragePills'
@@ -114,7 +114,6 @@ function WatchlistBlock({ title, rows, emptyText }) {
 }
 
 export default function OfficerRaiderActivity({ isOfficer }) {
-  const navigate = useNavigate()
   const [snapshot, setSnapshot] = useState(null)
   const [coverageMap, setCoverageMap] = useState(() => new Map())
   const [coverageRefreshedAt, setCoverageRefreshedAt] = useState(null)
@@ -246,12 +245,9 @@ export default function OfficerRaiderActivity({ isOfficer }) {
   }, [loadCoverage])
 
   useEffect(() => {
-    if (!isOfficer) {
-      navigate('/', { replace: true })
-      return
-    }
+    if (!isOfficer) return
     loadData()
-  }, [isOfficer, navigate, loadData])
+  }, [isOfficer, loadData])
 
   const computed = useMemo(() => {
     if (!snapshot) return null
@@ -273,7 +269,7 @@ export default function OfficerRaiderActivity({ isOfficer }) {
     return { rows, raidsSorted, summary, watchlists, filtered, rosterIds }
   }, [snapshot, periodDays, search, statusFilter, sortBy, absentRaids, coverageMap, classFilter])
 
-  if (!isOfficer) return null
+  if (!isOfficer) return <Navigate to="/" replace />
 
   if (loading && !snapshot) {
     return <div className="container">Loading raider activity…</div>
