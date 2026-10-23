@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from 'react'
 import { Routes, Route, Navigate, Link, useLocation, useNavigate } from 'react-router-dom'
 import { Analytics } from '@vercel/analytics/react'
 import { nextAuthGate } from './lib/authGate'
+import { consumeLastPath, persistLastPath } from './lib/lastPath'
 import { safeNextPath } from './lib/safeNextPath'
 import { documentTitleForPath, isProductionSite } from './lib/siteTitle'
 import { supabase } from './lib/supabase'
@@ -72,30 +73,6 @@ function SiteChrome({ children }) {
   )
 }
 
-function persistLastPath(userId, path) {
-  try {
-    if (userId) localStorage.setItem(`dkp-last-path:${userId}`, path)
-  } catch {
-    // ignore quota or private mode
-  }
-}
-
-function consumeLastPath(userId) {
-  try {
-    const scopedKey = `dkp-last-path:${userId}`
-    let saved = localStorage.getItem(scopedKey)
-    if (!saved) {
-      saved = sessionStorage.getItem('dkp-last-path') || localStorage.getItem('dkp-last-path')
-      if (saved) localStorage.setItem(scopedKey, saved)
-    }
-    sessionStorage.removeItem('dkp-last-path')
-    localStorage.removeItem('dkp-last-path')
-    return saved
-  } catch {
-    return null
-  }
-}
-
 export default function App() {
   const [session, setSession] = useState(null)
   const [profile, setProfile] = useState(null)
@@ -117,7 +94,7 @@ export default function App() {
     const path = location.pathname + location.search
     const userId = session?.user?.id
     if (path && userId && location.pathname !== '/login' && location.pathname !== '/auth/callback') {
-      persistLastPath(userId, path)
+      persistLastPath(userId, path, localStorage)
     }
   }, [location.pathname, location.search, session])
 
@@ -127,7 +104,7 @@ export default function App() {
     if (location.pathname !== '/') return
     if (hasRestoredRef.current) return
     hasRestoredRef.current = true
-    const saved = safeNextPath(consumeLastPath(session.user.id))
+    const saved = safeNextPath(consumeLastPath(session.user.id, localStorage, sessionStorage))
     if (saved !== '/' && !saved.startsWith('/login') && !saved.startsWith('/auth/callback')) {
       navigate(saved, { replace: true })
     }

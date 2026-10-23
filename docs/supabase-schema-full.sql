@@ -938,7 +938,10 @@ INSERT INTO public.restore_in_progress (id, in_progress) VALUES (1, false) ON CO
 
 ALTER TABLE public.restore_in_progress ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Authenticated read restore_in_progress" ON public.restore_in_progress;
-CREATE POLICY "Authenticated read restore_in_progress" ON public.restore_in_progress FOR SELECT TO authenticated USING (true);
+DROP POLICY IF EXISTS "Officers read restore_in_progress" ON public.restore_in_progress;
+CREATE POLICY "Officers read restore_in_progress" ON public.restore_in_progress
+  FOR SELECT TO authenticated
+  USING (public.is_officer());
 DROP POLICY IF EXISTS "Service role full restore_in_progress" ON public.restore_in_progress;
 CREATE POLICY "Service role full restore_in_progress" ON public.restore_in_progress FOR ALL TO service_role USING (true) WITH CHECK (true);
 
@@ -4131,7 +4134,7 @@ COMMENT ON VIEW public.guild_loot_sale_enriched IS
   'Guild sales. buyer_account_id is the raid_loot buyer (char_id / character_name). loot_assignment does not change the buyer.';
 
 GRANT SELECT ON public.guild_loot_sale_enriched TO authenticated;
-GRANT SELECT ON public.guild_loot_sale_enriched TO anon;
+REVOKE ALL ON public.guild_loot_sale_enriched FROM anon;
 
 -- Attendee resolution for bidding portfolio (tic-scoped when that event has attendance).
 CREATE OR REPLACE FUNCTION public.bid_forecast_attendees_resolved_for_scope(

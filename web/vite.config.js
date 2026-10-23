@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url'
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import deleteSiteUser from './api/delete-site-user.js'
+import { clientServiceRoleError } from './src/lib/clientServiceRole.js'
 
 const rootDir = path.dirname(fileURLToPath(import.meta.url))
 const DEFAULT_SITE_TITLE = 'NAGD DKP - Development'
@@ -25,6 +26,13 @@ function resolveSiteTitle(mode) {
 function applyServerEnv(mode) {
   const webEnv = loadEnv(mode, rootDir, '')
   const repoEnv = loadEnv(mode, path.resolve(rootDir, '..'), '')
+  const serviceRoleError = clientServiceRoleError({
+    VITE_SUPABASE_SERVICE_ROLE_KEY:
+      process.env.VITE_SUPABASE_SERVICE_ROLE_KEY
+      || webEnv.VITE_SUPABASE_SERVICE_ROLE_KEY
+      || repoEnv.VITE_SUPABASE_SERVICE_ROLE_KEY,
+  })
+  if (serviceRoleError) throw new Error(serviceRoleError)
   const keys = [
     'SUPABASE_URL',
     'SUPABASE_ANON_KEY',

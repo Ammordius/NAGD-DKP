@@ -125,8 +125,12 @@ BEGIN
   IF has_table_privilege('anon', 'public.loot_assignment', 'SELECT')
      OR has_table_privilege('anon', 'public.character_dkp_spent', 'SELECT')
      OR has_table_privilege('anon', 'public.raid_loot_with_assignment', 'SELECT')
-     OR has_table_privilege('anon', 'public.raid_loot_history', 'SELECT') THEN
+     OR has_table_privilege('anon', 'public.raid_loot_history', 'SELECT')
+     OR has_table_privilege('anon', 'public.guild_loot_sale_enriched', 'SELECT') THEN
     RAISE EXCEPTION 'anon can still select loot assignment or spent data';
+  END IF;
+  IF NOT has_table_privilege('authenticated', 'public.guild_loot_sale_enriched', 'SELECT') THEN
+    RAISE EXCEPTION 'authenticated cannot select guild_loot_sale_enriched';
   END IF;
   IF has_function_privilege('anon', 'public.log_officer_audit(text,text,text,jsonb)', 'EXECUTE')
      OR has_function_privilege('anon', 'public.siteadmin_claim_cooldowns()', 'EXECUTE')
@@ -566,6 +570,25 @@ BEGIN
   END IF;
 END $$;
 
+RESET SESSION AUTHORIZATION;
+
+-- restore_in_progress is an operational flag. Players must not see it.
+SET SESSION AUTHORIZATION authenticated;
+SELECT set_config('request.jwt.claim.sub', '11111111-1111-4111-8111-111111111111', false);
+SELECT set_config('request.jwt.claim.role', 'authenticated', false);
+DO $$
+BEGIN
+  IF (SELECT count(*) FROM public.restore_in_progress) <> 0 THEN
+    RAISE EXCEPTION 'a player can read restore_in_progress';
+  END IF;
+END $$;
+SELECT set_config('request.jwt.claim.sub', '22222222-2222-4222-8222-222222222222', false);
+DO $$
+BEGIN
+  IF (SELECT count(*) FROM public.restore_in_progress) <> 1 THEN
+    RAISE EXCEPTION 'an officer cannot read restore_in_progress';
+  END IF;
+END $$;
 RESET SESSION AUTHORIZATION;
 
 -- Test helper for the concurrent demotion. Lives only in the disposable database.

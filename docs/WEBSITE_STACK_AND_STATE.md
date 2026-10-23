@@ -41,7 +41,7 @@ Access in client code: `import.meta.env.VITE_*` (Vite convention). The service r
 | `web/src/lib/*.js` | Supabase client, DKP math, static JSON helpers, `usePersistedState`, caches |
 | `web/public/` | Static assets served at site root (`/item_stats.json`, `/dkp_mob_loot.json`, etc.) |
 | `web/api/` | Vercel serverless. `delete-site-user.js` removes an auth user (service role). |
-| `web/vercel.json` | SPA rewrites (`/*` → `/index.html`), cache headers for selected JSON, and `nosniff`, frame denial, and referrer policy on every response |
+| `web/vercel.json` | SPA rewrites (`/*` → `/index.html`), cache headers for selected JSON, and a content security policy plus `nosniff`, frame denial, and referrer policy on every response |
 
 Repo-level SQL/docs (schema, imports) live under `docs/` at the **repository** root; this file is the **web app** map.
 
@@ -102,7 +102,7 @@ Fetched with `fetch('/…')` from `public/` or CDN:
 
 | Mechanism | Key pattern | Purpose |
 |-----------|------------|---------|
-| `localStorage` | `dkp-last-path:<userId>` | Last visited path for that signed-in user (see below). A legacy unscoped session or local value is moved here once, then deleted. |
+| `localStorage` | `dkp-last-path:<userId>` | Last visited path for that signed-in user (see below). A legacy unscoped `dkp-last-path` value is deleted and is not copied onto the next user. |
 | `localStorage` | `pageState:user:<userId>:…` | `usePersistedState` viewing state: search, filters, expansion, show-more, calendar month, loaded page counts, and personalized drafts. Versioned `{ v, exp, value }`. A legacy session key is moved here once for that user, then deleted. Signing out does not delete the slot. Another user has a different key. |
 | `localStorage` | `pageState:user:<userId>:scroll:<pathname>` | Per-route scroll anchor for that user. Account and profile keys include `?tab=`. |
 | `localStorage` | `pageState:user:<userId>:/officer/RaidAdmin:ticDraft:<raid id>` | Unsaved tic paste for that officer and raid. A legacy session key is moved here once, then deleted. Never auto-submitted. |
@@ -189,7 +189,8 @@ Login email, password, and display name. Loading and error flags. Hover cards an
 In `web/src/App.jsx`:
 
 - On each navigation (except bare `/login` and `/auth/callback`), the app stores `pathname + search` in `localStorage['dkp-last-path:<userId>']`.
-- When the user is signed in and lands on **`/`** the **first time** in that session, the app may `replace` navigate to the saved path (`hasRestoredRef` ensures this runs once). **Clicking “Home” later stays on `/`** because the restore effect does not run again.
+- When the user is signed in and lands on **`/`** the **first time** in that session, the app may `replace` navigate to that user's saved path (`hasRestoredRef` ensures this runs once). **Clicking “Home” later stays on `/`** because the restore effect does not run again.
+- An older unscoped `localStorage` or `sessionStorage` key named `dkp-last-path` is removed on that restore and is not given to whoever signs in next.
 
 If a bookmark to `/` unexpectedly jumps elsewhere, this behavior is why.
 
