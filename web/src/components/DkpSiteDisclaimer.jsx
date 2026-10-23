@@ -1,7 +1,8 @@
 import { isProductionSite } from '../lib/siteTitle'
 
 /**
- * Shown on the DKP leaderboard and account pages when this deployment is not production.
+ * Shown under the page title on Home, My Site Profile, Game Accounts, the DKP
+ * leaderboard, and account pages when this deployment is not production.
  */
 export default function DkpSiteDisclaimer() {
   if (isProductionSite()) return null

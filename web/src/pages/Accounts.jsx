@@ -6,6 +6,7 @@ import { supabase } from '../lib/supabase'
 import { usePersistedState } from '../lib/usePersistedState'
 import { compareAccountsByName } from '../lib/accountSort'
 import { useScrollContentReady } from '../lib/routeScrollView'
+import DkpSiteDisclaimer from '../components/DkpSiteDisclaimer'
 import MyDkpStandings from '../components/MyDkpStandings'
 import {
   formatCharacterClassSpentLine,
@@ -138,6 +139,7 @@ export default function Accounts({ profile }) {
   return (
     <div className="container">
       <h1>Accounts &amp; characters</h1>
+      <DkpSiteDisclaimer />
       <MyDkpStandings accountId={profile?.account_id} />
       <p style={{ color: '#71717a', marginBottom: '1rem' }}>
         All accounts with full character lists. Type a name to find who it is.

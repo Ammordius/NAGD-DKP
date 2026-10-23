@@ -4,6 +4,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { loadAccountActivity } from '../lib/accountData'
 import { discordRaidNameRequired, normalizeUiPreferences } from '../lib/uiPreferences'
+import DkpSiteDisclaimer from '../components/DkpSiteDisclaimer'
 import MyDkpStandings from '../components/MyDkpStandings'
 
 const MAGELO_BASE = 'https://www.takproject.net/magelo/character.php?char='
@@ -269,6 +270,7 @@ export default function Profile({ profile, onProfileUpdate }) {
     <div className="container">
       <p><Link to="/">← Home</Link></p>
       <h1>My Site Profile</h1>
+      <DkpSiteDisclaimer />
       <p style={{ color: '#a1a1aa', marginBottom: '1rem' }}>
         Role: <strong>{profile?.role === 'siteadmin' ? 'Site Admin' : profile?.role === 'officer' ? 'Officer' : 'Player'}</strong>
       </p>

@@ -50,7 +50,7 @@ function SiteChrome({ children }) {
       )}
       <div className="app-shell-main">{children}</div>
       <footer className="site-footer">
-        NAGD is an EverQuest guild on TAKP eqemulator server. This DKP site was created by Ammordius.
+        NAGD is an EverQuest guild on TAKP eqemulator server. This site was created by Ammordius.
       </footer>
     </div>
   )

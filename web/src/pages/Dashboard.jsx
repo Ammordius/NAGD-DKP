@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import DkpSiteDisclaimer from '../components/DkpSiteDisclaimer'
 import MyDkpStandings from '../components/MyDkpStandings'
 import { siteTitle } from '../lib/siteTitle'
 
@@ -7,6 +8,7 @@ export default function Dashboard({ isOfficer, profile }) {
   return (
     <div className="container">
       <h1>{siteTitle()}</h1>
+      <DkpSiteDisclaimer />
       <p style={{ color: '#a1a1aa' }}>
         Welcome{displayName ? ` ${displayName}` : ''}. Use the nav to view <Link to="/raids">Raids</Link> and <Link to="/dkp">DKP</Link>.
       </p>
