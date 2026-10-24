@@ -4,6 +4,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { loadAccountActivity } from '../lib/accountData'
 import { discordRaidNameRequired, normalizeUiPreferences } from '../lib/uiPreferences'
+import { useAmbianceTheme } from '../lib/useAmbianceTheme'
 import DkpSiteDisclaimer from '../components/DkpSiteDisclaimer'
 import MyDkpStandings from '../components/MyDkpStandings'
 
@@ -95,6 +96,14 @@ function normalizeProfileTab(raw) {
 }
 
 export default function Profile({ profile, onProfileUpdate }) {
+  const {
+    ambianceEnabled,
+    selectedTheme,
+    themeIds,
+    themes,
+    setAmbianceEnabled,
+    setSelectedTheme,
+  } = useAmbianceTheme()
   const [searchParams, setSearchParams] = useSearchParams()
   const tab = normalizeProfileTab(searchParams.get('tab'))
   const setTab = useCallback(
@@ -295,6 +304,36 @@ export default function Profile({ profile, onProfileUpdate }) {
           <button type="button" className="btn" onClick={handleSaveDisplayName} disabled={nameSaving}>
             {nameSaving ? 'Saving...' : 'Save display name'}
           </button>
+        </div>
+
+        <div className="card profile-ambiance">
+          <h2 style={{ marginTop: 0 }}>Ambiance</h2>
+          <p style={{ color: '#71717a', fontSize: '0.875rem', marginBottom: '0.75rem' }}>
+            Optional visual theme for this browser. Does not change DKP data or permissions.
+          </p>
+          <label className="raid-admin-option" style={{ cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={ambianceEnabled}
+              onChange={(e) => setAmbianceEnabled(e.target.checked)}
+              aria-label="Enable ambiance"
+            />
+            <span>Enable ambiance</span>
+          </label>
+          <label style={{ marginTop: '0.5rem' }}>
+            Theme
+            <select
+              value={selectedTheme}
+              disabled={!ambianceEnabled}
+              onChange={(e) => setSelectedTheme(e.target.value)}
+              aria-label="Ambiance theme"
+              style={{ display: 'block', marginTop: '0.25rem' }}
+            >
+              {themeIds.map((id) => (
+                <option key={id} value={id}>{themes[id].label}</option>
+              ))}
+            </select>
+          </label>
         </div>
 
         {(profile?.role === 'officer' || profile?.role === 'siteadmin') && (
