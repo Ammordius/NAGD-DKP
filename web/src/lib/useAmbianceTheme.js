@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo } from 'react'
+import { createContext, createElement, useCallback, useContext, useEffect, useMemo } from 'react'
 import { usePersistedState } from './usePersistedState'
 import {
   AMBIANCE_PAGE_STATE_KEY,
@@ -59,25 +59,10 @@ function useAmbianceThemeState() {
 /** Applies persisted ambiance CSS variables and shares prefs with useAmbianceTheme. Must sit under PageStateUserProvider. */
 export function AmbianceRoot({ children }) {
   const value = useAmbianceThemeState()
-  return (
-    <AmbianceContext.Provider value={value}>
-      {children}
-    </AmbianceContext.Provider>
-  )
+  return createElement(AmbianceContext.Provider, { value }, children)
 }
 
-/**
- * Persisted ambiance prefs for the signed-in user (from AmbianceRoot).
- * @returns {{
- *   ambianceEnabled: boolean,
- *   selectedTheme: string,
- *   theme: object,
- *   themes: typeof THEMES,
- *   themeIds: string[],
- *   setAmbianceEnabled: (enabled: boolean) => void,
- *   setSelectedTheme: (id: string) => void,
- * }}
- */
+/** Persisted ambiance prefs for the signed-in user (from AmbianceRoot). */
 export function useAmbianceTheme() {
   const ctx = useContext(AmbianceContext)
   if (!ctx) {
