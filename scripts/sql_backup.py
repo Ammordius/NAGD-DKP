@@ -802,8 +802,20 @@ def encrypt_archive(bundle: Path, recipient: str, destination: Path) -> None:
         raise BackupError("Encrypted artifact still contains the plaintext archive.")
     if not ciphertext.startswith(b"age-encryption.org/"):
         raise BackupError("age did not produce an encrypted file.")
+    _publish_file(age_tmp, destination)
+
+
+def _publish_file(source: Path, destination: Path) -> None:
+    # os.replace is a rename and raises EXDEV across mount points. GitHub-hosted
+    # Ubuntu keeps /tmp on a tmpfs and the workspace on another disk.
     destination.parent.mkdir(parents=True, exist_ok=True)
-    os.replace(age_tmp, destination)
+    staged = destination.with_name(f".{destination.name}.partial")
+    try:
+        shutil.copyfile(source, staged)
+        os.replace(staged, destination)
+    except Exception:
+        staged.unlink(missing_ok=True)
+        raise
 
 
 def _git_sha(root: Path) -> str:
