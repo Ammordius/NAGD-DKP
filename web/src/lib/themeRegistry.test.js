@@ -6,11 +6,28 @@ import {
   AMBIANCE_PREFS_DEFAULTS,
   DEFAULT_THEME_ID,
   THEMES,
+  THEME_IDS,
+  applyThemeCssVars,
+  clearThemeCssVars,
   getTheme,
   normalizeAmbiancePrefs,
   resolveActiveTheme,
   themeToCssVars,
 } from './themeRegistry.js'
+
+function mockRoot() {
+  const props = {}
+  const dataset = {}
+  return {
+    style: {
+      setProperty(name, value) {
+        props[name] = value
+      },
+    },
+    dataset,
+    _props: props,
+  }
+}
 
 function memoryStorage(initial = {}) {
   const data = { ...initial }
@@ -84,5 +101,41 @@ describe('resolveActiveTheme', () => {
     assert.deepEqual(themeToCssVars(active), themeToCssVars(THEMES.default))
     assert.equal(themeToCssVars(active)['--dkp-bg-image'], 'none')
     assert.equal(themeToCssVars(active)['--dkp-overlay-opacity'], '0')
+  })
+})
+
+describe('gnome theme', () => {
+  it('is a known selectable theme with its own accent and background image', () => {
+    assert.ok(THEME_IDS.includes('gnome'))
+    assert.equal(getTheme('gnome').id, 'gnome')
+    assert.equal(getTheme('gnome').label, 'Gnome')
+    const prefs = normalizeAmbiancePrefs({
+      ambianceEnabled: true,
+      selectedTheme: 'gnome',
+    })
+    const active = resolveActiveTheme(prefs)
+    assert.equal(active.id, 'gnome')
+    const vars = themeToCssVars(active)
+    assert.equal(vars['--dkp-accent'], THEMES.gnome.primary)
+    assert.equal(vars['--dkp-bg-image'], 'url(/themes/gnome.jpg)')
+  })
+})
+
+describe('applyThemeCssVars', () => {
+  it('writes CSS variables and data-ambiance-theme on the root', () => {
+    const root = mockRoot()
+    applyThemeCssVars(THEMES.wizard, root)
+    assert.equal(root._props['--dkp-accent'], THEMES.wizard.primary)
+    assert.equal(root._props['--dkp-bg-image'], 'url(/themes/wizard.jpg)')
+    assert.equal(root.dataset.ambianceTheme, 'wizard')
+  })
+
+  it('clearThemeCssVars restores default vars and data attribute', () => {
+    const root = mockRoot()
+    applyThemeCssVars(THEMES.evil, root)
+    clearThemeCssVars(root)
+    assert.equal(root.dataset.ambianceTheme, DEFAULT_THEME_ID)
+    assert.equal(root._props['--dkp-bg-image'], 'none')
+    assert.equal(root._props['--dkp-accent'], THEMES.default.primary)
   })
 })

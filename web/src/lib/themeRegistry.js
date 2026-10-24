@@ -90,6 +90,17 @@ export const THEMES = {
     pageBackground: '#18181b',
     overlay: { color: '#27272a', opacity: 0.68, blendMode: 'multiply' },
   },
+  gnome: {
+    id: 'gnome',
+    label: 'Gnome',
+    backgroundImage: '/themes/gnome.jpg',
+    primary: '#b45309',
+    secondary: '#5eead4',
+    border: '#78716c',
+    cardBackground: 'rgba(28, 25, 23, 0.92)',
+    pageBackground: '#1c1917',
+    overlay: { color: '#292524', opacity: 0.7, blendMode: 'multiply' },
+  },
 }
 
 export const THEME_IDS = Object.keys(THEMES)
@@ -144,9 +155,13 @@ export function themeToCssVars(theme) {
 
 export function applyThemeCssVars(theme, root = typeof document !== 'undefined' ? document.documentElement : null) {
   if (!root || typeof root.style?.setProperty !== 'function') return
-  const vars = themeToCssVars(theme)
+  const t = theme && typeof theme === 'object' ? theme : THEMES[DEFAULT_THEME_ID]
+  const vars = themeToCssVars(t)
   for (const [name, value] of Object.entries(vars)) {
     root.style.setProperty(name, value)
+  }
+  if (root.dataset) {
+    root.dataset.ambianceTheme = t.id || DEFAULT_THEME_ID
   }
 }
 

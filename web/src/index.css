@@ -133,6 +133,27 @@ th { color: #a1a1aa; font-weight: 600; }
 .dkp-sort-triangle-desc { border-top: 6px solid currentColor; }
 tr:hover { background: var(--dkp-card-bg); }
 .card { background: var(--dkp-card-bg); border-radius: 8px; padding: 1rem; margin-bottom: 1rem; }
+
+/* Ambiance-only chrome: leave default look unchanged when theme is default / off */
+html[data-ambiance-theme]:not([data-ambiance-theme="default"]) .card {
+  border: 1px solid var(--dkp-border);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--dkp-accent) 18%, transparent),
+    0 6px 18px color-mix(in srgb, var(--dkp-accent) 12%, transparent);
+}
+html[data-ambiance-theme]:not([data-ambiance-theme="default"]) .card > h1,
+html[data-ambiance-theme]:not([data-ambiance-theme="default"]) .card > h2,
+html[data-ambiance-theme]:not([data-ambiance-theme="default"]) .container > h1,
+html[data-ambiance-theme]:not([data-ambiance-theme="default"]) .container > h2 {
+  color: var(--dkp-accent-secondary);
+  border-bottom: 1px solid color-mix(in srgb, var(--dkp-accent) 35%, transparent);
+  padding-bottom: 0.35rem;
+}
+html[data-ambiance-theme]:not([data-ambiance-theme="default"]) table {
+  background: var(--dkp-page-bg);
+}
+html[data-ambiance-theme]:not([data-ambiance-theme="default"]) tr:hover {
+  background: color-mix(in srgb, var(--dkp-page-bg) 88%, var(--dkp-accent) 12%);
+}
 .profile-settings-row {
   display: flex;
   flex-wrap: wrap;
