@@ -1,4 +1,7 @@
+import { existsSync, readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { describe, it } from 'node:test'
+import { fileURLToPath } from 'node:url'
 import assert from 'node:assert/strict'
 import { encodeStoredValue, readPageState } from './pageState.js'
 import {
@@ -118,6 +121,106 @@ describe('gnome theme', () => {
     const vars = themeToCssVars(active)
     assert.equal(vars['--dkp-accent'], THEMES.gnome.primary)
     assert.equal(vars['--dkp-bg-image'], 'url(/themes/gnome.jpg)')
+  })
+})
+
+describe('martial theme', () => {
+  it('uses a monastery palette distinct from knight with its own background image', () => {
+    assert.ok(THEME_IDS.includes('martial'))
+    const martial = getTheme('martial')
+    assert.equal(martial.id, 'martial')
+    assert.equal(martial.label, 'Martial')
+    assert.equal(martial.primary, '#92400e')
+    assert.equal(martial.secondary, '#d6b37a')
+    assert.equal(martial.border, '#5b4636')
+    assert.equal(martial.pageBackground, '#1a1410')
+    assert.equal(martial.cardBackground, 'rgba(26, 20, 16, 0.92)')
+    assert.equal(martial.overlay.color, '#1a1410')
+    assert.notEqual(martial.primary, THEMES.knight.primary)
+    assert.notEqual(martial.secondary, THEMES.knight.secondary)
+    assert.notEqual(martial.border, THEMES.knight.border)
+    const prefs = normalizeAmbiancePrefs({
+      ambianceEnabled: true,
+      selectedTheme: 'martial',
+    })
+    const active = resolveActiveTheme(prefs)
+    assert.equal(active.id, 'martial')
+    const vars = themeToCssVars(active)
+    assert.equal(vars['--dkp-accent'], THEMES.martial.primary)
+    assert.equal(vars['--dkp-accent-secondary'], THEMES.martial.secondary)
+    assert.equal(vars['--dkp-bg-image'], 'url(/themes/martial.jpg)')
+  })
+})
+
+const ILLUSTRATED_THEME_IDS = ['good', 'evil', 'martial', 'enchanter', 'wizard', 'knight', 'gnome']
+
+function linearChannel(channel) {
+  const c = channel / 255
+  return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4
+}
+
+function contrastRatio(background, foreground = '#ffffff') {
+  const luminance = (hex) => {
+    const n = Number.parseInt(hex.slice(1), 16)
+    const r = linearChannel((n >> 16) & 255)
+    const g = linearChannel((n >> 8) & 255)
+    const b = linearChannel(n & 255)
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+  }
+  const lighter = Math.max(luminance(background), luminance(foreground))
+  const darker = Math.min(luminance(background), luminance(foreground))
+  return (lighter + 0.05) / (darker + 0.05)
+}
+
+describe('theme artwork', () => {
+  it('maps the seven illustrated themes to existing jpgs and emits no image when ambiance is off', () => {
+    const themesDir = fileURLToPath(new URL('../../public/themes/', import.meta.url))
+    const illustrated = THEME_IDS.filter((id) => id !== DEFAULT_THEME_ID)
+    assert.deepEqual(illustrated, ILLUSTRATED_THEME_IDS)
+    for (const id of illustrated) {
+      assert.equal(THEMES[id].backgroundImage, `/themes/${id}.jpg`)
+      assert.equal(existsSync(join(themesDir, `${id}.jpg`)), true)
+      const enabled = themeToCssVars(resolveActiveTheme({ ambianceEnabled: true, selectedTheme: id }))
+      assert.equal(enabled['--dkp-bg-image'], `url(/themes/${id}.jpg)`)
+    }
+    const disabled = themeToCssVars(resolveActiveTheme({ ambianceEnabled: false, selectedTheme: 'wizard' }))
+    assert.equal(disabled['--dkp-bg-image'], 'none')
+    assert.equal(disabled['--dkp-bg-image'].includes('url('), false)
+    const defaults = themeToCssVars(THEMES.default)
+    assert.equal(defaults['--dkp-bg-image'], 'none')
+    assert.equal(defaults['--dkp-bg-image'].includes('url('), false)
+    assert.equal(defaults['--dkp-bg-image'].includes('default.jpg'), false)
+  })
+})
+
+describe('button contrast', () => {
+  it('keeps the default purple button and meets AA for white text on every theme', () => {
+    const defaults = themeToCssVars(THEMES.default)
+    assert.equal(defaults['--dkp-btn-bg'], '#7c3aed')
+    assert.equal(defaults['--dkp-btn-hover'], '#6d28d9')
+    assert.equal(THEMES.good.primary, '#ca8a04')
+    assert.equal(THEMES.knight.primary, '#d97706')
+    assert.equal(themeToCssVars(THEMES.good)['--dkp-btn-bg'], '#9a6903')
+    assert.equal(themeToCssVars(THEMES.good)['--dkp-btn-hover'], '#7e5602')
+    assert.equal(themeToCssVars(THEMES.knight)['--dkp-btn-bg'], '#ae5f05')
+    assert.equal(themeToCssVars(THEMES.knight)['--dkp-btn-hover'], '#8f4e04')
+    for (const id of THEME_IDS) {
+      const vars = themeToCssVars(THEMES[id])
+      assert.ok(contrastRatio(vars['--dkp-btn-bg']) >= 4.5, `${id} button fill`)
+      assert.ok(contrastRatio(vars['--dkp-btn-hover']) >= 4.5, `${id} button hover`)
+      if (id !== 'good' && id !== 'knight') {
+        assert.equal(vars['--dkp-btn-bg'], THEMES[id].primary)
+        assert.ok(contrastRatio(THEMES[id].primary) >= 4.5, `${id} primary`)
+      }
+    }
+  })
+})
+
+describe('default form controls', () => {
+  it('does not style every select from the global input rule', () => {
+    const css = readFileSync(new URL('../index.css', import.meta.url), 'utf8')
+    assert.doesNotMatch(css, /input\s*,\s*select\s*\{/)
+    assert.match(css, /\.profile-ambiance select\s*\{/)
   })
 })
 

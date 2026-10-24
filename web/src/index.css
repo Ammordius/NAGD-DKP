@@ -11,6 +11,8 @@
   --dkp-overlay-color: #0f0f12;
   --dkp-overlay-opacity: 0;
   --dkp-overlay-blend: normal;
+  --dkp-btn-bg: #7c3aed;
+  --dkp-btn-hover: #6d28d9;
 }
 body {
   margin: 0;
@@ -167,7 +169,15 @@ html[data-ambiance-theme]:not([data-ambiance-theme="default"]) tr:hover {
   flex: 0 1 17.5rem;
   max-width: 18.5rem;
 }
-.profile-ambiance select { max-width: 100%; }
+.profile-ambiance select {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--dkp-border);
+  border-radius: 6px;
+  background: var(--dkp-card-bg);
+  color: #e4e4e7;
+  width: 100%;
+  max-width: 100%;
+}
 .profile-raid-admin {
   flex: 0 1 17.5rem;
   max-width: 18.5rem;
@@ -197,13 +207,13 @@ html[data-ambiance-theme]:not([data-ambiance-theme="default"]) tr:hover {
 }
 .profile-raid-admin .btn { margin-top: 0.15rem; padding: 0.3rem 0.6rem; font-size: 0.75rem; }
 .profile-raid-admin-status { font-size: 0.75rem; margin: 0.25rem 0; }
-.btn { display: inline-block; padding: 0.5rem 1rem; background: var(--dkp-accent); color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 0.875rem; }
-.btn:hover { background: color-mix(in srgb, var(--dkp-accent) 82%, black); }
+.btn { display: inline-block; padding: 0.5rem 1rem; background: var(--dkp-btn-bg); color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 0.875rem; }
+.btn:hover { background: var(--dkp-btn-hover); }
 .btn-discord { background: #5865F2; }
 .btn-discord:hover { background: #4752c4; }
 .btn-ghost { background: transparent; color: var(--dkp-accent-secondary); }
 .btn-ghost:hover { background: #27272a; color: var(--dkp-accent-secondary); }
-input, select { padding: 0.5rem 0.75rem; border: 1px solid var(--dkp-border); border-radius: 6px; background: var(--dkp-card-bg); color: #e4e4e7; width: 100%; max-width: 280px; }
+input { padding: 0.5rem 0.75rem; border: 1px solid var(--dkp-border); border-radius: 6px; background: var(--dkp-card-bg); color: #e4e4e7; width: 100%; max-width: 280px; }
 label { display: block; margin-bottom: 0.25rem; font-size: 0.875rem; color: #a1a1aa; }
 .form-group { margin-bottom: 1rem; }
 .error { color: #f87171; font-size: 0.875rem; margin-top: 0.25rem; }

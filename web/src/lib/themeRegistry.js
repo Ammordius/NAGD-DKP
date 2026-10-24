@@ -29,6 +29,7 @@ export const THEMES = {
     label: 'Good',
     backgroundImage: '/themes/good.jpg',
     primary: '#ca8a04',
+    buttonBackground: '#9a6903',
     secondary: '#fde68a',
     border: '#854d0e',
     cardBackground: 'rgba(28, 25, 23, 0.92)',
@@ -50,12 +51,12 @@ export const THEMES = {
     id: 'martial',
     label: 'Martial',
     backgroundImage: '/themes/martial.jpg',
-    primary: '#b91c1c',
-    secondary: '#94a3b8',
-    border: '#475569',
-    cardBackground: 'rgba(15, 23, 42, 0.92)',
-    pageBackground: '#0f172a',
-    overlay: { color: '#0f172a', opacity: 0.7, blendMode: 'multiply' },
+    primary: '#92400e',
+    secondary: '#d6b37a',
+    border: '#5b4636',
+    cardBackground: 'rgba(26, 20, 16, 0.92)',
+    pageBackground: '#1a1410',
+    overlay: { color: '#1a1410', opacity: 0.7, blendMode: 'multiply' },
   },
   enchanter: {
     id: 'enchanter',
@@ -84,6 +85,7 @@ export const THEMES = {
     label: 'Knight',
     backgroundImage: '/themes/knight.jpg',
     primary: '#d97706',
+    buttonBackground: '#ae5f05',
     secondary: '#cbd5e1',
     border: '#64748b',
     cardBackground: 'rgba(24, 24, 27, 0.92)',
@@ -131,6 +133,20 @@ export function resolveActiveTheme(prefs) {
   return getTheme(normalized.selectedTheme)
 }
 
+function mixWithBlack(hex, portion) {
+  const n = Number.parseInt(hex.slice(1), 16)
+  const channel = (shift) => Math.round(((n >> shift) & 255) * portion)
+    .toString(16)
+    .padStart(2, '0')
+  return `#${channel(16)}${channel(8)}${channel(0)}`
+}
+
+function buttonCssColors(theme) {
+  const background = theme.buttonBackground || theme.primary || DEFAULT_THEME.primary
+  const hover = theme.id === DEFAULT_THEME_ID ? '#6d28d9' : mixWithBlack(background, 0.82)
+  return { background, hover }
+}
+
 export function themeToCssVars(theme) {
   const t = theme && typeof theme === 'object' ? theme : THEMES[DEFAULT_THEME_ID]
   const overlay = t.overlay && typeof t.overlay === 'object' ? t.overlay : DEFAULT_THEME.overlay
@@ -139,6 +155,7 @@ export function themeToCssVars(theme) {
     typeof t.backgroundImage === 'string' && t.backgroundImage && opacity > 0
       ? `url(${t.backgroundImage})`
       : 'none'
+  const buttons = buttonCssColors(t)
   return {
     '--dkp-page-bg': t.pageBackground || DEFAULT_THEME.pageBackground,
     '--dkp-card-bg': t.cardBackground || DEFAULT_THEME.cardBackground,
@@ -146,6 +163,8 @@ export function themeToCssVars(theme) {
     '--dkp-accent': t.primary || DEFAULT_THEME.primary,
     '--dkp-accent-secondary': t.secondary || DEFAULT_THEME.secondary,
     '--dkp-border': t.border || DEFAULT_THEME.border,
+    '--dkp-btn-bg': buttons.background,
+    '--dkp-btn-hover': buttons.hover,
     '--dkp-bg-image': bgImage,
     '--dkp-overlay-color': overlay.color || DEFAULT_THEME.overlay.color,
     '--dkp-overlay-opacity': String(opacity),
