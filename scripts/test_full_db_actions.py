@@ -236,6 +236,31 @@ def sealed_artifact(directory: Path, public: str) -> Path:
     return destination
 
 
+def test_publish_file_across_directories() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        source = root / "tmp" / "backup.tar.gz.age"
+        source.parent.mkdir()
+        payload = b"age-encryption.org/v1\nsealed"
+        source.write_bytes(payload)
+        destination = root / "full-db-out" / "full-db-backup-20261024T032421Z.tar.gz.age"
+        real_replace = os.replace
+
+        def replace(src, dst, *args, **kwargs):
+            if Path(src).parent != Path(dst).parent:
+                raise OSError(18, "Invalid cross-device link")
+            return real_replace(src, dst, *args, **kwargs)
+
+        os.replace = replace
+        try:
+            full_db_common._publish_file(source, destination)
+        finally:
+            os.replace = real_replace
+        check(destination.read_bytes() == payload, "published bytes differ")
+        partial = destination.with_name(f".{destination.name}.partial")
+        check(not partial.exists(), "partial file left behind")
+
+
 def test_encryption_failures() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
@@ -510,6 +535,7 @@ def main() -> None:
     test_workflow_shapes()
     test_hosted_identity()
     test_missing_recipient_and_required_tables()
+    test_publish_file_across_directories()
     test_encryption_failures()
     test_artifact_selection()
     test_hosted_restore_stays_closed()

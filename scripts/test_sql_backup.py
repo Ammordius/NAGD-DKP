@@ -196,6 +196,32 @@ def test_csv_coverage() -> None:
     )
 
 
+def test_publish_file_across_directories() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        source = root / "tmp" / "backup.tar.gz.age"
+        source.parent.mkdir()
+        payload = b"age-encryption.org/v1\nsealed"
+        source.write_bytes(payload)
+        destination = root / "sql-backup-out" / "sql-backup-20261024T032421Z.tar.gz.age"
+        real_replace = os.replace
+
+        def replace(src, dst, *args, **kwargs):
+            if Path(src).parent != Path(dst).parent:
+                raise OSError(18, "Invalid cross-device link")
+            return real_replace(src, dst, *args, **kwargs)
+
+        os.replace = replace
+        try:
+            sql_backup._publish_file(source, destination)
+        finally:
+            os.replace = real_replace
+        check(destination.read_bytes() == payload, "published bytes differ")
+        check(source.is_file(), "source was removed before the temp bundle cleanup")
+        partial = destination.with_name(f".{destination.name}.partial")
+        check(not partial.exists(), "partial file left behind")
+
+
 def test_retention_tiers() -> None:
     now = datetime(2026, 10, 14, tzinfo=timezone.utc)
     weekly = f"sql-backup-weekly-{now.strftime('%G-W%V')}"
@@ -563,6 +589,7 @@ def main() -> None:
     test_copy_parser()
     test_allowlist_contract()
     test_csv_coverage()
+    test_publish_file_across_directories()
     test_retention_tiers()
     test_missing_credentials()
     test_failed_dump()
