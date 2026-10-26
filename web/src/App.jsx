@@ -9,6 +9,7 @@ import { supabase } from './lib/supabase'
 import { clearUserPageState } from './lib/pageState'
 import { PageStateUserProvider } from './lib/pageStateUser'
 import { RouteScrollProvider } from './lib/routeScrollView'
+import { AmbianceRoot } from './lib/useAmbianceTheme'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import Raids from './pages/Raids'
@@ -235,6 +236,7 @@ export default function App() {
 
   return (
     <PageStateUserProvider userId={session?.user?.id || null}>
+    <AmbianceRoot>
     <RouteScrollProvider>
     <SiteChrome>
       <nav>
@@ -294,6 +296,7 @@ export default function App() {
       <Analytics />
     </SiteChrome>
     </RouteScrollProvider>
+    </AmbianceRoot>
     </PageStateUserProvider>
   )
 }
