@@ -156,7 +156,7 @@ export default function DKP({ isOfficer, profile }) {
                 const active = sort.key === column
                 const label = column === 'account' ? colLabel : column === '30d' ? 'Last 30 days' : column === '60d' ? 'Last 60 days' : column[0].toUpperCase() + column.slice(1)
                 const title = column === '30d' || column === '60d'
-                  ? 'DKP earned / total DKP in period; % = share in period. Sort uses DKP earned in the period.'
+                  ? 'Raid tics attended / raid tics in the period. Each tic counts once. Sort uses tics attended.'
                   : `Sort by ${label}`
                 return (
                   <th

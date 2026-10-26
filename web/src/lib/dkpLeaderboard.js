@@ -6,6 +6,7 @@ import { useMemo } from 'react'
 import useSWR from 'swr'
 import { supabase } from './supabase'
 import { isoDay } from './accountEarned'
+import { applyLeaderboardAttendanceWindows, utcIsoDate, windowCutoff } from './attendanceWindows.js'
 
 export const ACTIVE_DAYS = 120
 /** SWR key for DKP payload (authenticated Supabase fetch). */
@@ -31,9 +32,53 @@ async function fetchAll(supabaseClient, table, select, orderColumn) {
   return all
 }
 
+async function fetchFiltered(table, select, apply) {
+  const all = []
+  let from = 0
+  while (true) {
+    const to = from + PAGE_SIZE - 1
+    const query = apply(supabase.from(table).select(select))
+    const { data, error } = await query.range(from, to)
+    if (error) throw new Error(error.message || `Failed to fetch ${table}`)
+    const rows = data ?? []
+    all.push(...rows)
+    if (rows.length < PAGE_SIZE) break
+    from += PAGE_SIZE
+  }
+  return all
+}
+
+/** Raids, tics, and attendance for the leaderboard windows. Extra days cover the date filter. */
+export async function fetchAttendanceWindowRows(now = new Date()) {
+  const fromDay = windowCutoff(utcIsoDate(now), 70)
+  const raids = await fetchFiltered(
+    'raids',
+    'raid_id, date_iso',
+    (query) => query.gte('date_iso', fromDay).order('raid_id', { ascending: true }),
+  )
+  const ids = raids.map((raid) => raid.raid_id).filter(Boolean)
+  const events = []
+  const attendance = []
+  const chunkSize = 40
+  for (let i = 0; i < ids.length; i += chunkSize) {
+    const chunk = ids.slice(i, i + chunkSize)
+    events.push(...await fetchFiltered(
+      'raid_events',
+      'id, raid_id, event_id, event_order, event_name, dkp_value',
+      (query) => query.in('raid_id', chunk).order('id', { ascending: true }),
+    ))
+    attendance.push(...await fetchFiltered(
+      'raid_event_attendance',
+      'id, raid_id, event_id, char_id, character_name, account_id',
+      (query) => query.in('raid_id', chunk).order('id', { ascending: true }),
+    ))
+  }
+  return { raids, events, attendance }
+}
+
 /** Fetch same payload as former /api/get-dkp using authenticated Supabase client (required after requiring sign-in). */
 export async function fetchDkpPayloadFromSupabase() {
-  const [summary, accountSummary, adjustments, activeRaiders, activeAccounts, periodTotals, charAccount, accounts, characters] = await Promise.all([
+  const [summary, accountSummary, adjustments, activeRaiders, activeAccounts, periodTotals, charAccount, accounts, characters, attendanceWindowRows] = await Promise.all([
     fetchAll(supabase, 'dkp_summary', 'character_key, character_name, earned, spent, earned_30d, earned_60d, last_activity_date, updated_at', 'character_key'),
     fetchAll(supabase, 'account_dkp_summary', 'account_id, display_name, earned, spent, earned_30d, earned_60d, last_activity_date, updated_at', 'account_id'),
     fetchAll(supabase, 'dkp_adjustments', 'character_name, account_id, earned_delta, spent_delta', 'character_name'),
@@ -43,6 +88,7 @@ export async function fetchDkpPayloadFromSupabase() {
     fetchAll(supabase, 'character_account', 'char_id, account_id', ['char_id', 'account_id']),
     fetchAll(supabase, 'accounts', 'account_id, toon_names, display_name, inactive', 'account_id'),
     fetchAll(supabase, 'characters', 'char_id, name, class_name', 'char_id'),
+    fetchAttendanceWindowRows(),
   ])
   return {
     dkp_summary: summary,
@@ -54,8 +100,10 @@ export async function fetchDkpPayloadFromSupabase() {
     character_account: charAccount,
     accounts,
     characters,
+    attendance_window_rows: attendanceWindowRows,
   }
 }
+
 
 async function defaultDkpFetcher() {
   return fetchDkpPayloadFromSupabase()
@@ -262,7 +310,7 @@ export function processApiPayload(payload) {
       payload.characters ?? []
     )
     const summaryUpdatedAt = payload.account_dkp_summary[0]?.updated_at ?? null
-    return {
+    return applyLeaderboardAttendanceWindows({
       list: [],
       accountList,
       fullAccountBalances,
@@ -273,7 +321,7 @@ export function processApiPayload(payload) {
       accData,
       charData: payload.characters ?? [],
       summaryUpdatedAt,
-    }
+    }, payload)
   }
 
   if (!payload?.dkp_summary?.length) return null
@@ -348,7 +396,10 @@ export function processApiPayload(payload) {
   })
   const accountList = buildAccountLeaderboard(list, caData, accData, charData)
   const summaryUpdatedAt = rows[0]?.updated_at ?? null
-  return { list, accountList, fullAccountBalances, fullAccountTotals, activeKeys, periodTotals: pt, caData, accData, charData, summaryUpdatedAt }
+  return applyLeaderboardAttendanceWindows(
+    { list, accountList, fullAccountBalances, fullAccountTotals, activeKeys, periodTotals: pt, caData, accData, charData, summaryUpdatedAt },
+    payload,
+  )
 }
 
 /**
