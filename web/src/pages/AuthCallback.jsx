@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
+import { safeGetSession } from '../lib/authSession'
 import { safeNextPath } from '../lib/safeNextPath'
 import { supabase } from '../lib/supabase'
 
@@ -28,7 +29,8 @@ export default function AuthCallback({ session }) {
       else navigate('/login?error=' + encodeURIComponent('Discord sign-in failed. Try again.'), { replace: true })
     }
 
-    supabase.auth.getSession().then(({ data: { session: sess } }) => {
+    safeGetSession(supabase).then(({ session: sess, error }) => {
+      if (error) console.warn('[auth/callback/getSession]', error?.message || error)
       if (sess) go(sess)
     })
 

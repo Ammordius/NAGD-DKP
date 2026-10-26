@@ -2,8 +2,9 @@ import { useEffect, useState, useRef } from 'react'
 import { Routes, Route, Navigate, Link, useLocation, useNavigate } from 'react-router-dom'
 import { Analytics } from '@vercel/analytics/react'
 import { nextAuthGate } from './lib/authGate'
+import { safeGetSession, safeSignOut } from './lib/authSession'
 import { consumeLastPath, persistLastPath } from './lib/lastPath'
-import { formatProfileLoadDebug, sanitizeProfileLoadError } from './lib/profileLoadError'
+import { loadProfileForUser } from './lib/loadProfile'
 import { safeNextPath } from './lib/safeNextPath'
 import { documentTitleForPath, isProductionSite } from './lib/siteTitle'
 import { supabase, supabaseUrl } from './lib/supabase'
@@ -80,6 +81,8 @@ export default function App() {
   const [profile, setProfile] = useState(null)
   const [profileLoadFailed, setProfileLoadFailed] = useState(false)
   const [profileLoadDebug, setProfileLoadDebug] = useState(null)
+  const [profileLoadUserMessage, setProfileLoadUserMessage] = useState(null)
+  const [authActionError, setAuthActionError] = useState(null)
   const [loading, setLoading] = useState(true)
   const location = useLocation()
   const navigate = useNavigate()
@@ -87,6 +90,14 @@ export default function App() {
   const profileUserIdRef = useRef(null)
   const profileRequestRef = useRef(null)
   const sessionUserIdRef = useRef(null)
+
+  function noteUserChange(nextUserId) {
+    const previousUserId = sessionUserIdRef.current
+    if (previousUserId && previousUserId !== nextUserId) {
+      clearUserPageState(sessionStorage, previousUserId)
+    }
+    sessionUserIdRef.current = nextUserId
+  }
 
   useEffect(() => {
     document.title = documentTitleForPath(location.pathname)
@@ -116,14 +127,6 @@ export default function App() {
   useEffect(() => {
     let cancelled = false
 
-    function noteUserChange(nextUserId) {
-      const previousUserId = sessionUserIdRef.current
-      if (previousUserId && previousUserId !== nextUserId) {
-        clearUserPageState(sessionStorage, previousUserId)
-      }
-      sessionUserIdRef.current = nextUserId
-    }
-
     function applyAuth(event, session) {
       if (cancelled) return
       const decision = nextAuthGate({
@@ -141,6 +144,8 @@ export default function App() {
         setProfile(null)
         setProfileLoadFailed(false)
         setProfileLoadDebug(null)
+        setProfileLoadUserMessage(null)
+        setAuthActionError(null)
         setLoading(false)
         return
       }
@@ -154,16 +159,21 @@ export default function App() {
         setLoading(true)
         setProfileLoadFailed(false)
         setProfileLoadDebug(null)
+        setProfileLoadUserMessage(null)
+        setAuthActionError(null)
       }
       const userId = decision.userId
       // The auth client awaits this callback while it holds its session lock.
       // A Supabase query here deadlocks that lock when the tab becomes visible.
       setTimeout(() => {
-        if (!cancelled) fetchProfile(userId)
+        if (!cancelled) fetchProfile(userId, { operation: 'initial' })
       }, 0)
     }
 
-    supabase.auth.getSession().then(({ data: { session } }) => applyAuth('GET_SESSION', session))
+    safeGetSession(supabase).then(({ session, error }) => {
+      if (error) console.warn('[auth/getSession]', error?.message || error)
+      if (!cancelled) applyAuth('GET_SESSION', session)
+    })
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       applyAuth(event, session)
     })
@@ -173,32 +183,82 @@ export default function App() {
     }
   }, [])
 
-  async function fetchProfile(userId) {
+  async function fetchProfile(userId, { operation = 'initial', allowAutoRetry = true } = {}) {
     if (profileRequestRef.current && profileRequestRef.current !== userId) return
     profileRequestRef.current = userId
     let failed = false
     try {
-      const { data, error } = await supabase.from('profiles').select('role, account_id, unclaim_cooldown_until, display_name, ui_preferences').eq('id', userId).single()
+      const result = await loadProfileForUser(supabase, userId, {
+        supabaseUrl,
+        operation,
+        sessionExpected: true,
+        allowAutoRetry,
+      })
       if (profileRequestRef.current !== userId) return
-      if (error) throw error
-      setProfile(data)
+      if (!result.ok) {
+        failed = true
+        console.warn('[auth/profile]', result.debugLine)
+        setProfileLoadDebug(result.debugLine)
+        setProfileLoadUserMessage(result.userMessage)
+        // Allow a later auth event to try again. Leaving the request marked
+        // in flight would ignore every future SIGNED_IN for this user.
+        if (profileRequestRef.current === userId) profileRequestRef.current = null
+        // A failed read is not a player. Keep a profile we already loaded.
+        if (profileUserIdRef.current !== userId) setProfileLoadFailed(true)
+        return
+      }
+      setProfile(result.profile)
       profileUserIdRef.current = userId
       setProfileLoadFailed(false)
       setProfileLoadDebug(null)
+      setProfileLoadUserMessage(null)
+      setAuthActionError(null)
     } catch (err) {
       failed = true
-      const debug = formatProfileLoadDebug(
-        sanitizeProfileLoadError(err, { userId, supabaseUrl }),
-      )
-      console.warn('[auth/profile]', debug)
-      setProfileLoadDebug(debug)
-      // Allow a later auth event to try again. Leaving the request marked
-      // in flight would ignore every future SIGNED_IN for this user.
+      console.warn('[auth/profile]', err?.message || err)
+      setProfileLoadDebug(err?.message ? String(err.message) : 'Profile read failed')
+      setProfileLoadUserMessage('Could not load your profile.')
       if (profileRequestRef.current === userId) profileRequestRef.current = null
-      // A failed read is not a player. Keep a profile we already loaded.
       if (profileUserIdRef.current !== userId) setProfileLoadFailed(true)
     } finally {
       if (failed || profileRequestRef.current === userId || profileUserIdRef.current === userId) setLoading(false)
+    }
+  }
+
+  async function handleProfileRetry() {
+    setAuthActionError(null)
+    setProfileLoadDebug(null)
+    setProfileLoadUserMessage(null)
+    setLoading(true)
+    const userId = session?.user?.id
+    if (!userId) {
+      setLoading(false)
+      setProfileLoadFailed(false)
+      return
+    }
+    const { session: live, error } = await safeGetSession(supabase)
+    if (error) console.warn('[auth/retry/getSession]', error?.message || error)
+    if (!live?.user?.id) {
+      noteUserChange(null)
+      profileUserIdRef.current = null
+      profileRequestRef.current = null
+      setSession(null)
+      setProfile(null)
+      setProfileLoadFailed(false)
+      setLoading(false)
+      setAuthActionError('Your session expired. Sign in again.')
+      return
+    }
+    await fetchProfile(live.user.id, { operation: 'retry', allowAutoRetry: true })
+  }
+
+  async function handleSignOut() {
+    setAuthActionError(null)
+    const { ok, error } = await safeSignOut(supabase)
+    if (!ok) {
+      const message = error?.message ? String(error.message) : 'Sign out failed. Try again.'
+      console.warn('[auth/signOut]', message)
+      setAuthActionError(message)
     }
   }
 
@@ -216,7 +276,9 @@ export default function App() {
     return (
       <SiteChrome>
         <div className="container" style={{ paddingTop: '2rem' }}>
-          <p className="error" role="alert">Could not load your profile.</p>
+          <p className="error" role="alert">
+            {profileLoadUserMessage || 'Could not load your profile.'}
+          </p>
           {profileLoadDebug && (
             <p
               role="status"
@@ -225,22 +287,17 @@ export default function App() {
               {profileLoadDebug}
             </p>
           )}
-          <button
-            type="button"
-            className="btn"
-            onClick={() => {
-              setProfileLoadDebug(null)
-              setLoading(true)
-              fetchProfile(session.user.id)
-            }}
-          >
+          {authActionError && (
+            <p className="error" role="alert" style={{ marginTop: '0.75rem' }}>{authActionError}</p>
+          )}
+          <button type="button" className="btn" onClick={handleProfileRetry}>
             Retry
           </button>
           <button
             type="button"
             className="btn btn-ghost"
             style={{ marginLeft: '0.5rem' }}
-            onClick={() => supabase.auth.signOut()}
+            onClick={handleSignOut}
           >
             Sign out
           </button>
@@ -276,10 +333,7 @@ export default function App() {
               </span>
             )}
             <span className="role">{roleLabel}</span>
-            <button
-              className="btn btn-ghost"
-              onClick={() => supabase.auth.signOut()}
-            >
+            <button className="btn btn-ghost" onClick={handleSignOut}>
               Sign out
             </button>
           </>
@@ -287,6 +341,11 @@ export default function App() {
           <Link to="/login">Sign in</Link>
         )}
       </nav>
+      {authActionError && !profileLoadFailed && (
+        <div className="container" style={{ paddingTop: '0.5rem' }}>
+          <p className="error" role="alert">{authActionError}</p>
+        </div>
+      )}
       <Routes>
         <Route path="/login" element={<Login session={session} />} />
         <Route path="/auth/callback" element={<AuthCallback session={session} />} />
