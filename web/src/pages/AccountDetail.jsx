@@ -188,7 +188,8 @@ async function fetchAccountDetail(accountId, includeMissing = false) {
     (row) => !accountEventRaidIds.has(String(row?.raid_id ?? '').trim()),
   )
   const fractions = ticFractionsByRaid([...accountEventRows, ...universeEventRows], eventAttResData)
-  // Include raids where this account had no activity so "only missing" can show full absences.
+  // Raids this account never attended, so missing-tic details can mark them in the full list.
+  // "Only show raids with missing tics" does not list those; it lists raids they attended and still missed a tic.
   const allPositiveTicRaidIds = new Set(
     (allPositiveEventsRes.data || []).map((row) => String(row?.raid_id ?? '').trim()).filter(Boolean),
   )

@@ -98,23 +98,24 @@ describe('missed attendance tics', () => {
     assert.equal(paid.missingCount, 0)
   })
 
-  it('still lists a partial miss when details are hidden until the filter is on', () => {
+  it('only-missing lists partial tic gaps and not every raid the account never attended', () => {
     const partial = rows.find((row) => row.raid_id === 'r3')
-    assert.deepEqual(
-      visibleMissingTicRows([partial], { showMissingDetails: false, onlyMissingRaids: false }).map((row) => row.raid_id),
-      ['r3'],
-    )
     const absent = {
       raid_id: 'absent',
-      ...raidMissingTics({ ticEarned: 0, ticTotal: 2, dkpEarned: 0, dkpRaidTotal: 2 }),
+      ...raidMissingTics({ ticEarned: 0, ticTotal: 4, dkpEarned: 0, dkpRaidTotal: 4 }),
     }
+    const present = rows.find((row) => row.raid_id === 'r1')
+    assert.equal(absent.isMissingTics, true)
     assert.equal(
       visibleMissingTicRows([absent], { showMissingDetails: false, onlyMissingRaids: false }).length,
       0,
     )
-    assert.deepEqual(
-      visibleMissingTicRows([absent], { showMissingDetails: true, onlyMissingRaids: true }).map((row) => row.raid_id),
-      ['absent'],
+    const onlyMissing = visibleMissingTicRows(
+      [present, partial, absent],
+      { showMissingDetails: true, onlyMissingRaids: true },
     )
+    assert.deepEqual(onlyMissing.map((row) => row.raid_id), ['r3'])
+    assert.equal(onlyMissing[0].missingCount, 1)
+    assert.equal(onlyMissing[0].ticEarned, 3)
   })
 })

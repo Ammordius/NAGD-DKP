@@ -144,11 +144,22 @@ export function raidMissingTics(act) {
   }
 }
 
-/** Activity rows for the two account-history tic controls. */
+/** True when this account received credit on the raid, so a short tic count is a gap rather than a raid they never attended. */
+export function accountWasPresent(act) {
+  return Number(act?.ticEarned ?? 0) > 0 || Number(act?.dkpEarned ?? 0) > 0
+}
+
+/**
+ * Activity rows for the two account-history tic controls.
+ * "Only missing" is raids this account attended and still missed at least one tic.
+ * Raids they never attended stay in the full list (and can be highlighted there)
+ * but are not the missing-tic list — that set is every other guild raid.
+ */
 export function visibleMissingTicRows(rows, { showMissingDetails = false, onlyMissingRaids = false } = {}) {
   const trackable = (rows || []).filter((act) => act.hasTrackableAttendance)
   const detailScoped = showMissingDetails
     ? trackable
-    : trackable.filter((act) => Number(act.dkpEarned ?? 0) > 0 || Number(act.ticEarned ?? 0) > 0)
-  return onlyMissingRaids ? detailScoped.filter((act) => act.isMissingTics) : detailScoped
+    : trackable.filter((act) => accountWasPresent(act))
+  if (!onlyMissingRaids) return detailScoped
+  return detailScoped.filter((act) => act.isMissingTics && accountWasPresent(act))
 }
