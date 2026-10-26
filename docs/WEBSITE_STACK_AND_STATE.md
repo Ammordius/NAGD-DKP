@@ -243,6 +243,7 @@ Vercel: set root to **`web`**, add `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`
 | “Refresh loses everything” | URL params missing for primary context; or only sessionStorage without URL |
 | “Landing on `/` sends me somewhere else” | `dkp-last-path` + one-time restore in `App.jsx` |
 | “Supabase errors / empty data” | Env vars, RLS policies, user role in `profiles` |
+| “Could not load your profile.” | Auth session exists but `profiles` `.single()` failed. The failure screen shows a sanitized PostgREST line (`code` / `message` / truncated user id / Supabase host only — no keys). Check `on_auth_user_created` → `handle_new_user`, a row in `public.profiles` for that user, RLS `"Profiles select"`, and that `VITE_SUPABASE_URL` / anon key match the Auth project. |
 | “Static JSON 404” | File under `web/public/` or deployment artifact path |
 
 **First files to open:** `web/src/App.jsx` (routes, auth), the relevant `web/src/pages/*.jsx`, `web/src/lib/supabase.js`, `web/src/lib/usePersistedState.js`.

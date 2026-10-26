@@ -3,9 +3,10 @@ import { Routes, Route, Navigate, Link, useLocation, useNavigate } from 'react-r
 import { Analytics } from '@vercel/analytics/react'
 import { nextAuthGate } from './lib/authGate'
 import { consumeLastPath, persistLastPath } from './lib/lastPath'
+import { formatProfileLoadDebug, sanitizeProfileLoadError } from './lib/profileLoadError'
 import { safeNextPath } from './lib/safeNextPath'
 import { documentTitleForPath, isProductionSite } from './lib/siteTitle'
-import { supabase } from './lib/supabase'
+import { supabase, supabaseUrl } from './lib/supabase'
 import { clearUserPageState } from './lib/pageState'
 import { PageStateUserProvider } from './lib/pageStateUser'
 import { RouteScrollProvider } from './lib/routeScrollView'
@@ -78,6 +79,7 @@ export default function App() {
   const [session, setSession] = useState(null)
   const [profile, setProfile] = useState(null)
   const [profileLoadFailed, setProfileLoadFailed] = useState(false)
+  const [profileLoadDebug, setProfileLoadDebug] = useState(null)
   const [loading, setLoading] = useState(true)
   const location = useLocation()
   const navigate = useNavigate()
@@ -138,6 +140,7 @@ export default function App() {
         setSession(null)
         setProfile(null)
         setProfileLoadFailed(false)
+        setProfileLoadDebug(null)
         setLoading(false)
         return
       }
@@ -150,6 +153,7 @@ export default function App() {
       if (profileUserIdRef.current !== decision.userId) {
         setLoading(true)
         setProfileLoadFailed(false)
+        setProfileLoadDebug(null)
       }
       const userId = decision.userId
       // The auth client awaits this callback while it holds its session lock.
@@ -180,8 +184,14 @@ export default function App() {
       setProfile(data)
       profileUserIdRef.current = userId
       setProfileLoadFailed(false)
-    } catch {
+      setProfileLoadDebug(null)
+    } catch (err) {
       failed = true
+      const debug = formatProfileLoadDebug(
+        sanitizeProfileLoadError(err, { userId, supabaseUrl }),
+      )
+      console.warn('[auth/profile]', debug)
+      setProfileLoadDebug(debug)
       // Allow a later auth event to try again. Leaving the request marked
       // in flight would ignore every future SIGNED_IN for this user.
       if (profileRequestRef.current === userId) profileRequestRef.current = null
@@ -207,10 +217,19 @@ export default function App() {
       <SiteChrome>
         <div className="container" style={{ paddingTop: '2rem' }}>
           <p className="error" role="alert">Could not load your profile.</p>
+          {profileLoadDebug && (
+            <p
+              role="status"
+              style={{ color: '#a1a1aa', fontSize: '0.875rem', marginTop: '0.75rem', wordBreak: 'break-word' }}
+            >
+              {profileLoadDebug}
+            </p>
+          )}
           <button
             type="button"
             className="btn"
             onClick={() => {
+              setProfileLoadDebug(null)
               setLoading(true)
               fetchProfile(session.user.id)
             }}
