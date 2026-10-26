@@ -21,6 +21,10 @@ describe('AccountDetail missing-tic behavior', () => {
     assert.match(source, /setAccountDetailInSession\(accountId, data, includeMissing\)/)
     assert.match(source, /Show missing tic details/)
     assert.match(source, /Only show raids with missing tics/)
+    assert.match(source, /fetchChunkedIn\(supabase, 'raid_event_attendance'/)
+    assert.match(source, /fetchChunkedIn\(supabase, 'raid_events'/)
+    assert.match(source, /ticFractionsByRaid\(/)
+    assert.match(source, /visibleMissingTicRows\(activityWithMissing/)
   })
 
   it('evaluates all four control combinations for fetch scope', () => {
