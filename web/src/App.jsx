@@ -289,7 +289,7 @@ export default function App() {
         <Route path="/accounts" element={<RequireAuth session={session}><Accounts profile={profile} onProfileUpdate={() => session?.user?.id && fetchProfile(session.user.id)} /></RequireAuth>} />
         <Route path="/accounts/:accountId" element={<RequireAuth session={session}><AccountDetail isOfficer={isOfficer} profile={profile} session={session} onProfileUpdate={() => session?.user?.id && fetchProfile(session.user.id)} /></RequireAuth>} />
         <Route path="/profile" element={<RequireAuth session={session}><Profile profile={profile} onProfileUpdate={() => session?.user?.id && fetchProfile(session.user.id)} /></RequireAuth>} />
-        <Route path="/items/:itemNameEncoded" element={<RequireAuth session={session}><ItemPage isOfficer={isOfficer} /></RequireAuth>} />
+        <Route path="/items/:itemNameEncoded" element={<RequireAuth session={session}><ItemPage /></RequireAuth>} />
         <Route path="/characters/:charKey" element={<RequireAuth session={session}><CharacterPage /></RequireAuth>} />
         <Route path="*" element={<NotFound />} />
       </Routes>

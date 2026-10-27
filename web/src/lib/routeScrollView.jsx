@@ -388,7 +388,7 @@ export function useScrollPixelMode(enabled) {
   }, [api, enabled])
 }
 
-/** Let the page position itself (hash section, second-place query). */
+/** Let the page position itself (e.g. hash section). */
 export function useLeaveScrollToPage(active) {
   const api = useContext(ScrollContext)
   useEffect(() => {

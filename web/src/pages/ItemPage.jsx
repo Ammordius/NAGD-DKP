@@ -1,32 +1,18 @@
-import { useEffect, useState, useMemo, useRef, useCallback } from 'react'
-import { useParams, Link, useSearchParams, useLocation } from 'react-router-dom'
+import { useEffect, useState, useMemo } from 'react'
+import { useParams, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useCharToAccountMap } from '../lib/useCharToAccountMap'
 import AssignedLootDisclaimer from '../components/AssignedLootDisclaimer'
 import ItemLink from '../components/ItemLink'
 import ItemCard from '../components/ItemCard'
-import { getItemStats, itemHasClassRestrictions } from '../lib/itemStats'
+import { getItemStats } from '../lib/itemStats'
 import { getDkpMobLoot, getRaidItemSources } from '../lib/staticData'
 import { ensureElementalArmorLoaded, getMoldInfo, getArmorIdForMoldAndClass, isElementalMold } from '../lib/elementalArmor'
 import { formatAccountCharacter } from '../lib/formatAccountCharacter'
 import { usePersistedState } from '../lib/usePersistedState'
-import { useLeaveScrollToPage, useScrollContentReady } from '../lib/routeScrollView'
+import { useScrollContentReady } from '../lib/routeScrollView'
 
 const CLASS_OPTIONS = ['WAR', 'CLR', 'PAL', 'RNG', 'SHD', 'DRU', 'BRD', 'ROG', 'SHM', 'MNK', 'NEC', 'WIZ', 'MAG', 'ENC', 'BST']
-
-const FACT_IN_CHUNK = 100
-const RPC_FALLBACK_MAX = 10
-
-/** True if URL asks to open the inferred second-place section. */
-function queryWantsSecondPlaceOpen(searchParams) {
-  for (const key of ['second_place', 'bid_estimate', 'bid_portfolio']) {
-    const v = searchParams.get(key)
-    if (v === null) continue
-    const s = String(v).trim().toLowerCase()
-    if (s === '' || s === '1' || s === 'true' || s === 'yes') return true
-  }
-  return false
-}
 
 // Build item_name (lowercase) -> item_id from dkp_mob_loot.json
 function buildItemIdMap(mobLoot) {
@@ -162,12 +148,9 @@ function PriceChart({ data, height = 180 }) {
   )
 }
 
-export default function ItemPage({ isOfficer = false }) {
+export default function ItemPage() {
   const { itemNameEncoded } = useParams()
-  const [searchParams, setSearchParams] = useSearchParams()
-  const location = useLocation()
-  const secondPlaceSectionRef = useRef(null)
-  const { getAccountId, getAccountDisplayName, getDisplayNameForAccountId, getRepresentativeCharNameForAccount, getCharacterNameForCharId } = useCharToAccountMap()
+  const { getAccountId, getAccountDisplayName } = useCharToAccountMap()
   const itemName = useMemo(() => (itemNameEncoded ? decodeURIComponent(itemNameEncoded) : ''), [itemNameEncoded])
   const [lootRows, setLootRows] = useState([])
   const [raids, setRaids] = useState({})
@@ -181,75 +164,7 @@ export default function ItemPage({ isOfficer = false }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [elementalDataReady, setElementalDataReady] = useState(false)
-
-  const urlSecondPlaceOpen = useMemo(() => queryWantsSecondPlaceOpen(searchParams), [searchParams])
-  const [secondPlaceOpen, setSecondPlaceOpen] = useState(false)
-  const [factByLootId, setFactByLootId] = useState({})
-  const [factLoading, setFactLoading] = useState(false)
-  const [factError, setFactError] = useState('')
-  const [rpcRunnerUpByLootId, setRpcRunnerUpByLootId] = useState({})
-  const [rpcLoading, setRpcLoading] = useState(false)
   useScrollContentReady(!loading)
-  useLeaveScrollToPage(urlSecondPlaceOpen)
-
-  useEffect(() => {
-    if (urlSecondPlaceOpen) setSecondPlaceOpen(true)
-  }, [urlSecondPlaceOpen])
-
-  useEffect(() => {
-    if (!urlSecondPlaceOpen || !secondPlaceOpen || loading) return
-    const id = requestAnimationFrame(() => {
-      secondPlaceSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    })
-    return () => cancelAnimationFrame(id)
-  }, [urlSecondPlaceOpen, secondPlaceOpen, loading, lootRows.length])
-
-  useEffect(() => {
-    setFactByLootId({})
-    setFactError('')
-    setRpcRunnerUpByLootId({})
-  }, [itemName])
-
-  const lootIdsForFact = useMemo(() => {
-    const ids = (lootRows || []).map((r) => r.id).filter((id) => id != null)
-    return [...new Set(ids.map((x) => Number(x)))].filter((n) => Number.isFinite(n) && n > 0)
-  }, [lootRows])
-
-  useEffect(() => {
-    if (!isOfficer || !secondPlaceOpen || lootIdsForFact.length === 0) return
-    let cancelled = false
-    setFactLoading(true)
-    setFactError('')
-    ;(async () => {
-      const merged = {}
-      try {
-        for (let i = 0; i < lootIdsForFact.length; i += FACT_IN_CHUNK) {
-          const chunk = lootIdsForFact.slice(i, i + FACT_IN_CHUNK)
-          const { data, error: qErr } = await supabase
-            .from('bid_portfolio_auction_fact')
-            .select('loot_id, runner_up_account_guess, runner_up_char_guess')
-            .in('loot_id', chunk)
-          if (cancelled) return
-          if (qErr) {
-            setFactError(qErr.message)
-            return
-          }
-          ;(data || []).forEach((row) => {
-            merged[Number(row.loot_id)] = {
-              runner_up_account_guess: row.runner_up_account_guess ?? null,
-              runner_up_char_guess: row.runner_up_char_guess ?? null,
-            }
-          })
-        }
-        if (!cancelled) setFactByLootId(merged)
-      } finally {
-        if (!cancelled) setFactLoading(false)
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [isOfficer, secondPlaceOpen, lootRows])
 
   useEffect(() => {
     if (!itemName) {
@@ -312,39 +227,6 @@ export default function ItemPage({ isOfficer = false }) {
     return { historyByDate: withDate, historyAll: allRows, lastThree: last3, rollingAvg: avg }
   }, [lootRows, raids])
 
-  const loadRpcFallback = useCallback(async () => {
-    if (!isOfficer || factLoading) return
-    const reversed = [...historyAll].reverse()
-    const targets = []
-    for (const row of reversed) {
-      const n = Number(row.id)
-      if (!Number.isFinite(n)) continue
-      if (Object.prototype.hasOwnProperty.call(factByLootId, n)) continue
-      if (Object.prototype.hasOwnProperty.call(rpcRunnerUpByLootId, n)) continue
-      targets.push(n)
-      if (targets.length >= RPC_FALLBACK_MAX) break
-    }
-    if (targets.length === 0) return
-    setRpcLoading(true)
-    const next = { ...rpcRunnerUpByLootId }
-    try {
-      for (const lootId of targets) {
-        const { data, error: rpcErr } = await supabase.rpc('officer_bid_portfolio_for_loot', { p_loot_id: lootId })
-        if (rpcErr) {
-          setFactError(rpcErr.message)
-          break
-        }
-        next[lootId] = {
-          runner_up_account_guess: data?.runner_up_account_guess ?? null,
-          runner_up_char_guess: data?.runner_up_char_guess ?? null,
-        }
-      }
-    } finally {
-      setRpcRunnerUpByLootId(next)
-      setRpcLoading(false)
-    }
-  }, [isOfficer, factLoading, historyAll, factByLootId, rpcRunnerUpByLootId])
-
   const itemIdMap = useMemo(() => buildItemIdMap(mobLoot), [mobLoot])
   const raidNameToId = useMemo(() => buildRaidItemNameToId(raidItemSources), [raidItemSources])
   const itemKey = (itemName || '').trim().toLowerCase()
@@ -393,20 +275,12 @@ export default function ItemPage({ isOfficer = false }) {
   if (loading) return <div className="container">Loading item…</div>
   if (error) return <div className="container"><span className="error">{error}</span> <Link to="/loot">← Item History</Link></div>
 
-  const secondPlaceLinkTo = `${location.pathname}?second_place=1`
-
   return (
     <div className="container">
       <p>
         <Link to="/loot">← Item History</Link>
         {' · '}
         <Link to="/mobs">Raid Items</Link>
-        {isOfficer && historyAll.length > 0 && (
-          <>
-            {' · '}
-            <Link to={secondPlaceLinkTo}>Inferred 2nd place</Link>
-          </>
-        )}
       </p>
       <h1 style={{ marginBottom: '0.5rem' }}>
         {takpId != null ? (
@@ -463,138 +337,6 @@ export default function ItemPage({ isOfficer = false }) {
       )}
 
       {historyByDate.length > 0 && <PriceChart data={historyByDate} />}
-
-      {isOfficer && historyAll.length > 0 && !secondPlaceOpen && (
-        <p style={{ marginBottom: '1rem' }}>
-          <button type="button" className="btn btn-ghost" onClick={() => {
-            setSecondPlaceOpen(true)
-            const next = new URLSearchParams(searchParams)
-            next.set('second_place', '1')
-            setSearchParams(next, { replace: true })
-          }}>
-            Show inferred second place (officers)
-          </button>
-        </p>
-      )}
-
-      {isOfficer && historyAll.length > 0 && secondPlaceOpen && (
-        <div
-          ref={secondPlaceSectionRef}
-          className="card"
-          style={{ marginBottom: '1.25rem', borderLeft: '4px solid #fbbf24' }}
-        >
-          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', justifyContent: 'space-between', gap: '0.5rem' }}>
-            <h2 style={{ marginTop: 0, marginBottom: '0.25rem' }}>Inferred second place (officers)</h2>
-            <button type="button" className="btn btn-ghost" style={{ fontSize: '0.85rem' }} onClick={() => {
-              setSecondPlaceOpen(false)
-              const next = new URLSearchParams(searchParams)
-              next.delete('second_place')
-              next.delete('bid_estimate')
-              next.delete('bid_portfolio')
-              setSearchParams(next, { replace: true })
-            }}>
-              Hide
-            </button>
-          </div>
-          <p style={{ color: '#a1a1aa', fontSize: '0.875rem', marginTop: 0 }}>
-            No auction bid log: this is a guess. Runner-up uses the unified Python pipeline (item stats + character CSVs for class/level gates, same pool as second-bidder batch) then max-pool or scored rank; stored in{' '}
-            <code>bid_portfolio_auction_fact</code>.{' '}
-            <strong>pool_before</strong>
-            {' '}is always account-level, not the named character’s balance. When present, the character shown after the model upload is the model’s item-eligible attending lane; otherwise the name is only a representative toon for that account. For{' '}
-            <strong>class-restricted</strong>
-            {' '}items, if there is no cached character lane we show the <strong>account only</strong> (no random attending toon) so we do not imply that person could equip the item.
-          </p>
-          {factError && <p className="error" style={{ marginBottom: '0.5rem' }}>{factError}</p>}
-          {factLoading && <p style={{ color: '#a1a1aa', marginBottom: '0.5rem' }}>Loading cached inference…</p>}
-          <div style={{ overflowX: 'auto' }}>
-            <table>
-              <thead>
-                <tr>
-                  <th>Date</th>
-                  <th>Raid</th>
-                  <th>Winner</th>
-                  <th>Cost</th>
-                  <th>Inferred 2nd</th>
-                </tr>
-              </thead>
-              <tbody>
-                {[...historyAll].reverse().map((row, i) => {
-                  const n = Number(row.id)
-                  const hasFact = Number.isFinite(n) && Object.prototype.hasOwnProperty.call(factByLootId, n)
-                  const hasRpc = Number.isFinite(n) && Object.prototype.hasOwnProperty.call(rpcRunnerUpByLootId, n)
-                  let inferredAccount = null
-                  let inferredCharId = null
-                  let inferredReady = false
-                  if (hasFact) {
-                    const f = factByLootId[n]
-                    inferredAccount = f?.runner_up_account_guess ?? null
-                    inferredCharId = f?.runner_up_char_guess ?? null
-                    inferredReady = true
-                  } else if (hasRpc) {
-                    const rpc = rpcRunnerUpByLootId[n]
-                    inferredAccount = rpc?.runner_up_account_guess ?? null
-                    inferredCharId = rpc?.runner_up_char_guess ?? null
-                    inferredReady = true
-                  }
-                  const charName = row.character_name || row.char_id || '—'
-                  const accountId = getAccountId(row.character_name || row.char_id)
-                  const accountName = getAccountDisplayName?.(row.character_name || row.char_id)
-                  const winnerLabel = formatAccountCharacter(accountName, charName)
-                  const winnerTo = accountId ? `/accounts/${accountId}` : `/characters/${encodeURIComponent(charName)}`
-                  return (
-                    <tr key={row.id ?? i}>
-                      <td>{row.displayDate}</td>
-                      <td>
-                        <Link to={`/raids/${row.raid_id}`}>{raids[row.raid_id]?.raid_name || row.raid_id}</Link>
-                      </td>
-                      <td>
-                        <Link to={winnerTo}>{winnerLabel}</Link>
-                      </td>
-                      <td>{row.cost ?? '—'}</td>
-                      <td>
-                        {!inferredReady && factLoading ? (
-                          <span style={{ color: '#71717a' }}>…</span>
-                        ) : inferredAccount ? (
-                          <Link
-                            to={`/accounts/${encodeURIComponent(String(inferredAccount))}`}
-                            title={
-                              !inferredCharId && itemHasClassRestrictions(itemStats)
-                                ? 'Account-level guess only: no item-eligible character on this raid’s attendance in cache (or SQL/CSV path). The named account may still have an eligible alt not on this raid.'
-                                : undefined
-                            }
-                          >
-                            {formatAccountCharacter(
-                              getDisplayNameForAccountId(inferredAccount),
-                              !inferredCharId && itemHasClassRestrictions(itemStats)
-                                ? ''
-                                : inferredCharId
-                                  ? (getCharacterNameForCharId(inferredCharId) || String(inferredCharId))
-                                  : (getRepresentativeCharNameForAccount?.(inferredAccount) ?? ''),
-                            )}
-                            {!inferredCharId && itemHasClassRestrictions(itemStats) ? (
-                              <span style={{ color: '#71717a', fontWeight: 400, marginLeft: '0.35rem', fontSize: '0.8em' }}>
-                                (account only)
-                              </span>
-                            ) : null}
-                          </Link>
-                        ) : (
-                          '—'
-                        )}
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-          <p style={{ color: '#71717a', fontSize: '0.85rem', marginTop: '0.75rem', marginBottom: '0.5rem' }}>
-            Values come from <code>bid_portfolio_auction_fact</code> (Python <code>compute_bid_portfolio_from_csv</code> or second-bidder JSONL upload). Live RPC reads the same fact row when present. If empty, run CSV compute + upload or JSONL upload (see repo docs).
-          </p>
-          <button type="button" className="btn btn-ghost" disabled={factLoading || rpcLoading} onClick={() => loadRpcFallback()}>
-            {rpcLoading ? 'Loading…' : `Load live inference (up to ${RPC_FALLBACK_MAX} recent drops missing cache)`}
-          </button>
-        </div>
-      )}
 
       <h2>Drop history</h2>
       <AssignedLootDisclaimer compact />
