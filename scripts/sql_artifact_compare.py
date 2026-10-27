@@ -90,6 +90,98 @@ def _parse_created_at(value: str) -> datetime | None:
     return parsed.astimezone(timezone.utc)
 
 
+def resolve_latest_artifact_id(
+    repository: str,
+    current_repository: str = "",
+) -> tuple[str, str, str]:
+    """Return (canonical_repo, artifact_id, artifact_name) for the latest SQL backup."""
+    _secret, _token, client, origin = open_comparison_source(
+        repository, current_repository
+    )
+    now = datetime.now(timezone.utc)
+    try:
+        snapshots = sql_backup_fetch.discover_snapshots(
+            client, origin.full_name, now=now, per_page=sql_backup_fetch.PER_PAGE
+        )
+        selection = sql_backup_fetch.select_checkpoint(
+            snapshots,
+            checkpoint=sql_backup_fetch.CHECKPOINT_LATEST,
+            artifact_id="",
+            client=client,
+            repo=origin.full_name,
+            now=now,
+            per_page=sql_backup_fetch.PER_PAGE,
+        )
+    except sql_backup_fetch.FetchError as exc:
+        raise CompareError(str(exc)) from None
+    return (
+        origin.full_name,
+        selection.artifact.artifact_id,
+        selection.artifact.name,
+    )
+
+
+def resolve_compare_sides(
+    *,
+    old_repository: str = "",
+    old_artifact_id: str = "",
+    new_repository: str = "",
+    new_artifact_id: str = "",
+    current_repository: str = "",
+    mirror_source: str = "",
+) -> dict[str, str]:
+    """Apply defaults: old=SQL_MIRROR_SOURCE latest, new=this repo latest.
+
+    Explicit owner/name and numeric artifact ids still win when provided.
+    """
+    current = (current_repository or os.environ.get("GITHUB_REPOSITORY", "")).strip()
+    mirror = (mirror_source or os.environ.get("SQL_MIRROR_SOURCE", "")).strip()
+
+    old_repo = (old_repository or "").strip() or mirror
+    new_repo = (new_repository or "").strip() or current
+    if not old_repo:
+        raise CompareError(
+            "old_repository is empty and SQL_MIRROR_SOURCE is not set. "
+            "Pass old_repository=owner/name or set the mirror source variable."
+        )
+    if not new_repo:
+        raise CompareError(
+            "new_repository is empty and the current repository is unknown. "
+            "Pass new_repository=owner/name."
+        )
+
+    old_id = (old_artifact_id or "").strip()
+    new_id = (new_artifact_id or "").strip()
+    old_name = ""
+    new_name = ""
+
+    if old_id:
+        if not _DIGITS.fullmatch(old_id):
+            raise CompareError(f"old_artifact_id must be numeric, got {old_id!r}.")
+        # Canonicalize repository name via comparison opener.
+        _s, _t, _c, old_origin = open_comparison_source(old_repo, current)
+        old_repo = old_origin.full_name
+    else:
+        old_repo, old_id, old_name = resolve_latest_artifact_id(old_repo, current)
+
+    if new_id:
+        if not _DIGITS.fullmatch(new_id):
+            raise CompareError(f"new_artifact_id must be numeric, got {new_id!r}.")
+        _s, _t, _c, new_origin = open_comparison_source(new_repo, current)
+        new_repo = new_origin.full_name
+    else:
+        new_repo, new_id, new_name = resolve_latest_artifact_id(new_repo, current)
+
+    return {
+        "old_repository": old_repo,
+        "old_artifact_id": old_id,
+        "old_artifact_name": old_name,
+        "new_repository": new_repo,
+        "new_artifact_id": new_id,
+        "new_artifact_name": new_name,
+    }
+
+
 def fetch_verified_backup(
     *,
     repository: str,
@@ -98,7 +190,13 @@ def fetch_verified_backup(
     work_dir: Path,
 ) -> dict[str, Any]:
     """Download, decrypt, and verify one portable SQL artifact into work_dir."""
-    if not _DIGITS.fullmatch((artifact_id or "").strip()):
+    artifact_id = (artifact_id or "").strip()
+    if not artifact_id:
+        _repo, artifact_id, _name = resolve_latest_artifact_id(
+            repository, current_repository
+        )
+        repository = _repo
+    elif not _DIGITS.fullmatch(artifact_id):
         raise CompareError(f"Artifact id must be numeric, got {artifact_id!r}.")
     identity_key = sql_backup_fetch._identity_from_env()
     if not identity_key:
@@ -116,7 +214,7 @@ def fetch_verified_backup(
             client,
             origin.full_name,
             run_id=None,
-            artifact_id=artifact_id.strip(),
+            artifact_id=artifact_id,
             now=now,
             per_page=sql_backup_fetch.PER_PAGE,
         )
@@ -351,28 +449,37 @@ def materialize_backup_snapshot(payload: dict[str, Any], out_dir: Path, *, label
 
 def compare_artifacts(
     *,
-    old_repository: str,
-    old_artifact_id: str,
-    new_repository: str,
-    new_artifact_id: str,
+    old_repository: str = "",
+    old_artifact_id: str = "",
+    new_repository: str = "",
+    new_artifact_id: str = "",
     out_dir: Path,
     current_repository: str = "",
+    mirror_source: str = "",
 ) -> dict[str, Any]:
     current = (current_repository or os.environ.get("GITHUB_REPOSITORY", "")).strip()
+    sides = resolve_compare_sides(
+        old_repository=old_repository,
+        old_artifact_id=old_artifact_id,
+        new_repository=new_repository,
+        new_artifact_id=new_artifact_id,
+        current_repository=current,
+        mirror_source=mirror_source,
+    )
     work = Path(tempfile.mkdtemp(prefix="sql-artifact-compare-"))
     warnings: list[str] = []
     try:
         old_work = work / "old"
         new_work = work / "new"
         old_payload = fetch_verified_backup(
-            repository=old_repository,
-            artifact_id=old_artifact_id,
+            repository=sides["old_repository"],
+            artifact_id=sides["old_artifact_id"],
             current_repository=current,
             work_dir=old_work,
         )
         new_payload = fetch_verified_backup(
-            repository=new_repository,
-            artifact_id=new_artifact_id,
+            repository=sides["new_repository"],
+            artifact_id=sides["new_artifact_id"],
             current_repository=current,
             work_dir=new_work,
         )
@@ -409,6 +516,12 @@ def compare_artifacts(
             "balance_source": "reconstructed_from_portable_backup",
             "warnings": warnings,
             "actions_run_url": "",
+            "defaults": {
+                "old_defaulted_from_mirror_source": not (old_repository or "").strip(),
+                "new_defaulted_from_current_repository": not (new_repository or "").strip(),
+                "old_artifact_defaulted_to_latest": not (old_artifact_id or "").strip(),
+                "new_artifact_defaulted_to_latest": not (new_artifact_id or "").strip(),
+            },
         }
         model = diff.compare_snapshots(
             old_snap,
@@ -435,16 +548,51 @@ def compare_artifacts(
         shutil.rmtree(work, ignore_errors=True)
 
 
+def _write_github_output(fields: dict[str, str]) -> None:
+    path = os.environ.get("GITHUB_OUTPUT", "").strip()
+    if not path:
+        return
+    with open(path, "a", encoding="utf-8", newline="\n") as handle:
+        for key, value in fields.items():
+            if "\n" in value or "\r" in value:
+                raise CompareError(f"Refusing multiline GitHub output for {key}.")
+            handle.write(f"{key}={value}\n")
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Compare two portable SQL backup artifacts (read-only, no DB)."
+        description=(
+            "Compare two portable SQL backup artifacts (read-only, no DB). "
+            "Defaults: old=SQL_MIRROR_SOURCE latest, new=current repository latest."
+        )
     )
-    parser.add_argument("--old-repository", required=True)
-    parser.add_argument("--old-artifact-id", required=True)
-    parser.add_argument("--new-repository", required=True)
-    parser.add_argument("--new-artifact-id", required=True)
+    parser.add_argument(
+        "--old-repository",
+        default="",
+        help="Old owner/name (default: SQL_MIRROR_SOURCE)",
+    )
+    parser.add_argument(
+        "--old-artifact-id",
+        default="",
+        help="Old numeric artifact id (default: latest SQL backup in that repo)",
+    )
+    parser.add_argument(
+        "--new-repository",
+        default="",
+        help="New owner/name (default: current repository)",
+    )
+    parser.add_argument(
+        "--new-artifact-id",
+        default="",
+        help="New numeric artifact id (default: latest SQL backup in that repo)",
+    )
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--current-repository", default="")
+    parser.add_argument(
+        "--mirror-source",
+        default="",
+        help="Fallback old repository when --old-repository is empty (default: SQL_MIRROR_SOURCE env)",
+    )
     args = parser.parse_args(argv)
 
     try:
@@ -455,25 +603,42 @@ def main(argv: list[str] | None = None) -> int:
             new_artifact_id=args.new_artifact_id,
             out_dir=args.out,
             current_repository=args.current_repository,
+            mirror_source=args.mirror_source,
         )
     except CompareError as exc:
         print(str(exc), file=sys.stderr)
         return 1
 
     ok = bool((model.get("validation") or {}).get("ok"))
+    prov = model.get("provenance") or {}
+    old_id = str(prov.get("old_artifact_id") or "")
+    new_id = str(prov.get("new_artifact_id") or "")
+    _write_github_output(
+        {
+            "old_repository": str(prov.get("old_repository") or ""),
+            "old_artifact_id": old_id,
+            "new_repository": str(prov.get("new_repository") or ""),
+            "new_artifact_id": new_id,
+            "artifact_name": f"sql-compare-{old_id}-vs-{new_id}",
+        }
+    )
     print(
         f"Wrote comparison {args.out} validation_ok={ok} "
-        f"warnings={len(model.get('warnings') or [])}"
+        f"warnings={len(model.get('warnings') or [])} "
+        f"old={prov.get('old_repository')}#{old_id} "
+        f"new={prov.get('new_repository')}#{new_id}"
     )
     # Write step summary when running in Actions.
     summary_path = os.environ.get("GITHUB_STEP_SUMMARY", "").strip()
     if summary_path:
-        prov = model.get("provenance") or {}
+        defaults = prov.get("defaults") or {}
         lines = [
             "## SQL artifact comparison",
             "",
-            f"- Old: `{prov.get('old_repository')}` artifact `{prov.get('old_artifact_id')}`",
-            f"- New: `{prov.get('new_repository')}` artifact `{prov.get('new_artifact_id')}`",
+            f"- Old: `{prov.get('old_repository')}` artifact `{old_id}`"
+            + (" (default: mirror source latest)" if defaults.get("old_artifact_defaulted_to_latest") or defaults.get("old_defaulted_from_mirror_source") else ""),
+            f"- New: `{prov.get('new_repository')}` artifact `{new_id}`"
+            + (" (default: this repo latest)" if defaults.get("new_artifact_defaulted_to_latest") or defaults.get("new_defaulted_from_current_repository") else ""),
             f"- Validation: {'PASS' if ok else 'FAIL'}",
             f"- Balance source: `{model.get('balance_source')}`",
             "",

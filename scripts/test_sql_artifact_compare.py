@@ -36,6 +36,43 @@ def test_compare_workflow_is_artifact_only() -> None:
     check("db-restore-sql" not in text, "compare must not dispatch restore")
     check("workflow_dispatch" in text, "compare must be manually dispatched")
     check("old_artifact_id" in text and "new_artifact_id" in text, "inputs missing")
+    check("SQL_MIRROR_SOURCE" in text, "mirror source default wiring missing")
+    check('default: ""' in text, "inputs should default empty for latest resolution")
+
+
+def test_resolve_compare_sides_defaults() -> None:
+    with patch.object(
+        compare,
+        "resolve_latest_artifact_id",
+        side_effect=[
+            ("Upstream/Prod", "101", "sql-backup-2026-10-25"),
+            ("Ammordius/NAGD-DKP", "202", "sql-backup-2026-10-26"),
+        ],
+    ) as latest:
+        sides = compare.resolve_compare_sides(
+            old_repository="",
+            old_artifact_id="",
+            new_repository="",
+            new_artifact_id="",
+            current_repository="Ammordius/NAGD-DKP",
+            mirror_source="Upstream/Prod",
+        )
+        check(sides["old_repository"] == "Upstream/Prod", sides["old_repository"])
+        check(sides["old_artifact_id"] == "101", sides["old_artifact_id"])
+        check(sides["new_repository"] == "Ammordius/NAGD-DKP", sides["new_repository"])
+        check(sides["new_artifact_id"] == "202", sides["new_artifact_id"])
+        check(latest.call_count == 2, "both sides should resolve latest")
+
+    try:
+        compare.resolve_compare_sides(
+            old_repository="",
+            new_repository="Ammordius/NAGD-DKP",
+            current_repository="Ammordius/NAGD-DKP",
+            mirror_source="",
+        )
+        fail("expected missing mirror source error")
+    except compare.CompareError as exc:
+        check("SQL_MIRROR_SOURCE" in str(exc), str(exc))
 
 
 def test_mirror_workflow_no_history_cache() -> None:
@@ -245,6 +282,7 @@ def test_report_bundle_privacy() -> None:
 def main() -> None:
     tests = [
         test_compare_workflow_is_artifact_only,
+        test_resolve_compare_sides_defaults,
         test_mirror_workflow_no_history_cache,
         test_open_comparison_source_skips_network_gate,
         test_restore_open_source_still_uses_network_gate,

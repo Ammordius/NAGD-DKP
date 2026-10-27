@@ -1,5 +1,6 @@
-# Read-only comparison of any two accessible portable SQL backup artifacts.
-# Does not restore into a database and does not publish to GitHub Pages.
+# Read-only comparison of portable SQL backup artifacts.
+# Defaults: old = SQL_MIRROR_SOURCE latest, new = this repository latest.
+# Artifact ids are optional; empty means latest. Does not restore or publish Pages.
 # See docs/SQL-LEDGER.md.
 
 name: Compare SQL artifacts
@@ -8,21 +9,25 @@ on:
   workflow_dispatch:
     inputs:
       old_repository:
-        description: "Old source repository (owner/name)"
-        required: true
+        description: "Old repository owner/name (default: SQL_MIRROR_SOURCE)"
+        required: false
         type: string
+        default: ""
       old_artifact_id:
-        description: "Old exact numeric Actions artifact id"
-        required: true
+        description: "Old artifact id (default: latest SQL backup in that repo)"
+        required: false
         type: string
+        default: ""
       new_repository:
-        description: "New source repository (owner/name)"
-        required: true
+        description: "New repository owner/name (default: this repository)"
+        required: false
         type: string
+        default: ""
       new_artifact_id:
-        description: "New exact numeric Actions artifact id"
-        required: true
+        description: "New artifact id (default: latest SQL backup in that repo)"
+        required: false
         type: string
+        default: ""
 
 permissions:
   contents: read
@@ -58,6 +63,7 @@ jobs:
           BACKUP_FORK_READ_TOKEN_3: ${{ secrets.BACKUP_FORK_READ_TOKEN_3 }}
           BACKUP_FORK_READ_TOKEN_4: ${{ secrets.BACKUP_FORK_READ_TOKEN_4 }}
           SQL_BACKUP_AGE_IDENTITY: ${{ secrets.SQL_BACKUP_AGE_IDENTITY }}
+          SQL_MIRROR_SOURCE: ${{ vars.SQL_MIRROR_SOURCE }}
           CURRENT_REPOSITORY: ${{ github.repository }}
           OLD_REPOSITORY: ${{ inputs.old_repository }}
           OLD_ARTIFACT_ID: ${{ inputs.old_artifact_id }}
@@ -73,6 +79,7 @@ jobs:
             --new-repository "${NEW_REPOSITORY}" \
             --new-artifact-id "${NEW_ARTIFACT_ID}" \
             --current-repository "${CURRENT_REPOSITORY}" \
+            --mirror-source "${SQL_MIRROR_SOURCE}" \
             --out compare_out
           rc=$?
           set -e
@@ -81,6 +88,7 @@ jobs:
             echo "has_report=true" >> "$GITHUB_OUTPUT"
           else
             echo "has_report=false" >> "$GITHUB_OUTPUT"
+            echo "artifact_name=sql-compare-failed" >> "$GITHUB_OUTPUT"
             exit "$rc"
           fi
           # Exit 2 means report written but validation failed — still upload artifact.
@@ -93,7 +101,7 @@ jobs:
         if: always() && steps.compare.outputs.has_report == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: sql-compare-${{ inputs.old_artifact_id }}-vs-${{ inputs.new_artifact_id }}
+          name: ${{ steps.compare.outputs.artifact_name }}
           path: compare_out
           retention-days: 90
 

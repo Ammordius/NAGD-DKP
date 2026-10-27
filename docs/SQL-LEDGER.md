@@ -61,14 +61,16 @@ Workflow: [`.github/workflows/compare-sql-artifacts.yml`](../.github/workflows/c
 
 Compare **any two compatible portable SQL backups** you can authenticate to, including cross-repository, **without restoring** and **without overwriting Pages**.
 
-Inputs:
+Inputs (all optional):
 
-| Input | Meaning |
+| Input | Default |
 |-------|---------|
-| `old_repository` | `owner/name` |
-| `old_artifact_id` | Exact numeric Actions artifact id |
-| `new_repository` | `owner/name` |
-| `new_artifact_id` | Exact numeric Actions artifact id |
+| `old_repository` | Repository variable `SQL_MIRROR_SOURCE` (the repo this mirror pulls from) |
+| `old_artifact_id` | Latest portable `sql-backup-*` in that repository |
+| `new_repository` | This repository (`github.repository`) |
+| `new_artifact_id` | Latest portable `sql-backup-*` in that repository |
+
+Run with empty inputs to compare **mirror-source latest vs this repo’s latest**. Pass numeric artifact ids only when you need a specific checkpoint.
 
 Output artifact: `sql-compare-<old_id>-vs-<new_id>` containing standalone `index.html`, `delta.json`, `manifest.json`.
 
