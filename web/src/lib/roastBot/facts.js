@@ -189,6 +189,12 @@ export function buildAccountFacts(input = {}) {
     currentDkp: input.currentDkp != null && Number.isFinite(Number(input.currentDkp))
       ? Number(input.currentDkp)
       : null,
+    earnedDkp: input.earnedDkp != null && Number.isFinite(Number(input.earnedDkp))
+      ? Number(input.earnedDkp)
+      : null,
+    spentDkp: input.spentDkp != null && Number.isFinite(Number(input.spentDkp))
+      ? Number(input.spentDkp)
+      : null,
     guildBalances: input.guildBalances || [],
     characters,
     purchases,

@@ -24,10 +24,17 @@ export function loadClassRankings(url = CLASS_RANKINGS_URL) {
     rankingsPromise = fetch(url)
       .then((r) => (r.ok ? r.json() : null))
       .then((json) => {
-        rankingsCache = json
-        return json
+        if (json) {
+          rankingsCache = json
+          return json
+        }
+        // Failed fetch must not stick — allow later retry
+        rankingsPromise = null
+        rankingsCache = null
+        return null
       })
       .catch(() => {
+        rankingsPromise = null
         rankingsCache = null
         return null
       })
@@ -213,7 +220,11 @@ export function computeCharacterUpgrades({
     }
   }
   flat.sort((a, b) => b.delta - a.delta)
-  return { ok: true, reason: null, suggestions: flat.slice(0, limit), anyMissing: result.anyMissing }
+  const suggestions = flat.slice(0, limit)
+  if (!suggestions.length) {
+    return { ok: false, reason: 'no_positive_upgrades', suggestions: [], anyMissing: result.anyMissing }
+  }
+  return { ok: true, reason: null, suggestions, anyMissing: result.anyMissing }
 }
 
 /**
@@ -241,6 +252,7 @@ export async function getUpgradesForCharacter(character, options = {}) {
     raidItemIds,
     limit: options.limit ?? 3,
   })
-  upgradeCache.set(cacheKey, result)
+  // Cache successful upgrade computations only; allow retry after missing Magelo
+  if (result.ok) upgradeCache.set(cacheKey, result)
   return result
 }
