@@ -1,14 +1,17 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useSWRConfig } from 'swr'
 import { supabase } from '../lib/supabase'
 import { accountDetailSwrKey } from '../lib/accountDetailMissingScope'
 import { usePersistedState } from '../lib/usePersistedState'
 import { resolveExpeditionRoster } from '../lib/expedition/rosterLoader'
+import { loadCombatProfiles, clearCombatProfileCache } from '../lib/expedition/combatProfile'
 import {
   startRun,
   commitRound,
   selectBoon,
   selectEventChoice,
+  selectRoute,
+  selectConsumable,
   restartRun,
 } from '../lib/expedition/gameEngine'
 import {
@@ -22,15 +25,16 @@ import RewardsScreen from '../components/expedition/RewardsScreen'
 import '../styles/expedition.css'
 
 /**
- * Quarm's Questionable Expedition — fully client-side minigame.
  * @param {{ profile?: { account_id?: string|null }|null, userId?: string|null }} props
  */
-export default function Expedition({ profile }) {
+export default function Expedition({ profile, userId }) {
   const accountId = profile?.account_id || null
   const { cache } = useSWRConfig()
 
-  const [screen, setScreen] = useState('landing') // landing | party | run
+  const [screen, setScreen] = useState('landing')
+  const [difficulty, setDifficulty] = useState('normal')
   const [roster, setRoster] = useState(null)
+  const [profiles, setProfiles] = useState(null)
   const [rosterMeta, setRosterMeta] = useState({ notice: null, fictional: false, loading: false, error: null })
   const [selectedIds, setSelectedIds] = useState([])
   const [run, setRun] = useState(null)
@@ -53,9 +57,18 @@ export default function Expedition({ profile }) {
         client: supabase,
         allowNetwork: true,
       })
+      // Static Magelo profiles — one fetch, not Supabase; cached for session
+      const map = await loadCombatProfiles()
+      setProfiles(map)
       setRoster(result.characters)
+      const geared = result.characters.filter((c) => map.has(String(c.name).toLowerCase())).length
+      const gearNote = result.fictional
+        ? null
+        : geared
+          ? `Magelo combat profiles matched for ${geared}/${result.characters.length} characters.`
+          : 'No Magelo combat profiles matched — using class and level only.'
       setRosterMeta({
-        notice: result.notice,
+        notice: [result.notice, gearNote].filter(Boolean).join(' '),
         fictional: result.fictional,
         loading: false,
         error: null,
@@ -80,7 +93,7 @@ export default function Expedition({ profile }) {
   }
 
   function beginExpedition(party) {
-    const state = startRun(party)
+    const state = startRun(party, { difficulty, profiles })
     setPartyChars(party)
     setRun(state)
     setScreen('run')
@@ -88,36 +101,43 @@ export default function Expedition({ profile }) {
   }
 
   function bumpRun(next) {
-    setRun({ ...next, party: next.party.map((p) => ({ ...p })), enemy: next.enemy ? { ...next.enemy } : null })
+    setRun({
+      ...next,
+      party: next.party.map((p) => ({ ...p, statuses: [...(p.statuses || [])], cooldowns: { ...p.cooldowns } })),
+      enemies: (next.enemies || []).map((e) => ({ ...e, statuses: [...(e.statuses || [])] })),
+      intents: { ...(next.intents || {}) },
+      consumables: { ...(next.consumables || {}) },
+    })
   }
 
-  function handleCommit(actions) {
+  function maybeSave(next) {
+    if (next.phase === 'rewards' && next.report) {
+      setSave((prev) => applyRunToSave(prev, {
+        score: next.report.score,
+        artifactId: next.report.artifact?.id,
+      }))
+    }
+  }
+
+  function handleCommit(actions, extras) {
     if (!run) return
-    const res = commitRound(run, actions)
+    const res = commitRound(run, actions, extras)
     if (!res.ok) {
       setActionError((res.errors || ['Invalid actions']).join(' · '))
       return
     }
     setActionError(null)
     bumpRun(res.state)
-    if (res.state.phase === 'rewards' && res.state.report) {
-      setSave((prev) => applyRunToSave(prev, {
-        score: res.state.report.score,
-        artifactId: res.state.report.artifact?.id,
-      }))
+    maybeSave(res.state)
+  }
+
+  function wrapSelect(fn, arg) {
+    if (!run) return
+    const res = fn(run, arg)
+    if (res.ok) {
+      bumpRun(res.state)
+      maybeSave(res.state)
     }
-  }
-
-  function handleBoon(id) {
-    if (!run) return
-    const res = selectBoon(run, id)
-    if (res.ok) bumpRun(res.state)
-  }
-
-  function handleEvent(id) {
-    if (!run) return
-    const res = selectEventChoice(run, id)
-    if (res.ok) bumpRun(res.state)
   }
 
   function playAgain() {
@@ -126,22 +146,46 @@ export default function Expedition({ profile }) {
       setRun(null)
       return
     }
-    const state = restartRun(partyChars)
-    setRun(state)
+    setRun(restartRun(partyChars, { difficulty, profiles }))
     setActionError(null)
   }
 
+  function leaveToLanding() {
+    setScreen('landing')
+    setRun(null)
+  }
+
+  useEffect(() => {
+    setRun(null)
+    setRoster(null)
+    setScreen('landing')
+    setSelectedIds([])
+    setPartyChars(null)
+  }, [userId, accountId])
+
   return (
-    <div className="expedition">
+    <div className="expedition" data-user={userId || ''} data-account={accountId || ''}>
       <div className="exp-landing-hero">
         <h1>Quarm&apos;s Questionable Expedition</h1>
         <p className="exp-tagline">Three characters. Terrible leadership. One questionable expedition.</p>
         {screen === 'landing' ? (
           <>
             <p style={{ maxWidth: '36rem', margin: '0 auto 1.25rem', color: 'var(--exp-muted)' }}>
-              A short turn-based raid parody. Uses your linked account characters when available.
-              No DKP changes. No database writes. Playable offline after roster load.
+              A tactical raid parody. Real class, level, and Magelo-derived gear when available.
+              Six abilities per class. No DKP changes. No database writes.
             </p>
+            <div className="exp-action-row" style={{ justifyContent: 'center', marginBottom: '1rem' }}>
+              {['normal', 'heroic', 'reckless'].map((d) => (
+                <button
+                  key={d}
+                  type="button"
+                  className={`exp-btn${difficulty === d ? ' is-active' : ''}`}
+                  onClick={() => setDifficulty(d)}
+                >
+                  {d}
+                </button>
+              ))}
+            </div>
             {save.personalBest > 0 ? (
               <p className="exp-status">Personal best: {save.personalBest} · Runs: {save.completedRuns}</p>
             ) : null}
@@ -172,6 +216,7 @@ export default function Expedition({ profile }) {
             onStart={beginExpedition}
             notice={rosterMeta.notice}
             fictionalRoster={rosterMeta.fictional}
+            profiles={profiles}
           />
         )
       ) : null}
@@ -181,10 +226,7 @@ export default function Expedition({ profile }) {
           report={run.report}
           personalBest={save.personalBest}
           onPlayAgain={playAgain}
-          onLeave={() => {
-            setScreen('landing')
-            setRun(null)
-          }}
+          onLeave={leaveToLanding}
         />
       ) : null}
 
@@ -192,10 +234,15 @@ export default function Expedition({ profile }) {
         <BattleScreen
           state={run}
           onCommit={handleCommit}
-          onBoon={handleBoon}
-          onEvent={handleEvent}
+          onBoon={(id) => wrapSelect(selectBoon, id)}
+          onEvent={(id) => wrapSelect(selectEventChoice, id)}
+          onRoute={(id) => wrapSelect(selectRoute, id)}
+          onConsumable={(take) => wrapSelect(selectConsumable, take)}
         />
       ) : null}
     </div>
   )
 }
+
+// Re-export for tests that clear on sign-out simulation
+export { clearCombatProfileCache }

@@ -176,6 +176,14 @@
   border-radius: 8px;
   padding: 0.65rem;
   background: #09090b;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  width: 100%;
+}
+
+.expedition .exp-combatant.is-selected {
+  border-color: var(--exp-accent);
 }
 
 .expedition .exp-combatant.is-down {
