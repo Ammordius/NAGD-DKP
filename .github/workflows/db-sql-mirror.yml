@@ -39,10 +39,10 @@ jobs:
       source_artifact_id: ${{ steps.select.outputs.artifact_id || '' }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.11"
 
@@ -55,7 +55,7 @@ jobs:
           python scripts/sql_mirror_gate.py --parse-source "$SQL_MIRROR_SOURCE"
 
       - name: Restore last mirrored artifact id
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v5
         with:
           path: .sql-mirror-state
           key: sql-mirror-state-v1-${{ steps.source.outputs.cache_key }}-${{ github.run_id }}
@@ -234,7 +234,7 @@ jobs:
 
       - name: Save last mirrored artifact id
         if: steps.gate.outputs.decision == 'proceed' && success()
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v5
         with:
           path: .sql-mirror-state
           key: sql-mirror-state-v1-${{ steps.source.outputs.cache_key }}-${{ github.run_id }}
@@ -294,7 +294,7 @@ jobs:
 
       - name: Upload sanitized report artifact
         if: steps.gate.outputs.decision == 'proceed' && steps.report.outputs.should_publish == 'true' && success()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: ${{ steps.report.outputs.artifact_name }}
           path: ledger_site
@@ -326,7 +326,7 @@ jobs:
       url: ${{ steps.deploy.outputs.page_url }}
     steps:
       - name: Download new report
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: ${{ needs.mirror.outputs.artifact_name }}
           path: ledger_report
@@ -341,10 +341,10 @@ jobs:
           fi
 
       - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v4
+        uses: actions/upload-pages-artifact@v5
         with:
           path: pages_site
 
       - name: Deploy to GitHub Pages
         id: deploy
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5

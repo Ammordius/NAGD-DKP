@@ -29,10 +29,10 @@ jobs:
       actions: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.11'
 
@@ -48,7 +48,7 @@ jobs:
 
       - name: Upload encrypted backup
         if: success()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: sql-backup-${{ steps.export.outputs.stamp }}
           path: sql-backup-out/*.tar.gz.age
@@ -81,7 +81,7 @@ jobs:
 
       - name: Upload weekly backup
         if: steps.tiers.outputs.upload_weekly == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: ${{ steps.tiers.outputs.weekly_name }}
           path: sql-backup-out/*.tar.gz.age
@@ -90,7 +90,7 @@ jobs:
 
       - name: Upload monthly backup
         if: steps.tiers.outputs.upload_monthly == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: ${{ steps.tiers.outputs.monthly_name }}
           path: sql-backup-out/*.tar.gz.age

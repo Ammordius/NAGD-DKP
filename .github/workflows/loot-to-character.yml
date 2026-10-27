@@ -38,14 +38,14 @@ jobs:
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
     steps:
       - name: Checkout DKP repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       # The exact key includes run_attempt because caches are immutable.
       # A rerun must be able to save a new watermark. restore-keys picks up
       # the newest earlier entry. A miss falls back to the file in git.
       - name: Restore loot-count watermark
         id: loot-count-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: .ci/last_raid_loot_count.txt
           key: last-raid-loot-count-${{ github.run_id }}-${{ github.run_attempt }}
@@ -79,7 +79,7 @@ jobs:
           fi
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.11'
 
@@ -193,7 +193,7 @@ jobs:
       CLASS_RANKINGS_URL: ${{ secrets.CLASS_RANKINGS_URL }}
     steps:
       - name: Checkout DKP repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Check secrets for class coverage
         id: cc_secrets
@@ -207,7 +207,7 @@ jobs:
 
       - name: Set up Node
         if: steps.cc_secrets.outputs.ok == 'true'
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: '24'
           cache: npm
