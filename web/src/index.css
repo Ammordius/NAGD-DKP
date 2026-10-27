@@ -231,7 +231,7 @@ html[data-ambiance-theme]:not([data-ambiance-theme="default"]) tr:hover {
   border-radius: 0;
   background: transparent;
   color: #e4e4e7;
-  font-size: 1rem;
+  font-size: 0.875rem;
   font-weight: 400;
   line-height: 1.4;
   cursor: pointer;

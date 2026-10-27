@@ -404,15 +404,9 @@ export default function Profile({ profile, onProfileUpdate }) {
         <h2 style={{ marginTop: 0 }}>Claimed account</h2>
         {claimedAccount ? (
           <>
-            <p style={{ marginBottom: '0.5rem' }}>
-              You have claimed account{' '}
-              <Link to={`/accounts/${claimedAccount.account_id}`}>
-                {claimedAccount.display_name?.trim() || claimedAccount.toon_names?.split(',')[0]?.trim() || claimedAccount.account_id}
-              </Link>
-              {' '}(<code>{claimedAccount.account_id}</code>).
-            </p>
             <MyDkpStandings
               accountId={profile.account_id}
+              claimedName={claimedAccount.display_name?.trim() || claimedAccount.toon_names?.split(',')[0]?.trim() || claimedAccount.account_id}
               activityByRaid={activityByRaid}
               activityReady={!accountLoading}
             />

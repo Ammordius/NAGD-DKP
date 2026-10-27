@@ -19,7 +19,7 @@ export function claimedAccountId(accountId) {
 export function useMyAccountDkp(accountId, { activityByRaid, activityReady } = {}) {
   const id = claimedAccountId(accountId)
   const provided = activityByRaid !== undefined
-  const { accountTotalsByAccountId, isLoading: summaryLoading, error: summaryError } = useDkpData(undefined, { enabled: Boolean(id) })
+  const { accountTotalsByAccountId, apiData, isLoading: summaryLoading, error: summaryError } = useDkpData(undefined, { enabled: Boolean(id) })
   const { data, error: activityFetchError, isLoading: activityLoading } = useSWR(
     !provided && id ? `my-account-activity-${id}` : null,
     () => loadAccountActivity(id),
@@ -38,10 +38,31 @@ export function useMyAccountDkp(accountId, { activityByRaid, activityReady } = {
   )
   const loading = Boolean(id) && (summaryLoading || !raidsReady)
   const failed = Boolean(id) && !loading && Boolean(summaryError) && Boolean(activityError)
-  return { accountId: id, totals, recentRaid, loading, failed }
+  const claimedName = useMemo(() => claimedAccountName(id, apiData?.accounts), [id, apiData?.accounts])
+  return { accountId: id, claimedName, totals, recentRaid, loading, failed }
 }
 
-export function MyDkpStandingsView({ accountId, totals, recentRaid, loading, failed, showClaimPrompt = false }) {
+export function claimedAccountName(accountId, accounts) {
+  const id = claimedAccountId(accountId)
+  if (!id) return ''
+  const row = (accounts || []).find((acc) => String(acc?.account_id) === id)
+  return row?.display_name?.trim()
+    || String(row?.toon_names || '').split(',')[0]?.trim()
+    || id
+}
+
+function ClaimedAccountLine({ accountId, claimedName }) {
+  if (!accountId) return null
+  return (
+    <p style={{ marginTop: 0, marginBottom: '0.5rem' }}>
+      You have claimed account{' '}
+      <Link to={`/accounts/${accountId}`}>{claimedName || accountId}</Link>
+      {' '}(<code>{accountId}</code>).
+    </p>
+  )
+}
+
+export function MyDkpStandingsView({ accountId, claimedName, totals, recentRaid, loading, failed, showClaimPrompt = false }) {
   if (!accountId) {
     if (!showClaimPrompt) return null
     return (
@@ -51,10 +72,20 @@ export function MyDkpStandingsView({ accountId, totals, recentRaid, loading, fai
     )
   }
   if (loading || !totals) {
-    return <p style={{ color: '#71717a' }}>Loading your DKP…</p>
+    return (
+      <div style={{ marginBottom: '1rem' }}>
+        <ClaimedAccountLine accountId={accountId} claimedName={claimedName} />
+        <p style={{ color: '#71717a' }}>Loading your DKP…</p>
+      </div>
+    )
   }
   if (failed) {
-    return <p style={{ color: '#f87171' }}>Couldn&apos;t load your DKP standings.</p>
+    return (
+      <div style={{ marginBottom: '1rem' }}>
+        <ClaimedAccountLine accountId={accountId} claimedName={claimedName} />
+        <p style={{ color: '#f87171' }}>Couldn&apos;t load your DKP standings.</p>
+      </div>
+    )
   }
   const line = formatMyDkpTotal(totals)
   const balance = Number(totals.balance).toFixed(0)
@@ -69,6 +100,7 @@ export function MyDkpStandingsView({ accountId, totals, recentRaid, loading, fai
     : ''
   return (
     <div style={{ marginBottom: '1rem' }}>
+      <ClaimedAccountLine accountId={accountId} claimedName={claimedName} />
       <p className="my-dkp-total">
         {marked ? (
           <>
@@ -96,7 +128,13 @@ export function MyDkpStandingsView({ accountId, totals, recentRaid, loading, fai
   )
 }
 
-export default function MyDkpStandings({ accountId, showClaimPrompt = false, activityByRaid, activityReady }) {
+export default function MyDkpStandings({ accountId, claimedName, showClaimPrompt = false, activityByRaid, activityReady }) {
   const state = useMyAccountDkp(accountId, { activityByRaid, activityReady })
-  return <MyDkpStandingsView {...state} showClaimPrompt={showClaimPrompt} />
+  return (
+    <MyDkpStandingsView
+      {...state}
+      claimedName={claimedName || state.claimedName}
+      showClaimPrompt={showClaimPrompt}
+    />
+  )
 }
