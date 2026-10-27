@@ -38,6 +38,9 @@ def test_compare_workflow_is_artifact_only() -> None:
     check("old_artifact_id" in text and "new_artifact_id" in text, "inputs missing")
     check("SQL_MIRROR_SOURCE" in text, "mirror source default wiring missing")
     check('default: ""' in text, "inputs should default empty for latest resolution")
+    check("Install age" in text, "compare must install age before decrypt")
+    check("apt-get install -y age" in text, "compare must install age package")
+    check("SQL_BACKUP_AGE_IDENTITY" in text, "compare must use SQL_BACKUP_AGE_IDENTITY")
 
 
 def test_resolve_compare_sides_defaults() -> None:

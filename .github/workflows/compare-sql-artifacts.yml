@@ -52,6 +52,14 @@ jobs:
       - name: Install Python dependencies
         run: pip install -r requirements.txt
 
+      - name: Install age
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y age
+          command -v age
+          age --version
+
       - name: Compare SQL artifacts
         id: compare
         env:
