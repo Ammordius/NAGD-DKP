@@ -234,14 +234,21 @@ export default function RoastBot({ profile, session, factsOverride = null, openO
 
   const ensureUpgradeContext = useCallback(async () => {
     // Always try loadClassRankings (retryable after failure); refresh React ctx when rankings arrive
-    const [rankings, itemStats, raidItemIds] = await Promise.all([
+    const [rankingsResult, itemStats, raidItemIds] = await Promise.all([
       loadClassRankings(),
       ensureItemStatsLoaded().then(() =>
         fetch('/item_stats.json').then((r) => (r.ok ? r.json() : {})).catch(() => ({})),
       ),
       collectRaidLootItemIds(),
     ])
-    const ctx = { rankings, itemStats, raidItemIds }
+    const rankings = rankingsResult?.ok ? rankingsResult.rankings : null
+    const rankingsError = rankingsResult?.ok
+      ? null
+      : {
+          error: rankingsResult?.error || 'unknown',
+          status: rankingsResult?.status,
+        }
+    const ctx = { rankings, rankingsError, itemStats, raidItemIds }
     setUpgradeContext(ctx)
     return ctx
   }, [])
@@ -313,13 +320,15 @@ export default function RoastBot({ profile, session, factsOverride = null, openO
           {(facts.characters || []).length > 1 ? (
             <div className={`roast-bot-char-select${pendingChar ? ' roast-bot-char-select-pending' : ''}`}>
               <label>
-                {pendingChar ? 'Which character?' : 'Character'}
+                {pendingChar
+                  ? 'Which character?'
+                  : 'Character (upgrades & attributed buys)'}
                 <select
                   data-testid="roast-bot-character"
                   value={convState.selectedCharacterId || ''}
                   onChange={(e) => onCharSelect(e.target.value)}
                 >
-                  <option value="">Auto</option>
+                  <option value="">Auto (account-wide spending)</option>
                   {facts.characters.map((c) => (
                     <option key={c.char_id || c.name} value={c.char_id || ''}>
                       {c.name}

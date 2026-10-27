@@ -228,6 +228,107 @@ export function buildAccountFacts(input = {}) {
 }
 
 /**
+ * Whether a purchase is attributed to the given character (reliable attribution only).
+ * @param {ReturnType<typeof normalizePurchase>} purchase
+ * @param {{ char_id?: string, name?: string }} character
+ */
+export function purchaseMatchesCharacter(purchase, character) {
+  if (!purchase?.attributionReliable || !character) return false
+  const id = String(character.char_id || '').trim()
+  const name = String(character.name || '').trim().toLowerCase()
+  if (id && purchase.attributedCharacterId && String(purchase.attributedCharacterId) === id) return true
+  if (id && purchase.attributionKey && String(purchase.attributionKey) === id) return true
+  if (name && purchase.attributedCharacterName && String(purchase.attributedCharacterName).toLowerCase() === name) {
+    return true
+  }
+  if (name && purchase.attributionKey && String(purchase.attributionKey).toLowerCase() === name) return true
+  return false
+}
+
+/**
+ * Account-wide or character-scoped purchase view for spend intents.
+ * When character is null (Auto), returns account-level biggest/recent/outliers.
+ * When character is set, only reliably attributed purchases for that toon.
+ *
+ * @param {object} facts
+ * @param {{ char_id?: string, name?: string }|null} character
+ */
+export function scopedPurchaseFacts(facts, character = null) {
+  if (!character) {
+    return {
+      scope: 'account',
+      character: null,
+      purchases: facts.purchases || [],
+      biggestPurchase: facts.biggestPurchase || null,
+      recentPurchase: facts.recentPurchase || null,
+      priceOutliers: facts.priceOutliers || [],
+      slotRepeatPatterns: facts.slotRepeatPatterns || [],
+      totalRecordedPurchases: facts.totalRecordedPurchases || 0,
+    }
+  }
+
+  const purchases = (facts.purchases || []).filter((p) => purchaseMatchesCharacter(p, character))
+  const withCost = purchases.filter((p) => p.cost != null && p.cost > 0)
+  const biggestPurchase = withCost.length
+    ? withCost.reduce((best, p) => (p.cost > best.cost ? p : best), withCost[0])
+    : null
+  const recentPurchase = withCost[0] || purchases[0] || null
+  const accountOutliers = facts.priceOutliers || []
+  const priceOutliers = accountOutliers.filter((p) => purchaseMatchesCharacter(p, character))
+  const slotRepeatPatterns = (facts.slotRepeatPatterns || []).filter(
+    (pat) =>
+      (character.char_id && pat.toonId && String(pat.toonId) === String(character.char_id)) ||
+      (character.name && pat.toon && String(pat.toon).toLowerCase() === String(character.name).toLowerCase()),
+  )
+
+  return {
+    scope: 'character',
+    character,
+    purchases,
+    biggestPurchase,
+    recentPurchase,
+    priceOutliers,
+    slotRepeatPatterns,
+    totalRecordedPurchases: purchases.length,
+  }
+}
+
+/**
+ * Prefer the worst in-scope price outlier (highest paid/median ratio); else biggest/recent.
+ * Attaches medianPrice on the chosen purchase when it is an outlier.
+ *
+ * @param {ReturnType<typeof scopedPurchaseFacts>} scoped
+ * @returns {{ purchase: object|null, category: string|null }}
+ */
+export function pickSpendPurchase(scoped) {
+  const outliers = scoped.priceOutliers || []
+  if (outliers.length) {
+    const worst = outliers.reduce((best, p) => {
+      const ratio = p.medianPrice > 0 ? p.cost / p.medianPrice : 0
+      const bestRatio = best.medianPrice > 0 ? best.cost / best.medianPrice : 0
+      if (ratio !== bestRatio) return ratio > bestRatio ? p : best
+      return p.cost > best.cost ? p : best
+    })
+    return { purchase: worst, category: 'price_outlier' }
+  }
+  if (scoped.biggestPurchase?.itemName && scoped.biggestPurchase.cost != null) {
+    return { purchase: scoped.biggestPurchase, category: 'biggest_purchase' }
+  }
+  if (scoped.recentPurchase?.itemName) {
+    return { purchase: scoped.recentPurchase, category: 'recent_purchase' }
+  }
+  if ((scoped.slotRepeatPatterns || []).length > 0) {
+    const pat = scoped.slotRepeatPatterns[0]
+    const purchase = pat.purchases?.[0] || scoped.recentPurchase || null
+    return { purchase, category: 'slot_repeat' }
+  }
+  if ((scoped.totalRecordedPurchases || 0) >= 1) {
+    return { purchase: scoped.recentPurchase || null, category: 'purchase_volume' }
+  }
+  return { purchase: null, category: null }
+}
+
+/**
  * Extract loot rows from fetchAccountDetail activity payload when available.
  * AccountDetail returns activityByRaid with loot arrays — also accept flat lootRows.
  */

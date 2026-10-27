@@ -5,8 +5,9 @@
 import { INTENTS } from '../intents.js'
 import { deriveEvents, classifyBalance, spendingConcentration } from '../events.js'
 import { formatDkp } from '../formatting.js'
-import { computeCharacterUpgrades } from '../upgrades.js'
+import { computeCharacterUpgrades, formatMageloLoadError } from '../upgrades.js'
 import { assessCharacterGear } from '../gearAssessment.js'
+import { scopedPurchaseFacts, pickSpendPurchase } from '../facts.js'
 import { FULL_GEAR_COST_REFUSAL, NO_ACCOUNT_HINT } from '../templates.js'
 
 /**
@@ -301,9 +302,29 @@ function handleGearAssessment(args) {
     }
   }
 
+  if (!args.upgradeContext?.rankings) {
+    const loadErr = formatMageloLoadError(
+      args.upgradeContext?.rankingsError
+        ? { ok: false, ...args.upgradeContext.rankingsError }
+        : null,
+    )
+    const detail = loadErr || 'the public Magelo rankings export is unavailable'
+    return {
+      intent: INTENTS.GEAR_ASSESSMENT,
+      category: 'unknown',
+      factText: `I cannot assess ${character.name}'s gear right now — ${detail}. No analysis was invented.`,
+      requiredClaims: ['magelo_unavailable'],
+      placeholders: { toon: character.name },
+      referenced: withRefs([character.name], []),
+      reasonCode: loadErr ? 'magelo_fetch_failed' : 'missing_magelo_export',
+      allowFlavor: false,
+      templateId: 'GEAR_MISSING',
+    }
+  }
+
   const assessment = assessCharacterGear({
     character,
-    rankings: args.upgradeContext?.rankings ?? null,
+    rankings: args.upgradeContext.rankings,
     itemStats: args.upgradeContext?.itemStats ?? null,
     raidItemIds: args.upgradeContext?.raidItemIds ?? null,
   })
@@ -317,7 +338,7 @@ function handleGearAssessment(args) {
       placeholders: { toon: character.name },
       referenced: withRefs([character.name], []),
       reasonCode: assessment.reason,
-      allowFlavor: true,
+      allowFlavor: false,
       templateId: 'GEAR_MISSING',
     }
   }
@@ -386,15 +407,21 @@ function handleUpgrades(args) {
   }
 
   if (!args.upgradeContext?.rankings) {
+    const loadErr = formatMageloLoadError(
+      args.upgradeContext?.rankingsError
+        ? { ok: false, ...args.upgradeContext.rankingsError }
+        : null,
+    )
+    const detail = loadErr || 'Magelo rankings data is not loaded'
     return {
       intent: INTENTS.UPGRADES,
       category: 'unknown',
-      factText: `I cannot suggest upgrades for ${character.name} because Magelo rankings data is not loaded. No candidates were invented.`,
+      factText: `I cannot suggest upgrades for ${character.name} because ${detail}. No candidates were invented.`,
       requiredClaims: ['magelo_unavailable'],
       placeholders: { toon: character.name },
       referenced: withRefs([character.name], []),
-      reasonCode: 'magelo_unavailable',
-      allowFlavor: true,
+      reasonCode: loadErr ? 'magelo_fetch_failed' : 'magelo_unavailable',
+      allowFlavor: false,
     }
   }
 
@@ -415,7 +442,7 @@ function handleUpgrades(args) {
       placeholders: { toon: character.name },
       referenced: withRefs([character.name], []),
       reasonCode: 'upgrades_unavailable',
-      allowFlavor: true,
+      allowFlavor: false,
       detailReason: result.reason || null,
     }
   }
@@ -477,7 +504,22 @@ function clarificationCharacter(pendingIntent, characters, ambiguousClass) {
 function handleWorstPurchase(args) {
   const blocked = requireAccount(args, INTENTS.WORST_PURCHASE)
   if (blocked) return blocked
-  const purchase = args.facts.biggestPurchase
+  const scoped = scopedPurchaseFacts(args.facts, args.selectedCharacter || null)
+  if (scoped.scope === 'character' && scoped.totalRecordedPurchases === 0) {
+    const name = args.selectedCharacter?.name || 'that character'
+    return {
+      intent: INTENTS.WORST_PURCHASE,
+      category: 'unknown',
+      factText: `No reliably attributed purchases for ${name} are loaded, so I cannot identify a worst purchase for that character.`,
+      requiredClaims: ['no_purchases', 'character_scoped'],
+      placeholders: { toon: name },
+      referenced: withRefs([name], []),
+      reasonCode: 'no_purchases',
+      allowFlavor: false,
+    }
+  }
+  const picked = pickSpendPurchase(scoped)
+  const purchase = picked.purchase
   if (!purchase?.itemName || purchase.cost == null) {
     return {
       intent: INTENTS.WORST_PURCHASE,
@@ -490,20 +532,29 @@ function handleWorstPurchase(args) {
       allowFlavor: true,
     }
   }
-  const events = deriveEvents(args.facts)
-  const outlier = (args.facts.priceOutliers || [])[0]
-  const category = outlier ? 'price_outlier' : 'biggest_purchase'
-  const who = purchase.attributedCharacterName
+  // Only use price_outlier when the selected purchase itself carries medianPrice
+  const category =
+    purchase.medianPrice != null && Number.isFinite(Number(purchase.medianPrice))
+      ? 'price_outlier'
+      : 'biggest_purchase'
+  const who =
+    args.selectedCharacter?.name ||
+    purchase.attributedCharacterName ||
+    null
+  const medianBit =
+    category === 'price_outlier'
+      ? ` Comparable sales median for that same purchase: ${formatDkp(purchase.medianPrice)} DKP.`
+      : ''
   return {
     intent: INTENTS.WORST_PURCHASE,
     category,
-    factText: `By sheer DKP spent, your most expensive verified purchase was ${purchase.itemName} for ${formatDkp(purchase.cost)} DKP${who ? ` (toward ${who})` : ''}. That is an expense metric, not a scientific waste score.`,
+    factText: `By sheer DKP spent${scoped.scope === 'character' ? ` for ${who}` : ''}, your most expensive verified purchase was ${purchase.itemName} for ${formatDkp(purchase.cost)} DKP${who && scoped.scope === 'account' ? ` (toward ${who})` : ''}.${medianBit} That is an expense metric, not a scientific waste score.`,
     requiredClaims: ['largest_purchase', 'metric_disclaimer'],
     placeholders: {
       item: purchase.itemName,
       cost: purchase.cost,
-      toon: who || null,
-      medianPrice: outlier?.medianPrice ?? null,
+      toon: who,
+      medianPrice: category === 'price_outlier' ? purchase.medianPrice : null,
     },
     referenced: withRefs(who ? [who] : [], [purchase.itemName]),
     reasonCode: category,
@@ -515,7 +566,22 @@ function handleWorstPurchase(args) {
 function handlePurchases(args) {
   const blocked = requireAccount(args, args.intent)
   if (blocked) return blocked
-  const purchase = args.facts.biggestPurchase || args.facts.recentPurchase
+  const scoped = scopedPurchaseFacts(args.facts, args.selectedCharacter || null)
+  if (scoped.scope === 'character' && scoped.totalRecordedPurchases === 0) {
+    const name = args.selectedCharacter?.name || 'that character'
+    return {
+      intent: args.intent,
+      category: 'unknown',
+      factText: `No reliably attributed purchases for ${name} are loaded.`,
+      requiredClaims: ['no_purchases', 'character_scoped'],
+      placeholders: { toon: name },
+      referenced: withRefs([name], []),
+      reasonCode: 'no_purchases',
+      allowFlavor: false,
+    }
+  }
+  const picked = pickSpendPurchase(scoped)
+  const purchase = picked.purchase
   if (!purchase?.itemName) {
     return {
       intent: args.intent,
@@ -528,31 +594,51 @@ function handlePurchases(args) {
       allowFlavor: true,
     }
   }
-  const outlier = (args.facts.priceOutliers || [])[0]
-  const slotPat = (args.facts.slotRepeatPatterns || [])[0]
-  let category = 'recent_purchase'
-  if (outlier) category = 'price_outlier'
-  else if (slotPat) category = 'slot_repeat'
-  else if (args.facts.biggestPurchase) category = 'biggest_purchase'
-  else if ((args.facts.totalRecordedPurchases || 0) >= 3) category = 'purchase_volume'
+  const slotPat = (scoped.slotRepeatPatterns || [])[0]
+  let category = picked.category || 'recent_purchase'
+  if (
+    purchase.medianPrice != null &&
+    Number.isFinite(Number(purchase.medianPrice)) &&
+    category === 'price_outlier'
+  ) {
+    category = 'price_outlier'
+  } else if (category === 'price_outlier') {
+    category = scoped.biggestPurchase ? 'biggest_purchase' : 'recent_purchase'
+  } else if (slotPat && category !== 'biggest_purchase') {
+    category = category === 'slot_repeat' ? 'slot_repeat' : category
+  } else if (!category || category === 'recent_purchase') {
+    if (scoped.biggestPurchase && purchase.purchaseId === scoped.biggestPurchase.purchaseId) {
+      category = 'biggest_purchase'
+    } else if ((scoped.totalRecordedPurchases || 0) >= 3) {
+      category = 'purchase_volume'
+    }
+  }
+
+  const who =
+    args.selectedCharacter?.name ||
+    slotPat?.toon ||
+    purchase.attributedCharacterName ||
+    null
+  const scopeLabel =
+    scoped.scope === 'character'
+      ? ` for ${who}`
+      : ''
 
   return {
     intent: args.intent,
     category,
-    factText: `Verified purchase evidence includes ${purchase.itemName}${purchase.cost != null ? ` for ${formatDkp(purchase.cost)} DKP` : ''} across ${args.facts.totalRecordedPurchases} recorded purchases.`,
+    factText: `Verified purchase evidence${scopeLabel} includes ${purchase.itemName}${purchase.cost != null ? ` for ${formatDkp(purchase.cost)} DKP` : ''} across ${scoped.totalRecordedPurchases} recorded purchases${scoped.scope === 'character' ? ' attributed to that character' : ''}.`,
     requiredClaims: ['purchase_history'],
     placeholders: {
       item: purchase.itemName,
       cost: purchase.cost,
-      purchaseCount: args.facts.totalRecordedPurchases,
-      toon: slotPat?.toon || purchase.attributedCharacterName || null,
+      purchaseCount: scoped.totalRecordedPurchases,
+      toon: who,
       slot: slotPat?.slot || null,
-      medianPrice: outlier?.medianPrice ?? null,
+      medianPrice:
+        category === 'price_outlier' && purchase.medianPrice != null ? purchase.medianPrice : null,
     },
-    referenced: withRefs(
-      [slotPat?.toon, purchase.attributedCharacterName].filter(Boolean),
-      [purchase.itemName],
-    ),
+    referenced: withRefs(who ? [who] : [], [purchase.itemName]),
     reasonCode: category,
     allowFlavor: true,
     purchase,

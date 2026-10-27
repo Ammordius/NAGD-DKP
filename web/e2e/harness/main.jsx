@@ -52,6 +52,7 @@ function RoastBotHarness() {
               { char_id: 'c1', name: 'Zenderheals', class_name: 'Cleric' },
               { char_id: 'e1', name: 'Iaminae', class_name: 'Enchanter' },
               { char_id: 'e2', name: 'Charmalt', class_name: 'Enchanter' },
+              { char_id: 'm1', name: 'Ammomats', class_name: 'Magician' },
             ],
             lootRows: [
               {
@@ -71,6 +72,16 @@ function RoastBotHarness() {
                 assigned_char_id: 'e1',
                 assigned_character_name: 'Iaminae',
                 sale_date: '2026-09-15',
+              },
+              {
+                id: 3,
+                item_name: 'Robes of the Elementalist',
+                cost: 40,
+                char_id: 'm1',
+                character_name: 'Ammomats',
+                assigned_char_id: 'm1',
+                assigned_character_name: 'Ammomats',
+                sale_date: '2026-09-12',
               },
             ],
             recentItemPrices: {

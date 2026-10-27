@@ -20,6 +20,9 @@ export {
   lootRowsFromAccountDetail,
   attendanceRowsFromAccountDetail,
   raidsByIdFromAccountDetail,
+  scopedPurchaseFacts,
+  purchaseMatchesCharacter,
+  pickSpendPurchase,
 } from './facts.js'
 export {
   buildAccountAttendanceFacts,
@@ -38,7 +41,10 @@ export {
 export { greetingMessage, buildResponse, renderAnswer } from './responseBuilder.js'
 export { suggestionChips, matchItemName, formatDkp, buildLinks } from './formatting.js'
 export {
+  DEFAULT_CLASS_RANKINGS_URL,
   loadClassRankings,
+  validateClassRankingsSchema,
+  formatMageloLoadError,
   computeCharacterUpgrades,
   getUpgradesForCharacter,
   findMageloCharacter,

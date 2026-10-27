@@ -22,7 +22,9 @@ import {
   STATUS_COLORS,
 } from '../lib/raiderActivity'
 
-const CLASS_RANKINGS_URL = import.meta.env.VITE_CLASS_RANKINGS_URL || '/class_rankings.json'
+const CLASS_RANKINGS_URL =
+  import.meta.env.VITE_CLASS_RANKINGS_URL ||
+  'https://ammordius.github.io/NAGD-spell-inventory/class_rankings.json'
 
 const PERIOD_OPTIONS = [
   { value: 30, label: '30 days' },

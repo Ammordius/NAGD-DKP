@@ -36,6 +36,89 @@ test.describe('DKP Inquisitor roast bot', () => {
     await page.getByTestId('roast-bot-character').selectOption({ label: 'Zenderheals (Cleric)' })
   })
 
+  test('switching to Ammomats makes the next upgrade reply name Ammomats', async ({ page }) => {
+    const rankings = {
+      characters: [
+        {
+          name: 'Iaminae',
+          class: 'Enchanter',
+          inventory: [{ slot_id: 2, item_id: 100, item_name: 'Old Circlet' }],
+        },
+        {
+          name: 'Ammomats',
+          class: 'Magician',
+          inventory: [{ slot_id: 17, item_id: 200, item_name: 'Old Robe' }],
+        },
+      ],
+      class_weights: {
+        Enchanter: { CHA: 1, INT: 1, AC: 0.2 },
+        Magician: { INT: 1, HP: 0.5, AC: 0.2 },
+      },
+      focus_candidates: {},
+    }
+    await page.route('**/class_rankings.json', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(rankings),
+      })
+    })
+    await page.route('**/item_stats.json', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          100: {
+            name: 'Old Circlet',
+            slot: 'HEAD',
+            classes: 'ENC',
+            ac: 5,
+            mods: [{ label: 'CHA', value: 5 }],
+            resists: [],
+          },
+          200: {
+            name: 'Old Robe',
+            slot: 'CHEST',
+            classes: 'MAG',
+            ac: 10,
+            mods: [{ label: 'INT', value: 5 }],
+            resists: [],
+          },
+          501: {
+            name: 'Beguiler Circlet',
+            slot: 'HEAD',
+            classes: 'ENC',
+            ac: 25,
+            mods: [{ label: 'CHA', value: 20 }],
+            resists: [],
+          },
+          601: {
+            name: 'Elementalist Robe',
+            slot: 'CHEST',
+            classes: 'MAG',
+            ac: 40,
+            mods: [{ label: 'INT', value: 25 }],
+            resists: [],
+          },
+        }),
+      })
+    })
+
+    await page.goto('/roast-bot')
+    await expect(page.getByTestId('roast-bot-character')).toBeVisible()
+    await page.getByTestId('roast-bot-character').selectOption({ label: 'Iaminae (Enchanter)' })
+    await page.getByTestId('roast-bot-input').fill('What should I buy for upgrades?')
+    await page.getByTestId('roast-bot-send').click()
+    await expect(page.getByTestId('roast-bot-reply').last()).toContainText(/Iaminae/i)
+
+    await page.getByTestId('roast-bot-character').selectOption({ label: 'Ammomats (Magician)' })
+    await page.getByTestId('roast-bot-input').fill('What upgrades should I buy?')
+    await page.getByTestId('roast-bot-send').click()
+    const reply = page.getByTestId('roast-bot-reply').last()
+    await expect(reply).toContainText(/Ammomats/i)
+    await expect(reply).not.toContainText(/Iaminae/i)
+  })
+
   test('keyboard: Enter sends message', async ({ page }) => {
     await page.goto('/roast-bot')
     const input = page.getByTestId('roast-bot-input')

@@ -315,18 +315,87 @@ describe('roastBot dialogue acceptance', () => {
     let calls = 0
     globalThis.fetch = async () => {
       calls += 1
-      return { ok: false, json: async () => null }
+      return { ok: false, status: 404, json: async () => null }
     }
     try {
       const first = await loadClassRankings('/missing-rankings.json')
-      assert.equal(first, null)
+      assert.equal(first.ok, false)
+      assert.equal(first.error, 'http_404')
       const second = await loadClassRankings('/missing-rankings.json')
-      assert.equal(second, null)
+      assert.equal(second.ok, false)
       assert.ok(calls >= 2, `expected retry fetch, got ${calls} calls`)
     } finally {
       globalThis.fetch = originalFetch
       resetUpgradeCaches()
     }
+  })
+
+  it('character dropdown scopes spending; Auto stays account-wide', () => {
+    const facts = fixtureFacts()
+    const state = createConversationState()
+    state.selectedCharacterId = 'w1'
+    const scoped = handleMessage({
+      text: 'What was my worst purchase?',
+      facts,
+      state,
+      rng: () => 0,
+    })
+    assert.match(scoped.response.text, /Smooth Onyx Torque/i)
+    assert.equal(scoped.response.text.includes('Beguiler Circlet'), false)
+
+    const accountWide = handleMessage({
+      text: 'What was my worst purchase?',
+      facts,
+      state: createConversationState(),
+      rng: () => 0,
+    })
+    assert.match(accountWide.response.text, /Beguiler Circlet/i)
+  })
+
+  it('price outlier median matches the cited purchase only', () => {
+    const facts = fixtureFacts({
+      lootRows: [
+        {
+          id: 10,
+          item_name: 'Cheap Spike',
+          cost: 100,
+          char_id: 'e1',
+          character_name: 'Iaminae',
+          assigned_char_id: 'e1',
+          assigned_character_name: 'Iaminae',
+          sale_date: '2026-09-20',
+        },
+        {
+          id: 11,
+          item_name: 'Serpent of Vindication',
+          cost: 51,
+          char_id: 'e1',
+          character_name: 'Iaminae',
+          assigned_char_id: 'e1',
+          assigned_character_name: 'Iaminae',
+          sale_date: '2026-09-10',
+        },
+      ],
+      comparableSalesByItem: {
+        'cheap spike': [90, 95, 100],
+        'serpent of vindication': [2, 2, 3, 2],
+      },
+    })
+    assert.equal(facts.biggestPurchase.itemName, 'Cheap Spike')
+    assert.ok(facts.priceOutliers.some((o) => o.itemName === 'Serpent of Vindication'))
+    const { response, answer } = handleMessage({
+      text: 'Roast my DKP spending',
+      facts,
+      state: createConversationState(),
+      rng: () => 0,
+    })
+    // Must not pair Cheap Spike cost with Serpent median
+    if (answer.placeholders?.medianPrice != null) {
+      assert.equal(answer.placeholders.item, answer.purchase?.itemName)
+      assert.equal(answer.placeholders.medianPrice, answer.purchase?.medianPrice)
+      assert.notEqual(answer.placeholders.item, 'Cheap Spike')
+    }
+    assert.ok(response.text)
   })
 })
 

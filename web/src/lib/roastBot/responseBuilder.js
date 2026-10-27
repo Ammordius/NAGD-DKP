@@ -90,10 +90,22 @@ export function renderAnswer({ answer, state, facts, rng = Math.random }) {
       answer.reasonCode === 'no_gearing_total' || answer.reasonCode === 'need_character' ||
       answer.reasonCode === 'need_item' || answer.reasonCode === 'unknown' ||
       answer.reasonCode === 'unknown_no_analysis' || answer.reasonCode === 'magelo_unavailable' ||
+      answer.reasonCode === 'magelo_fetch_failed' ||
       answer.reasonCode === 'upgrades_unavailable' || answer.reasonCode === 'character_not_in_magelo' ||
       answer.reasonCode === 'missing_magelo_export' || answer.reasonCode === 'missing_gear_score') {
+    // Data/error paths: never append unrelated generic insults (allowFlavor must be explicit)
     let text = answer.factText
-    if (answer.allowFlavor && answer.reasonCode !== 'need_character' && answer.reasonCode !== 'need_item') {
+    const noFlavorCodes = new Set([
+      'need_character',
+      'need_item',
+      'magelo_unavailable',
+      'magelo_fetch_failed',
+      'upgrades_unavailable',
+      'character_not_in_magelo',
+      'missing_magelo_export',
+      'missing_gear_score',
+    ])
+    if (answer.allowFlavor && !noFlavorCodes.has(answer.reasonCode)) {
       const flavor = pickFlavorSentence(state.recentTemplateIds, state.turnCount, rng)
       if (flavor?.text && !text.includes(flavor.text)) {
         text = `${text} ${flavor.text}`

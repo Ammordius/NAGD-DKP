@@ -37,7 +37,13 @@ export function isEligible(eligibility, ctx) {
     case 'slot_repeat':
       return (facts.slotRepeatPatterns || []).length > 0
     case 'price_outlier':
-      return (facts.priceOutliers || []).length > 0
+      // Selected purchase must itself be the outlier (has matching medianPrice)
+      return (
+        ctx.purchase?.medianPrice != null &&
+        Number.isFinite(Number(ctx.purchase.medianPrice)) &&
+        ctx.purchase?.itemName &&
+        ctx.purchase?.cost != null
+      )
     case 'purchase_unknown_value':
       return Boolean(facts.biggestPurchase || facts.recentPurchase)
     case 'multi_char':
@@ -159,7 +165,19 @@ export function buildPlaceholderValues(ctx) {
   const upgrade = (ctx.upgrades || [])[0]
   const conc = (ctx.events || []).find((e) => e.type === 'SPEND_CONCENTRATION')?.payload
   const slotPat = (facts.slotRepeatPatterns || [])[0]
-  const outlier = (facts.priceOutliers || [])[0]
+  // Median only from the same purchase record — never an unrelated priceOutliers[0]
+  const matchedOutlier =
+    purchase?.medianPrice != null
+      ? purchase
+      : (facts.priceOutliers || []).find(
+          (o) =>
+            purchase &&
+            ((purchase.purchaseId && o.purchaseId && o.purchaseId === purchase.purchaseId) ||
+              (o.itemName &&
+                purchase.itemName &&
+                o.itemName === purchase.itemName &&
+                o.cost === purchase.cost)),
+        ) || null
   const chars = facts.characters || []
   const toon =
     ctx.selectedCharacter?.name ||
@@ -174,21 +192,15 @@ export function buildPlaceholderValues(ctx) {
     account: facts.accountName,
     toon,
     otherToon,
-    item:
-      ctx.itemName ||
-      upgrade?.itemName ||
-      purchase?.itemName ||
-      outlier?.itemName ||
-      ctx.followupItem ||
-      null,
-    cost: purchase?.cost ?? outlier?.cost ?? null,
+    item: ctx.itemName || upgrade?.itemName || purchase?.itemName || ctx.followupItem || null,
+    cost: purchase?.cost ?? null,
     balance: facts.currentDkp,
     slot: upgrade?.slot || slotPat?.slot || null,
     upgrade: upgrade?.upgrade || null,
     zone: ctx.itemSource?.zone || null,
     mob: ctx.itemSource?.mob || null,
     lastSale: ctx.lastSale ?? null,
-    medianPrice: outlier?.medianPrice ?? null,
+    medianPrice: matchedOutlier?.medianPrice ?? purchase?.medianPrice ?? null,
     purchaseCount: facts.totalRecordedPurchases,
     charCount: chars.length,
     sharePct: conc?.sharePct ?? null,

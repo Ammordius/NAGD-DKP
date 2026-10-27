@@ -9,37 +9,96 @@ import { getDkpMobLoot, getRaidItemSources } from '../staticData.js'
 import { classifyUpgradeDelta } from './events.js'
 import { formatUpgradeDelta } from './formatting.js'
 
+/** Hosted Magelo export (gh-pages). Override with VITE_CLASS_RANKINGS_URL. */
+export const DEFAULT_CLASS_RANKINGS_URL =
+  'https://ammordius.github.io/NAGD-spell-inventory/class_rankings.json'
+
 const CLASS_RANKINGS_URL =
   (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_CLASS_RANKINGS_URL) ||
-  '/class_rankings.json'
+  DEFAULT_CLASS_RANKINGS_URL
 
 let rankingsPromise = null
+/** @type {{ ok: true, rankings: object } | null} */
 let rankingsCache = null
 const upgradeCache = new Map()
 
-/** @param {string} [url] */
+/**
+ * Minimal schema check for Magelo class_rankings export.
+ * @param {unknown} json
+ * @returns {{ ok: true } | { ok: false, error: string }}
+ */
+export function validateClassRankingsSchema(json) {
+  if (!json || typeof json !== 'object') {
+    return { ok: false, error: 'invalid_schema' }
+  }
+  const list = json.characters || json.Chars || json.toons
+  if (!Array.isArray(list)) {
+    return { ok: false, error: 'invalid_schema' }
+  }
+  const weights = json.classWeights || json.class_weights || json.weights || json.ClassWeights
+  if (!weights || typeof weights !== 'object' || Object.keys(weights).length === 0) {
+    return { ok: false, error: 'invalid_schema' }
+  }
+  return { ok: true }
+}
+
+/**
+ * @param {string} [url]
+ * @returns {Promise<{ ok: true, rankings: object } | { ok: false, error: string, status?: number }>}
+ */
 export function loadClassRankings(url = CLASS_RANKINGS_URL) {
-  if (rankingsCache) return Promise.resolve(rankingsCache)
+  if (rankingsCache?.ok) return Promise.resolve(rankingsCache)
   if (!rankingsPromise) {
     rankingsPromise = fetch(url)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((json) => {
-        if (json) {
-          rankingsCache = json
-          return json
+      .then(async (r) => {
+        if (!r.ok) {
+          rankingsPromise = null
+          rankingsCache = null
+          const error = r.status === 404 ? 'http_404' : 'http_status'
+          return { ok: false, error, status: r.status }
         }
-        // Failed fetch must not stick — allow later retry
-        rankingsPromise = null
-        rankingsCache = null
-        return null
+        let json
+        try {
+          json = await r.json()
+        } catch {
+          rankingsPromise = null
+          rankingsCache = null
+          return { ok: false, error: 'invalid_json' }
+        }
+        const schema = validateClassRankingsSchema(json)
+        if (!schema.ok) {
+          rankingsPromise = null
+          rankingsCache = null
+          return { ok: false, error: schema.error }
+        }
+        const success = { ok: true, rankings: json }
+        rankingsCache = success
+        return success
       })
       .catch(() => {
         rankingsPromise = null
         rankingsCache = null
-        return null
+        return { ok: false, error: 'network' }
       })
   }
   return rankingsPromise
+}
+
+/** Human-readable Magelo load failure for chat replies (no insults). */
+export function formatMageloLoadError(result) {
+  if (!result || result.ok) return null
+  const err = result.error || 'unknown'
+  if (err === 'http_404') return 'Magelo rankings fetch failed (HTTP 404)'
+  if (err === 'http_status') {
+    const status = result.status != null ? `HTTP ${result.status}` : 'HTTP error'
+    return `Magelo rankings fetch failed (${status})`
+  }
+  if (err === 'invalid_json') return 'Magelo rankings response was not valid JSON'
+  if (err === 'invalid_schema') {
+    return 'Magelo rankings JSON failed schema validation (need characters[] and class weights)'
+  }
+  if (err === 'network') return 'Magelo rankings network request failed'
+  return `Magelo rankings unavailable (${err})`
 }
 
 /** Test helper */
@@ -234,8 +293,14 @@ export async function getUpgradesForCharacter(character, options = {}) {
   const cacheKey = `${options.accountId || ''}:${character?.char_id || character?.name || ''}:${options.cacheToken || ''}`
   if (upgradeCache.has(cacheKey)) return upgradeCache.get(cacheKey)
 
-  const [rankings, itemStatsObj, raidItemIds] = await Promise.all([
-    options.rankings !== undefined ? Promise.resolve(options.rankings) : loadClassRankings(options.rankingsUrl),
+  const [rankingsLoaded, itemStatsObj, raidItemIds] = await Promise.all([
+    options.rankings !== undefined
+      ? Promise.resolve(
+          options.rankings
+            ? { ok: true, rankings: options.rankings }
+            : { ok: false, error: 'missing_rankings' },
+        )
+      : loadClassRankings(options.rankingsUrl),
     options.itemStats
       ? Promise.resolve(options.itemStats)
       : ensureItemStatsLoaded().then(() => {
@@ -245,9 +310,17 @@ export async function getUpgradesForCharacter(character, options = {}) {
     options.raidItemIds || collectRaidLootItemIds(),
   ])
 
+  if (!rankingsLoaded?.ok) {
+    return {
+      ok: false,
+      reason: rankingsLoaded?.error || 'magelo_fetch_failed',
+      suggestions: [],
+    }
+  }
+
   const result = computeCharacterUpgrades({
     character,
-    rankings,
+    rankings: rankingsLoaded.rankings,
     itemStats: itemStatsObj,
     raidItemIds,
     limit: options.limit ?? 3,

@@ -4,6 +4,8 @@ import {
   buildAccountFacts,
   normalizePurchase,
   dedupeLootRows,
+  scopedPurchaseFacts,
+  pickSpendPurchase,
 } from './facts.js'
 import { handleMessage, createConversationState, startConversation } from './conversation.js'
 import { INTENTS, classifyIntent } from './intents.js'
@@ -68,6 +70,53 @@ describe('roastBot facts and purchases', () => {
     assert.equal(facts.totalRecordedPurchases, 3)
     assert.equal(facts.biggestPurchase.itemName, 'Expensive')
     assert.equal(facts.biggestPurchase.cost, 200)
+  })
+
+  it('scopedPurchaseFacts filters reliably attributed buys per character', () => {
+    const iaminae = { char_id: 'e1', name: 'Iaminae' }
+    const ammomats = { char_id: 'm1', name: 'Ammomats' }
+    const facts = buildAccountFacts({
+      accountId: 'a1',
+      characters: [iaminae, ammomats],
+      lootRows: [
+        {
+          id: 1,
+          item_name: 'Beguiler Circlet',
+          cost: 220,
+          assigned_char_id: 'e1',
+          assigned_character_name: 'Iaminae',
+          char_id: 'e1',
+          character_name: 'Iaminae',
+          sale_date: '2026-09-15',
+        },
+        {
+          id: 2,
+          item_name: 'Robes of the Elementalist',
+          cost: 40,
+          assigned_char_id: 'm1',
+          assigned_character_name: 'Ammomats',
+          char_id: 'm1',
+          character_name: 'Ammomats',
+          sale_date: '2026-09-12',
+        },
+      ],
+      comparableSalesByItem: {
+        'beguiler circlet': [100, 110, 120],
+      },
+    })
+    const account = scopedPurchaseFacts(facts, null)
+    assert.equal(account.scope, 'account')
+    assert.equal(account.biggestPurchase.itemName, 'Beguiler Circlet')
+
+    const forAmmo = scopedPurchaseFacts(facts, ammomats)
+    assert.equal(forAmmo.scope, 'character')
+    assert.equal(forAmmo.biggestPurchase.itemName, 'Robes of the Elementalist')
+    assert.equal(forAmmo.totalRecordedPurchases, 1)
+
+    const picked = pickSpendPurchase(scopedPurchaseFacts(facts, iaminae))
+    assert.equal(picked.category, 'price_outlier')
+    assert.equal(picked.purchase.itemName, 'Beguiler Circlet')
+    assert.ok(picked.purchase.medianPrice != null)
   })
 
   it('does not invent prices when sale history is missing', () => {
