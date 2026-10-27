@@ -1,247 +1,43 @@
-# Public SQL Ledger: daily delta between two DB backups, published to GitHub Pages.
-# Uses backup artifacts from the DB backup workflow; excludes raid_loot (loot assignments).
-# Serves as a transparent, historical record that is hard for a site admin to wipe.
-# See docs/SQL-LEDGER.md.
+# RETIRED: CSV backup SQL Ledger → GitHub Pages.
+#
+# The scheduled CSV supabase-backup-* pipeline is obsolete. The public change
+# report is now produced by DB SQL mirror after a successful restore.
+# See docs/SQL-LEDGER.md and .github/workflows/db-sql-mirror.yml.
+#
+# This workflow no longer schedules, no longer downloads CSV artifacts, and
+# cannot overwrite GitHub Pages.
 
-name: SQL Ledger (daily delta → GitHub Pages)
+name: SQL Ledger (retired)
 
 on:
-  schedule:
-    # Run after backup (backup at 07:00 UTC); need at least 2 backup artifacts
-    - cron: '30 7 * * *'
   workflow_dispatch:
     inputs:
-      backup_type:
-        description: 'Backup artifact type to compare (older vs newer)'
-        required: false
-        default: 'daily'
-        type: choice
-        options:
-          - daily
-          - weekly
-          - monthly
-
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+      acknowledge:
+        description: "Type RETIRED to confirm you understand this workflow no longer publishes"
+        required: true
+        type: string
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 concurrency:
-  group: sql-ledger
+  group: sql-ledger-retired
   cancel-in-progress: false
 
 jobs:
-  ledger:
+  retired:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Get two most recent backup artifacts
-        id: artifacts
+      - name: Refuse retired CSV ledger
         env:
-          BACKUP_TYPE: ${{ github.event.inputs.backup_type || 'daily' }}
+          ACK: ${{ inputs.acknowledge }}
         run: |
-          # BACKUP_TYPE: daily (supabase-backup-YYYY-MM-DD) | weekly (supabase-backup-weekly-*) | monthly (supabase-backup-monthly-*)
-          case "$BACKUP_TYPE" in
-            daily)   JQ_PATTERN='^supabase-backup-[0-9]{4}-[0-9]{2}-[0-9]{2}$'; PREFIX='supabase-backup-' ;;
-            weekly)  JQ_PATTERN='^supabase-backup-weekly-'; PREFIX='supabase-backup-weekly-' ;;
-            monthly) JQ_PATTERN='^supabase-backup-monthly-'; PREFIX='supabase-backup-monthly-' ;;
-            *)       JQ_PATTERN='^supabase-backup-[0-9]{4}-[0-9]{2}-[0-9]{2}$'; PREFIX='supabase-backup-' ;;
-          esac
-          echo "Using backup type: $BACKUP_TYPE (pattern: $JQ_PATTERN)"
-          # Paginate through all artifacts so we get full history (not just first 100)
-          PAGE=1
-          : > /tmp/artifacts.txt
-          while true; do
-            RES=$(curl -sS -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-              "https://api.github.com/repos/${{ github.repository }}/actions/artifacts?per_page=100&page=$PAGE")
-            echo "$RES" | jq -r --arg re "$JQ_PATTERN" '.artifacts[] | select(.name | test($re)) | select(.expired == false) | select(.workflow_run.id != null) | "\(.name) \(.workflow_run.id)"' >> /tmp/artifacts.txt
-            MORE=$(echo "$RES" | jq -r '.artifacts | length')
-            [ "$MORE" = "100" ] || break
-            PAGE=$((PAGE + 1))
-          done
-          # Unique by name (keep one run_id per name), then sort by name descending = newest dates first
-          sort -u -k1,1 -t' ' /tmp/artifacts.txt | sort -r -k1,1 -t' ' > /tmp/uniq.txt
-          NEW_LINE=$(sed -n '1p' /tmp/uniq.txt)
-          OLD_LINE=$(sed -n '2p' /tmp/uniq.txt)
-          if [ -z "$NEW_LINE" ]; then
-            echo "No $BACKUP_TYPE backup artifacts found."
-            echo "has_two=false" >> $GITHUB_OUTPUT
-            exit 0
+          set -euo pipefail
+          echo "The CSV SQL Ledger workflow is retired."
+          echo "Public mirror change reports are published by DB SQL mirror → GitHub Pages."
+          echo "See docs/SQL-LEDGER.md"
+          if [ "${ACK}" != "RETIRED" ]; then
+            echo "Type RETIRED in the acknowledge input if you only needed this notice." >&2
+            exit 1
           fi
-          NEW_NAME="${NEW_LINE% *}"
-          NEW_RUN_ID="${NEW_LINE#* }"
-          echo "new_name=$NEW_NAME" >> $GITHUB_OUTPUT
-          echo "new_date=${NEW_NAME#$PREFIX}" >> $GITHUB_OUTPUT
-          if [ -z "$OLD_LINE" ]; then
-            echo "Only one backup artifact in history; cannot build delta. Last snapshot: ${NEW_NAME#$PREFIX}"
-            echo "has_two=false" >> $GITHUB_OUTPUT
-            echo "latest_single_date=${NEW_NAME#$PREFIX}" >> $GITHUB_OUTPUT
-            exit 0
-          fi
-          OLD_NAME="${OLD_LINE% *}"
-          OLD_RUN_ID="${OLD_LINE#* }"
-          echo "new_name=$NEW_NAME" >> $GITHUB_OUTPUT
-          echo "new_run_id=$NEW_RUN_ID" >> $GITHUB_OUTPUT
-          echo "old_name=$OLD_NAME" >> $GITHUB_OUTPUT
-          echo "old_run_id=$OLD_RUN_ID" >> $GITHUB_OUTPUT
-          echo "has_two=true" >> $GITHUB_OUTPUT
-          echo "backup_type=$BACKUP_TYPE" >> $GITHUB_OUTPUT
-          echo "new_date=${NEW_NAME#$PREFIX}" >> $GITHUB_OUTPUT
-          echo "old_date=${OLD_NAME#$PREFIX}" >> $GITHUB_OUTPUT
-
-      - name: Download older backup
-        if: steps.artifacts.outputs.has_two == 'true'
-        uses: actions/download-artifact@v4
-        with:
-          name: ${{ steps.artifacts.outputs.old_name }}
-          run-id: ${{ steps.artifacts.outputs.old_run_id }}
-          path: artifacts_old
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Extract older backup to backup_old
-        if: steps.artifacts.outputs.has_two == 'true'
-        run: |
-          TAR=$(find artifacts_old -name "*.tar.gz" | head -1)
-          mkdir -p backup_old
-          tar xzf "$TAR" -C backup_old
-          [ -d backup_old/backup ] && mv backup_old/backup/* backup_old/ && rmdir backup_old/backup
-
-      - name: Download newer backup
-        if: steps.artifacts.outputs.has_two == 'true'
-        uses: actions/download-artifact@v4
-        with:
-          name: ${{ steps.artifacts.outputs.new_name }}
-          run-id: ${{ steps.artifacts.outputs.new_run_id }}
-          path: artifacts_new
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Extract newer backup to backup_new
-        if: steps.artifacts.outputs.has_two == 'true'
-        run: |
-          TAR=$(find artifacts_new -name "*.tar.gz" | head -1)
-          mkdir -p backup_new
-          tar xzf "$TAR" -C backup_new
-          [ -d backup_new/backup ] && mv backup_new/backup/* backup_new/ && rmdir backup_new/backup
-
-      - name: Generate delta report
-        if: steps.artifacts.outputs.has_two == 'true'
-        run: |
-          mkdir -p ledger
-          python scripts/ledger_delta.py \
-            --old backup_old \
-            --new backup_new \
-            --out ledger/delta.html \
-            --old-date ${{ steps.artifacts.outputs.old_date }} \
-            --new-date ${{ steps.artifacts.outputs.new_date }}
-
-      - name: Generate ledger index page
-        if: steps.artifacts.outputs.has_two == 'true'
-        env:
-          REPO: ${{ github.repository }}
-          OLD_DATE: ${{ steps.artifacts.outputs.old_date }}
-          NEW_DATE: ${{ steps.artifacts.outputs.new_date }}
-          BACKUP_TYPE: ${{ steps.artifacts.outputs.backup_type }}
-        run: |
-          cat > ledger/index.html << EOF
-          <!DOCTYPE html>
-          <html lang="en">
-          <head>
-            <meta charset="utf-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1">
-            <title>Public SQL Ledger</title>
-            <style>
-              :root { --bg: #0f1419; --surface: #1a2332; --text: #e6edf3; --muted: #8b949e; }
-              body { font-family: ui-sans-serif, system-ui, sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; margin: 0; padding: 2rem; max-width: 48rem; }
-              a { color: #58a6ff; }
-              h1 { font-size: 1.5rem; }
-              .meta { color: var(--muted); margin: 1rem 0; }
-              .card { background: var(--surface); border-radius: 8px; padding: 1rem; margin: 1rem 0; }
-              .card a { font-weight: 500; }
-            </style>
-          </head>
-          <body>
-            <h1>Public SQL Ledger</h1>
-            <p class="meta">Transparent, historical record of database changes. Backup-to-backup deltas (all tables except raid_loot). Includes officer_audit_log (who added/deleted loot, raids, tics). Hosted on GitHub as a root of trust.</p>
-            <div class="card">
-              <p><strong>Latest delta</strong> ($BACKUP_TYPE): <a href="delta.html">$OLD_DATE → $NEW_DATE</a></p>
-              <p>Generated by CI from $BACKUP_TYPE backup artifacts. raid_loot excluded; officer audit log (loot/raid/tic changes) included.</p>
-            </div>
-            <p class="meta">See <a href="https://github.com/$REPO/actions">Actions</a> for backup and ledger workflow runs.</p>
-          </body>
-          </html>
-          EOF
-
-      - name: Add index when no comparison
-        if: steps.artifacts.outputs.has_two != 'true'
-        env:
-          REPO: ${{ github.repository }}
-          BACKUP_TYPE: ${{ github.event.inputs.backup_type || 'daily' }}
-          LATEST_DATE: ${{ steps.artifacts.outputs.latest_single_date }}
-        run: |
-          mkdir -p ledger
-          if [ -n "$LATEST_DATE" ]; then
-            cat > ledger/index.html << EOF
-          <!DOCTYPE html>
-          <html lang="en">
-          <head>
-            <meta charset="utf-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1">
-            <title>Public SQL Ledger</title>
-            <style>
-              :root { --bg: #0f1419; --surface: #1a2332; --text: #e6edf3; --muted: #8b949e; }
-              body { font-family: ui-sans-serif, system-ui, sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; margin: 0; padding: 2rem; max-width: 48rem; }
-              a { color: #58a6ff; }
-              h1 { font-size: 1.5rem; }
-              .meta { color: var(--muted); margin: 1rem 0; }
-              .card { background: var(--surface); border-radius: 8px; padding: 1rem; margin: 1rem 0; }
-            </style>
-          </head>
-          <body>
-            <h1>Public SQL Ledger</h1>
-            <p class="meta">Transparent, historical record of database changes. Backup-to-backup deltas (all tables except raid_loot).</p>
-            <div class="card">
-              <p><strong>Data last updated:</strong> $LATEST_DATE</p>
-              <p>Only one $BACKUP_TYPE backup in history. Run another backup to generate a delta (compare two snapshots).</p>
-            </div>
-            <p class="meta"><a href="https://github.com/$REPO/actions">Actions</a></p>
-          </body>
-          </html>
-          EOF
-          else
-            cat > ledger/index.html << EOF
-          <!DOCTYPE html>
-          <html lang="en">
-          <head>
-            <meta charset="utf-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1">
-            <title>Public SQL Ledger</title>
-          </head>
-          <body>
-            <h1>Public SQL Ledger</h1>
-            <p>No delta yet. Need at least two $BACKUP_TYPE backup artifacts from the DB backup workflow.</p>
-            <p><a href="https://github.com/$REPO/actions">Actions</a></p>
-          </body>
-          </html>
-          EOF
-          fi
-
-      - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v4
-        with:
-          path: ledger
-
-  deploy:
-    needs: ledger
-    environment:
-      name: github-pages
-      url: ${{ steps.deploy.outputs.page_url }}
-    runs-on: ubuntu-latest
-    steps:
-      - name: Deploy to GitHub Pages
-        id: deploy
-        uses: actions/deploy-pages@v4
+          echo "Acknowledged. No Pages content was published."

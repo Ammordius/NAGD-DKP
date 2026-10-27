@@ -19,6 +19,7 @@ import tempfile
 import time
 import zipfile
 from datetime import date, datetime, timezone
+from decimal import Decimal
 from pathlib import Path
 from unittest.mock import patch
 
@@ -467,6 +468,85 @@ def test_policy_and_totals() -> None:
         fail("duplicate account primary key was accepted")
     except sql_restore.RestoreError:
         pass
+
+    char_totals = sql_restore.expected_character_totals(sample_blocks(), AS_OF)
+    check(
+        char_totals
+        == {
+            "ForgottenName": {
+                "character_name": "ForgottenName",
+                "earned": "4",
+                "spent": "0",
+                "balance": "4",
+                "earned_30d": "0",
+                "earned_60d": "0",
+            },
+            "UniqueName": {
+                "character_name": "UniqueName",
+                "earned": "10",
+                "spent": "0",
+                "balance": "10",
+                "earned_30d": "10",
+                "earned_60d": "10",
+            },
+            "char-a": {
+                "character_name": "SharedA",
+                "earned": "10",
+                "spent": "0",
+                "balance": "10",
+                "earned_30d": "10",
+                "earned_60d": "10",
+            },
+            "char-b": {
+                "character_name": "SharedB",
+                "earned": "10",
+                "spent": "0",
+                "balance": "10",
+                "earned_30d": "10",
+                "earned_60d": "10",
+            },
+            "char-explicit": {
+                "character_name": "ExplicitToon",
+                "earned": "10",
+                "spent": "0",
+                "balance": "10",
+                "earned_30d": "10",
+                "earned_60d": "10",
+            },
+            "char-linked": {
+                "character_name": "LinkedToon",
+                "earned": "10",
+                "spent": "3",
+                "balance": "7",
+                "earned_30d": "10",
+                "earned_60d": "10",
+            },
+            "char-old": {
+                "character_name": "OldToon",
+                "earned": "4",
+                "spent": "0",
+                "balance": "4",
+                "earned_30d": "0",
+                "earned_60d": "0",
+            },
+        },
+        f"Independent character DKP totals were wrong: {char_totals}",
+    )
+    # Adjustments must not affect reconstructed character base totals.
+    check(
+        char_totals["char-linked"]["earned"] == "10",
+        "adjustments must not inflate reconstructed character earned",
+    )
+    # Shared account earns once; two characters each earn the tic.
+    check(
+        Decimal(char_totals["char-a"]["earned"]) + Decimal(char_totals["char-b"]["earned"])
+        == Decimal("20"),
+        "character sum for shared account should be 20",
+    )
+    check(
+        totals["acct-shared"]["earned"] == "10",
+        "account shared earned must remain one tic credit",
+    )
 
 
 def restore_env(port: int) -> dict[str, str]:

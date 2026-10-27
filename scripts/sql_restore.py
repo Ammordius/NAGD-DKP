@@ -848,7 +848,10 @@ def _require_unique(blocks: dict[str, dict]) -> None:
 
 
 def expected_account_totals(blocks: dict[str, dict], as_of: date) -> dict[str, dict[str, str]]:
-    """Account earned, spent, and windows from the published attendance and loot rules."""
+    """Account earned, spent, and windows from the published attendance and loot rules.
+
+    Does not include dkp_adjustments (same as account_dkp_summary rebuild).
+    """
     snapshot_foreign_keys(blocks)
     char_accounts, name_accounts, linked = _mapping_indexes(blocks)
     tic_values = _tic_values(blocks)
@@ -914,6 +917,76 @@ def expected_account_totals(blocks: dict[str, dict], as_of: date) -> dict[str, d
             "balance": format(account_earned - account_spent, "f"),
             "earned_30d": str(account_30),
             "earned_60d": str(account_60),
+        }
+    return totals
+
+
+def _character_key(char_id: str | None, character_name: str | None) -> str | None:
+    """Match dkp_summary identity: prefer trimmed char_id, else character name."""
+    cid = _norm(char_id)
+    if cid:
+        return cid
+    name = _norm(character_name)
+    return name or None
+
+
+def expected_character_totals(blocks: dict[str, dict], as_of: date) -> dict[str, dict[str, str]]:
+    """Character earned/spent from attendance and loot (base totals; no adjustments).
+
+    Mirrors refresh_dkp_summary_internal semantics: each raid_event_attendance row
+    credits the distinct-tic value for (raid_id, event_id) to that character_key.
+    Spent is the sum of raid_loot.cost keyed the same way. Adjustments are excluded.
+    """
+    snapshot_foreign_keys(blocks)
+    tic_values = _tic_values(blocks)
+    raid_dates = {_raw(row.get("raid_id")): _parse_date(row.get("date_iso")) for row in _rows(blocks, "raids")}
+    names: dict[str, str] = {}
+    for row in _rows(blocks, "characters"):
+        cid = _norm(row.get("char_id"))
+        if cid:
+            names[cid] = _norm(row.get("name")) or cid
+    earned: dict[str, Decimal] = {}
+    earned_30: dict[str, Decimal] = {}
+    earned_60: dict[str, Decimal] = {}
+    spent: dict[str, Decimal] = {}
+    for row in _rows(blocks, "raid_event_attendance"):
+        key = _character_key(row.get("char_id"), row.get("character_name"))
+        if not key:
+            continue
+        display = _norm(row.get("character_name")) or names.get(key, key)
+        names[key] = display
+        raid_id = _raw(row.get("raid_id"))
+        event_id = _raw(row.get("event_id"))
+        value = tic_values.get((raid_id, event_id), Decimal(0))
+        earned[key] = earned.get(key, Decimal(0)) + value
+        raid_date = raid_dates.get(raid_id)
+        if raid_date is not None and raid_date >= as_of - timedelta(days=30):
+            earned_30[key] = earned_30.get(key, Decimal(0)) + value
+        if raid_date is not None and raid_date >= as_of - timedelta(days=60):
+            earned_60[key] = earned_60.get(key, Decimal(0)) + value
+    for row in _rows(blocks, "raid_loot"):
+        key = _character_key(row.get("char_id"), row.get("character_name"))
+        if not key:
+            continue
+        display = _norm(row.get("character_name")) or names.get(key, key)
+        names[key] = display
+        cost = _parse_decimal(row.get("cost"), "raid_loot.cost")
+        spent[key] = spent.get(key, Decimal(0)) + cost
+    totals: dict[str, dict[str, str]] = {}
+    for key in sorted(set(earned) | set(spent)):
+        char_earned = earned.get(key, Decimal(0))
+        char_spent = spent.get(key, Decimal(0))
+        char_30 = _sql_int(earned_30.get(key, Decimal(0)))
+        char_60 = _sql_int(earned_60.get(key, Decimal(0)))
+        if char_earned == 0 and char_spent == 0 and char_30 == 0 and char_60 == 0:
+            continue
+        totals[key] = {
+            "character_name": names.get(key, key),
+            "earned": format(char_earned, "f"),
+            "spent": format(char_spent, "f"),
+            "balance": format(char_earned - char_spent, "f"),
+            "earned_30d": str(char_30),
+            "earned_60d": str(char_60),
         }
     return totals
 

@@ -3,7 +3,9 @@
 # Source is repository variable SQL_MIRROR_SOURCE (owner/name only).
 # Soft-skips if the latest sql-backup-* is stale or already mirrored, then
 # dispatches DB SQL restore with a pinned artifact id.
-# See docs/CI-DB-SQL-RESTORE.md.
+# On successful restore, captures before/after read-only snapshots and publishes
+# a sanitized change report to GitHub Pages (no plaintext DB dumps published).
+# See docs/CI-DB-SQL-RESTORE.md and docs/SQL-LEDGER.md.
 
 name: DB SQL mirror
 
@@ -29,6 +31,12 @@ jobs:
     permissions:
       contents: read
       actions: write
+    outputs:
+      should_publish: ${{ steps.report.outputs.should_publish || 'false' }}
+      report_slug: ${{ steps.report.outputs.report_slug || '' }}
+      artifact_name: ${{ steps.report.outputs.artifact_name || '' }}
+      restore_run_id: ${{ steps.wait.outputs.restore_run_id || '' }}
+      source_artifact_id: ${{ steps.select.outputs.artifact_id || '' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -114,6 +122,33 @@ jobs:
             exit 1
           fi
 
+      - name: Setup PostgreSQL 17 client
+        if: steps.gate.outputs.decision == 'proceed'
+        uses: ./.github/actions/setup-postgresql-17
+
+      - name: Install Python dependencies
+        if: steps.gate.outputs.decision == 'proceed'
+        run: pip install -r requirements.txt
+
+      - name: Capture before snapshot
+        if: steps.gate.outputs.decision == 'proceed'
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          ARTIFACT_ID: ${{ steps.select.outputs.artifact_id }}
+          SOURCE_LABEL: ${{ steps.source.outputs.source_label }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SUPABASE_DB_URL}" ]; then
+            echo "SUPABASE_DB_URL is required for mirror ledger snapshots." >&2
+            exit 1
+          fi
+          python scripts/mirror_ledger_snapshot.py \
+            --out mirror_snap_before \
+            --source-artifact-id "${ARTIFACT_ID}" \
+            --source-repository "${SOURCE_LABEL}" \
+            --mirror-run-id "${GITHUB_RUN_ID}" \
+            --label before
+
       - name: Dispatch DB SQL restore
         id: dispatch
         if: steps.gate.outputs.decision == 'proceed'
@@ -186,6 +221,8 @@ jobs:
           echo "If the sql-restore environment requires reviewers, remove them before enabling SQL_MIRROR_SCHEDULE." >&2
           exit 1
 
+      # Record mirror success immediately after restore so a later report/Pages
+      # failure cannot force a destructive repeat restore of the same artifact.
       - name: Record mirrored artifact id
         if: steps.gate.outputs.decision == 'proceed' && success()
         env:
@@ -202,7 +239,112 @@ jobs:
           path: .sql-mirror-state
           key: sql-mirror-state-v1-${{ steps.source.outputs.cache_key }}-${{ github.run_id }}
 
+      - name: Capture after snapshot
+        if: steps.gate.outputs.decision == 'proceed' && success()
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          ARTIFACT_ID: ${{ steps.select.outputs.artifact_id }}
+          SOURCE_LABEL: ${{ steps.source.outputs.source_label }}
+          RESTORE_RUN_ID: ${{ steps.wait.outputs.restore_run_id }}
+        run: |
+          set -euo pipefail
+          python scripts/mirror_ledger_snapshot.py \
+            --out mirror_snap_after \
+            --source-artifact-id "${ARTIFACT_ID}" \
+            --source-repository "${SOURCE_LABEL}" \
+            --mirror-run-id "${GITHUB_RUN_ID}" \
+            --restore-run-id "${RESTORE_RUN_ID}" \
+            --label after
+
+      - name: Generate change report
+        id: report
+        if: steps.gate.outputs.decision == 'proceed' && success()
+        env:
+          ARTIFACT_ID: ${{ steps.select.outputs.artifact_id }}
+          SOURCE_LABEL: ${{ steps.source.outputs.source_label }}
+          RESTORE_RUN_ID: ${{ steps.wait.outputs.restore_run_id }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          mkdir -p ledger_site
+          mirror_url="https://github.com/${REPO}/actions/runs/${GITHUB_RUN_ID}"
+          restore_url="https://github.com/${REPO}/actions/runs/${RESTORE_RUN_ID}"
+          set +e
+          python scripts/mirror_ledger_report.py \
+            --old mirror_snap_before \
+            --new mirror_snap_after \
+            --out ledger_site \
+            --source-repository "${SOURCE_LABEL}" \
+            --source-artifact-id "${ARTIFACT_ID}" \
+            --mirror-run-url "${mirror_url}" \
+            --restore-run-url "${restore_url}" \
+            --actions-run-url "${mirror_url}" \
+            --balance-source live_dkp_summary_tables
+          rc=$?
+          set -e
+          if [ "$rc" -ne 0 ]; then
+            echo "should_publish=false" >> "$GITHUB_OUTPUT"
+            echo "Report generation failed (exit ${rc}). Mirror artifact id was already recorded; Pages will not update." >&2
+            exit "$rc"
+          fi
+          slug="$(python -c "import json; print(json.load(open('ledger_site/latest.json'))['slug'])")"
+          echo "should_publish=true" >> "$GITHUB_OUTPUT"
+          echo "report_slug=${slug}" >> "$GITHUB_OUTPUT"
+          echo "artifact_name=mirror-ledger-${slug}-src-${ARTIFACT_ID}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload sanitized report artifact
+        if: steps.gate.outputs.decision == 'proceed' && steps.report.outputs.should_publish == 'true' && success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.report.outputs.artifact_name }}
+          path: ledger_site
+          retention-days: 90
+
+      - name: Scrub ephemeral snapshots
+        if: always() && steps.gate.outputs.decision == 'proceed'
+        run: |
+          set -euo pipefail
+          rm -rf mirror_snap_before mirror_snap_after
+
       - name: Mirror skipped
         if: steps.gate.outputs.decision == 'skip'
         run: |
           echo "Mirror skipped: ${{ steps.gate.outputs.reason }}"
+          echo "should_publish=false" >> "$GITHUB_OUTPUT"
+
+  publish:
+    needs: mirror
+    if: needs.mirror.outputs.should_publish == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+      actions: read
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - name: Download new report
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.mirror.outputs.artifact_name }}
+          path: ledger_report
+
+      - name: Stage latest-only Pages site
+        run: |
+          set -euo pipefail
+          mkdir -p pages_site
+          cp ledger_report/index.html pages_site/index.html
+          if [ -f ledger_report/latest.json ]; then
+            cp ledger_report/latest.json pages_site/latest.json
+          fi
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: pages_site
+
+      - name: Deploy to GitHub Pages
+        id: deploy
+        uses: actions/deploy-pages@v4

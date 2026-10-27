@@ -1,0 +1,104 @@
+# Read-only comparison of any two accessible portable SQL backup artifacts.
+# Does not restore into a database and does not publish to GitHub Pages.
+# See docs/SQL-LEDGER.md.
+
+name: Compare SQL artifacts
+
+on:
+  workflow_dispatch:
+    inputs:
+      old_repository:
+        description: "Old source repository (owner/name)"
+        required: true
+        type: string
+      old_artifact_id:
+        description: "Old exact numeric Actions artifact id"
+        required: true
+        type: string
+      new_repository:
+        description: "New source repository (owner/name)"
+        required: true
+        type: string
+      new_artifact_id:
+        description: "New exact numeric Actions artifact id"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: compare-sql-artifacts-${{ github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  compare:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+
+      - name: Compare SQL artifacts
+        id: compare
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
+          BACKUP_ARTIFACT_READ_TOKEN_STAGING: ${{ secrets.BACKUP_ARTIFACT_READ_TOKEN_STAGING }}
+          BACKUP_FORK_READ_TOKEN: ${{ secrets.BACKUP_FORK_READ_TOKEN }}
+          BACKUP_FORK_READ_TOKEN_2: ${{ secrets.BACKUP_FORK_READ_TOKEN_2 }}
+          BACKUP_FORK_READ_TOKEN_3: ${{ secrets.BACKUP_FORK_READ_TOKEN_3 }}
+          BACKUP_FORK_READ_TOKEN_4: ${{ secrets.BACKUP_FORK_READ_TOKEN_4 }}
+          SQL_BACKUP_AGE_IDENTITY: ${{ secrets.SQL_BACKUP_AGE_IDENTITY }}
+          CURRENT_REPOSITORY: ${{ github.repository }}
+          OLD_REPOSITORY: ${{ inputs.old_repository }}
+          OLD_ARTIFACT_ID: ${{ inputs.old_artifact_id }}
+          NEW_REPOSITORY: ${{ inputs.new_repository }}
+          NEW_ARTIFACT_ID: ${{ inputs.new_artifact_id }}
+        run: |
+          set -euo pipefail
+          mkdir -p compare_out
+          set +e
+          python scripts/sql_artifact_compare.py \
+            --old-repository "${OLD_REPOSITORY}" \
+            --old-artifact-id "${OLD_ARTIFACT_ID}" \
+            --new-repository "${NEW_REPOSITORY}" \
+            --new-artifact-id "${NEW_ARTIFACT_ID}" \
+            --current-repository "${CURRENT_REPOSITORY}" \
+            --out compare_out
+          rc=$?
+          set -e
+          echo "compare_exit=${rc}" >> "$GITHUB_OUTPUT"
+          if [ "$rc" -eq 0 ] || [ "$rc" -eq 2 ]; then
+            echo "has_report=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_report=false" >> "$GITHUB_OUTPUT"
+            exit "$rc"
+          fi
+          # Exit 2 means report written but validation failed — still upload artifact.
+          if [ "$rc" -eq 2 ]; then
+            echo "Comparison finished with validation failures; report artifact will still upload." >&2
+            exit 2
+          fi
+
+      - name: Upload comparison artifact
+        if: always() && steps.compare.outputs.has_report == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: sql-compare-${{ inputs.old_artifact_id }}-vs-${{ inputs.new_artifact_id }}
+          path: compare_out
+          retention-days: 90
+
+      - name: Scrub temporary compare files
+        if: always()
+        run: |
+          set -euo pipefail
+          rm -rf compare_out /tmp/sql-artifact-compare-* 2>/dev/null || true

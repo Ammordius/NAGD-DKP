@@ -62,3 +62,8 @@ backup-*.tar.gz
 sql-backup-out/
 sql-backup-*.tar.gz.age
 ledger/
+ledger_site/
+mirror_snap_before/
+mirror_snap_after/
+
+scripts/testdata/mirror_ledger/*.html

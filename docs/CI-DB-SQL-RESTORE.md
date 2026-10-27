@@ -2,7 +2,7 @@
 
 This restores a portable SQL backup into an independent database. The backup contains guild DKP rows, not authentication. The destination keeps its own `auth.users`, `profiles`, local sign-in identities, site-admin and officer roles, profile preferences, and officer audit log.
 
-The scheduled CSV backup and its GitHub Action are retired. A local load of a historical plaintext CSV tree is still described in [CI-DB-RESTORE.md](CI-DB-RESTORE.md). [SQL-LEDGER.md](SQL-LEDGER.md) diffs `supabase-backup-*` artifacts that have not expired. Those artifacts are not deleted. This workflow does not apply `docs/supabase-schema-full.sql`. The destination must already be able to load the snapshot. Byte-identical schema files are not required when the restore tables, columns, types, constraints, foreign keys, and restore functions are compatible.
+The scheduled CSV backup and its GitHub Action are retired. A local load of a historical plaintext CSV tree is still described in [CI-DB-RESTORE.md](CI-DB-RESTORE.md). The public change report is the mirror-driven ledger in [SQL-LEDGER.md](SQL-LEDGER.md) (before/after destination snapshots after a successful mirror restore), not the retired CSV artifact diff. This workflow does not apply `docs/supabase-schema-full.sql`. The destination must already be able to load the snapshot. Byte-identical schema files are not required when the restore tables, columns, types, constraints, foreign keys, and restore functions are compatible.
 
 This is the supported historical restore for the live site. Anyone who can run **DB SQL restore** on `main` can use it. A new artifact does not require a source change.
 
@@ -112,11 +112,16 @@ The variable is required for every mirror run (scheduled or manual). An empty or
 The mirror job:
 
 1. Resolves that source’s latest successful `sql-backup-*` artifact with `scripts/sql_restore_checkpoint.py`.
-2. Soft-skips (job succeeds, no restore) when the source is unavailable, older than **36 hours**, or the same artifact id was already mirrored successfully for that source.
-3. Pins that numeric artifact id and dispatches **DB SQL restore** with `operation=Restore`, the configured source, and `confirm=RESTORE <SQL_RESTORE_DESTINATION_NAME>`.
-4. Waits for that restore run. It does not look up “latest” again after dispatch.
+2. Soft-skips (job succeeds, no restore) when the source is unavailable, older than **36 hours**, or the same artifact id was already mirrored successfully for that source. A skip leaves the existing GitHub Pages change report intact.
+3. Captures a **read-only before snapshot** of guild data plus rebuilt DKP summaries from the destination (`SUPABASE_DB_URL`). Snapshot failure aborts before dispatch.
+4. Pins that numeric artifact id and dispatches **DB SQL restore** with `operation=Restore`, the configured source, and `confirm=RESTORE <SQL_RESTORE_DESTINATION_NAME>`.
+5. Waits for that restore run. It does not look up “latest” again after dispatch.
+6. On restore success, **records** the mirrored artifact id immediately, then captures an **after snapshot**, diffs the two, and generates a sanitized HTML + JSON change report.
+7. Uploads a **dated Actions artifact** (`mirror-ledger-<stamp>-src-<id>`, ~90-day retention). A separate **publish** job (Pages permissions only; **no database secrets**) deploys **only the latest** `index.html` to GitHub Pages. Report or Pages failures are visible and do **not** clear the mirrored-artifact gate. Generated reports are never committed to git.
 
-It reuses the existing restore secrets and variables (`BACKUP_ARTIFACT_READ_TOKEN_STAGING` and the other fork-read slots for discovery; `SQL_BACKUP_AGE_IDENTITY`, `SQL_BACKUP_AGE_RECIPIENT`, `SUPABASE_DB_URL`, and `SQL_RESTORE_DESTINATION_*` on the restore workflow). No new backup architecture or credentials are required.
+For comparing any two portable SQL backups without restoring, use **Compare SQL artifacts** ([SQL-LEDGER.md](SQL-LEDGER.md)). Plaintext snapshots are ephemeral on the runner and are not published.
+
+It reuses the existing restore secrets and variables (`BACKUP_ARTIFACT_READ_TOKEN_STAGING` and the other fork-read slots for discovery; `SQL_BACKUP_AGE_IDENTITY`, `SQL_BACKUP_AGE_RECIPIENT`, `SUPABASE_DB_URL`, and `SQL_RESTORE_DESTINATION_*` on the restore workflow). No new backup architecture or credentials are required. GitHub Pages must use **Source: GitHub Actions** (Settings → Pages).
 
 This is a replacement snapshot, not bidirectional sync. Guild-data edits made only on this instance are overwritten on the next successful mirror. Destination auth, profiles, claims, and the officer audit log stay in place, so Discord users who signed up only on the source site are not created here. `bid_portfolio_auction_fact` is cleared by restore and is not rebuilt by the mirror.
 
@@ -126,15 +131,17 @@ This is a replacement snapshot, not bidirectional sync. Guild-data edits made on
 2. Confirm that repository has recent successful `sql-backup-*` artifacts (`SQL_BACKUP_SCHEDULE=enabled` on the source when using its schedule).
 3. Confirm a manual restore from that source into this database still works (dry-run with **Other discovered fork** and the same `owner/name`, then restore).
 4. Confirm the `sql-restore` environment has **no required reviewers**. Scheduled restores wait for approval until that policy is removed; the mirror job will time out and fail if a run stays queued.
-5. Set repository variable `SQL_MIRROR_SCHEDULE` to `enabled`.
+5. Confirm GitHub Pages **Source** is **GitHub Actions** (for the public change report).
+6. Set repository variable `SQL_MIRROR_SCHEDULE` to `enabled`.
 
-Use **Actions → DB SQL mirror → Run workflow** with **force** to re-dispatch the same artifact after a successful mirror. Intentional restores of older checkpoints stay on **DB SQL restore**.
+Use **Actions → DB SQL mirror → Run workflow** with **force** to re-dispatch the same artifact after a successful mirror (also regenerates the Pages report). Intentional restores of older checkpoints stay on **DB SQL restore**.
 
 ## Local test
 
 ```bash
 python scripts/test_sql_restore_checkpoint.py
 python scripts/test_sql_mirror_gate.py
+python scripts/test_mirror_ledger.py
 python scripts/test_sql_backup_fetch.py
 python scripts/test_sql_restore.py
 ```

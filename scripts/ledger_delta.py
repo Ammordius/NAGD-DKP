@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
 """
-Public SQL Ledger: compare two Supabase backup dirs (CSV per table) and generate
-a daily-delta HTML report. Excludes raid_loot (loot assignment to character);
-all other tables from the schema are included.
+DEPRECATED local helper: compare two historical supabase-backup-* CSV dirs.
+
+The public GitHub Pages change report is now produced by the DB SQL mirror
+workflow (scripts/mirror_ledger_*.py). Prefer those tools for new work.
+This script remains for offline comparison of unexpired historical CSV
+artifacts only. It excludes raid_loot by design (legacy behavior).
 
 Usage:
   python scripts/ledger_delta.py --old backup_old --new backup_new --out ledger/report.html
   # Or with dates for the report title:
-  python scripts/ledger_delta.py --old backup_old --new backup_new --out report.html --old-date 2026-02-15 --new-date 2026-02-18
+    python scripts/ledger_delta.py --old backup_old --new backup_new --out report.html --old-date 2026-02-15 --new-date 2026-02-18
 """
 
 from __future__ import annotations
