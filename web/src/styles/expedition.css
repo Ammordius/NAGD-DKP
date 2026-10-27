@@ -1,0 +1,360 @@
+/* Quarm's Questionable Expedition — compact dark-fantasy game chrome */
+
+.expedition {
+  --exp-panel: var(--dkp-card-bg, #18181b);
+  --exp-border: var(--dkp-border, #3f3f46);
+  --exp-accent: var(--dkp-accent, #7c3aed);
+  --exp-text: #e4e4e7;
+  --exp-muted: #a1a1aa;
+  --exp-danger: #f87171;
+  --exp-heal: #4ade80;
+  --exp-hp: #22c55e;
+  --exp-hp-bg: #27272a;
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 1rem 1rem 2.5rem;
+  color: var(--exp-text);
+}
+
+.expedition h1 {
+  font-size: 1.75rem;
+  margin: 0 0 0.25rem;
+  letter-spacing: 0.02em;
+}
+
+.expedition .exp-tagline {
+  color: var(--exp-muted);
+  margin: 0 0 1.25rem;
+  font-style: italic;
+}
+
+.expedition .exp-panel {
+  background: var(--exp-panel);
+  border: 1px solid var(--exp-border);
+  border-radius: 8px;
+  padding: 1rem;
+  margin-bottom: 1rem;
+}
+
+.expedition .exp-narrator {
+  border-left: 3px solid var(--exp-accent);
+  padding: 0.75rem 1rem;
+  background: color-mix(in srgb, var(--exp-accent) 12%, transparent);
+  margin-bottom: 1rem;
+  font-size: 0.95rem;
+}
+
+.expedition .exp-narrator strong {
+  display: block;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--dkp-accent-secondary, #a78bfa);
+  margin-bottom: 0.35rem;
+}
+
+.expedition .exp-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 0.75rem;
+}
+
+.expedition .exp-char-card {
+  text-align: left;
+  background: #09090b;
+  border: 2px solid var(--exp-border);
+  border-radius: 8px;
+  padding: 0.75rem;
+  cursor: pointer;
+  color: inherit;
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+
+.expedition .exp-char-card:hover,
+.expedition .exp-char-card:focus-visible {
+  border-color: var(--exp-accent);
+  outline: none;
+}
+
+.expedition .exp-char-card.is-selected {
+  border-color: var(--exp-accent);
+  box-shadow: 0 0 0 1px var(--exp-accent);
+}
+
+.expedition .exp-char-card:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.expedition .exp-class-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 0.15rem 0.4rem;
+  border-radius: 4px;
+  border: 1px solid currentColor;
+  margin-bottom: 0.35rem;
+}
+
+.expedition .exp-char-card .name {
+  font-weight: 600;
+  display: block;
+}
+
+.expedition .exp-char-card .meta {
+  font-size: 0.8rem;
+  color: var(--exp-muted);
+}
+
+.expedition .exp-party-preview {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0.75rem 0;
+}
+
+.expedition .exp-party-chip {
+  border: 1px solid var(--exp-border);
+  border-radius: 999px;
+  padding: 0.25rem 0.65rem;
+  font-size: 0.85rem;
+  background: #09090b;
+}
+
+.expedition .exp-comp {
+  font-size: 0.85rem;
+  color: var(--exp-muted);
+  margin: 0.5rem 0 1rem;
+}
+
+.expedition .exp-enemy {
+  text-align: center;
+}
+
+.expedition .exp-enemy-portrait {
+  width: 64px;
+  height: 64px;
+  margin: 0 auto 0.5rem;
+  border-radius: 8px;
+  border: 2px solid var(--exp-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.75rem;
+  background: linear-gradient(145deg, #27272a, #09090b);
+}
+
+.expedition .exp-hp {
+  height: 12px;
+  background: var(--exp-hp-bg);
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid var(--exp-border);
+}
+
+.expedition .exp-hp > span {
+  display: block;
+  height: 100%;
+  background: var(--exp-hp);
+  transition: width 0.25s ease;
+}
+
+.expedition .exp-hp.is-enemy > span {
+  background: var(--exp-danger);
+}
+
+.expedition .exp-intent {
+  margin-top: 0.5rem;
+  font-size: 0.9rem;
+  color: #fbbf24;
+}
+
+.expedition .exp-combatant {
+  border: 1px solid var(--exp-border);
+  border-radius: 8px;
+  padding: 0.65rem;
+  background: #09090b;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  width: 100%;
+}
+
+.expedition .exp-combatant.is-selected {
+  border-color: var(--exp-accent);
+}
+
+.expedition .exp-combatant.is-down {
+  opacity: 0.45;
+  filter: grayscale(0.8);
+}
+
+.expedition .exp-combatant.is-flash-dmg {
+  animation: exp-flash-dmg 0.35s ease;
+}
+
+.expedition .exp-combatant.is-flash-heal {
+  animation: exp-flash-heal 0.35s ease;
+}
+
+@keyframes exp-flash-dmg {
+  from { box-shadow: 0 0 0 2px var(--exp-danger); }
+  to { box-shadow: none; }
+}
+
+@keyframes exp-flash-heal {
+  from { box-shadow: 0 0 0 2px var(--exp-heal); }
+  to { box-shadow: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .expedition .exp-hp > span,
+  .expedition .exp-char-card,
+  .expedition .exp-combatant.is-flash-dmg,
+  .expedition .exp-combatant.is-flash-heal {
+    transition: none;
+    animation: none;
+  }
+}
+
+.expedition .exp-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.expedition .exp-action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.expedition .exp-action-row .who {
+  min-width: 7rem;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.expedition .exp-btn {
+  appearance: none;
+  border: 1px solid var(--exp-border);
+  background: #27272a;
+  color: var(--exp-text);
+  border-radius: 6px;
+  padding: 0.4rem 0.7rem;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.85rem;
+}
+
+.expedition .exp-btn:hover,
+.expedition .exp-btn:focus-visible {
+  border-color: var(--exp-accent);
+  outline: none;
+}
+
+.expedition .exp-btn.is-active {
+  background: color-mix(in srgb, var(--exp-accent) 35%, #27272a);
+  border-color: var(--exp-accent);
+}
+
+.expedition .exp-btn.is-primary {
+  background: var(--dkp-btn-bg, var(--exp-accent));
+  border-color: transparent;
+  color: #fff;
+  font-weight: 600;
+}
+
+.expedition .exp-btn.is-primary:hover {
+  background: var(--dkp-btn-hover, #6d28d9);
+}
+
+.expedition .exp-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.expedition .exp-log {
+  max-height: 140px;
+  overflow: auto;
+  font-size: 0.8rem;
+  color: var(--exp-muted);
+  font-family: ui-monospace, Consolas, monospace;
+  line-height: 1.4;
+}
+
+.expedition .exp-boon-grid {
+  display: grid;
+  gap: 0.75rem;
+}
+
+@media (min-width: 640px) {
+  .expedition .exp-boon-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+.expedition .exp-boon {
+  text-align: left;
+  background: #09090b;
+  border: 1px solid var(--exp-border);
+  border-radius: 8px;
+  padding: 0.85rem;
+  color: inherit;
+  cursor: pointer;
+}
+
+.expedition .exp-boon:hover,
+.expedition .exp-boon:focus-visible {
+  border-color: var(--exp-accent);
+  outline: none;
+}
+
+.expedition .exp-boon.is-risk {
+  border-color: #b45309;
+}
+
+.expedition .exp-disclaimer {
+  font-size: 0.8rem;
+  color: #fbbf24;
+  border: 1px dashed #b45309;
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+  margin: 0.75rem 0;
+}
+
+.expedition .exp-notice {
+  color: var(--exp-muted);
+  font-size: 0.9rem;
+  margin-bottom: 0.75rem;
+}
+
+.expedition .exp-landing-hero {
+  text-align: center;
+  padding: 2rem 1rem;
+  background:
+    radial-gradient(ellipse at top, color-mix(in srgb, var(--exp-accent) 25%, transparent), transparent 60%),
+    var(--exp-panel);
+  border: 1px solid var(--exp-border);
+  border-radius: 12px;
+  margin-bottom: 1.25rem;
+}
+
+.expedition .exp-status {
+  font-size: 0.75rem;
+  color: var(--exp-muted);
+}
+
+.expedition .sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  border: 0;
+}

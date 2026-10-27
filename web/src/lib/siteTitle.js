@@ -51,6 +51,7 @@ const PAGE_TITLES = {
   '/officer/SiteAdmin': 'Site Admin',
   '/officer/raider-activity': 'Raider Activity',
   '/tools/discord-schedule': 'Discord raid schedule',
+  '/games/expedition': 'Expedition',
 }
 
 function pageLabel(pathname) {

@@ -69,6 +69,7 @@ Defined in `web/src/App.jsx`.
 | `/profile` | `Profile` | Signed in |
 | `/items/:itemNameEncoded` | `ItemPage` | Signed in |
 | `/characters/:charKey` | `CharacterPage` | Signed in |
+| `/games/expedition` | `Expedition` (lazy) | Signed in. Client-only minigame (Quarm's Questionable Expedition). Cache-first account roster peek; at most two small Supabase reads when assembling a party; optional static Magelo combat profiles; zero network during combat. Scores in user-scoped localStorage (`/games/expedition:save:<accountId|unclaimed>`). No DKP/DB writes. |
 | `*` | Page not found | Public |
 
 **DKP Inquisitor (roast bot):** Lazy-loaded floating chat in `App.jsx` for signed-in users with a loaded `profile` (`web/src/components/RoastBot.jsx`). Hidden on `/login` and `/auth/*`. Rule-based only (no LLM APIs). Personalized facts use `profiles.account_id` plus existing reads: `fetchAccountDetail` / `account-detail-*` SWR, `useDkpData` (`account_dkp_summary`), `recent_item_sale_costs`, and static item/mob JSON. Upgrade suggestions lazy-load the public Magelo `class_rankings` export (`VITE_CLASS_RANKINGS_URL` or `/class_rankings.json`) and score via `mageloUpgradeEngine` against raid-loot item stats — never `account_class_coverage` (officer-only). Attendance jokes are account-level only. Conversations stay in memory (not written to Supabase). Engine: `web/src/lib/roastBot/` (150 authored templates A01–J15).
