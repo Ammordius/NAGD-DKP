@@ -679,6 +679,99 @@ def _csv_null(value: str) -> str | None:
     return None if value == "" else value
 
 
+def _as_of_from_tables(tables: dict[str, list[dict[str, str]]]) -> date:
+    raid_dates: list[date] = []
+    for row in tables.get("raids", []):
+        text = (row.get("date_iso") or "").strip()
+        if len(text) >= 10:
+            try:
+                raid_dates.append(date.fromisoformat(text[:10]))
+            except ValueError:
+                pass
+    return max(raid_dates) if raid_dates else date.today()
+
+
+def _earned_spent(row: dict[str, Any] | None) -> tuple[Decimal, Decimal]:
+    if not row:
+        return Decimal(0), Decimal(0)
+    return parse_decimal(row.get("earned")), parse_decimal(row.get("spent"))
+
+
+def _compare_summary_to_expected(
+    *,
+    summary_rows: list[dict[str, str]],
+    key_col: str,
+    expected: dict[str, dict[str, str]],
+) -> list[str]:
+    """Return mismatch strings: summary earned/spent vs independently reconstructed totals."""
+    summary = {r[key_col]: r for r in summary_rows if r.get(key_col)}
+    mismatches: list[str] = []
+    keys = set(expected) | set(summary)
+    for key in sorted(keys):
+        exp = expected.get(key)
+        got = summary.get(key)
+        if exp is None and got is not None:
+            ge, gs = _earned_spent(got)
+            if ge == 0 and gs == 0:
+                continue
+            mismatches.append(f"{key}: unexpected summary row")
+            continue
+        if got is None and exp is not None:
+            mismatches.append(f"{key}: missing summary row")
+            continue
+        if exp is None or got is None:
+            continue
+        ee, es = _earned_spent(exp)
+        ge, gs = _earned_spent(got)
+        if ee != ge:
+            mismatches.append(f"{key}: earned {exp['earned']}!={got.get('earned')}")
+        if es != gs:
+            mismatches.append(f"{key}: spent {exp['spent']}!={got.get('spent')}")
+    return mismatches
+
+
+def _delta_vs_reconstructed(
+    *,
+    deltas: list[dict[str, Any]],
+    old_expected: dict[str, dict[str, str]],
+    new_expected: dict[str, dict[str, str]],
+) -> list[str]:
+    """Reported row deltas must equal independently reconstructed new − old."""
+    by_key = {r["key"]: r for r in deltas if r.get("key")}
+    mismatches: list[str] = []
+    keys = set(by_key) | set(old_expected) | set(new_expected)
+    for key in sorted(keys):
+        old_e, old_s = _earned_spent(old_expected.get(key))
+        new_e, new_s = _earned_spent(new_expected.get(key))
+        exp_de = new_e - old_e
+        exp_ds = new_s - old_s
+        exp_db = (new_e - new_s) - (old_e - old_s)
+        if exp_de == 0 and exp_ds == 0 and exp_db == 0 and key not in by_key:
+            continue
+        row = by_key.get(key)
+        if row is None:
+            mismatches.append(f"{key}: missing reported delta")
+            continue
+        if parse_decimal(row["delta_earned"]) != exp_de:
+            mismatches.append(
+                f"{key}: delta_earned {row['delta_earned']}!={format_decimal(exp_de)}"
+            )
+        if parse_decimal(row["delta_spent"]) != exp_ds:
+            mismatches.append(
+                f"{key}: delta_spent {row['delta_spent']}!={format_decimal(exp_ds)}"
+            )
+        if parse_decimal(row["delta_balance"]) != exp_db:
+            mismatches.append(
+                f"{key}: delta_balance {row['delta_balance']}!={format_decimal(exp_db)}"
+            )
+        # Absolute totals in the report must match reconstruction (atomicity of endpoints).
+        if parse_decimal(row["old_earned"]) != old_e or parse_decimal(row["old_spent"]) != old_s:
+            mismatches.append(f"{key}: old totals != reconstructed")
+        if parse_decimal(row["new_earned"]) != new_e or parse_decimal(row["new_spent"]) != new_s:
+            mismatches.append(f"{key}: new totals != reconstructed")
+    return mismatches
+
+
 def validate_report(
     old_tables: dict[str, list[dict[str, str]]],
     new_tables: dict[str, list[dict[str, str]]],
@@ -687,6 +780,12 @@ def validate_report(
     old_manifest: dict,
     new_manifest: dict,
 ) -> ValidationResult:
+    """Validate snapshot integrity, clean DKP totals, and reported deltas vs reconstruction.
+
+    Independent reconstruction uses sql_restore.expected_account_totals /
+    expected_character_totals (attendance + loot; adjustments excluded). That is the
+    same arithmetic restore uses to prove destination account DKP is clean.
+    """
     result = ValidationResult(ok=True)
 
     for label, manifest, tables in (
@@ -738,60 +837,107 @@ def validate_report(
     check_deltas("character", character_deltas)
     check_deltas("account", account_deltas)
 
-    # Stronger check: rebuild expected account totals from after guild rows.
+    old_acct_exp: dict[str, dict[str, str]] = {}
+    new_acct_exp: dict[str, dict[str, str]] = {}
+    old_char_exp: dict[str, dict[str, str]] = {}
+    new_char_exp: dict[str, dict[str, str]] = {}
+
+    # Clean totals on both sides + reported deltas vs independent reconstruction.
     try:
-        blocks = csv_tables_to_blocks(new_tables)
-        as_of = date.today()
-        # Prefer newest raid date_iso when available.
-        raid_dates = []
-        for row in new_tables.get("raids", []):
-            text = (row.get("date_iso") or "").strip()
-            if text:
-                try:
-                    raid_dates.append(date.fromisoformat(text[:10]))
-                except ValueError:
-                    pass
-        if raid_dates:
-            as_of = max(raid_dates)
-        expected = sql_restore.expected_account_totals(blocks, as_of)
-        summary = {
-            r["account_id"]: r for r in new_tables.get("account_dkp_summary", []) if r.get("account_id")
-        }
-        mismatches = []
-        # Compare accounts present in either side with non-zero activity in expected or summary.
-        keys = set(expected) | set(summary)
-        for account_id in sorted(keys):
-            exp = expected.get(account_id)
-            got = summary.get(account_id)
-            if exp is None and got is not None:
-                if parse_decimal(got.get("earned")) == 0 and parse_decimal(got.get("spent")) == 0:
-                    continue
-                mismatches.append(f"{account_id}: unexpected summary row")
-                continue
-            if got is None and exp is not None:
-                mismatches.append(f"{account_id}: missing summary row")
-                continue
-            if exp is None or got is None:
-                continue
-            if parse_decimal(exp["earned"]) != parse_decimal(got.get("earned")):
-                mismatches.append(f"{account_id}: earned {exp['earned']}!={got.get('earned')}")
-            if parse_decimal(exp["spent"]) != parse_decimal(got.get("spent")):
-                mismatches.append(f"{account_id}: spent {exp['spent']}!={got.get('spent')}")
+        old_blocks = csv_tables_to_blocks(old_tables)
+        new_blocks = csv_tables_to_blocks(new_tables)
+        old_as_of = _as_of_from_tables(old_tables)
+        new_as_of = _as_of_from_tables(new_tables)
+        old_acct_exp = sql_restore.expected_account_totals(old_blocks, old_as_of)
+        new_acct_exp = sql_restore.expected_account_totals(new_blocks, new_as_of)
+        old_char_exp = sql_restore.expected_character_totals(old_blocks, old_as_of)
+        new_char_exp = sql_restore.expected_character_totals(new_blocks, new_as_of)
+
+        for side, tables, acct_exp, char_exp in (
+            ("before", old_tables, old_acct_exp, old_char_exp),
+            ("after", new_tables, new_acct_exp, new_char_exp),
+        ):
+            acct_mismatches = _compare_summary_to_expected(
+                summary_rows=tables.get("account_dkp_summary", []),
+                key_col="account_id",
+                expected=acct_exp,
+            )
+            result.add(
+                f"account_dkp_clean_{side}",
+                not acct_mismatches,
+                (
+                    f"{len(acct_mismatches)} mismatches (sql_restore.expected_account_totals)"
+                    if acct_mismatches
+                    else "matched sql_restore.expected_account_totals"
+                ),
+            )
+            char_mismatches = _compare_summary_to_expected(
+                summary_rows=tables.get("dkp_summary", []),
+                key_col="character_key",
+                expected=char_exp,
+            )
+            result.add(
+                f"character_dkp_clean_{side}",
+                not char_mismatches,
+                (
+                    f"{len(char_mismatches)} mismatches (sql_restore.expected_character_totals)"
+                    if char_mismatches
+                    else "matched sql_restore.expected_character_totals"
+                ),
+            )
+
+        # Keep legacy name as an alias of after-side account cleanliness for older readers.
+        after_acct = next(
+            (c for c in result.checks if c["name"] == "account_dkp_clean_after"),
+            None,
+        )
         result.add(
             "account_dkp_recomputed_from_guild_rows",
-            not mismatches,
+            bool(after_acct and after_acct["passed"]),
+            (after_acct or {}).get("detail", "missing after check"),
+        )
+
+        acct_delta_bad = _delta_vs_reconstructed(
+            deltas=account_deltas,
+            old_expected=old_acct_exp,
+            new_expected=new_acct_exp,
+        )
+        result.add(
+            "account_dkp_delta_matches_reconstructed",
+            not acct_delta_bad,
             (
-                f"{len(mismatches)} mismatches (using sql_restore.expected_account_totals)"
-                if mismatches
-                else "matched sql_restore.expected_account_totals"
+                f"{len(acct_delta_bad)} mismatches"
+                if acct_delta_bad
+                else "reported account deltas == reconstructed new − old"
             ),
         )
-    except Exception as exc:  # noqa: BLE001 — surface as failed check, do not invent pass
-        result.add(
-            "account_dkp_recomputed_from_guild_rows",
-            False,
-            f"check could not run: {type(exc).__name__}: {exc}",
+        char_delta_bad = _delta_vs_reconstructed(
+            deltas=character_deltas,
+            old_expected=old_char_exp,
+            new_expected=new_char_exp,
         )
+        result.add(
+            "character_dkp_delta_matches_reconstructed",
+            not char_delta_bad,
+            (
+                f"{len(char_delta_bad)} mismatches"
+                if char_delta_bad
+                else "reported character deltas == reconstructed new − old"
+            ),
+        )
+    except Exception as exc:  # noqa: BLE001 — surface as failed checks, do not invent pass
+        detail = f"check could not run: {type(exc).__name__}: {exc}"
+        for name in (
+            "account_dkp_clean_before",
+            "account_dkp_clean_after",
+            "character_dkp_clean_before",
+            "character_dkp_clean_after",
+            "account_dkp_recomputed_from_guild_rows",
+            "account_dkp_delta_matches_reconstructed",
+            "character_dkp_delta_matches_reconstructed",
+        ):
+            if not any(c["name"] == name for c in result.checks):
+                result.add(name, False, detail)
 
     return result
 

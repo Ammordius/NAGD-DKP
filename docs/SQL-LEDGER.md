@@ -36,6 +36,16 @@ The report is a **snapshot comparison**, not an officer audit trail. The mirror 
 
 Displayed website leaderboard totals that apply adjustments in the frontend may differ from these base balances. The report states which source was used and which validation checks ran or could not run.
 
+### Independent validation (atomicity)
+
+Every report runs checks that do **not** trust the summary tables alone:
+
+1. **Clean totals (before and after)** — rebuild account and character earned/spent from guild attendance + loot with the same `sql_restore.expected_account_totals` / `expected_character_totals` arithmetic restore uses, and require summary tables to match.
+2. **Reported deltas** — each character/account Δearned / Δspent / Δbalance must equal reconstructed(new) − reconstructed(old), including absolute old/new endpoints.
+3. **Internal identities** — `balance = earned − spent` and `Δbalance = Δearned − Δspent` on every reported row.
+
+Manual adjustments are listed separately and are intentionally outside these balances. A validation failure still writes the report artifact but exits non-zero (mirror does not replace Pages).
+
 ## Scheduled mirror flow
 
 Workflow: [`.github/workflows/db-sql-mirror.yml`](../.github/workflows/db-sql-mirror.yml).

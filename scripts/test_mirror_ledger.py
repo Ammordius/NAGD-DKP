@@ -165,14 +165,15 @@ def base_guild(*, with_raid: bool = True) -> dict[str, list[dict[str, str]]]:
 
 
 def fill_summaries(tables: dict[str, list[dict[str, str]]]) -> None:
-    """Populate account_dkp_summary from sql_restore.expected_account_totals; set character summaries simply."""
+    """Populate summary tables from sql_restore expected_*_totals (same as validation)."""
     blocks = diff.csv_tables_to_blocks(tables)
     as_of = date(2026, 10, 26)
-    expected = sql_restore.expected_account_totals(blocks, as_of)
+    expected_acct = sql_restore.expected_account_totals(blocks, as_of)
+    expected_char = sql_restore.expected_character_totals(blocks, as_of)
     acct_rows = []
     for account in tables["accounts"]:
         account_id = account["account_id"]
-        totals = expected.get(
+        totals = expected_acct.get(
             account_id,
             {"earned": "0", "spent": "0", "earned_30d": "0", "earned_60d": "0"},
         )
@@ -188,8 +189,7 @@ def fill_summaries(tables: dict[str, list[dict[str, str]]]) -> None:
                 "updated_at": "2026-10-26T00:00:00+00:00",
             }
         )
-    # Include expected-only accounts (none in our fixtures normally).
-    for account_id, totals in expected.items():
+    for account_id, totals in expected_acct.items():
         if any(r["account_id"] == account_id for r in acct_rows):
             continue
         acct_rows.append(
@@ -206,41 +206,33 @@ def fill_summaries(tables: dict[str, list[dict[str, str]]]) -> None:
         )
     tables["account_dkp_summary"] = acct_rows
 
-    # Character earned: one distinct-tic value per attendance row (fixture approximation).
-    by_raid_event: dict[tuple[str, str], list] = {}
-    for event in tables["raid_events"]:
-        by_raid_event.setdefault((event["raid_id"], event["event_id"]), []).append(event)
-    tic_dec = {
-        key: diff.tic_dkp_for_event_group(group) for key, group in by_raid_event.items()
-    }
-    earned: dict[str, object] = {}
-    names: dict[str, str] = {c["char_id"]: c["name"] for c in tables["characters"]}
-    for row in tables["raid_event_attendance"]:
-        key = row.get("char_id") or row.get("character_name") or ""
-        if not key:
-            continue
-        value = tic_dec.get((row["raid_id"], row["event_id"]), Decimal(0))
-        earned[key] = earned.get(key, Decimal(0)) + value
-        if row.get("character_name"):
-            names[key] = row["character_name"]
-    spent: dict[str, object] = {}
-    for loot in tables["raid_loot"]:
-        key = loot.get("char_id") or loot.get("character_name") or ""
-        if not key:
-            continue
-        spent[key] = spent.get(key, Decimal(0)) + diff.parse_decimal(loot.get("cost"))
-        if loot.get("character_name"):
-            names[key] = loot["character_name"]
+    names = {c["char_id"]: c["name"] for c in tables["characters"]}
     char_rows = []
-    for key in sorted(set(earned) | set(spent) | {c["char_id"] for c in tables["characters"]}):
-        e_val = earned.get(key, Decimal(0))
-        s_val = spent.get(key, Decimal(0))
+    seen: set[str] = set()
+    for key, totals in sorted(expected_char.items()):
+        seen.add(key)
         char_rows.append(
             {
                 "character_key": key,
-                "character_name": names.get(key, key),
-                "earned": diff.format_decimal(e_val),  # type: ignore[arg-type]
-                "spent": diff.format_decimal(s_val),  # type: ignore[arg-type]
+                "character_name": totals.get("character_name") or names.get(key, key),
+                "earned": totals["earned"],
+                "spent": totals["spent"],
+                "earned_30d": totals.get("earned_30d", "0"),
+                "earned_60d": totals.get("earned_60d", "0"),
+                "last_activity_date": "",
+                "updated_at": "2026-10-26T00:00:00+00:00",
+            }
+        )
+    for char in tables["characters"]:
+        key = char["char_id"]
+        if key in seen:
+            continue
+        char_rows.append(
+            {
+                "character_key": key,
+                "character_name": char.get("name", key),
+                "earned": "0",
+                "spent": "0",
                 "earned_30d": "0",
                 "earned_60d": "0",
                 "last_activity_date": "",
@@ -692,7 +684,7 @@ def test_incomplete_snapshot_refuses_publish() -> None:
         except diff.DiffError as exc:
             check("missing" in str(exc).lower() or "Incomplete" in str(exc), str(exc))
 
-        # Validation failure path: corrupt account summary so recomputation fails.
+        # Validation failure path: corrupt account summary so clean-totals check fails.
         write_snapshot(root / "new2", new, label="after", captured_at="2026-10-26T10:17:00Z")
         bad = clone(new)
         if bad["account_dkp_summary"]:
@@ -700,6 +692,9 @@ def test_incomplete_snapshot_refuses_publish() -> None:
         write_snapshot(root / "bad", bad, label="after", captured_at="2026-10-26T10:17:00Z")
         model = diff.compare_snapshots(root / "old", root / "bad")
         check(not model["validation"]["ok"], "expected validation failure")
+        names = {c["name"] for c in model["validation"]["checks"] if not c["passed"]}
+        check("account_dkp_clean_after" in names, names)
+        check("account_dkp_delta_matches_reconstructed" in names, names)
         site = root / "site"
         code = report.main(
             [
@@ -712,6 +707,17 @@ def test_incomplete_snapshot_refuses_publish() -> None:
             ]
         )
         check(code == 2, f"expected exit 2, got {code}")
+
+        # Character summary must also stay clean vs expected_character_totals.
+        bad_char = clone(new)
+        if bad_char["dkp_summary"]:
+            bad_char["dkp_summary"][0]["spent"] = "88888"
+        write_snapshot(root / "bad_char", bad_char, label="after", captured_at="2026-10-26T10:17:00Z")
+        model_char = diff.compare_snapshots(root / "old", root / "bad_char")
+        check(not model_char["validation"]["ok"], "expected character validation failure")
+        char_fail = {c["name"] for c in model_char["validation"]["checks"] if not c["passed"]}
+        check("character_dkp_clean_after" in char_fail, char_fail)
+        check("character_dkp_delta_matches_reconstructed" in char_fail, char_fail)
 
 
 def test_write_example_report_temp_only() -> None:
