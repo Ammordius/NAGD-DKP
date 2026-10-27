@@ -3,7 +3,10 @@ import assert from 'node:assert/strict'
 import {
   accountDetailSessionKey,
   accountDetailSwrKey,
+  CHAR_TO_ACCOUNT_SWR_KEY,
+  invalidateAccountActivityCaches,
   missingTicControlMatrix,
+  myAccountActivitySwrKey,
   needsMissingRaidUniverse,
 } from './accountDetailMissingScope.js'
 
@@ -67,5 +70,32 @@ describe('account detail missing-tic cache keys', () => {
     store.set(missingKey, { scope: 'missing' })
     assert.equal(store.get(accountDetailSessionKey(accountId, false)).scope, 'base')
     assert.equal(store.get(missingKey).scope, 'missing')
+  })
+})
+
+describe('invalidateAccountActivityCaches', () => {
+  it('clears both missing session variants and mutates related SWR keys', () => {
+    const accountId = 'acct-inv'
+    const removed = []
+    const mutated = []
+    const original = globalThis.sessionStorage
+    globalThis.sessionStorage = {
+      removeItem(key) { removed.push(key) },
+    }
+    try {
+      invalidateAccountActivityCaches(accountId, (key) => { mutated.push(key) })
+    } finally {
+      globalThis.sessionStorage = original
+    }
+    assert.deepEqual(removed.sort(), [
+      accountDetailSessionKey(accountId, false),
+      accountDetailSessionKey(accountId, true),
+    ].sort())
+    assert.deepEqual(mutated.sort(), [
+      accountDetailSwrKey(accountId, false),
+      accountDetailSwrKey(accountId, true),
+      myAccountActivitySwrKey(accountId),
+      CHAR_TO_ACCOUNT_SWR_KEY,
+    ].sort())
   })
 })

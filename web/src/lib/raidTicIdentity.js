@@ -154,10 +154,15 @@ function paidFullRaid(dkpEarned, dkpRaidTotal) {
   return dkpRaidTotal > 0 && Math.round(Number(dkpEarned) || 0) >= Math.round(Number(dkpRaidTotal) || 0)
 }
 
+function hasLootItems(act) {
+  return Array.isArray(act?.items) && act.items.length > 0
+}
+
 /**
  * Missing attendance is a positive-DKP tic whose event this account was not on.
- * Full attendance is not a miss. A raid paid in full with no matched tic row is
- * presence (raid-level credit), not a total absence.
+ * Observed tic counts come only from matched event attendance.
+ * Full DKP payment with no matched event rows is inferred credit, not verified
+ * full-tic attendance — do not silently rewrite ticEarned to ticTotal.
  */
 export function raidMissingTics(act) {
   const ticTotal = Math.max(0, Number(act?.ticTotal ?? 0) || 0)
@@ -165,12 +170,25 @@ export function raidMissingTics(act) {
   const dkpRaidTotal = Number(act?.dkpRaidTotal ?? 0) || 0
   let ticEarned = Math.max(0, Number(act?.ticEarned ?? 0) || 0)
   if (ticTotal > 0) ticEarned = Math.min(ticEarned, ticTotal)
+  const observedTicEarned = ticEarned
   let missingCount = ticTotal > 0
     ? ticTotal - ticEarned
     : (dkpRaidTotal > 0 ? Math.max(0, dkpRaidTotal - dkpEarned) : 0)
   let missingTics = ticTotal > 0 ? namedMissingTics(act) : []
-  if (ticTotal > 0 && ticEarned === 0 && missingCount === ticTotal && paidFullRaid(dkpEarned, dkpRaidTotal)) {
-    ticEarned = ticTotal
+  const inferredFullPayment = (
+    ticTotal > 0
+    && observedTicEarned === 0
+    && missingCount === ticTotal
+    && paidFullRaid(dkpEarned, dkpRaidTotal)
+  )
+  let attendanceSource = 'unknown'
+  if (ticTotal > 0 && observedTicEarned > 0) attendanceSource = 'observed'
+  else if (inferredFullPayment) attendanceSource = 'inferred-full-payment'
+  else if (ticTotal > 0 || dkpRaidTotal > 0) attendanceSource = 'observed'
+
+  // Full payment without event rows is raid-level credit, not a total absence.
+  // Keep observed ticEarned; clear the "missing all tics" flag for filters/UI.
+  if (inferredFullPayment) {
     missingCount = 0
     missingTics = []
   }
@@ -180,8 +198,10 @@ export function raidMissingTics(act) {
   return {
     dkpEarned,
     dkpRaidTotal,
-    ticEarned,
+    ticEarned: observedTicEarned,
+    observedTicEarned,
     ticTotal,
+    attendanceSource,
     hasTrackableAttendance,
     missingCount,
     missingTics,
@@ -191,7 +211,9 @@ export function raidMissingTics(act) {
 
 /** True when this account received credit on the raid, so a short tic count is a gap rather than a raid they never attended. */
 export function accountWasPresent(act) {
-  return Number(act?.ticEarned ?? 0) > 0 || Number(act?.dkpEarned ?? 0) > 0
+  return Number(act?.ticEarned ?? 0) > 0
+    || Number(act?.dkpEarned ?? 0) > 0
+    || act?.attendanceSource === 'inferred-full-payment'
 }
 
 /**
@@ -199,12 +221,15 @@ export function accountWasPresent(act) {
  * "Only missing" is raids this account attended and still missed at least one tic.
  * Raids they never attended stay in the full list (and can be highlighted there)
  * but are not the missing-tic list — that set is every other guild raid.
+ * Loot-only raids stay in normal history even without trackable attendance.
  */
 export function visibleMissingTicRows(rows, { showMissingDetails = false, onlyMissingRaids = false } = {}) {
-  const trackable = (rows || []).filter((act) => act.hasTrackableAttendance)
+  const historyRows = (rows || []).filter(
+    (act) => act.hasTrackableAttendance || hasLootItems(act),
+  )
   const detailScoped = showMissingDetails
-    ? trackable
-    : trackable.filter((act) => accountWasPresent(act))
+    ? historyRows
+    : historyRows.filter((act) => accountWasPresent(act) || hasLootItems(act))
   if (!onlyMissingRaids) return detailScoped
   return detailScoped.filter((act) => act.isMissingTics && accountWasPresent(act))
 }

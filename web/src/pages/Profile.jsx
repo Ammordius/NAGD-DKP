@@ -1,9 +1,8 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { Link, useSearchParams } from 'react-router-dom'
-import useSWR from 'swr'
+import useSWR, { useSWRConfig } from 'swr'
 import { supabase } from '../lib/supabase'
-import { loadAccountActivity } from '../lib/accountData'
 import { discordRaidNameRequired, normalizeUiPreferences } from '../lib/uiPreferences'
 import { useAmbianceTheme } from '../lib/useAmbianceTheme'
 import DkpSiteDisclaimer from '../components/DkpSiteDisclaimer'
@@ -14,7 +13,7 @@ import {
   getAccountDetailFromSession,
   setAccountDetailInSession,
 } from './AccountDetail'
-import { accountDetailSwrKey } from '../lib/accountDetailMissingScope'
+import { accountDetailSwrKey, invalidateAccountActivityCaches } from '../lib/accountDetailMissingScope'
 
 const MAGELO_BASE = 'https://www.takproject.net/magelo/character.php?char='
 const MIDDLE_DOT = '\u00B7'
@@ -129,12 +128,9 @@ export default function Profile({ profile, onProfileUpdate }) {
     [setSearchParams]
   )
   const [claimedAccount, setClaimedAccount] = useState(null)
-  const [characters, setCharacters] = useState([])
-  const [activityByRaid, setActivityByRaid] = useState([])
-  const [accountLoading, setAccountLoading] = useState(false)
   const [unclaimLoading, setUnclaimLoading] = useState(false)
   const [error, setError] = useState('')
-  const [refreshKey, setRefreshKey] = useState(0)
+  const { mutate: globalMutate } = useSWRConfig()
   const [addCharOpen, setAddCharOpen] = useState(false)
   const [addCharReveal, setAddCharReveal] = useState(0)
   const addCharSectionRef = useRef(null)
@@ -179,8 +175,6 @@ export default function Profile({ profile, onProfileUpdate }) {
   useEffect(() => {
     if (!profile?.account_id) {
       setClaimedAccount(null)
-      setCharacters([])
-      setActivityByRaid([])
       return
     }
     supabase.from('accounts').select('account_id, display_name, toon_names').eq('account_id', profile.account_id).single().then(({ data }) => {
@@ -188,24 +182,9 @@ export default function Profile({ profile, onProfileUpdate }) {
     })
   }, [profile?.account_id])
 
-  useEffect(() => {
-    if (!profile?.account_id) return
-    setAccountLoading(true)
-    setError('')
-    loadAccountActivity(profile.account_id).then((result) => {
-      setAccountLoading(false)
-      if (result.error) {
-        setError(result.error)
-        return
-      }
-      setError('')
-      setCharacters(result.characters || [])
-      setActivityByRaid(result.activityByRaid || [])
-    }).catch(() => {
-      setAccountLoading(false)
-      setError('Failed to load account activity')
-    })
-  }, [profile?.account_id, refreshKey])
+  const characters = activityDetail?.characters || []
+  const activityByRaid = activityDetail?.activityByRaid || []
+  const accountLoading = Boolean(profile?.account_id) && activityDetailLoading && !activityDetail
 
   useEffect(() => {
     if (!addCharReveal) return
@@ -269,8 +248,7 @@ export default function Profile({ profile, onProfileUpdate }) {
       return
     }
     setClaimedAccount(null)
-    setCharacters([])
-    setActivityByRaid([])
+    if (profile?.account_id) invalidateAccountActivityCaches(profile.account_id, globalMutate)
     onProfileUpdate?.()
   }
 
@@ -297,7 +275,7 @@ export default function Profile({ profile, onProfileUpdate }) {
     }
     setAddCharOpen(false)
     setAddCharInput('')
-    setRefreshKey((k) => k + 1)
+    invalidateAccountActivityCaches(profile.account_id, globalMutate)
   }
 
   return (

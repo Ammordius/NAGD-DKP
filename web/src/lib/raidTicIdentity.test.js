@@ -99,7 +99,7 @@ describe('missed attendance tics', () => {
     assert.equal(absent.ticEarned, 0)
   })
 
-  it('does not call a fully paid raid a total absence when tic rows did not match', () => {
+  it('does not convert full DKP payment into verified full tic attendance', () => {
     const paid = raidMissingTics({
       ticEarned: 0,
       ticTotal: 4,
@@ -108,9 +108,53 @@ describe('missed attendance tics', () => {
       missingTics: [{ eventOrder: 1, eventName: 'On-time' }],
     })
     assert.equal(paid.isMissingTics, false)
-    assert.equal(paid.ticEarned, 4)
+    assert.equal(paid.ticEarned, 0)
+    assert.equal(paid.observedTicEarned, 0)
+    assert.equal(paid.attendanceSource, 'inferred-full-payment')
     assert.equal(paid.missingCount, 0)
     assert.deepEqual(paid.missingTics, [])
+  })
+
+  it('keeps observed attendance distinct from inferred full-payment credit', () => {
+    const observed = raidMissingTics({
+      ticEarned: 4,
+      ticTotal: 4,
+      dkpEarned: 4,
+      dkpRaidTotal: 4,
+    })
+    assert.equal(observed.attendanceSource, 'observed')
+    assert.equal(observed.ticEarned, 4)
+    assert.equal(observed.isMissingTics, false)
+
+    const partialNoEvents = raidMissingTics({
+      ticEarned: 0,
+      ticTotal: 4,
+      dkpEarned: 2,
+      dkpRaidTotal: 4,
+      missingTics: [{ eventOrder: 1, eventName: 'On-time' }],
+    })
+    assert.equal(partialNoEvents.attendanceSource, 'observed')
+    assert.equal(partialNoEvents.ticEarned, 0)
+    assert.equal(partialNoEvents.isMissingTics, true)
+    assert.equal(partialNoEvents.missingCount, 4)
+  })
+
+  it('keeps loot-only raids in normal history', () => {
+    const lootOnly = {
+      raid_id: 'loot-only',
+      items: [{ item_name: 'Sword', cost: 10 }],
+      ...raidMissingTics({ ticEarned: 0, ticTotal: 0, dkpEarned: 0, dkpRaidTotal: 0 }),
+    }
+    const visible = visibleMissingTicRows([lootOnly], {
+      showMissingDetails: false,
+      onlyMissingRaids: false,
+    })
+    assert.deepEqual(visible.map((row) => row.raid_id), ['loot-only'])
+    const onlyMissing = visibleMissingTicRows([lootOnly], {
+      showMissingDetails: true,
+      onlyMissingRaids: true,
+    })
+    assert.equal(onlyMissing.length, 0)
   })
 
   it('only-missing lists partial tic gaps and not every raid the account never attended', () => {

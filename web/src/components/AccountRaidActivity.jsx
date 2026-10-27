@@ -222,6 +222,11 @@ export default function AccountRaidActivity({ rows, controls }) {
                       {showMissingDetails && act.ticTotal > 0 && (
                         <span style={{ marginLeft: '0.5rem' }}>
                           {MIDDLE_DOT} <strong>{act.ticEarned}/{act.ticTotal} tics</strong>
+                          {act.attendanceSource === 'inferred-full-payment' && (
+                            <span style={{ color: '#a1a1aa', fontWeight: 400 }}>
+                              {' '}(DKP credited; attendance events unmatched)
+                            </span>
+                          )}
                         </span>
                       )}
                       {showMissingDetails && act.isMissingTics && (

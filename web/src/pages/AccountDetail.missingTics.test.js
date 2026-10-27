@@ -34,11 +34,17 @@ describe('AccountDetail missing-tic behavior', () => {
     assert.match(activitySource, /className="activity-pager"/)
     assert.match(activitySource, /className="activity-page-summary-page"/)
     assert.match(source, /fetchChunkedIn\(supabase, 'raid_event_attendance'/)
+    assert.match(source, /account_id, char_id, character_name/)
+    assert.match(source, /filterAttendanceForAccount\(/)
+    assert.match(source, /invalidateAccountActivityCaches\(accountId, globalMutate\)/)
     assert.match(source, /fetchChunkedIn\(supabase, 'raid_events'/)
     assert.match(source, /ticFractionsByRaid\(/)
     assert.match(activitySource, /visibleMissingTicRows\(activityWithMissing/)
+    assert.match(activitySource, /inferred-full-payment/)
     assert.match(profileSource, /<AccountRaidActivity rows=\{activityDetail\?\.activityByRaid \|\| \[\]\} controls=\{activityControls\} \/>/)
     assert.match(profileSource, /fetchAccountDetail\(profile\.account_id, activityControls\.includeMissing\)/)
+    assert.match(profileSource, /invalidateAccountActivityCaches\(profile\.account_id, globalMutate\)/)
+    assert.doesNotMatch(profileSource, /loadAccountActivity\(/)
   })
 
   it('evaluates all four control combinations for fetch scope', () => {

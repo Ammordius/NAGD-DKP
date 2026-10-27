@@ -27,7 +27,12 @@ import { ticFractionsByRaid } from '../lib/raidTicIdentity'
 import {
   accountDetailSessionKey,
   accountDetailSwrKey,
+  invalidateAccountActivityCaches,
 } from '../lib/accountDetailMissingScope'
+import {
+  buildResolveAccountMaps,
+  filterAttendanceForAccount,
+} from '../lib/resolveDkpAccountId'
 
 const MAGELO_BASE = 'https://www.takproject.net/magelo/character.php?char='
 
@@ -122,7 +127,7 @@ export async function fetchAccountDetail(accountId, includeMissing = false) {
     { order: { column: 'id', ascending: true } },
   )
   if (lootRes.error) throw new Error(lootRes.error?.message || 'Failed to load loot')
-  const attendanceColumns = 'id, raid_id, event_id, char_id, character_name'
+  const attendanceColumns = 'id, raid_id, event_id, account_id, char_id, character_name'
   const [eventAttByIdRes, eventAttByNameRes, eventAttByAccountRes] = await Promise.all([
     fetchChunkedIn(supabase, 'raid_event_attendance', attendanceColumns, 'char_id', charIds, 'id'),
     fetchChunkedIn(supabase, 'raid_event_attendance', attendanceColumns, 'character_name', charNames, 'id'),
@@ -133,10 +138,27 @@ export async function fetchAccountDetail(accountId, includeMissing = false) {
   if (eventAttByAccountRes?.error) throw new Error(eventAttByAccountRes.error?.message || 'Failed to load event attendance')
   const eventAttByKey = {}
   ;[...(eventAttByIdRes.data || []), ...(eventAttByNameRes.data || []), ...(eventAttByAccountRes.data || [])].forEach((row) => {
-    const key = `${row?.raid_id || ''}|${row?.event_id || ''}|${row?.char_id || ''}|${row?.character_name || ''}`
+    const key = `${row?.raid_id || ''}|${row?.event_id || ''}|${row?.char_id || ''}|${row?.character_name || ''}|${row?.id ?? ''}`
     if (!eventAttByKey[key]) eventAttByKey[key] = row
   })
-  const eventAttResData = Object.values(eventAttByKey)
+  const candidateEventAtt = Object.values(eventAttByKey)
+  const extraCharIds = [...new Set(
+    candidateEventAtt.map((r) => String(r?.char_id ?? '').trim()).filter((id) => id && !charIds.includes(id)),
+  )]
+  let linkRows = (caRes.data || []).map((r) => ({ char_id: r.char_id, account_id: accountId }))
+  let linkChars = chars
+  if (extraCharIds.length > 0) {
+    const [extraLinksRes, extraCharsRes] = await Promise.all([
+      fetchChunkedIn(supabase, 'character_account', 'char_id, account_id', 'char_id', extraCharIds, 'char_id'),
+      fetchChunkedIn(supabase, 'characters', 'char_id, name', 'char_id', extraCharIds, 'char_id'),
+    ])
+    if (extraLinksRes?.error) throw new Error(extraLinksRes.error?.message || 'Failed to load character links')
+    if (extraCharsRes?.error) throw new Error(extraCharsRes.error?.message || 'Failed to load characters')
+    linkRows = [...linkRows, ...(extraLinksRes.data || [])]
+    linkChars = [...linkChars, ...(extraCharsRes.data || [])]
+  }
+  const resolveMaps = buildResolveAccountMaps(linkRows, linkChars)
+  const eventAttResData = filterAttendanceForAccount(candidateEventAtt, accountId, resolveMaps)
   const attDkp = !attDkpByAccountRes.error && attDkpByAccountRes.data?.length > 0
     ? attDkpByAccountRes.data.map((r) => ({ raid_id: r.raid_id, character_key: r.account_id, dkp_earned: r.dkp_earned }))
     : (attDkpRes?.error ? [] : (attDkpRes?.data || []))
@@ -430,7 +452,7 @@ export default function AccountDetail({ isOfficer, profile, session, onProfileUp
     }
     setAddCharOpen(false)
     setAddCharInput('')
-    mutate()
+    invalidateAccountActivityCaches(accountId, globalMutate)
   }
 
   async function handleSetDisplayName() {
