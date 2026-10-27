@@ -14,7 +14,16 @@ export default defineConfig({
       enforce: 'pre',
       resolveId(source) {
         const normalized = source.replaceAll('\\', '/')
-        if (normalized === '../lib/supabase' || normalized.endsWith('/lib/supabase') || normalized.endsWith('/lib/supabase.js')) {
+        // Match relative imports used across pages (`../lib/supabase`) and libs (`./supabase`).
+        if (
+          normalized === '../lib/supabase' ||
+          normalized === './supabase' ||
+          normalized === './supabase.js' ||
+          normalized.endsWith('/lib/supabase') ||
+          normalized.endsWith('/lib/supabase.js') ||
+          normalized.endsWith('/supabase.js') ||
+          /(^|\/)supabase$/.test(normalized)
+        ) {
           return path.join(rootDir, 'e2e/harness/supabaseMock.js')
         }
         return null

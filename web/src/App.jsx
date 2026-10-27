@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, lazy, Suspense } from 'react'
 import { Routes, Route, Navigate, Link, useLocation, useNavigate } from 'react-router-dom'
 import { Analytics } from '@vercel/analytics/react'
 import { nextAuthGate } from './lib/authGate'
@@ -30,6 +30,8 @@ import OfficerRaiderActivity from './pages/OfficerRaiderActivity'
 import DiscordSchedule from './pages/DiscordSchedule'
 import Profile from './pages/Profile'
 import AuthCallback from './pages/AuthCallback'
+
+const RoastBot = lazy(() => import('./components/RoastBot.jsx'))
 
 function RequireAuth({ session, children }) {
   if (!session) {
@@ -293,6 +295,11 @@ export default function App() {
         <Route path="/characters/:charKey" element={<RequireAuth session={session}><CharacterPage /></RequireAuth>} />
         <Route path="*" element={<NotFound />} />
       </Routes>
+      {session && profile ? (
+        <Suspense fallback={null}>
+          <RoastBot profile={profile} session={session} />
+        </Suspense>
+      ) : null}
       <Analytics />
     </SiteChrome>
     </RouteScrollProvider>
