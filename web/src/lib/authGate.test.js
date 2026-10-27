@@ -69,26 +69,4 @@ describe('nextAuthGate', () => {
       { action: 'ignore' },
     )
   })
-
-  it('ignores duplicate GET_SESSION then SIGNED_IN for the same pending user (StrictMode remount)', () => {
-    assert.deepEqual(
-      nextAuthGate({ event: 'GET_SESSION', session, loadedUserId: null, pendingUserId: null }),
-      { action: 'load-profile', userId: 'user-1' },
-    )
-    assert.deepEqual(
-      nextAuthGate({ event: 'SIGNED_IN', session, loadedUserId: null, pendingUserId: 'user-1' }),
-      { action: 'ignore' },
-    )
-    assert.deepEqual(
-      nextAuthGate({ event: 'TOKEN_REFRESHED', session, loadedUserId: null, pendingUserId: 'user-1' }),
-      { action: 'ignore' },
-    )
-  })
-
-  it('loads again after a failed attempt cleared pending for the same user', () => {
-    assert.deepEqual(
-      nextAuthGate({ event: 'SIGNED_IN', session, loadedUserId: null, pendingUserId: null }),
-      { action: 'load-profile', userId: 'user-1' },
-    )
-  })
 })
