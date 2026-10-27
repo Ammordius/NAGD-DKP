@@ -15,19 +15,18 @@ import AccountBiddingPortfolioCard from '../components/AccountBiddingPortfolioCa
 import DkpSiteDisclaimer from '../components/DkpSiteDisclaimer'
 import ItemLink from '../components/ItemLink'
 import AccountLootHistoryTab from '../components/AccountLootHistoryTab'
+import AccountRaidActivity, { useAccountActivityControls } from '../components/AccountRaidActivity'
 import { getDkpMobLoot } from '../lib/staticData'
 import { formatAccountCharacter, formatCharacterClassSpentLine } from '../lib/formatAccountCharacter'
 import { ACCOUNTS_LIST_CACHE_KEY } from '../lib/cache'
-import { usePersistedState } from '../lib/usePersistedState'
 import { useScrollContentReady } from '../lib/routeScrollView'
 import { fetchLootForAccountChars } from '../lib/accountData'
 import { aggregateLootSpent, sumCharacterSpent } from '../lib/characterSpent'
 import { fetchChunkedIn } from '../lib/fetchChunkedIn'
-import { raidMissingTics, ticFractionsByRaid, visibleMissingTicRows } from '../lib/raidTicIdentity'
+import { ticFractionsByRaid } from '../lib/raidTicIdentity'
 import {
   accountDetailSessionKey,
   accountDetailSwrKey,
-  needsMissingRaidUniverse,
 } from '../lib/accountDetailMissingScope'
 
 const MAGELO_BASE = 'https://www.takproject.net/magelo/character.php?char='
@@ -55,9 +54,6 @@ function buildItemIdMap(mobLoot) {
 const MIDDLE_DOT = '\u00B7'
 
 const PAGE = 1000
-const ACTIVITY_PAGE_SIZE = 50
-/** Only paginate activity when raid count exceeds this (e.g. 1611 raids). */
-const ACTIVITY_PAGINATION_THRESHOLD = 100
 async function fetchAll(table, select = '*', filter, opts) {
   const all = []
   let from = 0
@@ -78,7 +74,7 @@ async function fetchAll(table, select = '*', filter, opts) {
 /** SWR deduplication: 60s so revisiting the same account shows cached data without full reload. */
 const ACCOUNT_DEDUPING_INTERVAL_MS = 60_000
 
-function getAccountDetailFromSession(accountId, includeMissing = false) {
+export function getAccountDetailFromSession(accountId, includeMissing = false) {
   const key = accountDetailSessionKey(accountId, includeMissing)
   if (!key) return undefined
   try {
@@ -89,7 +85,7 @@ function getAccountDetailFromSession(accountId, includeMissing = false) {
   }
 }
 
-function setAccountDetailInSession(accountId, data, includeMissing = false) {
+export function setAccountDetailInSession(accountId, data, includeMissing = false) {
   const key = accountDetailSessionKey(accountId, includeMissing)
   if (!key || !data) return
   try {
@@ -97,7 +93,7 @@ function setAccountDetailInSession(accountId, data, includeMissing = false) {
   } catch (_) { /* ignore */ }
 }
 
-async function fetchAccountDetail(accountId, includeMissing = false) {
+export async function fetchAccountDetail(accountId, includeMissing = false) {
   const accRes = await supabase.from('accounts').select('account_id, toon_names, display_name, toon_count').eq('account_id', accountId).single()
   if (accRes.error || !accRes.data) throw new Error(accRes.error?.message || 'Account not found')
   const caRes = await supabase.from('character_account').select('char_id').eq('account_id', accountId)
@@ -233,6 +229,7 @@ async function fetchAccountDetail(accountId, includeMissing = false) {
       dkpRaidTotal: accountEventRaidIds.has(raidKey) && fraction ? fraction.totalDkp : storedTotal,
       ticEarned: fraction ? fraction.ticEarned : 0,
       ticTotal: fraction ? fraction.ticTotal : 0,
+      missingTics: fraction?.missingTics || [],
       items: lootByRaid[raidKey] || [],
     }
   }).sort((a, b) => (b.date || '').localeCompare(a.date || ''))
@@ -292,16 +289,8 @@ export default function AccountDetail({ isOfficer, profile, session, onProfileUp
   )
   const { getAccountDisplayName } = useCharToAccountMap()
   const { mutate: globalMutate } = useSWRConfig()
-  const [onlyMissingRaids, setOnlyMissingRaids] = usePersistedState(
-    accountId ? `/accounts/detail:${accountId}:onlyMissingRaids` : '/accounts/detail:none:onlyMissingRaids',
-    false
-  )
-  const [showMissingDetails, setShowMissingDetails] = usePersistedState(
-    accountId ? `/accounts/detail:${accountId}:showMissingDetails` : '/accounts/detail:none:showMissingDetails',
-    false
-  )
-  // Either control needs the positive-DKP raid universe (missing absences / tic details).
-  const includeMissing = needsMissingRaidUniverse(showMissingDetails, onlyMissingRaids)
+  const activityControls = useAccountActivityControls(accountId)
+  const { includeMissing } = activityControls
   const cacheKey = accountDetailSwrKey(accountId, includeMissing)
   const fallbackData = cacheKey ? getAccountDetailFromSession(accountId, includeMissing) : undefined
   const { data: swrData, error: swrError, isLoading, mutate } = useSWR(
@@ -319,16 +308,11 @@ export default function AccountDetail({ isOfficer, profile, session, onProfileUp
   )
   const account = swrData?.account ?? null
   const characters = swrData?.characters ?? []
-  const raids = swrData?.raids ?? {}
   const activityByRaid = swrData?.activityByRaid ?? []
   const dkpByCharacterKey = swrData?.dkpByCharacterKey ?? { earned: {}, spent: {} }
   const loading = isLoading && !swrData
   useScrollContentReady(!loading)
   const error = swrError?.message ?? ''
-  const [activityPage, setActivityPage] = usePersistedState(
-    accountId ? `/accounts/detail:${accountId}:activityPage` : '/accounts/detail:none:activityPage',
-    1
-  )
   const [addCharOpen, setAddCharOpen] = useState(false)
   const [addCharInput, setAddCharInput] = useState('')
   const [addCharError, setAddCharError] = useState('')
@@ -571,16 +555,6 @@ export default function AccountDetail({ isOfficer, profile, session, onProfileUp
     })
   }
 
-  const activityWithMissing = useMemo(
-    () => activityByRaid.map((act) => ({ ...act, ...raidMissingTics(act) })),
-    [activityByRaid],
-  )
-
-  const visibleActivityRows = useMemo(
-    () => visibleMissingTicRows(activityWithMissing, { showMissingDetails, onlyMissingRaids }),
-    [activityWithMissing, onlyMissingRaids, showMissingDetails],
-  )
-
   const allDisplayNameChoices = useMemo(() => linkedCharacterOptions(characters), [characters])
   const displayNameChoices = useMemo(
     () => linkedCharacterOptions(characters, displayNameQuery),
@@ -635,14 +609,14 @@ export default function AccountDetail({ isOfficer, profile, session, onProfileUp
                         You can claim again after {cooldownUntil.toLocaleString()}. An officer can remove this cooldown.
                       </span>
                     ) : (
-                      <>
-                        <button type="button" className="btn btn-ghost" style={{ fontSize: '0.875rem' }} onClick={handleClaimAccount} disabled={claimLoading}>
+                      <span className="claim-account-box">
+                        <button type="button" className="claim-account-link" onClick={handleClaimAccount} disabled={claimLoading}>
                           {claimLoading ? 'Claiming...' : 'Claim this account'}
                         </button>
                         {claimError && (
-                          <span className="error" style={{ marginLeft: '0.5rem', fontSize: '0.875rem' }}>{claimError}</span>
+                          <span className="error" style={{ fontSize: '0.875rem' }}>{claimError}</span>
                         )}
-                      </>
+                      </span>
                     )}
                   </span>
                 )
@@ -944,166 +918,7 @@ export default function AccountDetail({ isOfficer, profile, session, onProfileUp
       )}
 
       {tab === 'activity' && (
-        <div className="card">
-          <h2 style={{ marginTop: 0 }}>Activity (earned DKP and items by raid)</h2>
-          <p style={{ color: '#a1a1aa', fontSize: '0.875rem', marginBottom: '0.75rem' }}>Reverse chronological. Each raid shows DKP earned and items won by the characters on this account.</p>
-          <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
-            <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem', color: '#d4d4d8' }}>
-              <input
-                type="checkbox"
-                checked={showMissingDetails}
-                onChange={(e) => setShowMissingDetails(e.target.checked)}
-              />
-              Show missing tic details
-            </label>
-            <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem', color: '#d4d4d8' }}>
-              <input
-                type="checkbox"
-                checked={onlyMissingRaids}
-                onChange={(e) => {
-                  const checked = e.target.checked
-                  setOnlyMissingRaids(checked)
-                  if (checked) setShowMissingDetails(true)
-                  setActivityPage(1)
-                }}
-              />
-              Only show raids with missing tics
-            </label>
-          </div>
-          {visibleActivityRows.length === 0 ? (
-            <p style={{ color: '#71717a' }}>
-              {onlyMissingRaids ? 'No raids with missing attendance tics.' : 'No raid activity recorded.'}
-            </p>
-          ) : (
-            <>
-              {(() => {
-                const total = visibleActivityRows.length
-                const usePagination = total > ACTIVITY_PAGINATION_THRESHOLD
-                const totalPages = usePagination ? Math.max(1, Math.ceil(total / ACTIVITY_PAGE_SIZE)) : 1
-                const page = Math.min(Math.max(1, activityPage), totalPages)
-                const start = usePagination ? (page - 1) * ACTIVITY_PAGE_SIZE : 0
-                const activityToShow = usePagination ? visibleActivityRows.slice(start, start + ACTIVITY_PAGE_SIZE) : visibleActivityRows
-                return (
-                  <>
-                    {usePagination && (
-                      <>
-                        <p style={{ color: '#a1a1aa', fontSize: '0.875rem', marginBottom: '0.75rem' }}>
-                          Showing {start + 1}–{start + activityToShow.length} of {total} raids
-                          {totalPages > 1 && (
-                            <span style={{ marginLeft: '0.5rem' }}>
-                              {MIDDLE_DOT} Page {page} of {totalPages}
-                            </span>
-                          )}
-                        </p>
-                        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap' }}>
-                          {totalPages > 10 && (
-                            <button
-                              type="button"
-                              className="btn btn-ghost"
-                              disabled={page <= 1}
-                              onClick={() => setActivityPage(1)}
-                            >
-                              First
-                            </button>
-                          )}
-                          <button
-                            type="button"
-                            className="btn btn-ghost"
-                            disabled={page <= 1}
-                            onClick={() => setActivityPage((p) => Math.max(1, p - 1))}
-                          >
-                            Previous
-                          </button>
-                          {totalPages <= 10 && (
-                            Array.from({ length: totalPages }, (_, i) => i + 1).map((n) => (
-                              <button
-                                key={n}
-                                type="button"
-                                className={n === page ? 'btn' : 'btn btn-ghost'}
-                                style={{ minWidth: '2.25rem', padding: '0.25rem 0.5rem' }}
-                                onClick={() => setActivityPage(n)}
-                              >
-                                {n}
-                              </button>
-                            ))
-                          )}
-                          <button
-                            type="button"
-                            className="btn btn-ghost"
-                            disabled={page >= totalPages}
-                            onClick={() => setActivityPage((p) => Math.min(totalPages, p + 1))}
-                          >
-                            Next
-                          </button>
-                          {totalPages > 10 && (
-                            <button
-                              type="button"
-                              className="btn btn-ghost"
-                              disabled={page >= totalPages}
-                              onClick={() => setActivityPage(totalPages)}
-                            >
-                              Last
-                            </button>
-                          )}
-                        </div>
-                      </>
-                    )}
-                    <ul style={{ listStyle: 'none', paddingLeft: 0, margin: 0 }}>
-                      {activityToShow.map((act) => (
-                        <li
-                          key={act.raid_id}
-                          style={{
-                            marginBottom: '1.5rem',
-                            paddingBottom: '1rem',
-                            borderBottom: '1px solid #27272a',
-                            borderLeft: showMissingDetails && act.isMissingTics ? '3px solid #f97316' : '3px solid transparent',
-                            paddingLeft: showMissingDetails && act.isMissingTics ? '0.5rem' : 0,
-                          }}
-                        >
-                          <p style={{ margin: '0 0 0.25rem 0' }}>
-                            <Link to={`/raids/${act.raid_id}`}><strong>{act.raid_name}</strong></Link>
-                            {act.date && <span style={{ color: '#71717a', marginLeft: '0.5rem' }}>{act.date}</span>}
-                            <span style={{ marginLeft: '0.5rem' }}>{MIDDLE_DOT} <strong>Earned: {Number(act.dkpEarned ?? 0).toFixed(0)}{act.dkpRaidTotal != null && act.dkpRaidTotal > 0 ? ` / ${Number(act.dkpRaidTotal).toFixed(0)}` : ''}</strong> DKP</span>
-                            {showMissingDetails && act.ticTotal > 0 && (
-                              <span style={{ marginLeft: '0.5rem' }}>
-                                {MIDDLE_DOT} <strong>{act.ticEarned}/{act.ticTotal} tics</strong>
-                              </span>
-                            )}
-                            {showMissingDetails && act.isMissingTics && (
-                              <span style={{ marginLeft: '0.5rem', color: '#f97316' }}>
-                                {MIDDLE_DOT} Missing {act.missingCount} tic{act.missingCount === 1 ? '' : 's'}
-                              </span>
-                            )}
-                          </p>
-                          {act.items.length > 0 && (
-                            <ul style={{ margin: '0.25rem 0 0 1.25rem', paddingLeft: 0, listStyle: 'none' }}>
-                              {act.items.map((row, i) => {
-                                const hasAssignment = (row.assigned_character_name || row.assigned_char_id || '').trim()
-                                const charName = hasAssignment ? (row.assigned_character_name || row.assigned_char_id) : 'Unassigned'
-                                return (
-                                  <li key={i} style={{ marginBottom: '0.25rem', fontSize: '0.9rem' }}>
-                                    <ItemLink itemName={row.item_name || ''} itemId={itemIdMap[(row.item_name || '').trim().toLowerCase()]}>{row.item_name || '—'}</ItemLink>
-                                    {' '}{MIDDLE_DOT}{' '}
-                                    {hasAssignment ? (
-                                      <Link to={`/characters/${encodeURIComponent(charName)}`}>{charName}</Link>
-                                    ) : (
-                                      <span style={{ color: '#71717a' }}>{charName}</span>
-                                    )}
-                                    {row.cost != null && row.cost !== '' && <> {MIDDLE_DOT} {row.cost} DKP</>}
-                                  </li>
-                                )
-                              })}
-                            </ul>
-                          )}
-                        </li>
-                      ))}
-                    </ul>
-                  </>
-                )
-              })()}
-            </>
-          )}
-        </div>
+        <AccountRaidActivity rows={activityByRaid} controls={activityControls} />
       )}
 
       {isOfficer && accountId && <AccountBiddingPortfolioCard accountId={accountId} />}

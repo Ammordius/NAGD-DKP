@@ -213,6 +213,119 @@ html[data-ambiance-theme]:not([data-ambiance-theme="default"]) tr:hover {
 .btn-discord:hover { background: #4752c4; }
 .btn-ghost { background: transparent; color: var(--dkp-accent-secondary); }
 .btn-ghost:hover { background: #27272a; color: var(--dkp-accent-secondary); }
+.activity-tic-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+  width: 100%;
+}
+.activity-tic-option {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  width: 100%;
+  margin: 0;
+  padding: 0.2rem 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: #e4e4e7;
+  font-size: 1rem;
+  font-weight: 400;
+  line-height: 1.4;
+  cursor: pointer;
+}
+.activity-tic-option input[type="checkbox"] {
+  width: 1.25rem;
+  height: 1.25rem;
+  max-width: none;
+  margin: 0;
+  flex: 0 0 auto;
+  accent-color: #f97316;
+  cursor: pointer;
+}
+.activity-show-which {
+  margin-left: 0.55rem;
+  padding: 0.15rem 0.5rem;
+  border: 1px solid #f97316;
+  border-radius: 4px;
+  background: transparent;
+  color: #fdba74;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.activity-show-which:hover { background: #3f3f46; }
+.activity-missing-tic-list {
+  margin: 0.35rem 0 0 1.25rem;
+  padding: 0;
+  color: #fdba74;
+  font-size: 0.9rem;
+}
+.activity-page-summary {
+  color: #e4e4e7;
+  font-size: 1.15rem;
+  margin: 0 0 0.75rem;
+}
+.activity-page-summary-page {
+  margin-left: 0.5rem;
+  font-weight: 700;
+}
+.activity-pager {
+  width: auto;
+  border: none;
+  border-collapse: collapse;
+  margin-bottom: 1rem;
+}
+.activity-pager td {
+  border: none;
+  border-bottom: none;
+  padding: 0.15rem 0.45rem 0.15rem 0;
+  background: transparent;
+  vertical-align: middle;
+}
+.activity-pager .btn { white-space: nowrap; }
+.activity-pager-pages {
+  display: flex;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.activity-pager-pages .btn {
+  min-width: 2.25rem;
+  padding: 0.25rem 0.5rem;
+}
+.claim-account-link {
+  display: inline;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  color: #22c55e;
+  font-weight: 700;
+  font-size: 0.95rem;
+  cursor: pointer;
+  text-align: left;
+}
+.claim-account-link:hover { text-decoration: underline; }
+.claim-account-link:disabled { opacity: 0.65; cursor: wait; }
+.accounts-claim-link {
+  display: block;
+  margin-top: 0.35rem;
+  font-size: 0.875rem;
+}
+.claim-account-box {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-left: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #22c55e;
+  border-radius: 6px;
+  background: color-mix(in srgb, #22c55e 14%, #18181b);
+  vertical-align: middle;
+}
 input { padding: 0.5rem 0.75rem; border: 1px solid var(--dkp-border); border-radius: 6px; background: var(--dkp-card-bg); color: #e4e4e7; width: 100%; max-width: 280px; }
 label { display: block; margin-bottom: 0.25rem; font-size: 0.875rem; color: #a1a1aa; }
 .form-group { margin-bottom: 1rem; }

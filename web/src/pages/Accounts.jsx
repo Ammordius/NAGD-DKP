@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { ACCOUNTS_LIST_CACHE_KEY, createCache } from '../lib/cache'
 import { fetchActiveRoster } from '../lib/activeRoster'
@@ -36,12 +36,19 @@ function loadSummaryRows(table, columns, orderColumn) {
   )
 }
 
-export default function Accounts({ profile }) {
+export default function Accounts({ profile, onProfileUpdate }) {
   const [accounts, setAccounts] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [search, setSearch] = usePersistedState('/accounts:search', '')
   const [showInactive, setShowInactive] = usePersistedState('/accounts:showInactive', false, showInactiveFlag)
+  const [claimingId, setClaimingId] = useState('')
+  const [claimError, setClaimError] = useState({ id: '', message: '' })
+  const [justClaimedId, setJustClaimedId] = useState('')
+  const claimedOverrideRef = useRef(null)
+  const myAccountId = String(profile?.account_id || justClaimedId || '').trim()
+  const cooldownUntil = profile?.unclaim_cooldown_until ? new Date(profile.unclaim_cooldown_until) : null
+  const onClaimCooldown = Boolean(!myAccountId && cooldownUntil && cooldownUntil > new Date())
   useScrollContentReady(!loading)
 
   useEffect(() => {
@@ -159,9 +166,15 @@ export default function Accounts({ profile }) {
         }
       })
       accList.sort(compareAccountsByName)
-      setAccounts(accList)
+      const claimed = claimedOverrideRef.current
+      const nextList = claimed
+        ? accList.map((acc) => (
+          String(acc.account_id) === claimed.id ? { ...acc, claimed_by: claimed.label } : acc
+        ))
+        : accList
+      setAccounts(nextList)
       setLoading(false)
-      cache.set(accList)
+      cache.set(nextList)
     }).catch((err) => {
       setError(err.message || 'Failed to load accounts')
       setLoading(false)
@@ -180,6 +193,30 @@ export default function Accounts({ profile }) {
     })
   }, [accounts, search, showInactive])
 
+  async function handleClaimAccount(accountId) {
+    const id = String(accountId || '').trim()
+    if (!id || claimingId) return
+    setClaimingId(id)
+    setClaimError({ id: '', message: '' })
+    const { error: rpcErr } = await supabase.rpc('claim_account', { p_account_id: id })
+    setClaimingId('')
+    if (rpcErr) {
+      setClaimError({ id, message: rpcErr.message })
+      return
+    }
+    const label = String(profile?.display_name || '').trim() || '—'
+    claimedOverrideRef.current = { id, label }
+    setJustClaimedId(id)
+    setAccounts((prev) => {
+      const next = prev.map((acc) => (
+        String(acc.account_id) === id ? { ...acc, claimed_by: label } : acc
+      ))
+      createCache(ACCOUNTS_LIST_CACHE_KEY, CACHE_TTL).set(next)
+      return next
+    })
+    onProfileUpdate?.()
+  }
+
   if (loading) return <div className="container">Loading accounts…</div>
   if (error) return <div className="container"><span className="error">{error}</span></div>
 
@@ -189,7 +226,7 @@ export default function Accounts({ profile }) {
       <DkpSiteDisclaimer />
       <MyDkpStandings accountId={profile?.account_id} />
       <p style={{ color: '#71717a', marginBottom: '1rem' }}>
-        All accounts with full character lists. Type a name to find who it is. Inactive accounts stay hidden until you show them on this page. That choice is only this list. Open an account to claim it.
+        All accounts with full character lists. Type a name to find who it is. Inactive accounts stay hidden until you show them on this page. That choice is only this list. Claim an unclaimed account from this list, or open the account and claim it there.
       </p>
       <div style={{ marginBottom: '1rem', display: 'flex', flexWrap: 'wrap', gap: '0.75rem', alignItems: 'center' }}>
         <input
@@ -223,10 +260,15 @@ export default function Accounts({ profile }) {
           </span>
         )}
       </div>
+      {onClaimCooldown && (
+        <p style={{ color: '#f59e0b', fontSize: '0.875rem', marginTop: 0 }}>
+          You can claim again after {cooldownUntil.toLocaleString()}. An officer can remove this cooldown.
+        </p>
+      )}
       <div className="card">
         <table style={{ tableLayout: 'fixed', width: '100%' }}>
           <colgroup>
-            <col style={{ width: '10rem' }} />
+            <col style={{ width: '13rem' }} />
             <col style={{ width: '14rem' }} />
             <col style={{ width: '9rem' }} />
             <col />
@@ -245,7 +287,22 @@ export default function Accounts({ profile }) {
               return (
                 <tr key={acc.account_id} data-scroll-anchor={acc.account_id}>
                   <td style={{ verticalAlign: 'top', color: acc.claimed_by === 'unclaimed' ? '#71717a' : undefined }}>
-                    {acc.claimed_by}
+                    <div>{acc.claimed_by}</div>
+                    {acc.claimed_by === 'unclaimed' && !myAccountId && !onClaimCooldown && (
+                      <>
+                        <button
+                          type="button"
+                          className="claim-account-link accounts-claim-link"
+                          onClick={() => handleClaimAccount(acc.account_id)}
+                          disabled={Boolean(claimingId)}
+                        >
+                          {claimingId === String(acc.account_id) ? 'Claiming...' : 'Claim this account'}
+                        </button>
+                        {claimError.id === String(acc.account_id) && claimError.message && (
+                          <div className="error">{claimError.message}</div>
+                        )}
+                      </>
+                    )}
                   </td>
                   <td style={{ verticalAlign: 'top', whiteSpace: 'nowrap' }}>
                     <Link to={`/accounts/${acc.account_id}`}>

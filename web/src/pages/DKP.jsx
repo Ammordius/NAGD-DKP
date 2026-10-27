@@ -95,6 +95,20 @@ export default function DKP({ isOfficer, profile }) {
     <div className="container">
       <h1>DKP Leaderboard</h1>
       <DkpSiteDisclaimer />
+      {profile?.account_id && (
+        <p style={{ marginBottom: '0.5rem' }}>
+          You have claimed account{' '}
+          <Link to={`/accounts/${profile.account_id}`}>
+            {(() => {
+              const row = (apiData?.accounts || []).find((acc) => String(acc.account_id) === String(profile.account_id))
+              return row?.display_name?.trim()
+                || String(row?.toon_names || '').split(',')[0]?.trim()
+                || profile.account_id
+            })()}
+          </Link>
+          {' '}(<code>{profile.account_id}</code>).
+        </p>
+      )}
       <MyDkpStandingsView {...myDkp} />
       <p style={{ color: '#71717a' }}>
         One row per account (one human). Earned, spent, and balance are the account totals. Adjustments are included.

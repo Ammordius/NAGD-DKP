@@ -15,6 +15,17 @@ function ticDkp(row) {
   return Number.isFinite(n) ? n : 0
 }
 
+function ticEventOrder(row) {
+  const raw = row?.event_order ?? row?.eventOrder
+  if (raw == null || raw === '') return null
+  const n = Number(raw)
+  return Number.isFinite(n) ? n : null
+}
+
+function ticEventName(row) {
+  return String(row?.event_name ?? row?.eventName ?? '').trim()
+}
+
 export function ticEventId(row) {
   if (row == null) return ''
   if (typeof row === 'string' || typeof row === 'number') return String(row).trim()
@@ -28,7 +39,7 @@ export function distinctTicKey(row) {
   return `${eventId}\0${order}\0${name}`
 }
 
-/** @returns {Map<string, Map<string, { eventId: string, dkp: number }>>} */
+/** @returns {Map<string, Map<string, { eventId: string, dkp: number, eventOrder: number|null, eventName: string }>>} */
 export function distinctTicsByRaid(rows) {
   const sorted = [...(rows || [])].sort((a, b) => rowId(a) - rowId(b))
   const byRaid = new Map()
@@ -42,7 +53,12 @@ export function distinctTicsByRaid(rows) {
     }
     const key = distinctTicKey(row)
     if (tics.has(key)) continue
-    tics.set(key, { eventId: ticEventId(row), dkp: ticDkp(row) })
+    tics.set(key, {
+      eventId: ticEventId(row),
+      dkp: ticDkp(row),
+      eventOrder: ticEventOrder(row),
+      eventName: ticEventName(row),
+    })
   }
   return byRaid
 }
@@ -79,7 +95,7 @@ export function ticFractionsByRaid(eventRows, attendanceRows) {
       raidId,
       tics
         ? raidTicAttendance(tics, attendedByRaid.get(raidId) || new Set())
-        : { totalDkp: 0, ticTotal: 0, ticEarned: 0 },
+        : { totalDkp: 0, ticTotal: 0, ticEarned: 0, missingTics: [] },
     )
   }
   return out
@@ -99,15 +115,39 @@ export function raidTicAttendance(tics, attendedEventIds) {
   let totalDkp = 0
   let ticTotal = 0
   let ticEarned = 0
+  const missingTics = []
   for (const tic of tics.values()) {
     totalDkp += tic.dkp
     if (tic.dkp > 0) {
       ticTotal += 1
       const eventId = ticEventId(tic.eventId)
-      if (eventId && attended.has(eventId)) ticEarned += 1
+      if (eventId && attended.has(eventId)) {
+        ticEarned += 1
+      } else {
+        missingTics.push({
+          eventOrder: ticEventOrder(tic),
+          eventName: ticEventName(tic),
+        })
+      }
     }
   }
-  return { totalDkp, ticTotal, ticEarned }
+  missingTics.sort((a, b) => {
+    const ao = a.eventOrder == null ? Number.POSITIVE_INFINITY : a.eventOrder
+    const bo = b.eventOrder == null ? Number.POSITIVE_INFINITY : b.eventOrder
+    if (ao !== bo) return ao - bo
+    return a.eventName.localeCompare(b.eventName)
+  })
+  return { totalDkp, ticTotal, ticEarned, missingTics }
+}
+
+function namedMissingTics(act) {
+  if (!Array.isArray(act?.missingTics)) return []
+  return act.missingTics
+    .map((tic) => ({
+      eventOrder: ticEventOrder(tic),
+      eventName: ticEventName(tic),
+    }))
+    .filter((tic) => tic.eventName || tic.eventOrder != null)
 }
 
 function paidFullRaid(dkpEarned, dkpRaidTotal) {
@@ -128,11 +168,15 @@ export function raidMissingTics(act) {
   let missingCount = ticTotal > 0
     ? ticTotal - ticEarned
     : (dkpRaidTotal > 0 ? Math.max(0, dkpRaidTotal - dkpEarned) : 0)
+  let missingTics = ticTotal > 0 ? namedMissingTics(act) : []
   if (ticTotal > 0 && ticEarned === 0 && missingCount === ticTotal && paidFullRaid(dkpEarned, dkpRaidTotal)) {
     ticEarned = ticTotal
     missingCount = 0
+    missingTics = []
   }
   const hasTrackableAttendance = ticTotal > 0 || dkpRaidTotal > 0
+  const isMissingTics = hasTrackableAttendance && missingCount > 0
+  if (!isMissingTics) missingTics = []
   return {
     dkpEarned,
     dkpRaidTotal,
@@ -140,7 +184,8 @@ export function raidMissingTics(act) {
     ticTotal,
     hasTrackableAttendance,
     missingCount,
-    isMissingTics: hasTrackableAttendance && missingCount > 0,
+    missingTics,
+    isMissingTics,
   }
 }
 

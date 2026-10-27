@@ -31,6 +31,12 @@ describe('raid tic identity', () => {
     assert.equal(attended.totalDkp, 3)
   })
 
+  it('names the missed tic by event order and event name', () => {
+    const tics = distinctTicsByRaid(rows).get('r1')
+    const attended = raidTicAttendance(tics, new Set(['e1']))
+    assert.deepEqual(attended.missingTics, [{ eventOrder: 2, eventName: 'DKP tic' }])
+  })
+
   it('trims event ids so attendance still matches the tic', () => {
     const tics = distinctTicsByRaid([
       { id: 1, raid_id: ' r1 ', event_id: ' e1 ', event_order: 1, event_name: 'DKP tic', dkp_value: '1' },
@@ -67,6 +73,7 @@ describe('missed attendance tics', () => {
       ticTotal: fraction.ticTotal,
       dkpEarned: fraction.ticEarned,
       dkpRaidTotal: fraction.totalDkp,
+      missingTics: fraction.missingTics,
     }),
   }))
 
@@ -82,6 +89,7 @@ describe('missed attendance tics', () => {
     assert.equal(onlyMissing[0].missingCount, 1)
     assert.equal(onlyMissing[0].ticEarned, 3)
     assert.equal(onlyMissing[0].ticTotal, 4)
+    assert.deepEqual(onlyMissing[0].missingTics, [{ eventOrder: 4, eventName: 'DKP tic' }])
   })
 
   it('shows every tic as missed only when the account was not present', () => {
@@ -92,10 +100,17 @@ describe('missed attendance tics', () => {
   })
 
   it('does not call a fully paid raid a total absence when tic rows did not match', () => {
-    const paid = raidMissingTics({ ticEarned: 0, ticTotal: 4, dkpEarned: 4, dkpRaidTotal: 4 })
+    const paid = raidMissingTics({
+      ticEarned: 0,
+      ticTotal: 4,
+      dkpEarned: 4,
+      dkpRaidTotal: 4,
+      missingTics: [{ eventOrder: 1, eventName: 'On-time' }],
+    })
     assert.equal(paid.isMissingTics, false)
     assert.equal(paid.ticEarned, 4)
     assert.equal(paid.missingCount, 0)
+    assert.deepEqual(paid.missingTics, [])
   })
 
   it('only-missing lists partial tic gaps and not every raid the account never attended', () => {
