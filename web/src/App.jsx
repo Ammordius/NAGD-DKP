@@ -32,6 +32,7 @@ import Profile from './pages/Profile'
 import AuthCallback from './pages/AuthCallback'
 
 const RoastBot = lazy(() => import('./components/RoastBot.jsx'))
+const Expedition = lazy(() => import('./pages/Expedition.jsx'))
 
 function RequireAuth({ session, children }) {
   if (!session) {
@@ -251,6 +252,7 @@ export default function App() {
         <Link to="/loot-recipients">Character History</Link>
         {session ? (
           <>
+            <Link to="/games/expedition">Expedition</Link>
             <Link to="/profile">My Site Profile</Link>
             {isOfficer && (
               <span className="nav-admin-group">
@@ -293,6 +295,16 @@ export default function App() {
         <Route path="/profile" element={<RequireAuth session={session}><Profile profile={profile} onProfileUpdate={() => session?.user?.id && fetchProfile(session.user.id)} /></RequireAuth>} />
         <Route path="/items/:itemNameEncoded" element={<RequireAuth session={session}><ItemPage /></RequireAuth>} />
         <Route path="/characters/:charKey" element={<RequireAuth session={session}><CharacterPage /></RequireAuth>} />
+        <Route
+          path="/games/expedition"
+          element={(
+            <RequireAuth session={session}>
+              <Suspense fallback={<div className="container" style={{ paddingTop: '2rem' }}>Loading expedition…</div>}>
+                <Expedition profile={profile} userId={session?.user?.id || null} />
+              </Suspense>
+            </RequireAuth>
+          )}
+        />
         <Route path="*" element={<NotFound />} />
       </Routes>
       {session && profile ? (

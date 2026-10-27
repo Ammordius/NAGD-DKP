@@ -27,6 +27,7 @@ describe('isProductionSite', () => {
     assert.equal(documentTitleForPath('/items/Cloak', title), 'Item · NAGD DKP - Staging Site')
     assert.equal(documentTitleForPath('/characters/bob', title), 'Character · NAGD DKP - Staging Site')
     assert.equal(documentTitleForPath('/officer/SiteAdmin', title), 'Site Admin · NAGD DKP - Staging Site')
+    assert.equal(documentTitleForPath('/games/expedition', title), 'Expedition · NAGD DKP - Staging Site')
     assert.equal(documentTitleForPath('/this-page-does-not-exist', title), 'Page not found · NAGD DKP - Staging Site')
   })
 
