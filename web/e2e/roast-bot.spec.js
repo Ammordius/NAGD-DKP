@@ -42,6 +42,31 @@ test.describe('DKP Inquisitor roast bot', () => {
     await input.fill('Why am I broke?')
     await input.press('Enter')
     await expect(page.getByTestId('roast-bot-user-msg').last()).toContainText('Why am I broke?')
+    await expect(page.getByTestId('roast-bot-reply').last()).toContainText(/42/)
+    await expect(page.getByTestId('roast-bot-reply').last()).toContainText(/800|758|Beguiler Circlet|220/i)
+  })
+
+  test('clarification resumes gear assessment for Iaminae', async ({ page }) => {
+    await page.goto('/roast-bot')
+    await page.getByTestId('roast-bot-input').fill('Is this a well geared enchanter?')
+    await page.getByTestId('roast-bot-send').click()
+    await expect(page.getByTestId('roast-bot-reply').last()).toContainText(/which enchanter/i)
+    await expect(page.getByTestId('roast-bot-reply').last()).toContainText(/Iaminae/i)
+
+    await page.getByTestId('roast-bot-input').fill('Iaminae')
+    await page.getByTestId('roast-bot-send').click()
+    await expect(page.getByTestId('roast-bot-reply').last()).toContainText(/Iaminae/i)
+    await expect(page.getByTestId('roast-bot-reply').last()).toContainText(/Magelo|gear|geared|unavailable|invent/i)
+  })
+
+  test('How does DKP work explains earn/spend/balance', async ({ page }) => {
+    await page.goto('/roast-bot')
+    await page.getByTestId('roast-bot-input').fill('How does DKP work?')
+    await page.getByTestId('roast-bot-send').click()
+    const reply = page.getByTestId('roast-bot-reply').last()
+    await expect(reply).toContainText(/earn/i)
+    await expect(reply).toContainText(/spend/i)
+    await expect(reply).toContainText(/balance/i)
   })
 
   test('missing account still allows sarcastic chat', async ({ page }) => {

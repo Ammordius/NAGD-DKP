@@ -19,8 +19,10 @@ import {
   handleMessage,
   resetIfIdentityChanged,
   createConversationState,
+  selectCharacterId,
   loadClassRankings,
   collectRaidLootItemIds,
+  resetUpgradeCaches,
 } from '../lib/roastBot/index.js'
 import { ensureItemStatsLoaded } from '../lib/itemStats'
 import './RoastBot.css'
@@ -65,8 +67,15 @@ function buildKnownSources(itemSources, mobLoot) {
   return out
 }
 
+function needsMageloContext(text, pendingIntent) {
+  const lower = String(text || '').toLowerCase()
+  if (pendingIntent === 'gear_assessment' || pendingIntent === 'upgrades') return true
+  return /upgrade|what should i buy|recommend|improve|gear|geared|well.?geared|gear check|buy for/.test(lower)
+}
+
 /**
  * Floating DKP Inquisitor chat. Authenticated users only (parent gates mount).
+ * Bot-specific network fetches are gated on `open` (except shared SWR caches when warm).
  */
 export default function RoastBot({ profile, session, factsOverride = null, openOnMount = false }) {
   const location = useLocation()
@@ -82,33 +91,35 @@ export default function RoastBot({ profile, session, factsOverride = null, openO
   const [messages, setMessages] = useState([])
   const [suggestions, setSuggestions] = useState([])
   const [convState, setConvState] = useState(() => createConversationState())
-  const [factsLoading, setFactsLoading] = useState(Boolean(accountId) && !factsOverride)
+  const [factsLoading, setFactsLoading] = useState(false)
   const [factsError, setFactsError] = useState(null)
   const [upgradeContext, setUpgradeContext] = useState(null)
   const [busy, setBusy] = useState(false)
   const listRef = useRef(null)
   const startedRef = useRef(false)
 
-  const swrKey = accountId ? accountDetailSwrKey(accountId, false) : null
+  const botActive = open && !factsOverride
+
+  const swrKey = botActive && accountId ? accountDetailSwrKey(accountId, false) : null
   const { data: accountDetail, error: accountError, isLoading: accountLoading } = useSWR(
-    factsOverride ? null : swrKey,
+    swrKey,
     () => fetchAccountDetail(accountId, false),
     { revalidateOnFocus: false, revalidateOnReconnect: false, dedupingInterval: 60_000 },
   )
 
   const { accountTotalsByAccountId, accountList, isLoading: dkpLoading } = useDkpData(
     undefined,
-    { enabled: Boolean(userId) && !factsOverride },
+    { enabled: botActive && Boolean(userId) },
   )
 
   const { data: saleCosts } = useSWR(
-    factsOverride ? null : userId ? 'roast-bot-sale-costs' : null,
+    botActive && userId ? 'roast-bot-sale-costs' : null,
     fetchSaleCosts,
     { revalidateOnFocus: false, dedupingInterval: 300_000 },
   )
 
   const { data: staticBundle } = useSWR(
-    factsOverride ? null : userId ? 'roast-bot-static-sources' : null,
+    botActive && userId ? 'roast-bot-static-sources' : null,
     async () => {
       const [itemSources, mobLoot] = await Promise.all([getItemSources(), getDkpMobLoot()])
       return { itemSources, mobLoot }
@@ -118,6 +129,9 @@ export default function RoastBot({ profile, session, factsOverride = null, openO
 
   const facts = useMemo(() => {
     if (factsOverride) return factsOverride
+    if (!open) {
+      return buildAccountFacts({ accountId: accountId || null })
+    }
     const totals = accountId ? accountTotalsByAccountId?.[accountId] : null
     const guildBalances = (accountList || [])
       .map((row) => Number(row.balance ?? row.dkp_balance))
@@ -148,6 +162,8 @@ export default function RoastBot({ profile, session, factsOverride = null, openO
       accountId,
       accountName: detail?.account?.display_name || null,
       currentDkp: totals?.balance ?? null,
+      earnedDkp: totals?.earned ?? null,
+      spentDkp: totals?.spent ?? null,
       guildBalances,
       characters: detail?.characters || [],
       lootRows,
@@ -161,6 +177,7 @@ export default function RoastBot({ profile, session, factsOverride = null, openO
     })
   }, [
     factsOverride,
+    open,
     accountId,
     accountDetail,
     accountTotalsByAccountId,
@@ -174,22 +191,26 @@ export default function RoastBot({ profile, session, factsOverride = null, openO
       setFactsLoading(false)
       return
     }
+    if (!open) {
+      setFactsLoading(false)
+      return
+    }
     setFactsLoading(Boolean(accountId) && (accountLoading || dkpLoading))
     setFactsError(accountError?.message || null)
-  }, [factsOverride, accountId, accountLoading, dkpLoading, accountError])
+  }, [factsOverride, open, accountId, accountLoading, dkpLoading, accountError])
 
-  // Reset conversation on identity change
   useEffect(() => {
     const next = resetIfIdentityChanged(convState, { userId, accountId })
     if (next !== convState) {
       setConvState(next)
       startedRef.current = false
       setMessages([])
+      setUpgradeContext(null)
+      resetUpgradeCaches()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only react to identity
   }, [userId, accountId])
 
-  // Initial greeting once panel opens and facts ready
   useEffect(() => {
     if (!open || startedRef.current || factsLoading) return
     const { response, state, suggestions: chips } = startConversation(facts)
@@ -198,6 +219,7 @@ export default function RoastBot({ profile, session, factsOverride = null, openO
       ...state,
       authUserId: userId,
       accountId,
+      selectedCharacterId: prev.selectedCharacterId,
       recentTemplateIds: state.recentTemplateIds,
     }))
     setMessages([{ role: 'bot', ...response }])
@@ -211,7 +233,7 @@ export default function RoastBot({ profile, session, factsOverride = null, openO
   }, [messages, open])
 
   const ensureUpgradeContext = useCallback(async () => {
-    if (upgradeContext) return upgradeContext
+    // Always try loadClassRankings (retryable after failure); refresh React ctx when rankings arrive
     const [rankings, itemStats, raidItemIds] = await Promise.all([
       loadClassRankings(),
       ensureItemStatsLoaded().then(() =>
@@ -222,7 +244,7 @@ export default function RoastBot({ profile, session, factsOverride = null, openO
     const ctx = { rankings, itemStats, raidItemIds }
     setUpgradeContext(ctx)
     return ctx
-  }, [upgradeContext])
+  }, [])
 
   const send = useCallback(
     async (raw) => {
@@ -233,8 +255,7 @@ export default function RoastBot({ profile, session, factsOverride = null, openO
       setInput('')
       try {
         let ctx = upgradeContext
-        const lower = text.toLowerCase()
-        if (/upgrade|what should i buy|recommend|improve|gear for/.test(lower)) {
+        if (needsMageloContext(text, convState.pendingIntent)) {
           ctx = await ensureUpgradeContext()
         }
         const result = handleMessage({
@@ -254,13 +275,19 @@ export default function RoastBot({ profile, session, factsOverride = null, openO
   )
 
   const onCharSelect = (charId) => {
-    setConvState((s) => ({ ...s, selectedCharacterId: charId || null }))
+    setConvState((s) => {
+      const next = { ...s }
+      selectCharacterId(next, charId || null, facts)
+      return next
+    })
   }
 
   if (hide) return null
 
+  const pendingChar = convState.pendingSlots?.includes('character')
+
   return (
-    <div className="roast-bot-root" data-testid="roast-bot">
+    <div className="roast-bot-root" data-testid="roast-bot" data-open={open ? '1' : '0'}>
       {open ? (
         <div
           className="roast-bot-panel"
@@ -284,9 +311,9 @@ export default function RoastBot({ profile, session, factsOverride = null, openO
           </div>
 
           {(facts.characters || []).length > 1 ? (
-            <div className="roast-bot-char-select">
+            <div className={`roast-bot-char-select${pendingChar ? ' roast-bot-char-select-pending' : ''}`}>
               <label>
-                Character
+                {pendingChar ? 'Which character?' : 'Character'}
                 <select
                   data-testid="roast-bot-character"
                   value={convState.selectedCharacterId || ''}

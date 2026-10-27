@@ -2,7 +2,7 @@
  * Public API for the DKP Inquisitor (rule-based roast bot).
  */
 
-export { INTENTS, classifyIntent, normalizeMessage, matchCharacterMention } from './intents.js'
+export { INTENTS, classifyIntent, normalizeMessage, matchCharacterMention, CHARACTER_SCOPED_INTENTS } from './intents.js'
 export {
   TEMPLATES,
   TEMPLATE_BY_ID,
@@ -33,8 +33,9 @@ export {
   startConversation,
   createConversationState,
   resetIfIdentityChanged,
+  selectCharacterId,
 } from './conversation.js'
-export { greetingMessage, buildResponse } from './responseBuilder.js'
+export { greetingMessage, buildResponse, renderAnswer } from './responseBuilder.js'
 export { suggestionChips, matchItemName, formatDkp, buildLinks } from './formatting.js'
 export {
   loadClassRankings,
@@ -45,6 +46,9 @@ export {
   resetUpgradeCaches,
   collectRaidLootItemIds,
 } from './upgrades.js'
+export { assessCharacterGear } from './gearAssessment.js'
+export { dispatchHandler } from './handlers/index.js'
+export { isEligible, categoriesForIntent } from './rules.js'
 
 export const BOT_NAME = 'The DKP Inquisitor'
 export const BOT_TAGLINE = 'Your loot history is public. Unfortunately.'
