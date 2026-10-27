@@ -11,7 +11,6 @@ import {
 } from '../lib/accountDisplayNameChange'
 import { useCharToAccountMap } from '../lib/useCharToAccountMap'
 import AssignedLootDisclaimer from '../components/AssignedLootDisclaimer'
-import AccountBiddingPortfolioCard from '../components/AccountBiddingPortfolioCard'
 import DkpSiteDisclaimer from '../components/DkpSiteDisclaimer'
 import ItemLink from '../components/ItemLink'
 import AccountLootHistoryTab from '../components/AccountLootHistoryTab'
@@ -942,8 +941,6 @@ export default function AccountDetail({ isOfficer, profile, session, onProfileUp
       {tab === 'activity' && (
         <AccountRaidActivity rows={activityByRaid} controls={activityControls} />
       )}
-
-      {isOfficer && accountId && <AccountBiddingPortfolioCard accountId={accountId} />}
     </div>
   )
 }

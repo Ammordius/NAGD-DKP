@@ -136,7 +136,6 @@ describe('view-state contract', () => {
     ['../pages/DkpChangelog.jsx', '/officer/dkp-changelog:pages'],
     ['../pages/Officer.jsx', 'raidPickerQuery'],
     ['../pages/ItemPage.jsx', 'elementalClass'],
-    ['../components/AccountBiddingPortfolioCard.jsx', 'bidFrom'],
     ['../components/DiscordScheduleTool.jsx', 'userScope: true'],
     ['../pages/OfficerWhoParser.jsx', 'userScope: true'],
     ['../App.jsx', 'clearUserPageState'],
