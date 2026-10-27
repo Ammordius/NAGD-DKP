@@ -45,9 +45,13 @@ function RoastBotHarness() {
             accountId: 'acct-e2e',
             accountName: 'E2E Account',
             currentDkp: 42,
+            earnedDkp: 800,
+            spentDkp: 758,
             characters: [
               { char_id: 'w1', name: 'Zender', class_name: 'Warrior' },
               { char_id: 'c1', name: 'Zenderheals', class_name: 'Cleric' },
+              { char_id: 'e1', name: 'Iaminae', class_name: 'Enchanter' },
+              { char_id: 'e2', name: 'Charmalt', class_name: 'Enchanter' },
             ],
             lootRows: [
               {
@@ -58,13 +62,28 @@ function RoastBotHarness() {
                 character_name: 'Zender',
                 sale_date: '2026-09-01',
               },
+              {
+                id: 2,
+                item_name: 'Beguiler Circlet',
+                cost: 220,
+                char_id: 'e1',
+                character_name: 'Iaminae',
+                assigned_char_id: 'e1',
+                assigned_character_name: 'Iaminae',
+                sale_date: '2026-09-15',
+              },
             ],
             recentItemPrices: {
               'smooth onyx torque': { values: [150, 180, 160], avg: '163.3' },
+              'beguiler circlet': { values: [200, 220], avg: '210' },
             },
-            itemCatalog: [{ name: 'Smooth Onyx Torque', itemId: 99 }],
+            itemCatalog: [
+              { name: 'Smooth Onyx Torque', itemId: 99 },
+              { name: 'Beguiler Circlet', itemId: 501 },
+            ],
             knownItemSources: {
               'smooth onyx torque': { zone: 'Plane of Time', mob: 'Quarm' },
+              'beguiler circlet': { zone: 'Plane of Time', mob: 'Quarm' },
             },
             guildRaidCountInWindow: 20,
             attendanceRows: [

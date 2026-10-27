@@ -1,181 +1,240 @@
 /**
- * Template selection and response assembly.
+ * Fact-first response assembly: required claims first, sarcasm as flavor only.
  */
 
-import { fillTemplate } from './templates.js'
-import {
-  categoriesForIntent,
-  eligibleTemplates,
-  buildPlaceholderValues,
-} from './rules.js'
-import { deriveEvents } from './events.js'
+import { fillTemplate, TEMPLATES } from './templates.js'
+import { isEligible } from './rules.js'
 import { buildLinks } from './formatting.js'
-import { INTENTS } from './intents.js'
-import { FULL_GEAR_COST_REFUSAL, NO_ACCOUNT_HINT, INITIAL_GREETING } from './templates.js'
+import { INITIAL_GREETING, NO_ACCOUNT_HINT } from './templates.js'
 
 /**
- * Deterministic-ish pick among candidates using turn count for variation.
- * @param {Array<{ id: string }>} templates
+ * @param {Array<{ id: string, text?: string, template?: object }>} templates
  * @param {number} turnCount
  * @param {() => number} [rng]
  */
 export function pickTemplate(templates, turnCount = 0, rng = Math.random) {
   if (!templates?.length) return null
   const idx = Math.floor(rng() * templates.length)
-  // Mix in turnCount so consecutive turns with same pool still vary when rng is stubbed poorly
   return templates[(idx + turnCount) % templates.length]
 }
 
 /**
- * @param {{
- *   intent: string,
- *   facts: object,
- *   state: object,
- *   upgrades?: object[],
- *   itemName?: string|null,
- *   itemSource?: object|null,
- *   lastSale?: number|null,
- *   affordability?: 'yes'|'no'|'unknown'|null,
- *   itemUnmatched?: boolean,
- *   followupItem?: string|null,
- *   selectedCharacter?: object|null,
- *   purchase?: object|null,
- *   preferReturnGap?: boolean,
- *   rng?: () => number,
- * }} args
+ * First matching eligible category only (no union with general).
+ * @param {string[]} categories
+ * @param {object} ctx
+ * @param {string[]} recentIds
+ * @param {Record<string, string|number|null>} placeholders
  */
-export function buildResponse(args) {
-  const {
-    intent,
-    facts,
-    state,
-    upgrades = [],
-    itemName = null,
-    itemSource = null,
-    lastSale = null,
-    affordability = null,
-    itemUnmatched = false,
-    followupItem = null,
-    selectedCharacter = null,
-    purchase = null,
-    preferReturnGap = false,
-    rng = Math.random,
-  } = args
+export function pickFromCategoryTiers(categories, ctx, recentIds, placeholders) {
+  const recent = new Set(recentIds || [])
+  for (const cat of categories) {
+    if (cat === 'general') continue
+    const pool = []
+    for (const t of TEMPLATES) {
+      if (t.category !== cat && t.eligibility !== cat) continue
+      if (!isEligible(t.eligibility || t.category, ctx)) continue
+      const filled = fillTemplate(t.text, placeholders)
+      if (filled == null) continue
+      pool.push({ template: t, text: filled })
+    }
+    if (!pool.length) continue
+    const fresh = pool.filter((p) => !recent.has(p.template.id))
+    return fresh.length ? fresh : pool
+  }
+  return []
+}
 
-  if (intent === INTENTS.FULL_GEAR_COST) {
+/**
+ * Optional short flavor from general templates that need no placeholders.
+ */
+export function pickFlavorSentence(recentIds, turnCount, rng) {
+  const recent = new Set(recentIds || [])
+  const pool = TEMPLATES.filter(
+    (t) => t.category === 'general' && (!t.requiredFacts || t.requiredFacts.length === 0),
+  )
+    .filter((t) => !recent.has(t.id))
+  if (!pool.length) return null
+  const picked = pickTemplate(
+    pool.map((t) => ({ template: t, text: t.text })),
+    turnCount,
+    rng,
+  )
+  return picked
+}
+
+/**
+ * Render AnswerFacts from a domain handler into a user-facing response.
+ * @param {{ answer: object, state: object, facts: object, rng?: () => number }} args
+ */
+export function renderAnswer({ answer, state, facts, rng = Math.random }) {
+  if (!answer) {
     return {
-      text: FULL_GEAR_COST_REFUSAL,
-      templateId: 'FULL_GEAR_COST',
-      reasonCode: 'no_gearing_total',
+      text: 'I am a collection of deterministic rules, not a miracle worker. Try a clearer question.',
+      templateId: 'J14',
+      reasonCode: 'empty_answer',
       links: [],
       cards: [],
-      placeholders: {},
+      requiredClaims: [],
+      referenced: { characters: [], items: [] },
     }
   }
 
-  if (!facts?.accountId && intent !== INTENTS.GREETING && intent !== INTENTS.UNKNOWN && intent !== INTENTS.GENERAL_ROAST) {
-    // Still roast, but note missing account for personalized data intents
-    if ([INTENTS.BALANCE, INTENTS.SPENDING_ROAST, INTENTS.PURCHASE_HISTORY, INTENTS.WORST_PURCHASE, INTENTS.UPGRADES, INTENTS.ATTENDANCE, INTENTS.CHARACTERS, INTENTS.CHARACTER_ROAST].includes(intent)) {
-      return {
-        text: `${NO_ACCOUNT_HINT} Meanwhile: I've examined your decisions. I would like to speak to whoever authorized them.`,
-        templateId: 'NO_ACCOUNT',
-        reasonCode: 'no_claimed_account',
-        links: [],
-        cards: [],
-        placeholders: {},
+  // Fixed / authored fact text paths (no template roulette over general)
+  if (answer.templateId === 'DKP_EXPLAIN' || answer.templateId === 'CAPABILITIES' ||
+      answer.templateId === 'FULL_GEAR_COST' || answer.templateId === 'GREETING' ||
+      answer.templateId === 'NO_ACCOUNT' || answer.templateId === 'NEED_CHAR' ||
+      answer.templateId === 'NEED_ITEM' || answer.templateId === 'UNKNOWN' ||
+      answer.templateId === 'GEAR_ASSESSMENT' || answer.templateId === 'GEAR_MISSING' ||
+      answer.reasonCode === 'why_broke' || answer.reasonCode === 'gear_assessment' ||
+      answer.reasonCode === 'dkp_explain' || answer.reasonCode === 'capabilities' ||
+      answer.reasonCode === 'no_gearing_total' || answer.reasonCode === 'need_character' ||
+      answer.reasonCode === 'need_item' || answer.reasonCode === 'unknown' ||
+      answer.reasonCode === 'unknown_no_analysis' || answer.reasonCode === 'magelo_unavailable' ||
+      answer.reasonCode === 'upgrades_unavailable' || answer.reasonCode === 'character_not_in_magelo' ||
+      answer.reasonCode === 'missing_magelo_export' || answer.reasonCode === 'missing_gear_score') {
+    let text = answer.factText
+    if (answer.allowFlavor && answer.reasonCode !== 'need_character' && answer.reasonCode !== 'need_item') {
+      const flavor = pickFlavorSentence(state.recentTemplateIds, state.turnCount, rng)
+      if (flavor?.text && !text.includes(flavor.text)) {
+        text = `${text} ${flavor.text}`
+        // track flavor id separately in recent via caller
+        answer._flavorId = flavor.template?.id
       }
     }
+    return {
+      text,
+      templateId: answer.templateId || answer.reasonCode,
+      reasonCode: answer.reasonCode,
+      links: buildLinksFromReferenced(answer.referenced),
+      cards: answer.cards || [],
+      requiredClaims: answer.requiredClaims || [],
+      referenced: answer.referenced || { characters: [], items: [] },
+      placeholders: answer.placeholders || {},
+    }
   }
 
-  const events = deriveEvents(facts)
   const ctx = {
     facts,
-    events,
-    upgrades,
-    itemName,
-    itemSource,
-    lastSale,
-    affordability,
-    itemUnmatched,
-    followupItem,
-    selectedCharacter,
-    purchase,
-    preferReturnGap,
+    upgrades: answer.upgrades || [],
+    itemName: answer.placeholders?.item || null,
+    itemSource: answer.placeholders?.zone || answer.placeholders?.mob
+      ? { zone: answer.placeholders.zone, mob: answer.placeholders.mob }
+      : null,
+    lastSale: answer.placeholders?.lastSale ?? null,
+    affordability:
+      answer.reasonCode === 'afford_yes' ? 'yes' : answer.reasonCode === 'afford_no' ? 'no' : answer.reasonCode === 'afford_unknown' ? 'unknown' : null,
+    itemUnmatched: answer.category === 'item_unmatched',
+    selectedCharacter: answer.placeholders?.toon ? { name: answer.placeholders.toon } : null,
+    purchase: answer.purchase || null,
+    preferReturnGap: answer.category === 'attendance_return',
   }
 
-  const categories = categoriesForIntent(intent, ctx)
-  let candidates = eligibleTemplates(categories, ctx, state.recentTemplateIds || [])
-  if (!candidates.length) {
-    candidates = eligibleTemplates(['general', 'unknown'], ctx, state.recentTemplateIds || [])
-  }
+  const categories = [answer.category].filter(Boolean)
+  const pool = pickFromCategoryTiers(categories, ctx, state.recentTemplateIds, answer.placeholders || {})
 
-  const values = buildPlaceholderValues(ctx)
-  // Filter to templates whose placeholders can be filled
-  const fillable = []
-  for (const t of candidates) {
-    const filled = fillTemplate(t.text, values)
-    if (filled != null) fillable.push({ template: t, text: filled })
-  }
-
-  const pool = fillable.length
-    ? fillable
-    : eligibleTemplates(['general'], { facts, events }, state.recentTemplateIds || [])
-        .map((t) => {
-          const filled = fillTemplate(t.text, values)
-          return filled != null ? { template: t, text: filled } : null
-        })
-        .filter(Boolean)
-
-  if (!pool.length) {
-    return {
-      text: "You have managed to disappoint a collection of conditional statements. Congratulations.",
-      templateId: 'A14',
-      reasonCode: 'fallback_general',
-      links: [],
-      cards: [],
-      placeholders: values,
+  let text = answer.factText
+  let templateId = answer.templateId || answer.reasonCode
+  if (pool.length) {
+    const picked = pickTemplate(pool, state.turnCount || 0, rng)
+    // Prefer template wording when it encodes the same required placeholders; keep factText claims intact by appending if needed
+    if (picked?.text) {
+      text = ensureClaimsInText(picked.text, answer.factText, answer.requiredClaims, answer.placeholders)
+      templateId = picked.template.id
     }
   }
 
-  const picked = pickTemplate(pool, state.turnCount || 0, rng)
-  const template = picked.template
-  const text = picked.text
-
-  const cards = []
-  if (intent === INTENTS.UPGRADES && upgrades.length) {
-    for (const u of upgrades.slice(0, 3)) {
-      cards.push({
-        type: 'upgrade',
-        itemName: u.itemName,
-        itemId: u.itemId,
-        slot: u.slot,
-        upgrade: u.upgrade,
-        lastSale: u.lastSale ?? null,
-        zone: u.zone ?? null,
-        to: `/items/${encodeURIComponent(u.itemName)}`,
-      })
+  if (answer.allowFlavor !== false) {
+    const flavor = pickFlavorSentence(
+      [...(state.recentTemplateIds || []), templateId],
+      state.turnCount,
+      rng,
+    )
+    if (flavor?.text && !text.includes(flavor.text.slice(0, 40))) {
+      text = `${text} ${flavor.text}`
+      answer._flavorId = flavor.template?.id
     }
-  }
-
-  const links = buildLinks({
-    itemName: values.item,
-    characterName: values.toon,
-  })
-
-  // Worst-purchase metric clarity
-  let finalText = text
-  if (intent === INTENTS.WORST_PURCHASE && facts.biggestPurchase && template.category === 'biggest_purchase') {
-    finalText = `${text} (Metric: largest verified DKP expense — not a scientific waste score.)`
   }
 
   return {
-    text: finalText,
-    templateId: template.id,
-    reasonCode: template.eligibility || template.category,
-    links,
-    cards,
-    placeholders: values,
+    text,
+    templateId,
+    reasonCode: answer.reasonCode,
+    links: buildLinksFromReferenced(answer.referenced),
+    cards: answer.cards || [],
+    requiredClaims: answer.requiredClaims || [],
+    referenced: answer.referenced || { characters: [], items: [] },
+    placeholders: answer.placeholders || {},
   }
+}
+
+/**
+ * Ensure factual claims appear: if template omitted a numeric fact present in factText, prefer factText.
+ */
+function ensureClaimsInText(templateText, factText, requiredClaims, placeholders) {
+  const claims = requiredClaims || []
+  if (claims.includes('balance') && placeholders?.balance != null) {
+    const bal = String(placeholders.balance)
+    if (!templateText.includes(bal) && factText.includes(bal)) {
+      return `${factText} ${templateText}`
+    }
+  }
+  if (claims.includes('last_sale') && placeholders?.lastSale != null) {
+    const sale = String(placeholders.lastSale)
+    if (!templateText.includes(sale) && factText.includes(sale)) {
+      return `${factText} ${templateText}`
+    }
+  }
+  if (claims.includes('largest_purchase') && placeholders?.cost != null) {
+    const cost = String(placeholders.cost)
+    if (!templateText.includes(cost)) {
+      return `${factText} ${templateText}`
+    }
+  }
+  return templateText
+}
+
+function buildLinksFromReferenced(referenced) {
+  const links = []
+  for (const name of referenced?.items || []) {
+    links.push(...buildLinks({ itemName: name }))
+  }
+  for (const name of referenced?.characters || []) {
+    links.push(...buildLinks({ characterName: name }))
+  }
+  return links
+}
+
+/** @deprecated use renderAnswer — kept for tests that call buildResponse */
+export function buildResponse(args) {
+  // Thin adapter for legacy tests: wrap as unknown answer
+  const { intent, facts, state, rng } = args
+  const answer = {
+    intent,
+    category: 'unknown',
+    factText: args.itemName && args.lastSale != null
+      ? `${args.itemName} last sold for ${args.lastSale} DKP (historical record, not a future guarantee).`
+      : "Try asking about loot, upgrades, DKP, or your purchase history.",
+    requiredClaims: args.lastSale != null ? ['last_sale'] : ['unknown_no_analysis'],
+    placeholders: {
+      item: args.itemName,
+      lastSale: args.lastSale,
+      balance: facts?.currentDkp,
+      toon: args.selectedCharacter?.name,
+    },
+    referenced: {
+      characters: args.selectedCharacter?.name ? [args.selectedCharacter.name] : [],
+      items: args.itemName && !args.itemUnmatched ? [args.itemName] : [],
+    },
+    reasonCode: args.lastSale != null ? 'item_sale' : 'unknown',
+    allowFlavor: false,
+    templateId: args.lastSale != null ? null : 'UNKNOWN',
+    upgrades: args.upgrades,
+  }
+  if (args.lastSale != null) {
+    answer.category = 'item_sale'
+    answer.allowFlavor = true
+  }
+  return renderAnswer({ answer, state, facts, rng })
 }
 
 export function greetingMessage(hasAccount) {
@@ -186,6 +245,8 @@ export function greetingMessage(hasAccount) {
       reasonCode: 'greeting_no_account',
       links: [],
       cards: [],
+      requiredClaims: ['greeting'],
+      referenced: { characters: [], items: [] },
     }
   }
   return {
@@ -194,5 +255,7 @@ export function greetingMessage(hasAccount) {
     reasonCode: 'greeting',
     links: [],
     cards: [],
+    requiredClaims: ['greeting'],
+    referenced: { characters: [], items: [] },
   }
 }

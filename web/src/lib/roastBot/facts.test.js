@@ -180,11 +180,12 @@ describe('roastBot conversation', () => {
     let state = createConversationState()
     const ids = []
     for (let i = 0; i < 5; i++) {
-      const r = handleMessage({ text: 'Why am I broke?', facts, state, rng: () => 0.1 * i })
+      // Balance still uses category templates; why-broke is fact-first and fixed.
+      const r = handleMessage({ text: "What's my DKP balance?", facts, state, rng: () => 0.1 * i })
       state = r.state
       ids.push(r.response.templateId)
     }
-    // With 5 low-balance templates, recent exclusion should prevent immediate full collapse to one id
+    // With several low-balance templates, recent exclusion should prevent collapse to one id
     assert.ok(new Set(ids).size >= 2, `expected variation, got ${ids.join(',')}`)
   })
 

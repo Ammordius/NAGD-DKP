@@ -180,6 +180,11 @@
   color: #a1a1aa;
 }
 
+.roast-bot-char-select-pending {
+  color: var(--dkp-accent-secondary, #a78bfa);
+  font-weight: 600;
+}
+
 .roast-bot-char-select select {
   margin-left: 0.35rem;
   background: #27272a;
