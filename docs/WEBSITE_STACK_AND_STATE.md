@@ -180,7 +180,7 @@ Scroll uses `pageState:user:<userId>:scroll:/mobs`. Changing search, slot, or cl
 
 ### Other exploration pages
 
-Those fields use the same per-user local slot: DKP search and sort, raids month, accounts search, the accounts Show inactive accounts toggle, item history query, sort, and loaded page count, character history window, sort, and expanded rows, account activity page and missing-raid toggles, raid detail expanded tics, raider-activity filters, changelog loaded page count, item elemental class, per-account bidding dates, and Raid Admin expanded tics and raid-picker query. Item History still loads `raid_loot_history` one page at a time; the saved fields are the query and sort, not the result rows. Server rows are still fetched again.
+Those fields use the same per-user local slot: DKP search and sort, raids month, accounts search, the accounts Show inactive accounts toggle, item history query, sort, and loaded page count, character history window, sort, and expanded rows, account activity page and missing-raid toggles (the same activity list on My Site Profile), which missed tics are expanded (`/accounts/detail:{accountId}:showWhichTics`), raid detail expanded tics, raider-activity filters, changelog loaded page count, item elemental class, per-account bidding dates, and Raid Admin expanded tics and raid-picker query. Item History still loads `raid_loot_history` one page at a time; the saved fields are the query and sort, not the result rows. Server rows are still fetched again.
 
 ### Intentionally not persisted
 

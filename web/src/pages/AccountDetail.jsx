@@ -15,18 +15,18 @@ import AccountBiddingPortfolioCard from '../components/AccountBiddingPortfolioCa
 import DkpSiteDisclaimer from '../components/DkpSiteDisclaimer'
 import ItemLink from '../components/ItemLink'
 import AccountLootHistoryTab from '../components/AccountLootHistoryTab'
+import AccountRaidActivity, { useAccountActivityControls } from '../components/AccountRaidActivity'
 import { getDkpMobLoot } from '../lib/staticData'
 import { formatAccountCharacter, formatCharacterClassSpentLine } from '../lib/formatAccountCharacter'
 import { ACCOUNTS_LIST_CACHE_KEY } from '../lib/cache'
-import { usePersistedState } from '../lib/usePersistedState'
 import { useScrollContentReady } from '../lib/routeScrollView'
 import { fetchLootForAccountChars } from '../lib/accountData'
 import { aggregateLootSpent, sumCharacterSpent } from '../lib/characterSpent'
-import { distinctTicsByRaid, raidTicAttendance } from '../lib/raidTicIdentity'
+import { fetchChunkedIn } from '../lib/fetchChunkedIn'
+import { ticFractionsByRaid } from '../lib/raidTicIdentity'
 import {
   accountDetailSessionKey,
   accountDetailSwrKey,
-  needsMissingRaidUniverse,
 } from '../lib/accountDetailMissingScope'
 
 const MAGELO_BASE = 'https://www.takproject.net/magelo/character.php?char='
@@ -54,11 +54,6 @@ function buildItemIdMap(mobLoot) {
 const MIDDLE_DOT = '\u00B7'
 
 const PAGE = 1000
-const ACTIVITY_PAGE_SIZE = 50
-/** Only paginate activity when raid count exceeds this (e.g. 1611 raids). */
-const ACTIVITY_PAGINATION_THRESHOLD = 100
-const IN_CHUNK = 150 // avoid URL length limits and timeouts when filtering by 1000+ ids
-
 async function fetchAll(table, select = '*', filter, opts) {
   const all = []
   let from = 0
@@ -76,23 +71,10 @@ async function fetchAll(table, select = '*', filter, opts) {
   return { data: all, error: null }
 }
 
-/** Fetch rows where column is in values, in chunks to avoid URL length limits and timeouts. */
-async function fetchByChunkedIn(table, select, column, values) {
-  if (!values.length) return { data: [], error: null }
-  const all = []
-  for (let i = 0; i < values.length; i += IN_CHUNK) {
-    const chunk = values.slice(i, i + IN_CHUNK)
-    const { data, error } = await supabase.from(table).select(select).in(column, chunk)
-    if (error) return { data: null, error }
-    all.push(...(data || []))
-  }
-  return { data: all, error: null }
-}
-
 /** SWR deduplication: 60s so revisiting the same account shows cached data without full reload. */
 const ACCOUNT_DEDUPING_INTERVAL_MS = 60_000
 
-function getAccountDetailFromSession(accountId, includeMissing = false) {
+export function getAccountDetailFromSession(accountId, includeMissing = false) {
   const key = accountDetailSessionKey(accountId, includeMissing)
   if (!key) return undefined
   try {
@@ -103,7 +85,7 @@ function getAccountDetailFromSession(accountId, includeMissing = false) {
   }
 }
 
-function setAccountDetailInSession(accountId, data, includeMissing = false) {
+export function setAccountDetailInSession(accountId, data, includeMissing = false) {
   const key = accountDetailSessionKey(accountId, includeMissing)
   if (!key || !data) return
   try {
@@ -111,7 +93,7 @@ function setAccountDetailInSession(accountId, data, includeMissing = false) {
   } catch (_) { /* ignore */ }
 }
 
-async function fetchAccountDetail(accountId, includeMissing = false) {
+export async function fetchAccountDetail(accountId, includeMissing = false) {
   const accRes = await supabase.from('accounts').select('account_id, toon_names, display_name, toon_count').eq('account_id', accountId).single()
   if (accRes.error || !accRes.data) throw new Error(accRes.error?.message || 'Account not found')
   const caRes = await supabase.from('character_account').select('char_id').eq('account_id', accountId)
@@ -140,14 +122,17 @@ async function fetchAccountDetail(accountId, includeMissing = false) {
     { order: { column: 'id', ascending: true } },
   )
   if (lootRes.error) throw new Error(lootRes.error?.message || 'Failed to load loot')
-  const [eventAttByIdRes, eventAttByNameRes] = await Promise.all([
-    fetchByChunkedIn('raid_event_attendance', 'raid_id, event_id, char_id, character_name', 'char_id', charIds),
-    fetchByChunkedIn('raid_event_attendance', 'raid_id, event_id, char_id, character_name', 'character_name', charNames),
+  const attendanceColumns = 'id, raid_id, event_id, char_id, character_name'
+  const [eventAttByIdRes, eventAttByNameRes, eventAttByAccountRes] = await Promise.all([
+    fetchChunkedIn(supabase, 'raid_event_attendance', attendanceColumns, 'char_id', charIds, 'id'),
+    fetchChunkedIn(supabase, 'raid_event_attendance', attendanceColumns, 'character_name', charNames, 'id'),
+    fetchAll('raid_event_attendance', attendanceColumns, (q) => q.eq('account_id', accountId), { order: { column: 'id', ascending: true } }),
   ])
   if (eventAttByIdRes?.error) throw new Error(eventAttByIdRes.error?.message || 'Failed to load event attendance')
   if (eventAttByNameRes?.error) throw new Error(eventAttByNameRes.error?.message || 'Failed to load event attendance')
+  if (eventAttByAccountRes?.error) throw new Error(eventAttByAccountRes.error?.message || 'Failed to load event attendance')
   const eventAttByKey = {}
-  ;[...(eventAttByIdRes.data || []), ...(eventAttByNameRes.data || [])].forEach((row) => {
+  ;[...(eventAttByIdRes.data || []), ...(eventAttByNameRes.data || []), ...(eventAttByAccountRes.data || [])].forEach((row) => {
     const key = `${row?.raid_id || ''}|${row?.event_id || ''}|${row?.char_id || ''}|${row?.character_name || ''}`
     if (!eventAttByKey[key]) eventAttByKey[key] = row
   })
@@ -162,29 +147,23 @@ async function fetchAccountDetail(accountId, includeMissing = false) {
   })
   const spentByKey = aggregateLootSpent(lootRes.data || [])
   const dkpByCharacterKey = { earned: earnedByKey, spent: spentByKey }
-  const attendedEventsByRaid = {}
-  ;(eventAttResData || []).forEach((row) => {
-    const rid = String(row?.raid_id ?? '').trim()
-    const eid = String(row?.event_id ?? '')
-    if (!rid || !eid) return
-    if (!attendedEventsByRaid[rid]) attendedEventsByRaid[rid] = new Set()
-    attendedEventsByRaid[rid].add(eid)
-  })
 
-  const raidIds = new Set([
-    ...(attRes.data || []).map((r) => r.raid_id),
-    ...(eventAttResData || []).map((r) => r.raid_id),
-    ...(lootRes.data || []).map((r) => r.raid_id),
-    ...attDkp.map((r) => r.raid_id),
-  ])
+  const raidIds = new Set(
+    [
+      ...(attRes.data || []).map((r) => r.raid_id),
+      ...(eventAttResData || []).map((r) => r.raid_id),
+      ...(lootRes.data || []).map((r) => r.raid_id),
+      ...attDkp.map((r) => r.raid_id),
+    ].map((id) => String(id ?? '').trim()).filter(Boolean),
+  )
   if (raidIds.size === 0) {
     return { account: accRes.data, characters: chars, raids: {}, activityByRaid: [], dkpByCharacterKey }
   }
   const raidList = [...raidIds]
   const [rRes, totalsRes, eventsRes, allPositiveEventsRes] = await Promise.all([
-    fetchByChunkedIn('raids', 'raid_id, raid_name, date_iso', 'raid_id', raidList),
-    fetchByChunkedIn('raid_dkp_totals', 'raid_id, total_dkp', 'raid_id', raidList),
-    fetchByChunkedIn('raid_events', 'id, raid_id, event_id, event_order, event_name, dkp_value', 'raid_id', raidList),
+    fetchChunkedIn(supabase, 'raids', 'raid_id, raid_name, date_iso', 'raid_id', raidList, 'raid_id'),
+    fetchChunkedIn(supabase, 'raid_dkp_totals', 'raid_id, total_dkp', 'raid_id', raidList, 'raid_id'),
+    fetchChunkedIn(supabase, 'raid_events', 'id, raid_id, event_id, event_order, event_name, dkp_value', 'raid_id', raidList, 'id'),
     includeMissing
       ? fetchAll('raid_events', 'id, raid_id, event_id, event_order, event_name, dkp_value', (q) => q.gt('dkp_value', 0), { order: { column: 'id', ascending: true } })
       : Promise.resolve({ data: [], error: null }),
@@ -194,60 +173,64 @@ async function fetchAccountDetail(accountId, includeMissing = false) {
   if (eventsRes?.error) throw new Error(eventsRes.error?.message || 'Failed to load raid events')
   if (allPositiveEventsRes?.error) throw new Error(allPositiveEventsRes.error?.message || 'Failed to load raid events')
   const rMap = {}
-  ;(rRes.data || []).forEach((row) => { rMap[row.raid_id] = row })
+  ;(rRes.data || []).forEach((row) => { rMap[String(row.raid_id ?? '').trim()] = row })
   const totalRaidDkp = {}
-  ;(totalsRes.data || []).forEach((row) => { totalRaidDkp[row.raid_id] = parseFloat(row.total_dkp || 0) })
-  const ticsByRaid = distinctTicsByRaid(eventsRes.data || [])
-  const universeEventRows = (allPositiveEventsRes.data || []).filter(
-    (row) => !ticsByRaid.has(String(row?.raid_id ?? '').trim()),
+  ;(totalsRes.data || []).forEach((row) => { totalRaidDkp[String(row.raid_id ?? '').trim()] = parseFloat(row.total_dkp || 0) })
+  const accountEventRows = eventsRes.data || []
+  const accountEventRaidIds = new Set(
+    accountEventRows.map((row) => String(row?.raid_id ?? '').trim()).filter(Boolean),
   )
-  const universeTicsByRaid = distinctTicsByRaid(universeEventRows)
-  // Include raids where this account had no activity so "only missing" can show full absences.
-  const allPositiveTicRaidIds = new Set((allPositiveEventsRes.data || []).map((row) => row.raid_id).filter(Boolean))
+  const universeEventRows = (allPositiveEventsRes.data || []).filter(
+    (row) => !accountEventRaidIds.has(String(row?.raid_id ?? '').trim()),
+  )
+  const fractions = ticFractionsByRaid([...accountEventRows, ...universeEventRows], eventAttResData)
+  // Raids this account never attended, so missing-tic details can mark them in the full list.
+  // "Only show raids with missing tics" does not list those; it lists raids they attended and still missed a tic.
+  const allPositiveTicRaidIds = new Set(
+    (allPositiveEventsRes.data || []).map((row) => String(row?.raid_id ?? '').trim()).filter(Boolean),
+  )
   const missingRaidIdsFromUniverse = [...allPositiveTicRaidIds].filter((rid) => !raidIds.has(rid))
   let universeRaidMap = {}
   let universeRaidTotalsMap = {}
   if (missingRaidIdsFromUniverse.length > 0) {
     const [universeRaidsRes, universeTotalsRes] = await Promise.all([
-      fetchByChunkedIn('raids', 'raid_id, raid_name, date_iso', 'raid_id', missingRaidIdsFromUniverse),
-      fetchByChunkedIn('raid_dkp_totals', 'raid_id, total_dkp', 'raid_id', missingRaidIdsFromUniverse),
+      fetchChunkedIn(supabase, 'raids', 'raid_id, raid_name, date_iso', 'raid_id', missingRaidIdsFromUniverse, 'raid_id'),
+      fetchChunkedIn(supabase, 'raid_dkp_totals', 'raid_id, total_dkp', 'raid_id', missingRaidIdsFromUniverse, 'raid_id'),
     ])
     if (universeRaidsRes?.error) throw new Error(universeRaidsRes.error?.message || 'Failed to load raid universe')
     if (universeTotalsRes?.error) throw new Error(universeTotalsRes.error?.message || 'Failed to load raid totals universe')
-    ;(universeRaidsRes.data || []).forEach((row) => { universeRaidMap[row.raid_id] = row })
-    ;(universeTotalsRes.data || []).forEach((row) => { universeRaidTotalsMap[row.raid_id] = parseFloat(row.total_dkp || 0) })
+    ;(universeRaidsRes.data || []).forEach((row) => { universeRaidMap[String(row.raid_id ?? '').trim()] = row })
+    ;(universeTotalsRes.data || []).forEach((row) => { universeRaidTotalsMap[String(row.raid_id ?? '').trim()] = parseFloat(row.total_dkp || 0) })
   }
   const dkpByRaid = {}
   attDkp.forEach((row) => {
-    if (!dkpByRaid[row.raid_id]) dkpByRaid[row.raid_id] = 0
-    dkpByRaid[row.raid_id] += parseFloat(row.dkp_earned || 0)
+    const raidKey = String(row.raid_id ?? '').trim()
+    if (!raidKey) return
+    if (!dkpByRaid[raidKey]) dkpByRaid[raidKey] = 0
+    dkpByRaid[raidKey] += parseFloat(row.dkp_earned || 0)
   })
   const lootByRaid = {}
   ;(lootRes.data || []).forEach((row) => {
-    if (!lootByRaid[row.raid_id]) lootByRaid[row.raid_id] = []
-    lootByRaid[row.raid_id].push(row)
+    const raidKey = String(row.raid_id ?? '').trim()
+    if (!raidKey) return
+    if (!lootByRaid[raidKey]) lootByRaid[raidKey] = []
+    lootByRaid[raidKey].push(row)
   })
   const allRaidIdsForActivity = [...new Set([...raidList, ...missingRaidIdsFromUniverse])]
   const activityByRaid = allRaidIdsForActivity.map((raidId) => {
     const raidKey = String(raidId ?? '').trim()
-    const fullTics = ticsByRaid.get(raidKey)
-    const partialTics = universeTicsByRaid.get(raidKey)
-    const attended = attendedEventsByRaid[raidKey] || new Set()
-    const fraction = fullTics
-      ? raidTicAttendance(fullTics, attended)
-      : partialTics
-        ? raidTicAttendance(partialTics, attended)
-        : null
-    const storedTotal = totalRaidDkp[raidId] ?? universeRaidTotalsMap[raidId] ?? 0
+    const fraction = fractions.get(raidKey) || null
+    const storedTotal = totalRaidDkp[raidKey] ?? universeRaidTotalsMap[raidKey] ?? 0
     return {
-      raid_id: raidId,
-      date: ((rMap[raidId]?.date_iso || universeRaidMap[raidId]?.date_iso) || '').slice(0, 10),
-      raid_name: rMap[raidId]?.raid_name || universeRaidMap[raidId]?.raid_name || raidId,
-      dkpEarned: dkpByRaid[raidId] ?? 0,
-      dkpRaidTotal: fullTics ? fraction.totalDkp : storedTotal,
+      raid_id: raidKey,
+      date: ((rMap[raidKey]?.date_iso || universeRaidMap[raidKey]?.date_iso) || '').slice(0, 10),
+      raid_name: rMap[raidKey]?.raid_name || universeRaidMap[raidKey]?.raid_name || raidKey,
+      dkpEarned: dkpByRaid[raidKey] ?? 0,
+      dkpRaidTotal: accountEventRaidIds.has(raidKey) && fraction ? fraction.totalDkp : storedTotal,
       ticEarned: fraction ? fraction.ticEarned : 0,
       ticTotal: fraction ? fraction.ticTotal : 0,
-      items: lootByRaid[raidId] || [],
+      missingTics: fraction?.missingTics || [],
+      items: lootByRaid[raidKey] || [],
     }
   }).sort((a, b) => (b.date || '').localeCompare(a.date || ''))
   return { account: accRes.data, characters: chars, raids: rMap, activityByRaid, dkpByCharacterKey }
@@ -306,16 +289,8 @@ export default function AccountDetail({ isOfficer, profile, session, onProfileUp
   )
   const { getAccountDisplayName } = useCharToAccountMap()
   const { mutate: globalMutate } = useSWRConfig()
-  const [onlyMissingRaids, setOnlyMissingRaids] = usePersistedState(
-    accountId ? `/accounts/detail:${accountId}:onlyMissingRaids` : '/accounts/detail:none:onlyMissingRaids',
-    false
-  )
-  const [showMissingDetails, setShowMissingDetails] = usePersistedState(
-    accountId ? `/accounts/detail:${accountId}:showMissingDetails` : '/accounts/detail:none:showMissingDetails',
-    false
-  )
-  // Either control needs the positive-DKP raid universe (missing absences / tic details).
-  const includeMissing = needsMissingRaidUniverse(showMissingDetails, onlyMissingRaids)
+  const activityControls = useAccountActivityControls(accountId)
+  const { includeMissing } = activityControls
   const cacheKey = accountDetailSwrKey(accountId, includeMissing)
   const fallbackData = cacheKey ? getAccountDetailFromSession(accountId, includeMissing) : undefined
   const { data: swrData, error: swrError, isLoading, mutate } = useSWR(
@@ -333,16 +308,11 @@ export default function AccountDetail({ isOfficer, profile, session, onProfileUp
   )
   const account = swrData?.account ?? null
   const characters = swrData?.characters ?? []
-  const raids = swrData?.raids ?? {}
   const activityByRaid = swrData?.activityByRaid ?? []
   const dkpByCharacterKey = swrData?.dkpByCharacterKey ?? { earned: {}, spent: {} }
   const loading = isLoading && !swrData
   useScrollContentReady(!loading)
   const error = swrError?.message ?? ''
-  const [activityPage, setActivityPage] = usePersistedState(
-    accountId ? `/accounts/detail:${accountId}:activityPage` : '/accounts/detail:none:activityPage',
-    1
-  )
   const [addCharOpen, setAddCharOpen] = useState(false)
   const [addCharInput, setAddCharInput] = useState('')
   const [addCharError, setAddCharError] = useState('')
@@ -585,41 +555,6 @@ export default function AccountDetail({ isOfficer, profile, session, onProfileUp
     })
   }
 
-  const activityWithMissing = useMemo(() => (
-    activityByRaid.map((act) => {
-      const ticEarned = Number(act.ticEarned ?? 0)
-      const ticTotal = Number(act.ticTotal ?? 0)
-      const dkpEarned = Number(act.dkpEarned ?? 0)
-      const dkpRaidTotal = Number(act.dkpRaidTotal ?? 0)
-      const hasTrackableAttendance = ticTotal > 0 || dkpRaidTotal > 0
-      const missingCount = ticTotal > 0
-        ? Math.max(0, ticTotal - ticEarned)
-        : (dkpRaidTotal > 0 ? Math.max(0, dkpRaidTotal - dkpEarned) : 0)
-      const isMissingTics = hasTrackableAttendance && missingCount > 0
-      return {
-        ...act,
-        dkpEarned,
-        dkpRaidTotal,
-        ticEarned,
-        ticTotal,
-        hasTrackableAttendance,
-        missingCount,
-        isMissingTics,
-      }
-    })
-  ), [activityByRaid])
-
-  const filteredActivityRows = useMemo(() => (
-    activityWithMissing.filter((act) => act.hasTrackableAttendance)
-  ), [activityWithMissing])
-
-  const visibleActivityRows = useMemo(() => {
-    const detailScopedRows = showMissingDetails
-      ? filteredActivityRows
-      : filteredActivityRows.filter((act) => Number(act.dkpEarned ?? 0) > 0 || Number(act.ticEarned ?? 0) > 0)
-    return onlyMissingRaids ? detailScopedRows.filter((act) => act.isMissingTics) : detailScopedRows
-  }, [filteredActivityRows, onlyMissingRaids, showMissingDetails])
-
   const allDisplayNameChoices = useMemo(() => linkedCharacterOptions(characters), [characters])
   const displayNameChoices = useMemo(
     () => linkedCharacterOptions(characters, displayNameQuery),
@@ -674,14 +609,14 @@ export default function AccountDetail({ isOfficer, profile, session, onProfileUp
                         You can claim again after {cooldownUntil.toLocaleString()}. An officer can remove this cooldown.
                       </span>
                     ) : (
-                      <>
-                        <button type="button" className="btn btn-ghost" style={{ fontSize: '0.875rem' }} onClick={handleClaimAccount} disabled={claimLoading}>
+                      <span className="claim-account-box">
+                        <button type="button" className="claim-account-link" onClick={handleClaimAccount} disabled={claimLoading}>
                           {claimLoading ? 'Claiming...' : 'Claim this account'}
                         </button>
                         {claimError && (
-                          <span className="error" style={{ marginLeft: '0.5rem', fontSize: '0.875rem' }}>{claimError}</span>
+                          <span className="error" style={{ fontSize: '0.875rem' }}>{claimError}</span>
                         )}
-                      </>
+                      </span>
                     )}
                   </span>
                 )
@@ -983,164 +918,7 @@ export default function AccountDetail({ isOfficer, profile, session, onProfileUp
       )}
 
       {tab === 'activity' && (
-        <div className="card">
-          <h2 style={{ marginTop: 0 }}>Activity (earned DKP and items by raid)</h2>
-          <p style={{ color: '#a1a1aa', fontSize: '0.875rem', marginBottom: '0.75rem' }}>Reverse chronological. Each raid shows DKP earned and items won by the characters on this account.</p>
-          <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
-            <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem', color: '#d4d4d8' }}>
-              <input
-                type="checkbox"
-                checked={showMissingDetails}
-                onChange={(e) => setShowMissingDetails(e.target.checked)}
-              />
-              Show missing tic details
-            </label>
-            <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem', color: '#d4d4d8' }}>
-              <input
-                type="checkbox"
-                checked={onlyMissingRaids}
-                onChange={(e) => {
-                  const checked = e.target.checked
-                  setOnlyMissingRaids(checked)
-                  if (checked) setShowMissingDetails(true)
-                  setActivityPage(1)
-                }}
-              />
-              Only show raids with missing tics
-            </label>
-          </div>
-          {visibleActivityRows.length === 0 ? (
-            <p style={{ color: '#71717a' }}>No raid activity recorded.</p>
-          ) : (
-            <>
-              {(() => {
-                const total = visibleActivityRows.length
-                const usePagination = total > ACTIVITY_PAGINATION_THRESHOLD
-                const totalPages = usePagination ? Math.max(1, Math.ceil(total / ACTIVITY_PAGE_SIZE)) : 1
-                const page = Math.min(Math.max(1, activityPage), totalPages)
-                const start = usePagination ? (page - 1) * ACTIVITY_PAGE_SIZE : 0
-                const activityToShow = usePagination ? visibleActivityRows.slice(start, start + ACTIVITY_PAGE_SIZE) : visibleActivityRows
-                return (
-                  <>
-                    {usePagination && (
-                      <>
-                        <p style={{ color: '#a1a1aa', fontSize: '0.875rem', marginBottom: '0.75rem' }}>
-                          Showing {start + 1}–{start + activityToShow.length} of {total} raids
-                          {totalPages > 1 && (
-                            <span style={{ marginLeft: '0.5rem' }}>
-                              {MIDDLE_DOT} Page {page} of {totalPages}
-                            </span>
-                          )}
-                        </p>
-                        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap' }}>
-                          {totalPages > 10 && (
-                            <button
-                              type="button"
-                              className="btn btn-ghost"
-                              disabled={page <= 1}
-                              onClick={() => setActivityPage(1)}
-                            >
-                              First
-                            </button>
-                          )}
-                          <button
-                            type="button"
-                            className="btn btn-ghost"
-                            disabled={page <= 1}
-                            onClick={() => setActivityPage((p) => Math.max(1, p - 1))}
-                          >
-                            Previous
-                          </button>
-                          {totalPages <= 10 && (
-                            Array.from({ length: totalPages }, (_, i) => i + 1).map((n) => (
-                              <button
-                                key={n}
-                                type="button"
-                                className={n === page ? 'btn' : 'btn btn-ghost'}
-                                style={{ minWidth: '2.25rem', padding: '0.25rem 0.5rem' }}
-                                onClick={() => setActivityPage(n)}
-                              >
-                                {n}
-                              </button>
-                            ))
-                          )}
-                          <button
-                            type="button"
-                            className="btn btn-ghost"
-                            disabled={page >= totalPages}
-                            onClick={() => setActivityPage((p) => Math.min(totalPages, p + 1))}
-                          >
-                            Next
-                          </button>
-                          {totalPages > 10 && (
-                            <button
-                              type="button"
-                              className="btn btn-ghost"
-                              disabled={page >= totalPages}
-                              onClick={() => setActivityPage(totalPages)}
-                            >
-                              Last
-                            </button>
-                          )}
-                        </div>
-                      </>
-                    )}
-                    <ul style={{ listStyle: 'none', paddingLeft: 0, margin: 0 }}>
-                      {activityToShow.map((act) => (
-                        <li
-                          key={act.raid_id}
-                          style={{
-                            marginBottom: '1.5rem',
-                            paddingBottom: '1rem',
-                            borderBottom: '1px solid #27272a',
-                            borderLeft: showMissingDetails && act.isMissingTics ? '3px solid #f97316' : '3px solid transparent',
-                            paddingLeft: showMissingDetails && act.isMissingTics ? '0.5rem' : 0,
-                          }}
-                        >
-                          <p style={{ margin: '0 0 0.25rem 0' }}>
-                            <Link to={`/raids/${act.raid_id}`}><strong>{act.raid_name}</strong></Link>
-                            {act.date && <span style={{ color: '#71717a', marginLeft: '0.5rem' }}>{act.date}</span>}
-                            <span style={{ marginLeft: '0.5rem' }}>{MIDDLE_DOT} <strong>Earned: {Number(act.dkpEarned ?? 0).toFixed(0)}{act.dkpRaidTotal != null && act.dkpRaidTotal > 0 ? ` / ${Number(act.dkpRaidTotal).toFixed(0)}` : ''}</strong> DKP</span>
-                            {showMissingDetails && act.ticTotal > 0 && (
-                              <span style={{ marginLeft: '0.5rem' }}>
-                                {MIDDLE_DOT} <strong>{act.ticEarned}/{act.ticTotal} tics</strong>
-                              </span>
-                            )}
-                            {showMissingDetails && act.isMissingTics && (
-                              <span style={{ marginLeft: '0.5rem', color: '#f97316' }}>
-                                {MIDDLE_DOT} Missing {act.missingCount} tic{act.missingCount === 1 ? '' : 's'}
-                              </span>
-                            )}
-                          </p>
-                          {act.items.length > 0 && (
-                            <ul style={{ margin: '0.25rem 0 0 1.25rem', paddingLeft: 0, listStyle: 'none' }}>
-                              {act.items.map((row, i) => {
-                                const hasAssignment = (row.assigned_character_name || row.assigned_char_id || '').trim()
-                                const charName = hasAssignment ? (row.assigned_character_name || row.assigned_char_id) : 'Unassigned'
-                                return (
-                                  <li key={i} style={{ marginBottom: '0.25rem', fontSize: '0.9rem' }}>
-                                    <ItemLink itemName={row.item_name || ''} itemId={itemIdMap[(row.item_name || '').trim().toLowerCase()]}>{row.item_name || '—'}</ItemLink>
-                                    {' '}{MIDDLE_DOT}{' '}
-                                    {hasAssignment ? (
-                                      <Link to={`/characters/${encodeURIComponent(charName)}`}>{charName}</Link>
-                                    ) : (
-                                      <span style={{ color: '#71717a' }}>{charName}</span>
-                                    )}
-                                    {row.cost != null && row.cost !== '' && <> {MIDDLE_DOT} {row.cost} DKP</>}
-                                  </li>
-                                )
-                              })}
-                            </ul>
-                          )}
-                        </li>
-                      ))}
-                    </ul>
-                  </>
-                )
-              })()}
-            </>
-          )}
-        </div>
+        <AccountRaidActivity rows={activityByRaid} controls={activityControls} />
       )}
 
       {isOfficer && accountId && <AccountBiddingPortfolioCard accountId={accountId} />}

@@ -12,15 +12,33 @@ import {
 
 const dir = dirname(fileURLToPath(import.meta.url))
 const source = readFileSync(join(dir, 'AccountDetail.jsx'), 'utf8')
+const activitySource = readFileSync(join(dir, '../components/AccountRaidActivity.jsx'), 'utf8')
+const profileSource = readFileSync(join(dir, 'Profile.jsx'), 'utf8')
 
 describe('AccountDetail missing-tic behavior', () => {
   it('wires scope helpers for either control and scoped caches', () => {
-    assert.match(source, /needsMissingRaidUniverse\(showMissingDetails, onlyMissingRaids\)/)
+    assert.match(activitySource, /needsMissingRaidUniverse\(showMissingDetails, onlyMissingRaids\)/)
     assert.match(source, /accountDetailSwrKey\(accountId, includeMissing\)/)
     assert.match(source, /getAccountDetailFromSession\(accountId, includeMissing\)/)
     assert.match(source, /setAccountDetailInSession\(accountId, data, includeMissing\)/)
-    assert.match(source, /Show missing tic details/)
-    assert.match(source, /Only show raids with missing tics/)
+    assert.match(source, /<AccountRaidActivity rows=\{activityByRaid\} controls=\{activityControls\} \/>/)
+    assert.match(activitySource, /Show all attendance tics, highlight any missed/)
+    assert.match(activitySource, /Only show attended raids with some missed tics/)
+    assert.match(activitySource, /show which/)
+    assert.match(activitySource, /missingTicLabel/)
+    assert.match(activitySource, /showWhichTics/)
+    assert.match(activitySource, /<< First Page/)
+    assert.match(activitySource, /< Previous Page/)
+    assert.match(activitySource, /Next Page >/)
+    assert.match(activitySource, /Last Page >>/)
+    assert.match(activitySource, /className="activity-pager"/)
+    assert.match(activitySource, /className="activity-page-summary-page"/)
+    assert.match(source, /fetchChunkedIn\(supabase, 'raid_event_attendance'/)
+    assert.match(source, /fetchChunkedIn\(supabase, 'raid_events'/)
+    assert.match(source, /ticFractionsByRaid\(/)
+    assert.match(activitySource, /visibleMissingTicRows\(activityWithMissing/)
+    assert.match(profileSource, /<AccountRaidActivity rows=\{activityDetail\?\.activityByRaid \|\| \[\]\} controls=\{activityControls\} \/>/)
+    assert.match(profileSource, /fetchAccountDetail\(profile\.account_id, activityControls\.includeMissing\)/)
   })
 
   it('evaluates all four control combinations for fetch scope', () => {

@@ -14,7 +14,7 @@ export function attendanceSharePercent(earned, total) {
   return Math.min(100, Math.round((earnedNum / pool) * 100))
 }
 
-/** Window DKP shown in the 30d and 60d cells. An account cannot earn more than the period pool. */
+/** Tics shown in the 30d and 60d cells. An account cannot attend more tics than the period has. */
 export function attendanceShareEarned(earned, total) {
   const pool = Number(total) || 0
   const earnedNum = Number(earned) || 0
