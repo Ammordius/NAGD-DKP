@@ -1,3 +1,7 @@
+import { adaptiveDateTicks } from '../lib/chartDateTicks.js'
+
+const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
 // Parse YYYY-MM-DD to timestamp; invalid returns NaN
 function parseDate(s) {
   if (!s || typeof s !== 'string') return NaN
@@ -5,81 +9,9 @@ function parseDate(s) {
   return isNaN(t) ? NaN : t
 }
 
-const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-
-function formatTickLabel(ts) {
-  const d = new Date(ts)
-  return `${MONTH_NAMES[d.getMonth()]} ${d.getFullYear()}`
-}
-
 function formatIsoMonthYear(iso) {
   const [y, mo] = iso.slice(0, 10).split('-').map(Number)
   return `${MONTH_NAMES[mo - 1]} ${y}`
-}
-
-// X ticks every 6 months; return [{ ts, label }]
-function sixMonthTicks(minTs, maxTs) {
-  if (minTs == null || maxTs == null || !Number.isFinite(minTs) || !Number.isFinite(maxTs) || maxTs <= minTs) return []
-  const min = new Date(minTs)
-  const max = new Date(maxTs)
-  const ticks = []
-  let y = min.getFullYear()
-  let m = min.getMonth()
-  for (;;) {
-    const d = new Date(y, m, 1)
-    const ts = d.getTime()
-    if (ts > maxTs) break
-    if (ts >= minTs) ticks.push({ ts, label: formatTickLabel(ts) })
-    m += 6
-    if (m >= 12) { m -= 12; y += 1 }
-  }
-  if (ticks.length === 0) ticks.push({ ts: minTs, label: formatTickLabel(minTs) })
-  return ticks
-}
-
-function monthlyTicks(minTs, maxTs, maxCount = 8) {
-  if (!Number.isFinite(minTs) || !Number.isFinite(maxTs) || maxTs <= minTs) return []
-  const min = new Date(minTs)
-  const max = new Date(maxTs)
-  const rangeMonths = (max.getFullYear() - min.getFullYear()) * 12 + (max.getMonth() - min.getMonth())
-  const step = Math.max(1, Math.ceil((rangeMonths + 1) / maxCount))
-  const ticks = []
-  let y = min.getFullYear()
-  let m = min.getMonth()
-  const seen = new Set()
-  for (;;) {
-    const d = new Date(y, m, 1)
-    const ts = d.getTime()
-    if (ts > maxTs) break
-    if (ts >= minTs) {
-      const label = formatTickLabel(ts)
-      if (!seen.has(label)) {
-        seen.add(label)
-        ticks.push({ ts, label })
-      }
-    }
-    m += step
-    while (m >= 12) { m -= 12; y += 1 }
-    if (y > max.getFullYear() + 1) break
-  }
-  if (ticks.length === 0) ticks.push({ ts: minTs, label: formatTickLabel(minTs) })
-  return ticks
-}
-
-function quarterlyTicks(minTs, maxTs) {
-  return monthlyTicks(minTs, maxTs, 8).filter((_, i, arr) => {
-    if (arr.length <= 6) return true
-    return i % 2 === 0 || i === arr.length - 1
-  })
-}
-
-/** Adaptive X ticks from span: monthly (≤90d), quarterly (≤2y), else 6-month. */
-function adaptiveDateTicks(minTs, maxTs) {
-  const dayMs = 86400000
-  const rangeDays = (maxTs - minTs) / dayMs
-  if (rangeDays <= 90) return monthlyTicks(minTs, maxTs, 6)
-  if (rangeDays <= 730) return quarterlyTicks(minTs, maxTs)
-  return sixMonthTicks(minTs, maxTs)
 }
 
 /** Date range only (no point count). */
