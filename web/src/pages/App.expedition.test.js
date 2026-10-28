@@ -30,6 +30,17 @@ describe('App Expedition wiring', () => {
     assert.doesNotMatch(appSource, /^import Expedition from/m)
   })
 
+  it('gates Expedition nav and route behind isFunZoneEnabled', () => {
+    assert.match(appSource, /import \{ isFunZoneEnabled \} from '\.\/lib\/funZone'/)
+    assert.match(appSource, /const funZoneEnabled = isFunZoneEnabled\(\)/)
+    assert.match(appSource, /funZoneEnabled \? <Link to="\/games\/expedition">Expedition<\/Link> : null/)
+    assert.match(appSource, /path="\/games\/expedition"\s+element=\{funZoneEnabled \? \(/)
+    assert.match(appSource, /<Navigate to="\/" replace \/>/)
+    // Fun Zone is independent of the production/development banner flag
+    assert.match(appSource, /const funZoneEnabled = isFunZoneEnabled\(\)/)
+    assert.doesNotMatch(appSource, /funZoneEnabled\s*=\s*isProductionSite/)
+  })
+
   it('game modules avoid Magelo, AccountDetail page, roastBot, and guild map hooks', () => {
     const src = allExpeditionSources()
     assert.doesNotMatch(src, /mageloUpgradeEngine|classCoverage|item_stats|itemStats/)

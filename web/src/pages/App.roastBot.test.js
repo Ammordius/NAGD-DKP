@@ -9,9 +9,11 @@ const appSource = readFileSync(path.join(root, 'App.jsx'), 'utf8')
 const roastSource = readFileSync(path.join(root, 'components', 'RoastBot.jsx'), 'utf8')
 
 describe('App RoastBot wiring', () => {
-  it('lazy-loads RoastBot for authenticated users with profile', () => {
+  it('lazy-loads RoastBot for authenticated users with profile when Fun Zone is enabled', () => {
     assert.match(appSource, /lazy\(\(\)\s*=>\s*import\('\.\/components\/RoastBot\.jsx'\)\)/)
-    assert.match(appSource, /session && profile/)
+    assert.match(appSource, /import \{ isFunZoneEnabled \} from '\.\/lib\/funZone'/)
+    assert.match(appSource, /const funZoneEnabled = isFunZoneEnabled\(\)/)
+    assert.match(appSource, /funZoneEnabled && session && profile/)
     assert.match(appSource, /<RoastBot profile=\{profile\} session=\{session\}/)
     assert.match(appSource, /Suspense/)
   })

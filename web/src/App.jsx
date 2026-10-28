@@ -4,6 +4,7 @@ import { Analytics } from '@vercel/analytics/react'
 import { nextAuthGate } from './lib/authGate'
 import { consumeLastPath, persistLastPath } from './lib/lastPath'
 import { safeNextPath } from './lib/safeNextPath'
+import { isFunZoneEnabled } from './lib/funZone'
 import { documentTitleForPath, isProductionSite } from './lib/siteTitle'
 import { supabase } from './lib/supabase'
 import { clearUserPageState } from './lib/pageState'
@@ -236,6 +237,7 @@ export default function App() {
   const isOfficer = profile?.role === 'officer' || profile?.role === 'siteadmin'
   const isSiteAdmin = profile?.role === 'siteadmin'
   const roleLabel = profile?.role === 'siteadmin' ? 'Site Admin' : profile?.role === 'officer' ? 'Officer' : 'Player'
+  const funZoneEnabled = isFunZoneEnabled()
 
   return (
     <PageStateUserProvider userId={session?.user?.id || null}>
@@ -252,7 +254,7 @@ export default function App() {
         <Link to="/loot-recipients">Character History</Link>
         {session ? (
           <>
-            <Link to="/games/expedition">Expedition</Link>
+            {funZoneEnabled ? <Link to="/games/expedition">Expedition</Link> : null}
             <Link to="/profile">My Site Profile</Link>
             {isOfficer && (
               <span className="nav-admin-group">
@@ -297,17 +299,19 @@ export default function App() {
         <Route path="/characters/:charKey" element={<RequireAuth session={session}><CharacterPage /></RequireAuth>} />
         <Route
           path="/games/expedition"
-          element={(
+          element={funZoneEnabled ? (
             <RequireAuth session={session}>
               <Suspense fallback={<div className="container" style={{ paddingTop: '2rem' }}>Loading expedition…</div>}>
                 <Expedition profile={profile} userId={session?.user?.id || null} />
               </Suspense>
             </RequireAuth>
+          ) : (
+            <Navigate to="/" replace />
           )}
         />
         <Route path="*" element={<NotFound />} />
       </Routes>
-      {session && profile ? (
+      {funZoneEnabled && session && profile ? (
         <Suspense fallback={null}>
           <RoastBot profile={profile} session={session} />
         </Suspense>
