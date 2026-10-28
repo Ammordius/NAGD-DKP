@@ -7,6 +7,7 @@ import { classifyIntent, INTENTS, matchCharacterMention, CHARACTER_SCOPED_INTENT
 import { renderAnswer, greetingMessage } from './responseBuilder.js'
 import { matchItemName, suggestionChips, formatDkp } from './formatting.js'
 import { dispatchHandler } from './handlers/index.js'
+import { lookupItemSource, catalogEntriesFromKnownSources } from '../itemSourceLookup.js'
 
 /**
  * @returns {object}
@@ -48,7 +49,22 @@ function rememberTemplate(state, templateId) {
   state.recentTemplateIds = recent.slice(-5)
 }
 
-function resolveItem(facts, hint, state, useSticky) {
+function mageloRecommendNames(upgradeContext) {
+  if (!upgradeContext) return []
+  const names = []
+  const stats = upgradeContext.itemStats || {}
+  const raidIds = upgradeContext.raidItemIds
+  if (raidIds && typeof raidIds[Symbol.iterator] === 'function') {
+    for (const id of raidIds) {
+      const row = stats[id] || stats[String(id)]
+      const name = row?.name
+      if (name) names.push({ name, itemId: id })
+    }
+  }
+  return names
+}
+
+function resolveItem(facts, hint, state, useSticky, upgradeContext = null) {
   if (!hint) {
     if (useSticky && state.lastItemName) {
       return { name: state.lastItemName, itemId: state.lastItemId }
@@ -60,7 +76,12 @@ function resolveItem(facts, hint, state, useSticky) {
     name: p.itemName,
     itemId: p.itemId,
   }))
-  const merged = [...catalog, ...fromPurchases].filter((i) => i.name)
+  const fromSources = catalogEntriesFromKnownSources(facts.knownItemSources)
+  const fromMagelo = mageloRecommendNames(upgradeContext)
+  if (state.lastItemName) {
+    fromMagelo.push({ name: state.lastItemName, itemId: state.lastItemId })
+  }
+  const merged = [...catalog, ...fromPurchases, ...fromSources, ...fromMagelo].filter((i) => i.name)
   const match = matchItemName(hint, merged)
   if (!match) return { unmatched: true, hint }
   if (match.ambiguous) return { ambiguous: true, candidates: match.candidates, hint }
@@ -73,11 +94,6 @@ function lookupPrice(facts, itemName) {
   if (!entry?.values?.length) return null
   const n = Number(entry.values[0])
   return Number.isFinite(n) ? n : null
-}
-
-function lookupSource(facts, itemName) {
-  if (!itemName) return null
-  return facts.knownItemSources?.[String(itemName).toLowerCase()] || null
 }
 
 function selectCharacter(facts, matched, state) {
@@ -196,7 +212,7 @@ export function handleMessage({ text, facts, state, upgradeContext = null, rng =
   }
 
   const stickyItem = [INTENTS.ITEM_PRICE, INTENTS.ITEM_SOURCE, INTENTS.AFFORDABILITY, INTENTS.FOLLOWUP].includes(intent)
-  const itemResolved = resolveItem(facts, classified.matchedItemHint, state, stickyItem)
+  const itemResolved = resolveItem(facts, classified.matchedItemHint, state, stickyItem, upgradeContext)
 
   if (itemResolved?.ambiguous) {
     const response = {
@@ -220,7 +236,7 @@ export function handleMessage({ text, facts, state, upgradeContext = null, rng =
   if (!itemName && stickyItem && state.lastItemName) itemName = state.lastItemName
 
   const lastSale = itemName && !itemUnmatched ? lookupPrice(facts, itemName) : null
-  const itemSource = itemName && !itemUnmatched ? lookupSource(facts, itemName) : null
+  const itemSource = itemName && !itemUnmatched ? lookupItemSource(facts.knownItemSources, itemName) : null
 
   const answer = dispatchHandler({
     intent,

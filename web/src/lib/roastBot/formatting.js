@@ -17,15 +17,32 @@ export function formatDkp(n) {
 }
 
 /**
+ * Absolute magnitude for display. ≥2 decimal places normally; 3 sig figs when |n| < 0.01
+ * so tiny upgrades never round to a zero label.
+ * @param {number} abs
+ * @returns {string}
+ */
+function formatDeltaMagnitude(abs) {
+  if (abs === 0) return '0.00'
+  if (abs < 0.01) return Number(abs.toPrecision(3)).toString()
+  return abs.toFixed(2)
+}
+
+/**
  * @param {number|null|undefined} delta
  * @param {string} [slotName]
  */
 export function formatUpgradeDelta(delta, slotName) {
   if (delta == null || !Number.isFinite(Number(delta))) return null
-  const d = Math.round(Number(delta) * 10) / 10
+  const raw = Number(delta)
   const slot = slotName ? ` ${slotName}` : ''
-  const sign = d > 0 ? '+' : ''
-  return `${sign}${d} score${slot}`
+  if (raw === 0) return `0.00 score${slot}`
+  const abs = Math.abs(raw)
+  let mag = formatDeltaMagnitude(abs)
+  // Guard: never label a strictly non-zero delta as zero
+  if (Number(mag) === 0) mag = Number(abs.toPrecision(3)).toString()
+  const sign = raw > 0 ? '+' : '-'
+  return `${sign}${mag} score${slot}`
 }
 
 /**

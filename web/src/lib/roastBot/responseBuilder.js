@@ -29,7 +29,7 @@ export function pickFromCategoryTiers(categories, ctx, recentIds, placeholders) 
   const recent = new Set(recentIds || [])
   for (const cat of categories) {
     if (cat === 'general') continue
-    const pool = []
+    let pool = []
     for (const t of TEMPLATES) {
       if (t.category !== cat && t.eligibility !== cat) continue
       if (!isEligible(t.eligibility || t.category, ctx)) continue
@@ -38,6 +38,14 @@ export function pickFromCategoryTiers(categories, ctx, recentIds, placeholders) 
       pool.push({ template: t, text: filled })
     }
     if (!pool.length) continue
+    // When both mob and zone are known, prefer templates that mention both
+    if (cat === 'item_source' && placeholders?.mob && placeholders?.zone) {
+      const both = pool.filter(
+        (p) =>
+          p.text.includes(String(placeholders.mob)) && p.text.includes(String(placeholders.zone)),
+      )
+      if (both.length) pool = both
+    }
     const fresh = pool.filter((p) => !recent.has(p.template.id))
     return fresh.length ? fresh : pool
   }

@@ -7,7 +7,11 @@ import { useDkpData } from '../lib/dkpLeaderboard'
 import { supabase } from '../lib/supabase'
 import { fetchAllRpcByRange } from '../lib/fetchAllRpcByRange'
 import { buildItemLast3FromSaleRows } from '../lib/recentItemSaleCosts'
-import { getItemSources, getDkpMobLoot } from '../lib/staticData'
+import { getItemSources, getDkpMobLoot, getRaidItemSources } from '../lib/staticData'
+import {
+  buildKnownItemSources,
+  catalogEntriesFromKnownSources,
+} from '../lib/itemSourceLookup.js'
 import {
   BOT_NAME,
   BOT_TAGLINE,
@@ -34,37 +38,6 @@ async function fetchSaleCosts() {
   } catch {
     return {}
   }
-}
-
-function buildKnownSources(itemSources, mobLoot) {
-  /** @type {Record<string, { zone?: string, mob?: string }>} */
-  const out = {}
-  const add = (name, zone, mob) => {
-    const key = String(name || '').trim().toLowerCase()
-    if (!key) return
-    if (!out[key]) out[key] = {}
-    if (zone && !out[key].zone) out[key].zone = zone
-    if (mob && !out[key].mob) out[key].mob = mob
-  }
-  if (itemSources && typeof itemSources === 'object') {
-    for (const [name, info] of Object.entries(itemSources)) {
-      if (Array.isArray(info)) {
-        for (const row of info) add(name, row.zone || row.raid || row.source, row.mob || row.npc)
-      } else if (info && typeof info === 'object') {
-        add(name, info.zone || info.raid || info.source, info.mob || info.npc)
-      }
-    }
-  }
-  if (mobLoot && typeof mobLoot === 'object') {
-    for (const [mob, items] of Object.entries(mobLoot)) {
-      const list = Array.isArray(items) ? items : items?.items || []
-      for (const it of list) {
-        const name = typeof it === 'string' ? it : it?.name || it?.item_name
-        add(name, it?.zone, mob)
-      }
-    }
-  }
-  return out
 }
 
 function needsMageloContext(text, pendingIntent) {
@@ -121,8 +94,12 @@ export default function RoastBot({ profile, session, factsOverride = null, openO
   const { data: staticBundle } = useSWR(
     botActive && userId ? 'roast-bot-static-sources' : null,
     async () => {
-      const [itemSources, mobLoot] = await Promise.all([getItemSources(), getDkpMobLoot()])
-      return { itemSources, mobLoot }
+      const [itemSources, mobLoot, raidItemSources] = await Promise.all([
+        getItemSources(),
+        getDkpMobLoot(),
+        getRaidItemSources(),
+      ])
+      return { itemSources, mobLoot, raidItemSources }
     },
     { revalidateOnFocus: false, dedupingInterval: 600_000 },
   )
@@ -141,7 +118,11 @@ export default function RoastBot({ profile, session, factsOverride = null, openO
     const lootRows = lootRowsFromAccountDetail(detail)
     const attendanceRows = attendanceRowsFromAccountDetail(detail)
     const raidsById = raidsByIdFromAccountDetail(detail)
-    const knownItemSources = buildKnownSources(staticBundle?.itemSources, staticBundle?.mobLoot)
+    const knownItemSources = buildKnownItemSources({
+      itemSources: staticBundle?.itemSources,
+      mobLoot: staticBundle?.mobLoot,
+      raidItemSources: staticBundle?.raidItemSources,
+    })
 
     const itemCatalog = []
     const seen = new Set()
@@ -150,6 +131,12 @@ export default function RoastBot({ profile, session, factsOverride = null, openO
       if (!name || seen.has(name.toLowerCase())) continue
       seen.add(name.toLowerCase())
       itemCatalog.push({ name, itemId: p.item_id })
+    }
+    for (const entry of catalogEntriesFromKnownSources(knownItemSources)) {
+      const key = String(entry.name || '').toLowerCase()
+      if (!key || seen.has(key)) continue
+      seen.add(key)
+      itemCatalog.push(entry)
     }
 
     /** @type {Record<string, number[]>} */

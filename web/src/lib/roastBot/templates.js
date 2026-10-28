@@ -144,10 +144,10 @@ export const TEMPLATES = [
   { id: 'H15', category: 'attendance_return', requiredFacts: [], eligibility: 'attendance_return', text: 'You made it back to raids. Congratulations on rediscovering the part of EverQuest that funds your bad decisions.' },
 
   // I. Item search / drops / sales — 15
-  { id: 'I01', category: 'item_source', requiredFacts: ['item', 'zone'], eligibility: 'item_source', text: '{item} drops in {zone}. Unfortunately, showing up there requires slightly more effort than asking me.' },
+  { id: 'I01', category: 'item_source', requiredFacts: ['item', 'mob', 'zone'], eligibility: 'item_source', text: '{item} drops from {mob} in {zone}. Unfortunately, showing up there requires slightly more effort than asking me.' },
   { id: 'I02', category: 'item_source', requiredFacts: ['item', 'mob'], eligibility: 'item_source', text: "You'll find {item} from {mob}. Try killing it before planning how much DKP to waste." },
-  { id: 'I03', category: 'item_source', requiredFacts: ['item', 'zone'], eligibility: 'item_source', text: 'The recorded source for {item} is {zone}. Geography: another challenge successfully solved for you.' },
-  { id: 'I04', category: 'item_source', requiredFacts: ['item', 'mob'], eligibility: 'item_source', text: '{mob} is a source of {item}. I hope your raid preparation exceeds your purchasing discipline.' },
+  { id: 'I03', category: 'item_source', requiredFacts: ['item', 'mob', 'zone'], eligibility: 'item_source', text: 'The recorded source for {item} is {mob} in {zone}. Geography: another challenge successfully solved for you.' },
+  { id: 'I04', category: 'item_source', requiredFacts: ['item', 'mob', 'zone'], eligibility: 'item_source', text: '{mob} in {zone} is a source of {item}. I hope your raid preparation exceeds your purchasing discipline.' },
   { id: 'I05', category: 'item_source', requiredFacts: ['item', 'zone'], eligibility: 'item_source', text: "Looking for {item}? Try {zone}. You're welcome for this astonishing feat of research." },
   { id: 'I06', category: 'item_sale', requiredFacts: ['item', 'lastSale'], eligibility: 'item_sale', text: "{item} last sold for {lastSale} DKP. That's historical data, not permission to double it." },
   { id: 'I07', category: 'item_sale', requiredFacts: ['item', 'lastSale'], eligibility: 'item_sale', text: 'The latest recorded sale of {item} was {lastSale} DKP. Please absorb this information without immediately bidding.' },

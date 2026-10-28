@@ -39,7 +39,13 @@ export {
   selectCharacterId,
 } from './conversation.js'
 export { greetingMessage, buildResponse, renderAnswer } from './responseBuilder.js'
-export { suggestionChips, matchItemName, formatDkp, buildLinks } from './formatting.js'
+export { suggestionChips, matchItemName, formatDkp, formatUpgradeDelta, buildLinks } from './formatting.js'
+export {
+  buildKnownItemSources,
+  lookupItemSource,
+  catalogEntriesFromKnownSources,
+  dedupePreferZone,
+} from '../itemSourceLookup.js'
 export {
   DEFAULT_CLASS_RANKINGS_URL,
   loadClassRankings,

@@ -225,6 +225,107 @@ describe('roastBot dialogue acceptance', () => {
     assert.ok(missing.answer.requiredClaims.includes('magelo_unavailable'))
   })
 
+  it('after recommending Earthen Bracer of Fortitude, where it drops returns Quarm / Plane of Time', () => {
+    const EARTHEN = 'Earthen Bracer of Fortitude'
+    const facts = fixtureFacts({
+      // Not owned — must resolve via known sources / Magelo recommend catalog
+      itemCatalog: [
+        { name: 'Beguiler Circlet', itemId: 501 },
+        { name: 'Smooth Onyx Torque', itemId: 99 },
+      ],
+      knownItemSources: {
+        'beguiler circlet': { zone: 'Plane of Time', mob: 'Quarm', displayName: 'Beguiler Circlet' },
+        'smooth onyx torque': { zone: 'Plane of Time', mob: 'Quarm', displayName: 'Smooth Onyx Torque' },
+        'earthen bracer of fortitude': {
+          zone: 'Plane of Time',
+          mob: 'Quarm',
+          displayName: EARTHEN,
+          itemId: 32100,
+          sources: [{ mob: 'Quarm', zone: 'Plane of Time' }],
+        },
+      },
+    })
+    const earthenStats = {
+      ...itemStatsFixture,
+      200: {
+        name: 'Old Bracer',
+        slot: 'WRIST',
+        classes: 'ENC',
+        ac: 5,
+        mods: [],
+        resists: [],
+      },
+      32100: {
+        name: EARTHEN,
+        slot: 'WRIST',
+        classes: 'ENC',
+        ac: 40,
+        mods: [],
+        resists: [],
+      },
+    }
+    const rankings = {
+      ...rankingsFixture,
+      characters: [
+        {
+          name: 'Iaminae',
+          class: 'Enchanter',
+          overall_score: 800,
+          inventory: [
+            { slot_id: 2, item_id: 100, item_name: 'Old Circlet' },
+            { slot_id: 9, item_id: 200, item_name: 'Old Bracer' },
+          ],
+        },
+        {
+          name: 'Charmalt',
+          class: 'Enchanter',
+          overall_score: 500,
+          inventory: [{ slot_id: 2, item_id: 100, item_name: 'Old Circlet' }],
+        },
+        {
+          name: 'TopEnc',
+          class: 'Enchanter',
+          overall_score: 1000,
+          inventory: [],
+        },
+      ],
+    }
+    const upgradeContext = {
+      rankings,
+      itemStats: earthenStats,
+      raidItemIds: new Set([100, 501, 200, 32100]),
+    }
+
+    let state = createConversationState()
+    const first = handleMessage({
+      text: 'What should I buy for Iaminae?',
+      facts,
+      state,
+      upgradeContext,
+      rng: () => 0,
+    })
+    assert.equal(first.intent, INTENTS.UPGRADES)
+    assert.ok(first.response.cards?.some((c) => c.itemName === EARTHEN), first.response.text)
+    const earthenCard = first.response.cards.find((c) => c.itemName === EARTHEN)
+    assert.equal(earthenCard.zone, 'Plane of Time')
+    assert.ok(first.response.referenced.items.includes(EARTHEN))
+    state = first.state
+
+    const second = handleMessage({
+      text: `Where does ${EARTHEN} drop?`,
+      facts,
+      state,
+      upgradeContext,
+      rng: () => 0,
+    })
+    assert.equal(second.intent, INTENTS.ITEM_SOURCE)
+    assert.ok(!second.answer.requiredClaims.includes('item_unmatched'))
+    assert.ok(!second.answer.requiredClaims.includes('source_unknown'))
+    assert.ok(second.answer.requiredClaims.includes('item_source'))
+    assert.match(second.response.text, /Quarm/i)
+    assert.match(second.response.text, /Plane of Time/i)
+  })
+
   it('How much was it after discussing an item resolves the correct item', () => {
     const facts = fixtureFacts()
     let state = createConversationState()

@@ -9,6 +9,7 @@ import { computeCharacterUpgrades, formatMageloLoadError } from '../upgrades.js'
 import { assessCharacterGear } from '../gearAssessment.js'
 import { scopedPurchaseFacts, pickSpendPurchase } from '../facts.js'
 import { FULL_GEAR_COST_REFUSAL, NO_ACCOUNT_HINT } from '../templates.js'
+import { lookupItemSource } from '../../itemSourceLookup.js'
 
 /**
  * @typedef {{
@@ -48,8 +49,7 @@ function lookupPrice(facts, itemName) {
 }
 
 function lookupSource(facts, itemName) {
-  if (!itemName) return null
-  return facts.knownItemSources?.[String(itemName).toLowerCase()] || null
+  return lookupItemSource(facts?.knownItemSources, itemName)
 }
 
 /**
