@@ -690,7 +690,8 @@ export function computeUpgradesForCharacter(char, maxPerSlot, includeDowngrades,
     const currentItemName =
       inv.item_name || (currentItemId ? `Item ${currentItemId}` : '')
     let currentScore = 0
-    let currentInData = false
+    // Empty slot (no equipped id): baseline 0, not "missing stats". Missing stats only when id is set but absent.
+    let currentInData = currentItemId == null || Number.isNaN(currentItemId)
     const currentStats =
       currentItemId != null && !Number.isNaN(currentItemId) && itemStats[String(currentItemId)]
         ? itemStats[String(currentItemId)]
@@ -704,7 +705,8 @@ export function computeUpgradesForCharacter(char, maxPerSlot, includeDowngrades,
         focusWeights,
         focusValuesByItem,
       )
-    } else {
+    } else if (currentItemId != null && !Number.isNaN(currentItemId)) {
+      currentInData = false
       anyMissing = true
     }
 

@@ -3,7 +3,13 @@
  * Never invents deltas when Magelo inventory or weights are missing.
  */
 
-import { computeUpgradesForCharacter, SLOT_NAMES_FOR_UI } from '../mageloUpgradeEngine.js'
+import {
+  CLASS_TO_ABBREV,
+  computeUpgradesForCharacter,
+  itemMatchesSlot,
+  itemUsableByClass,
+  SLOT_NAMES_FOR_UI,
+} from '../mageloUpgradeEngine.js'
 import { ensureItemStatsLoaded } from '../itemStats.js'
 import { getDkpMobLoot, getRaidItemSources } from '../staticData.js'
 import { classifyUpgradeDelta } from './events.js'
@@ -208,6 +214,53 @@ export function buildUpgradeContext(rankings, itemStats) {
 }
 
 /**
+ * Count items in `itemStats` that match any of the given slot ids for a class.
+ * Used to distinguish an empty candidate universe from zero positive deltas.
+ * @param {Record<string, object>} itemStats
+ * @param {number[]} slotIds
+ * @param {string} classAbbrev
+ */
+export function countSlotClassMatches(itemStats, slotIds, classAbbrev) {
+  if (!itemStats || !slotIds?.length) return 0
+  let count = 0
+  for (const stats of Object.values(itemStats)) {
+    if (!stats) continue
+    if (!itemUsableByClass(stats.classes, classAbbrev)) continue
+    if (slotIds.some((slotId) => itemMatchesSlot(slotId, stats.slot))) count += 1
+  }
+  return count
+}
+
+/**
+ * @param {object} args
+ * @param {number} [args.raidFilteredCount]
+ * @param {number} [args.matchCount]
+ * @param {number} [args.upgradeRowCount]
+ * @param {boolean} [args.anyMissing]
+ */
+function buildUpgradeDebug(args) {
+  return {
+    raidFilteredCount: args.raidFilteredCount ?? 0,
+    matchCount: args.matchCount ?? 0,
+    upgradeRowCount: args.upgradeRowCount ?? 0,
+    anyMissing: Boolean(args.anyMissing),
+  }
+}
+
+function logUpgradeDebug(debug) {
+  const isDev =
+    typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.DEV
+  if (!isDev || typeof console === 'undefined' || typeof console.debug !== 'function') return
+  console.debug(
+    '[roastBot upgrades]',
+    `raidFiltered=${debug.raidFilteredCount}`,
+    `slotClassMatches=${debug.matchCount}`,
+    `upgradeRows=${debug.upgradeRowCount}`,
+    `anyMissing=${debug.anyMissing}`,
+  )
+}
+
+/**
  * Compute up to `limit` upgrade suggestions for a character.
  *
  * @param {{
@@ -257,12 +310,25 @@ export function computeCharacterUpgrades({
     return { ok: false, reason: result.error, suggestions: [] }
   }
 
+  const classAbbrev = CLASS_TO_ABBREV[className] || ''
+  const slotIds = (result.bySlot || []).map((s) => s.slotId).filter((id) => Number.isFinite(id))
+  const matchCount = countSlotClassMatches(filtered, slotIds, classAbbrev)
+  const raidFilteredCount = Object.keys(filtered).length
+
   /** @type {Array<object>} */
   const flat = []
+  let upgradeRowCount = 0
+  let missingEquippedStats = false
   for (const slotEntry of result.bySlot || []) {
     const slotId = slotEntry.slotId
     const slotLabel = slotEntry.slotName || SLOT_NAMES_FOR_UI[slotId] || `Slot ${slotId}`
-    for (const cand of slotEntry.candidates || []) {
+    if (slotEntry.currentItemId != null && slotEntry.currentInData === false) {
+      missingEquippedStats = true
+    }
+    // Engine contract: bySlot[].upgrades (not .candidates — that property is never returned)
+    const rows = slotEntry.upgrades || []
+    upgradeRowCount += rows.length
+    for (const cand of rows) {
       const strength = classifyUpgradeDelta(cand.delta)
       if (strength === 'none') continue
       flat.push({
@@ -280,10 +346,33 @@ export function computeCharacterUpgrades({
   }
   flat.sort((a, b) => b.delta - a.delta)
   const suggestions = flat.slice(0, limit)
+  const debug = buildUpgradeDebug({
+    raidFilteredCount,
+    matchCount,
+    upgradeRowCount,
+    anyMissing: result.anyMissing,
+  })
+  logUpgradeDebug(debug)
+
   if (!suggestions.length) {
-    return { ok: false, reason: 'no_positive_upgrades', suggestions: [], anyMissing: result.anyMissing }
+    let reason = 'no_positive_upgrades'
+    if (matchCount === 0) reason = 'empty_candidate_set'
+    else if (missingEquippedStats || result.anyMissing) reason = 'missing_equipped_item_stats'
+    return {
+      ok: false,
+      reason,
+      suggestions: [],
+      anyMissing: result.anyMissing,
+      debug,
+    }
   }
-  return { ok: true, reason: null, suggestions, anyMissing: result.anyMissing }
+  return {
+    ok: true,
+    reason: null,
+    suggestions,
+    anyMissing: result.anyMissing,
+    debug,
+  }
 }
 
 /**

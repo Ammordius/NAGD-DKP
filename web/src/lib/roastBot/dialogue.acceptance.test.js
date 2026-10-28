@@ -90,7 +90,8 @@ const rankingsFixture = {
     },
   ],
   classWeights: {
-    Enchanter: { CHA: 1, INT: 1, AC: 0.2 },
+    // Engine reads hp_pct/mana_pct/ac_pct/resists_pct (not CHA/INT/AC)
+    Enchanter: { ac_pct: 1, hp_pct: 0, mana_pct: 0, resists_pct: 0 },
   },
   focusCandidates: {},
 }
@@ -101,7 +102,7 @@ const itemStatsFixture = {
     slot: 'HEAD',
     classes: 'ENC',
     ac: 5,
-    mods: [{ label: 'CHA', value: 5 }],
+    mods: [],
     resists: [],
   },
   501: {
@@ -109,7 +110,7 @@ const itemStatsFixture = {
     slot: 'HEAD',
     classes: 'ENC',
     ac: 25,
-    mods: [{ label: 'CHA', value: 20 }],
+    mods: [],
     resists: [],
   },
 }
@@ -194,7 +195,7 @@ describe('roastBot dialogue acceptance', () => {
     assert.match(response.text, /balance/i)
   })
 
-  it('What should I buy for Iaminae returns upgrades or explicit missing-data reason', () => {
+  it('What should I buy for Iaminae returns verified upgrade cards', () => {
     const facts = fixtureFacts()
     const withData = handleMessage({
       text: 'What should I buy for Iaminae?',
@@ -208,16 +209,10 @@ describe('roastBot dialogue acceptance', () => {
       rng: () => 0,
     })
     assert.equal(withData.intent, INTENTS.UPGRADES)
-    assert.ok(
-      withData.response.cards?.length > 0 ||
-        /unavailable|cannot|no verified|invent|no positive|missing/i.test(withData.response.text),
-      `unexpected upgrades reply: ${withData.response.text}`,
-    )
-    if (withData.response.cards?.length) {
-      assert.ok(withData.response.referenced.items.length > 0)
-    } else {
-      assert.ok(withData.answer.requiredClaims.includes('upgrades_unavailable'))
-    }
+    assert.ok(withData.response.cards?.length > 0, `expected upgrade cards: ${withData.response.text}`)
+    assert.equal(withData.response.cards[0].itemName, 'Beguiler Circlet')
+    assert.ok(withData.response.referenced.items.includes('Beguiler Circlet'))
+    assert.ok(withData.answer.requiredClaims.includes('upgrade_candidates'))
 
     const missing = handleMessage({
       text: 'What should I buy for Iaminae?',
