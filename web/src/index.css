@@ -273,28 +273,56 @@ html[data-ambiance-theme]:not([data-ambiance-theme="default"]) tr:hover {
   font-weight: 700;
 }
 .activity-pager {
-  width: auto;
-  border: none;
-  border-collapse: collapse;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
   margin-bottom: 1rem;
 }
-.activity-pager td {
-  border: none;
-  border-bottom: none;
-  padding: 0.15rem 0.45rem 0.15rem 0;
-  background: transparent;
-  vertical-align: middle;
+.activity-pager .btn {
+  white-space: nowrap;
+  min-height: 2.5rem;
 }
-.activity-pager .btn { white-space: nowrap; }
+.activity-pager .btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.activity-pager-status {
+  display: none;
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: #e4e4e7;
+  text-align: center;
+  white-space: nowrap;
+}
+.activity-pager-label-short { display: none; }
+.activity-pager-label-full { display: inline; }
 .activity-pager-pages {
   display: flex;
   gap: 0.35rem;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
 }
 .activity-pager-pages .btn {
   min-width: 2.25rem;
   padding: 0.25rem 0.5rem;
+}
+@media (max-width: 640px) {
+  .activity-page-summary { font-size: 0.95rem; }
+  .activity-pager {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .activity-pager-edge,
+  .activity-pager-pages { display: none; }
+  .activity-pager-status { display: block; }
+  .activity-pager-label-full { display: none; }
+  .activity-pager-label-short { display: inline; }
+  .activity-pager-prev { justify-self: start; }
+  .activity-pager-next { justify-self: end; }
+  .activity-pager .btn { min-height: 2.75rem; }
 }
 .claim-account-link {
   display: inline;

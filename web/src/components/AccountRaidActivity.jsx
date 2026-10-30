@@ -139,68 +139,59 @@ export default function AccountRaidActivity({ rows, controls }) {
                       </span>
                     )}
                   </p>
-                  <table className="activity-pager">
-                    <tbody>
-                      <tr>
-                        <td>
+                  <nav className="activity-pager" aria-label="Activity pagination">
+                    <button
+                      type="button"
+                      className="btn btn-ghost activity-pager-edge"
+                      disabled={page <= 1}
+                      onClick={() => setActivityPage(1)}
+                    >
+                      {'<< First Page'}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-ghost activity-pager-prev"
+                      disabled={page <= 1}
+                      onClick={() => setActivityPage((p) => Math.max(1, p - 1))}
+                    >
+                      <span className="activity-pager-label-full">{'< Previous Page'}</span>
+                      <span className="activity-pager-label-short">Previous</span>
+                    </button>
+                    <div className="activity-pager-status" aria-live="polite">
+                      Page {page} of {totalPages}
+                    </div>
+                    {totalPages <= 10 && (
+                      <div className="activity-pager-pages">
+                        {Array.from({ length: totalPages }, (_, i) => i + 1).map((n) => (
                           <button
+                            key={n}
                             type="button"
-                            className="btn btn-ghost"
-                            disabled={page <= 1}
-                            onClick={() => setActivityPage(1)}
+                            className={n === page ? 'btn' : 'btn btn-ghost'}
+                            onClick={() => setActivityPage(n)}
                           >
-                            {'<< First Page'}
+                            {n}
                           </button>
-                        </td>
-                        <td>
-                          <button
-                            type="button"
-                            className="btn btn-ghost"
-                            disabled={page <= 1}
-                            onClick={() => setActivityPage((p) => Math.max(1, p - 1))}
-                          >
-                            {'< Previous Page'}
-                          </button>
-                        </td>
-                        {totalPages <= 10 && (
-                          <td>
-                            <div className="activity-pager-pages">
-                              {Array.from({ length: totalPages }, (_, i) => i + 1).map((n) => (
-                                <button
-                                  key={n}
-                                  type="button"
-                                  className={n === page ? 'btn' : 'btn btn-ghost'}
-                                  onClick={() => setActivityPage(n)}
-                                >
-                                  {n}
-                                </button>
-                              ))}
-                            </div>
-                          </td>
-                        )}
-                        <td>
-                          <button
-                            type="button"
-                            className="btn btn-ghost"
-                            disabled={page >= totalPages}
-                            onClick={() => setActivityPage((p) => Math.min(totalPages, p + 1))}
-                          >
-                            {'Next Page >'}
-                          </button>
-                        </td>
-                        <td>
-                          <button
-                            type="button"
-                            className="btn btn-ghost"
-                            disabled={page >= totalPages}
-                            onClick={() => setActivityPage(totalPages)}
-                          >
-                            {'Last Page >>'}
-                          </button>
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
+                        ))}
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      className="btn btn-ghost activity-pager-next"
+                      disabled={page >= totalPages}
+                      onClick={() => setActivityPage((p) => Math.min(totalPages, p + 1))}
+                    >
+                      <span className="activity-pager-label-full">{'Next Page >'}</span>
+                      <span className="activity-pager-label-short">Next</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-ghost activity-pager-edge"
+                      disabled={page >= totalPages}
+                      onClick={() => setActivityPage(totalPages)}
+                    >
+                      {'Last Page >>'}
+                    </button>
+                  </nav>
                 </>
               )}
               <ul style={{ listStyle: 'none', paddingLeft: 0, margin: 0 }}>
