@@ -61,6 +61,17 @@ export {
 export { assessCharacterGear } from './gearAssessment.js'
 export { dispatchHandler } from './handlers/index.js'
 export { isEligible, categoriesForIntent } from './rules.js'
+export {
+  tryParseDiscovery,
+  looksLikeDiscovery,
+  prepareDiscovery,
+  runDiscovery,
+  planDiscovery,
+  executeDiscovery,
+  renderDiscovery,
+  resetDiscoveryCache,
+  discoverySwrKey,
+} from './discovery/index.js'
 
 export const BOT_NAME = 'The DKP Inquisitor'
 export const BOT_TAGLINE = 'Your loot history is public. Unfortunately.'

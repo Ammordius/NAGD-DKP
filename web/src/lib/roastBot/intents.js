@@ -26,6 +26,7 @@ export const INTENTS = {
   DEFENSE: 'defense',
   FOLLOWUP: 'followup',
   FULL_GEAR_COST: 'full_gear_cost',
+  LOOT_DISCOVERY: 'loot_discovery',
   UNKNOWN: 'unknown',
 }
 

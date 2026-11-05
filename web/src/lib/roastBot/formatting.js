@@ -111,7 +111,13 @@ export function matchItemName(hint, catalog) {
 
 /**
  * Build link payload for UI (React renders Link — never HTML strings).
- * @param {{ itemName?: string, itemId?: string|number, characterName?: string }} refs
+ * @param {{
+ *   itemName?: string,
+ *   itemId?: string|number,
+ *   characterName?: string,
+ *   raidId?: string|number,
+ *   raidName?: string,
+ * }} refs
  */
 export function buildLinks(refs = {}) {
   const links = []
@@ -128,6 +134,15 @@ export function buildLinks(refs = {}) {
       type: 'character',
       label: refs.characterName,
       to: `/characters/${encodeURIComponent(refs.characterName)}`,
+    })
+  }
+  if (refs.raidId != null && String(refs.raidId).trim() !== '') {
+    const id = String(refs.raidId).trim()
+    links.push({
+      type: 'raid',
+      label: refs.raidName || `Raid ${id}`,
+      to: `/raids/${encodeURIComponent(id)}`,
+      raidId: id,
     })
   }
   return links

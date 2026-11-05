@@ -10,6 +10,7 @@ import { assessCharacterGear } from '../gearAssessment.js'
 import { scopedPurchaseFacts, pickSpendPurchase } from '../facts.js'
 import { FULL_GEAR_COST_REFUSAL, NO_ACCOUNT_HINT } from '../templates.js'
 import { lookupItemSource } from '../../itemSourceLookup.js'
+import { renderDiscovery } from '../discovery/render.js'
 
 /**
  * @typedef {{
@@ -99,6 +100,8 @@ export function dispatchHandler(args) {
       return handleGeneralRoast(args)
     case INTENTS.GREETING:
       return handleGreeting(args)
+    case INTENTS.LOOT_DISCOVERY:
+      return handleLootDiscovery(args)
     case INTENTS.UNKNOWN:
     default:
       return handleUnknown(args)
@@ -138,7 +141,7 @@ function handleDkpExplain() {
 
 function handleCapabilities() {
   const factText =
-    'I can roast your spending, check your balance, diagnose why you look broke, review purchases, assess Magelo gear when the public export has your toon, suggest upgrades when inventory data exists, look up historical item prices and drop sources, and comment on account-level raid participation. I will not invent numbers or accuse individual characters of skipping raids.'
+    'I can roast your spending, check your balance, diagnose why you look broke, review purchases, assess Magelo gear when the public export has your toon, suggest upgrades when inventory data exists, look up historical item prices and drop sources, answer guild loot discovery questions (last raid loot by zone/phase, who got an item, award counts, character award windows), and comment on account-level raid participation. I will not invent numbers or accuse individual characters of skipping raids.'
   return {
     intent: INTENTS.CAPABILITIES,
     category: 'general',
@@ -149,6 +152,27 @@ function handleCapabilities() {
     reasonCode: 'capabilities',
     allowFlavor: true,
     templateId: 'CAPABILITIES',
+  }
+}
+
+/**
+ * Prefetched discovery AnswerFacts / DiscoveryResult from RoastBot send path.
+ * @param {object} args
+ */
+function handleLootDiscovery(args) {
+  if (args.discoveryAnswer) return args.discoveryAnswer
+  if (args.discoveryResult) return renderDiscovery(args.discoveryResult)
+  return {
+    intent: INTENTS.LOOT_DISCOVERY,
+    category: 'general',
+    factText:
+      'I recognized a loot discovery question, but award history was not loaded. Ask again; I query Supabase only when needed and cache the result briefly.',
+    requiredClaims: ['loot_discovery'],
+    placeholders: {},
+    referenced: emptyReferenced(),
+    reasonCode: 'loot_discovery',
+    allowFlavor: false,
+    templateId: 'LOOT_DISCOVERY',
   }
 }
 

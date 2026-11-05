@@ -100,7 +100,8 @@ export function renderAnswer({ answer, state, facts, rng = Math.random }) {
       answer.reasonCode === 'unknown_no_analysis' || answer.reasonCode === 'magelo_unavailable' ||
       answer.reasonCode === 'magelo_fetch_failed' ||
       answer.reasonCode === 'upgrades_unavailable' || answer.reasonCode === 'character_not_in_magelo' ||
-      answer.reasonCode === 'missing_magelo_export' || answer.reasonCode === 'missing_gear_score') {
+      answer.reasonCode === 'missing_magelo_export' || answer.reasonCode === 'missing_gear_score' ||
+      answer.reasonCode === 'loot_discovery' || answer.templateId === 'LOOT_DISCOVERY') {
     // Data/error paths: never append unrelated generic insults (allowFlavor must be explicit)
     let text = answer.factText
     const noFlavorCodes = new Set([
@@ -112,6 +113,7 @@ export function renderAnswer({ answer, state, facts, rng = Math.random }) {
       'character_not_in_magelo',
       'missing_magelo_export',
       'missing_gear_score',
+      'loot_discovery',
     ])
     if (answer.allowFlavor && !noFlavorCodes.has(answer.reasonCode)) {
       const flavor = pickFlavorSentence(state.recentTemplateIds, state.turnCount, rng)
@@ -121,14 +123,17 @@ export function renderAnswer({ answer, state, facts, rng = Math.random }) {
         answer._flavorId = flavor.template?.id
       }
     }
+    const links = answer.links?.length
+      ? answer.links
+      : buildLinksFromReferenced(answer.referenced)
     return {
       text,
       templateId: answer.templateId || answer.reasonCode,
       reasonCode: answer.reasonCode,
-      links: buildLinksFromReferenced(answer.referenced),
+      links,
       cards: answer.cards || [],
       requiredClaims: answer.requiredClaims || [],
-      referenced: answer.referenced || { characters: [], items: [] },
+      referenced: answer.referenced || { characters: [], items: [], raids: [] },
       placeholders: answer.placeholders || {},
     }
   }
@@ -220,6 +225,9 @@ function buildLinksFromReferenced(referenced) {
   }
   for (const name of referenced?.characters || []) {
     links.push(...buildLinks({ characterName: name }))
+  }
+  for (const raid of referenced?.raids || []) {
+    if (raid?.id != null) links.push(...buildLinks({ raidId: raid.id, raidName: raid.name }))
   }
   return links
 }

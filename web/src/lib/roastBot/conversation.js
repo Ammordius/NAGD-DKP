@@ -8,6 +8,7 @@ import { renderAnswer, greetingMessage } from './responseBuilder.js'
 import { matchItemName, suggestionChips, formatDkp } from './formatting.js'
 import { dispatchHandler } from './handlers/index.js'
 import { lookupItemSource, catalogEntriesFromKnownSources } from '../itemSourceLookup.js'
+import { looksLikeDiscovery } from './discovery/parse.js'
 
 /**
  * @returns {object}
@@ -122,10 +123,20 @@ function clearPending(state) {
  *   facts: object,
  *   state: object,
  *   upgradeContext?: object|null,
+ *   discoveryResult?: object|null,
+ *   discoveryAnswer?: object|null,
  *   rng?: () => number,
  * }} args
  */
-export function handleMessage({ text, facts, state, upgradeContext = null, rng = Math.random }) {
+export function handleMessage({
+  text,
+  facts,
+  state,
+  upgradeContext = null,
+  discoveryResult = null,
+  discoveryAnswer = null,
+  rng = Math.random,
+}) {
   state.turnCount = (state.turnCount || 0) + 1
 
   const classified = classifyIntent(text, {
@@ -137,7 +148,9 @@ export function handleMessage({ text, facts, state, upgradeContext = null, rng =
     pendingIntent: state.pendingIntent,
   })
 
-  let intent = classified.intent
+  // Discovery overrides broad item_source / search rules when phrasing matches.
+  const discoveryHit = Boolean(discoveryResult || discoveryAnswer || looksLikeDiscovery(text))
+  let intent = discoveryHit ? INTENTS.LOOT_DISCOVERY : classified.intent
   let ambiguousClass = null
 
   // Resume pending clarification
@@ -214,7 +227,7 @@ export function handleMessage({ text, facts, state, upgradeContext = null, rng =
   const stickyItem = [INTENTS.ITEM_PRICE, INTENTS.ITEM_SOURCE, INTENTS.AFFORDABILITY, INTENTS.FOLLOWUP].includes(intent)
   const itemResolved = resolveItem(facts, classified.matchedItemHint, state, stickyItem, upgradeContext)
 
-  if (itemResolved?.ambiguous) {
+  if (itemResolved?.ambiguous && !discoveryHit) {
     const response = {
       text: `Which item? Candidates: ${itemResolved.candidates.map((c) => c.name).slice(0, 5).join(', ')}.`,
       templateId: 'AMBIGUOUS_ITEM',
@@ -248,6 +261,8 @@ export function handleMessage({ text, facts, state, upgradeContext = null, rng =
     lastSale: lastSale != null ? Number(formatDkp(lastSale)) || lastSale : null,
     itemSource,
     upgradeContext,
+    discoveryResult,
+    discoveryAnswer,
   })
 
   if (answer.clarification?.slot === 'character') {

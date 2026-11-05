@@ -28,6 +28,7 @@ import {
   collectRaidLootItemIds,
   resetUpgradeCaches,
 } from '../lib/roastBot/index.js'
+import { looksLikeDiscovery, runDiscovery } from '../lib/roastBot/discovery/index.js'
 import { ensureItemStatsLoaded } from '../lib/itemStats'
 import './RoastBot.css'
 
@@ -44,6 +45,10 @@ function needsMageloContext(text, pendingIntent) {
   const lower = String(text || '').toLowerCase()
   if (pendingIntent === 'gear_assessment' || pendingIntent === 'upgrades') return true
   return /upgrade|what should i buy|recommend|improve|gear|geared|well.?geared|gear check|buy for/.test(lower)
+}
+
+function needsDiscoveryItemStats(text) {
+  return /shoulder|pauldron|caster|slot\b/i.test(String(text || ''))
 }
 
 /**
@@ -252,11 +257,35 @@ export default function RoastBot({ profile, session, factsOverride = null, openO
         if (needsMageloContext(text, convState.pendingIntent)) {
           ctx = await ensureUpgradeContext()
         }
+
+        let discoveryResult = null
+        let discoveryAnswer = null
+        if (!factsOverride && looksLikeDiscovery(text)) {
+          let itemStats = ctx?.itemStats || {}
+          if (needsDiscoveryItemStats(text)) {
+            await ensureItemStatsLoaded()
+            itemStats = await fetch('/item_stats.json')
+              .then((r) => (r.ok ? r.json() : {}))
+              .catch(() => ({}))
+          }
+          const run = await runDiscovery(supabase, text, {
+            knownItemSources: facts.knownItemSources,
+            itemCatalog: facts.itemCatalog,
+            itemStats,
+          })
+          if (run) {
+            discoveryResult = run.result
+            discoveryAnswer = run.answer
+          }
+        }
+
         const result = handleMessage({
           text,
           facts,
           state: { ...convState },
           upgradeContext: ctx,
+          discoveryResult,
+          discoveryAnswer,
         })
         setConvState(result.state)
         setMessages((m) => [...m, { role: 'bot', ...result.response }])
@@ -265,7 +294,7 @@ export default function RoastBot({ profile, session, factsOverride = null, openO
         setBusy(false)
       }
     },
-    [busy, convState, facts, upgradeContext, ensureUpgradeContext],
+    [busy, convState, facts, factsOverride, upgradeContext, ensureUpgradeContext],
   )
 
   const onCharSelect = (charId) => {

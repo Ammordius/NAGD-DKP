@@ -1,6 +1,16 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
-import { formatUpgradeDelta } from './formatting.js'
+import { formatUpgradeDelta, buildLinks } from './formatting.js'
+
+describe('buildLinks', () => {
+  it('builds raid links to /raids/:id without inventing ids', () => {
+    const links = buildLinks({ raidId: '1585398', raidName: 'Fire Minis' })
+    assert.equal(links.length, 1)
+    assert.equal(links[0].type, 'raid')
+    assert.equal(links[0].to, '/raids/1585398')
+    assert.equal(links[0].label, 'Fire Minis')
+  })
+})
 
 describe('formatUpgradeDelta', () => {
   it('shows at least two decimals for small positives (not 0 score)', () => {

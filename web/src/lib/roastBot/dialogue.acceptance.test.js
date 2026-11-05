@@ -508,5 +508,56 @@ describe('roastBot open-gate contract', () => {
     assert.match(src, /enabled: botActive && Boolean\(userId\)/)
     assert.match(src, /botActive && userId \? 'roast-bot-sale-costs'/)
     assert.match(src, /needsMageloContext/)
+    assert.match(src, /looksLikeDiscovery/)
+    assert.match(src, /runDiscovery/)
+  })
+})
+
+describe('loot discovery dialogue regression', () => {
+  it('capabilities mentions discovery without breaking roast why-broke', () => {
+    const facts = fixtureFacts()
+    const caps = handleMessage({
+      text: 'What can you do?',
+      facts,
+      state: createConversationState(),
+      rng: () => 0,
+    })
+    assert.equal(caps.intent, INTENTS.CAPABILITIES)
+    assert.match(caps.response.text, /discovery|who got|zone|phase/i)
+
+    const broke = handleMessage({
+      text: 'Why am I broke?',
+      facts,
+      state: createConversationState(),
+      rng: () => 0,
+    })
+    assert.equal(broke.intent, INTENTS.WHY_BROKE)
+    assert.match(broke.response.text, /42/)
+  })
+
+  it('discovery phrasing with prefetched answer does not fall through to item_source', () => {
+    const facts = fixtureFacts()
+    const discoveryAnswer = {
+      intent: INTENTS.LOOT_DISCOVERY,
+      category: 'general',
+      factText: 'Last Plane of Fire raid — 2026-03-01\n- Whip → Tandiyen\n1 recorded loot award.',
+      requiredClaims: ['loot_discovery'],
+      placeholders: {},
+      referenced: { characters: ['Tandiyen'], items: ['Whip'], raids: [{ id: 'r1', name: 'Fire' }] },
+      links: [{ type: 'raid', label: 'Fire', to: '/raids/r1' }],
+      reasonCode: 'loot_discovery',
+      allowFlavor: false,
+      templateId: 'LOOT_DISCOVERY',
+    }
+    const { response, intent } = handleMessage({
+      text: 'What dropped last time in PoF?',
+      facts,
+      state: createConversationState(),
+      discoveryAnswer,
+      rng: () => 0,
+    })
+    assert.equal(intent, INTENTS.LOOT_DISCOVERY)
+    assert.match(response.text, /Plane of Fire|recorded loot/i)
+    assert.ok(response.links.some((l) => l.type === 'raid' && l.to === '/raids/r1'))
   })
 })
