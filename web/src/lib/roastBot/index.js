@@ -64,6 +64,7 @@ export { isEligible, categoriesForIntent } from './rules.js'
 export {
   tryParseDiscovery,
   looksLikeDiscovery,
+  recognizeDiscovery,
   prepareDiscovery,
   runDiscovery,
   planDiscovery,

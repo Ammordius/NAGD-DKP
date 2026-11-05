@@ -15,6 +15,8 @@ export function discoverySwrKey(query) {
  */
 export function fingerprintQuery(query) {
   const parts = [
+    query.intent || query.family || '',
+    query.scope || (query.mostRecentRaidFirst ? 'last_raid_night' : 'history'),
     query.family || '',
     query.zone || '',
     query.phase || '',

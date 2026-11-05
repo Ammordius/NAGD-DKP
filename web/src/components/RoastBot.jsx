@@ -28,7 +28,7 @@ import {
   collectRaidLootItemIds,
   resetUpgradeCaches,
 } from '../lib/roastBot/index.js'
-import { looksLikeDiscovery, runDiscovery } from '../lib/roastBot/discovery/index.js'
+import { recognizeDiscovery, runDiscovery } from '../lib/roastBot/discovery/index.js'
 import { ensureItemStatsLoaded } from '../lib/itemStats'
 import './RoastBot.css'
 
@@ -262,22 +262,38 @@ export default function RoastBot({ profile, session, factsOverride = null, openO
 
         let discoveryResult = null
         let discoveryAnswer = null
-        if (!factsOverride && looksLikeDiscovery(text)) {
-          let itemStats = ctx?.itemStats || {}
-          if (needsDiscoveryItemStats(text)) {
-            await ensureItemStatsLoaded()
-            itemStats = await fetch('/item_stats.json')
-              .then((r) => (r.ok ? r.json() : {}))
-              .catch(() => ({}))
-          }
-          const run = await runDiscovery(supabase, text, {
-            knownItemSources: facts.knownItemSources,
-            itemCatalog: facts.itemCatalog,
-            itemStats,
-          })
-          if (run) {
-            discoveryResult = run.result
-            discoveryAnswer = run.answer
+        let discoveryRecognition = null
+        if (!factsOverride) {
+          const prev = convState.lastDiscovery?.query || null
+          const prevPrimary = convState.lastDiscovery?.primary || null
+          discoveryRecognition = recognizeDiscovery(text, { prev, prevPrimary })
+          if (
+            discoveryRecognition.status === 'recognized' ||
+            discoveryRecognition.status === 'ambiguous' ||
+            discoveryRecognition.status === 'unsupported'
+          ) {
+            let itemStats = ctx?.itemStats || {}
+            if (needsDiscoveryItemStats(text) || needsDiscoveryItemStats(prev?.raw || '')) {
+              await ensureItemStatsLoaded()
+              itemStats = await fetch('/item_stats.json')
+                .then((r) => (r.ok ? r.json() : {}))
+                .catch(() => ({}))
+            }
+            const run = await runDiscovery(supabase, text, {
+              knownItemSources: facts.knownItemSources,
+              itemCatalog: facts.itemCatalog,
+              itemStats,
+              prev,
+              prevPrimary,
+              recognition: discoveryRecognition,
+            })
+            if (run) {
+              discoveryResult = run.result
+              discoveryAnswer = run.answer
+              discoveryRecognition = run.recognition || discoveryRecognition
+            }
+          } else {
+            discoveryRecognition = null
           }
         }
 
@@ -288,6 +304,7 @@ export default function RoastBot({ profile, session, factsOverride = null, openO
           upgradeContext: ctx,
           discoveryResult,
           discoveryAnswer,
+          discoveryRecognition,
         })
         setConvState(result.state)
         setMessages((m) => [...m, { role: 'bot', ...result.response }])

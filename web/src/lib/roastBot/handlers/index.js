@@ -162,17 +162,33 @@ function handleCapabilities() {
 function handleLootDiscovery(args) {
   if (args.discoveryAnswer) return args.discoveryAnswer
   if (args.discoveryResult) return renderDiscovery(args.discoveryResult)
+  if (args.discoveryRecognition?.status === 'unsupported') {
+    return {
+      intent: INTENTS.LOOT_DISCOVERY,
+      category: 'general',
+      factText:
+        args.discoveryRecognition.reason ||
+        'I could not safely interpret that loot question. Try naming a boss, zone, phase, item, or character.',
+      requiredClaims: ['loot_discovery'],
+      placeholders: {},
+      referenced: emptyReferenced(),
+      reasonCode: 'loot_discovery',
+      allowFlavor: false,
+      templateId: 'LOOT_DISCOVERY',
+    }
+  }
+  // Never claim recognition without an executable query or clarification.
   return {
-    intent: INTENTS.LOOT_DISCOVERY,
+    intent: INTENTS.UNKNOWN,
     category: 'general',
     factText:
-      'I recognized a loot discovery question, but award history was not loaded. Ask again; I query Supabase only when needed and cache the result briefly.',
-    requiredClaims: ['loot_discovery'],
+      'Try asking about loot, upgrades, DKP balance, gear assessment, raid attendance, or your purchase history. I did not perform an analysis for that question.',
+    requiredClaims: [],
     placeholders: {},
     referenced: emptyReferenced(),
-    reasonCode: 'loot_discovery',
+    reasonCode: 'unknown',
     allowFlavor: false,
-    templateId: 'LOOT_DISCOVERY',
+    templateId: 'UNKNOWN',
   }
 }
 

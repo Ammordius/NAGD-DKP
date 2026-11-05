@@ -4,7 +4,22 @@
  */
 
 /**
+ * What kind of answer to produce.
+ * @typedef {'last_award'|'recipients'|'list_awards'|'count'|'has_won'|'catalog'} DiscoveryIntent
+ */
+
+/**
+ * Whether to pin to the most recent qualifying raid night or search award history.
+ * @typedef {'last_raid_night'|'history'} DiscoveryScope
+ */
+
+/**
+ * Legacy family label derived from intent+scope+filters (render/cache compatibility).
  * @typedef {'raid_loot'|'item_recipients'|'item_count'|'character_awards'|'boss_catalog'|'boss_raid_loot'|'has_won'|'item_last'} DiscoveryFamily
+ */
+
+/**
+ * @typedef {'recognized'|'ambiguous'|'unsupported'|'not_discovery'} RecognitionStatus
  */
 
 /**
@@ -17,6 +32,8 @@
 
 /**
  * @typedef {{
+ *   intent: DiscoveryIntent,
+ *   scope: DiscoveryScope,
  *   family: DiscoveryFamily,
  *   zone?: string|null,
  *   phase?: string|null,
@@ -30,7 +47,17 @@
  *   sort?: 'date_desc',
  *   limit?: number,
  *   raw: string,
+ *   refs?: { pronoun?: 'it'|'that'|'them'|null }|null,
  * }} StructuredQuery
+ */
+
+/**
+ * @typedef {{
+ *   status: RecognitionStatus,
+ *   query?: StructuredQuery|null,
+ *   reason?: string|null,
+ *   missing?: string[],
+ * }} Recognition
  */
 
 /**

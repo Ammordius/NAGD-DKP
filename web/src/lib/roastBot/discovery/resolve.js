@@ -12,6 +12,8 @@ import {
   SLOT_NAME_FALLBACK_PATTERNS,
   preferAuthoritativeSource,
   itemNamesForPhaseMobs,
+  itemNamesForBoss,
+  itemNamesForZone,
   P3_MOBS,
   normAliasKey,
   isPhaseMob,
@@ -25,6 +27,7 @@ import { catalogEntriesFromKnownSources } from '../../itemSourceLookup.js'
  *   itemAmbiguous?: { candidates: Array<{ name: string }>, message: string }|null,
  *   itemUnmatched?: boolean,
  *   phaseItemNames?: Set<string>,
+ *   itemSelector?: { names: Set<string>, match: 'boss'|'zone'|'phase'|'item'|null }|null,
  *   gaps?: string[],
  * }} ResolvedDiscovery
  */
@@ -54,7 +57,18 @@ export function resolveDiscoveryEntities(query, ctx = {}) {
   let itemAmbiguous = null
   let itemUnmatched = false
 
-  if (query.itemQuery) {
+  // Boss + slot/role history uses a multi-item catalog selector (skip single-item resolve).
+  // Phase/zone + slot without boss still tries constrained single-item resolution (P3 shoulders).
+  const multiCatalog =
+    Boolean(query.boss) &&
+    Boolean(query.slot || query.classesHint) &&
+    (query.intent === 'last_award' ||
+      query.intent === 'recipients' ||
+      query.family === 'item_last') &&
+    !lookupItemAlias(query.itemQuery || '')?.name &&
+    !looksLikeNamedItem(query.itemQuery)
+
+  if (query.itemQuery && !multiCatalog) {
     const resolved = resolveItemQuery(query.itemQuery, query, ctx, phaseItemNames)
     if (resolved.ambiguous) {
       itemAmbiguous = {
@@ -69,23 +83,116 @@ export function resolveDiscoveryEntities(query, ctx = {}) {
     }
   }
 
-  if (query.family === 'boss_raid_loot' || query.family === 'boss_catalog') {
+  if (
+    query.family === 'boss_raid_loot' ||
+    query.family === 'boss_catalog' ||
+    query.intent === 'catalog' ||
+    (query.boss && query.intent === 'last_award')
+  ) {
     if (!query.boss) {
       gaps.push('Boss name was not recognized; cannot attribute encounters without a known boss.')
     }
   }
 
+  const itemSelector = composeItemSelector(query, known, phaseItemNames, ctx, item)
+
+  if (multiCatalog && itemSelector?.names && itemSelector.names.size === 0) {
+    const where = query.boss
+      ? `boss ${query.boss}`
+      : query.phase
+        ? `phase ${query.phase}`
+        : query.zone || 'that filter'
+    const slotBit = query.slot ? ` in slot ${query.slot}` : ''
+    gaps.push(
+      `No catalog items mapped for ${where}${slotBit} (item_sources classification incomplete or empty).`,
+    )
+  }
+
   return {
     query: {
       ...query,
-      itemQuery: item?.name || query.itemQuery,
+      itemQuery: item?.name || (multiCatalog ? null : query.itemQuery),
     },
     item,
     itemAmbiguous,
     itemUnmatched,
     phaseItemNames,
+    itemSelector,
     gaps,
   }
+}
+
+/**
+ * Intersect catalog name sets for boss/zone/phase/slot filters.
+ * @param {import('./types.js').StructuredQuery} query
+ * @param {Record<string, object>} known
+ * @param {Set<string>} phaseItemNames
+ * @param {object} ctx
+ * @param {{ name: string }|null} item
+ */
+function composeItemSelector(query, known, phaseItemNames, ctx, item) {
+  if (item?.name) {
+    return { names: new Set([item.name]), match: /** @type {const} */ ('item') }
+  }
+
+  /** @type {Set<string>|null} */
+  let names = null
+  /** @type {'boss'|'zone'|'phase'|null} */
+  let match = null
+
+  if (query.boss) {
+    names = itemNamesForBoss(known, query.boss)
+    match = 'boss'
+  } else if (query.phase) {
+    names = phaseItemNames?.size ? new Set(phaseItemNames) : itemNamesForPhaseMobs(known, phaseMobsFor(query.phase))
+    match = 'phase'
+  } else if (query.zone) {
+    names = itemNamesForZone(known, query.zone)
+    match = 'zone'
+  }
+
+  if (!names) return null
+
+  if (query.slot) {
+    names = filterNamesBySlot(names, query.slot, ctx.itemStats || {})
+  }
+
+  return { names, match }
+}
+
+/**
+ * @param {Set<string>} names
+ * @param {string} slot
+ * @param {Record<string, object>} itemStats
+ */
+function filterNamesBySlot(names, slot, itemStats) {
+  const slotWant = String(slot || '').toUpperCase()
+  /** @type {Set<string>} */
+  const out = new Set()
+  const byNorm = new Map()
+  for (const [id, row] of Object.entries(itemStats || {})) {
+    if (row?.name) byNorm.set(normAliasKey(row.name), { ...row, id })
+  }
+  for (const name of names) {
+    const row = byNorm.get(normAliasKey(name))
+    if (row && slotMatches(row.slot, slotWant)) {
+      out.add(String(name).trim())
+      continue
+    }
+    // Name-token fallback when stats missing
+    const fallback = SLOT_NAME_FALLBACK_PATTERNS[slotWant]
+    if (!row && fallback && fallback.test(name)) out.add(String(name).trim())
+  }
+  return out
+}
+
+function looksLikeNamedItem(itemQuery) {
+  const q = String(itemQuery || '').trim()
+  if (!q) return false
+  // Constrained phrases like "p3 shoulders" / "finger" are not named items
+  if (resolveSlotAlias(q) && q.split(/\s+/).length <= 3) return false
+  if (/^(p\d+|priest|caster|tank|melee)\b/i.test(q) && resolveSlotAlias(q)) return false
+  return q.split(/\s+/).length >= 2 && !resolveSlotAlias(q)
 }
 
 /**

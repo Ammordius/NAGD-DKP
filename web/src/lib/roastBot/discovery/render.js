@@ -183,6 +183,16 @@ function renderRecipients(result, referenced) {
     }
   }
 
+  // Boss/zone + slot multi-item last awards (compositional selector)
+  const multiFilter =
+    (result.query?.boss || result.query?.zone || result.query?.phase) &&
+    result.query?.slot &&
+    !lookupNamedItem(result.query?.itemQuery)
+
+  if (multiFilter) {
+    return renderCatalogWindowAwards(result, referenced, links)
+  }
+
   if (!awards.length) {
     return {
       factText: `No recorded awards found for ${item}.`,
@@ -217,6 +227,49 @@ function renderRecipients(result, referenced) {
   factText +=
     '\nThese are recorded DKP awards/recipients, not independently proven in-game drop events.'
 
+  return { factText, links: dedupeLinks(links) }
+}
+
+function lookupNamedItem(itemQuery) {
+  const q = String(itemQuery || '').trim()
+  if (!q) return false
+  return q.split(/\s+/).length >= 2
+}
+
+/**
+ * @param {import('./types.js').DiscoveryResult} result
+ * @param {object} referenced
+ * @param {object[]} links
+ */
+function renderCatalogWindowAwards(result, referenced, links) {
+  const awards = result.awards || []
+  const boss = result.query?.boss ? prettyBoss(result.query.boss) : null
+  const slot = result.query?.slot ? String(result.query.slot).toLowerCase() : null
+  const phase = result.query?.phase || null
+  const zone = result.query?.zone || null
+  const where = boss
+    ? boss
+    : phase
+      ? `${phase}`
+      : zone || 'catalog'
+  const slotBit = slot ? ` ${slot}` : ''
+  const header = `Last recorded${slotBit} awards for ${where}`
+
+  if (!awards.length) {
+    const gapHint = (result.gaps || []).some((g) => /catalog|classification|mapped/i.test(g))
+      ? ' Catalog mapping for that boss/slot may be incomplete.'
+      : ''
+    return {
+      factText: `${header}: no recorded awards matched.${gapHint}\nAbsence from DKP award history is not proof the item never dropped in-game.`,
+      links: dedupeLinks(links),
+    }
+  }
+
+  const lines = awards.slice(0, MAX_LINES).map((a) => formatAwardLine(a, referenced, links))
+  const most = awards[0]
+  let factText = `${header} (most recent ${most.dateIso || 'unknown date'}):\n${lines.join('\n')}`
+  factText +=
+    '\nThese are recorded DKP awards joined via item_sources labels, not independently proven in-game drop events.'
   return { factText, links: dedupeLinks(links) }
 }
 

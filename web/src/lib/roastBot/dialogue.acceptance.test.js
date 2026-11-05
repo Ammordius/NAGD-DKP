@@ -508,7 +508,7 @@ describe('roastBot open-gate contract', () => {
     assert.match(src, /enabled: botActive && Boolean\(userId\)/)
     assert.match(src, /botActive && userId \? 'roast-bot-sale-costs'/)
     assert.match(src, /needsMageloContext/)
-    assert.match(src, /looksLikeDiscovery/)
+    assert.match(src, /recognizeDiscovery/)
     assert.match(src, /runDiscovery/)
   })
 })

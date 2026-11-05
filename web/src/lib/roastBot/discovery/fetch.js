@@ -207,14 +207,6 @@ export async function executeDiscovery(client, plan, opts = {}) {
         const { rows, truncated } = await fetchAwardsForItem(client, step.params)
         result.awards = rows.map((a) => enrichAward(a, null, known))
         result.truncated = truncated
-        if (step.params.character) {
-          const want = normAliasKey(step.params.character)
-          result.awards = result.awards.filter(
-            (a) =>
-              normAliasKey(a.characterName) === want ||
-              normAliasKey(a.assignedCharacterName) === want,
-          )
-        }
         continue
       }
 
@@ -247,10 +239,17 @@ export async function executeDiscovery(client, plan, opts = {}) {
         result.truncated = packed.truncated
         result.totalCount = packed.rows.length
         if (!catalogNames.size) {
+          const where = step.params.boss
+            ? `boss ${step.params.boss}`
+            : step.params.phase
+              ? `phase ${step.params.phase}`
+              : step.params.zone
+                ? `zone ${step.params.zone}`
+                : 'that filter'
           result.gaps.push(
             step.params.filterSlot
-              ? `No catalog items mapped for that zone/phase filter in slot ${step.params.filterSlot}.`
-              : 'No catalog items mapped for that zone/phase filter.',
+              ? `No catalog items mapped for ${where} in slot ${step.params.filterSlot} (classification incomplete or empty).`
+              : `No catalog items mapped for ${where}.`,
           )
         }
         continue
@@ -516,6 +515,23 @@ async function fetchLootForRaid(client, raidId, select) {
 async function fetchAwardsForItem(client, params) {
   if (!params.itemName) return { rows: [], truncated: false }
   const limit = params.limit || 10
+  // When filtering by character, push the filter before limit so older awards are not missed.
+  if (params.character) {
+    let q = client
+      .from('raid_loot_history')
+      .select(params.select || LOOT_SELECT)
+      .ilike('item_name', escapeIlike(params.itemName))
+      .ilike('character_name', escapeIlike(params.character))
+      .order('date_iso', { ascending: false, nullsFirst: false })
+      .order('id', { ascending: false })
+      .limit(limit + 1)
+    if (params.fromIso) q = q.gte('date_iso', params.fromIso)
+    if (params.toIso) q = q.lte('date_iso', params.toIso)
+    const { data, error } = await q
+    if (error) throw new Error(error.message)
+    const rows = data || []
+    return { rows: rows.slice(0, limit), truncated: rows.length > limit }
+  }
   let q = client
     .from('raid_loot_history')
     .select(params.select || LOOT_SELECT)

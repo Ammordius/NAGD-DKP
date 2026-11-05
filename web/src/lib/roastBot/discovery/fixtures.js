@@ -10,6 +10,7 @@ export const FIXTURE_ITEM_SOURCES = {
   'mask of conceptual energy': [{ mob: 'P1', zone: 'Plane of Time' }],
   'eye of cazic thule': [{ mob: 'Cazic_Thule', zone: 'Plane of Time' }],
   'quarm tooth': [{ mob: 'Quarm', zone: 'Plane of Time' }],
+  'band of the eternal': [{ mob: 'Quarm', zone: 'Plane of Time' }],
   'blazing whip of trillia': [{ mob: 'Fennin_Ro_the_Tyrant_of_Fire', zone: 'Plane of Fire' }],
 }
 
@@ -26,7 +27,10 @@ export const FIXTURE_MOB_LOOT = {
   'Quarm|Plane of Time': {
     mob: 'Quarm',
     zone: 'Plane of Time',
-    loot: [{ item_id: 90001, name: 'Quarm Tooth' }],
+    loot: [
+      { item_id: 90001, name: 'Quarm Tooth' },
+      { item_id: 90003, name: 'Band of the Eternal' },
+    ],
   },
   'Cazic_Thule|Plane of Time': {
     mob: 'Cazic_Thule',
@@ -65,6 +69,16 @@ export const FIXTURE_ITEM_STATS = {
     name: 'Spaulders of the Wind',
     slot: 'SHOULDERS',
     classes: 'RNG MNK BRD ROG BST',
+  },
+  '90003': {
+    name: 'Band of the Eternal',
+    slot: 'FINGER',
+    classes: 'ALL',
+  },
+  '90001': {
+    name: 'Quarm Tooth',
+    slot: 'PRIMARY',
+    classes: 'ALL',
   },
 }
 
@@ -164,6 +178,14 @@ export const FIXTURE_LOOT_BY_RAID = {
       char_id: 'c7',
       cost: '100',
     },
+    {
+      id: 11,
+      raid_id: 'r-quarm',
+      item_name: 'Band of the Eternal',
+      character_name: 'Helen',
+      char_id: 'c11',
+      cost: '75',
+    },
   ],
 }
 
@@ -209,6 +231,20 @@ export function fixtureHistoryRows() {
     raid_name: 'Time P3',
     date_iso: '2026-02-10',
     date: '2026-02-10',
+    assigned_char_id: null,
+    assigned_character_name: null,
+  })
+  // Older Quarm ring award (distant history) — last drop should prefer r-quarm Helen
+  rows.push({
+    id: 12,
+    raid_id: 'r-time-mixed',
+    item_name: 'Band of the Eternal',
+    character_name: 'Older',
+    char_id: 'c12',
+    cost: '70',
+    raid_name: 'Time P1-P3 + Gods',
+    date_iso: '2026-01-01',
+    date: '2026-01-01',
     assigned_char_id: null,
     assigned_character_name: null,
   })

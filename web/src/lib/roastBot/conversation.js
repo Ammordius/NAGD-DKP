@@ -8,8 +8,6 @@ import { renderAnswer, greetingMessage } from './responseBuilder.js'
 import { matchItemName, suggestionChips, formatDkp } from './formatting.js'
 import { dispatchHandler } from './handlers/index.js'
 import { lookupItemSource, catalogEntriesFromKnownSources } from '../itemSourceLookup.js'
-import { looksLikeDiscovery } from './discovery/parse.js'
-
 /**
  * @returns {object}
  */
@@ -27,6 +25,7 @@ export function createConversationState() {
     lastPurchase: null,
     lastReferencedPurchaseId: null,
     lastUpgradeCandidateId: null,
+    lastDiscovery: null,
     recentTemplateIds: [],
     turnCount: 0,
     authUserId: null,
@@ -125,6 +124,7 @@ function clearPending(state) {
  *   upgradeContext?: object|null,
  *   discoveryResult?: object|null,
  *   discoveryAnswer?: object|null,
+ *   discoveryRecognition?: object|null,
  *   rng?: () => number,
  * }} args
  */
@@ -135,6 +135,7 @@ export function handleMessage({
   upgradeContext = null,
   discoveryResult = null,
   discoveryAnswer = null,
+  discoveryRecognition = null,
   rng = Math.random,
 }) {
   state.turnCount = (state.turnCount || 0) + 1
@@ -148,8 +149,12 @@ export function handleMessage({
     pendingIntent: state.pendingIntent,
   })
 
-  // Discovery overrides broad item_source / search rules when phrasing matches.
-  const discoveryHit = Boolean(discoveryResult || discoveryAnswer || looksLikeDiscovery(text))
+  // Discovery only when recognition succeeded or an answer was prefetched — never via bare gate/lastIntent.
+  const recognitionOk =
+    discoveryRecognition?.status === 'recognized' ||
+    discoveryRecognition?.status === 'ambiguous' ||
+    discoveryRecognition?.status === 'unsupported'
+  const discoveryHit = Boolean(discoveryResult || discoveryAnswer || recognitionOk)
   let intent = discoveryHit ? INTENTS.LOOT_DISCOVERY : classified.intent
   let ambiguousClass = null
 
@@ -204,8 +209,11 @@ export function handleMessage({
       state.lastAnswer = { intent: INTENTS.FOLLOWUP, text: response.text, referenced: response.referenced }
       rememberTemplate(state, response.templateId)
       return { response, state, intent: INTENTS.FOLLOWUP, suggestions: suggestionChips(suggestionState(facts, state)) }
+    } else if (state.lastIntent && state.lastIntent !== INTENTS.LOOT_DISCOVERY) {
+      intent = state.lastIntent
     } else {
-      intent = state.lastIntent || INTENTS.UNKNOWN
+      // Do not remap FOLLOWUP → LOOT_DISCOVERY without an executable discovery run.
+      intent = INTENTS.UNKNOWN
     }
   }
 
@@ -263,6 +271,7 @@ export function handleMessage({
     upgradeContext,
     discoveryResult,
     discoveryAnswer,
+    discoveryRecognition,
   })
 
   if (answer.clarification?.slot === 'character') {
@@ -308,6 +317,34 @@ export function handleMessage({
     referenced: response.referenced,
   }
   state.lastSubject = charSel?.name || state.lastSubject
+
+  if (intent === INTENTS.LOOT_DISCOVERY && discoveryResult?.ok !== false) {
+    const awards = discoveryResult?.awards || []
+    const primaryAward = awards[0] || null
+    const q = discoveryResult?.query || discoveryRecognition?.query || null
+    if (q) {
+      state.lastDiscovery = {
+        query: q,
+        primary: primaryAward
+          ? {
+              itemName: primaryAward.itemName || null,
+              characterName: primaryAward.characterName || primaryAward.assignedCharacterName || null,
+              raidId: primaryAward.raidId || null,
+              dateIso: primaryAward.dateIso || null,
+            }
+          : discoveryResult?.raid
+            ? {
+                itemName: null,
+                characterName: null,
+                raidId: discoveryResult.raid.raidId,
+                dateIso: discoveryResult.raid.dateIso || null,
+              }
+            : state.lastDiscovery?.primary || null,
+        recognition: discoveryRecognition || null,
+      }
+    }
+  }
+
   rememberTemplate(state, response.templateId)
   if (answer._flavorId) rememberTemplate(state, answer._flavorId)
 
