@@ -82,6 +82,7 @@ export function renderAnswer({ answer, state, facts, rng = Math.random }) {
       reasonCode: 'empty_answer',
       links: [],
       cards: [],
+      table: null,
       requiredClaims: [],
       referenced: { characters: [], items: [] },
     }
@@ -123,15 +124,19 @@ export function renderAnswer({ answer, state, facts, rng = Math.random }) {
         answer._flavorId = flavor.template?.id
       }
     }
-    const links = answer.links?.length
-      ? answer.links
-      : buildLinksFromReferenced(answer.referenced)
+    // Table answers carry links in cells; do not rebuild a footer dump from referenced.
+    const links = answer.table?.rows?.length
+      ? answer.links || []
+      : answer.links?.length
+        ? answer.links
+        : buildLinksFromReferenced(answer.referenced)
     return {
       text,
       templateId: answer.templateId || answer.reasonCode,
       reasonCode: answer.reasonCode,
       links,
       cards: answer.cards || [],
+      table: answer.table || null,
       requiredClaims: answer.requiredClaims || [],
       referenced: answer.referenced || { characters: [], items: [], raids: [] },
       placeholders: answer.placeholders || {},
@@ -186,6 +191,7 @@ export function renderAnswer({ answer, state, facts, rng = Math.random }) {
     reasonCode: answer.reasonCode,
     links: buildLinksFromReferenced(answer.referenced),
     cards: answer.cards || [],
+    table: answer.table || null,
     requiredClaims: answer.requiredClaims || [],
     referenced: answer.referenced || { characters: [], items: [] },
     placeholders: answer.placeholders || {},
@@ -273,6 +279,7 @@ export function greetingMessage(hasAccount) {
       reasonCode: 'greeting_no_account',
       links: [],
       cards: [],
+      table: null,
       requiredClaims: ['greeting'],
       referenced: { characters: [], items: [] },
     }
@@ -283,6 +290,7 @@ export function greetingMessage(hasAccount) {
     reasonCode: 'greeting',
     links: [],
     cards: [],
+    table: null,
     requiredClaims: ['greeting'],
     referenced: { characters: [], items: [] },
   }

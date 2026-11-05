@@ -53,6 +53,16 @@ function needsDiscoveryItemStats(text) {
   )
 }
 
+/** Render a discovery table cell: link object, plain string, or empty. */
+function renderTableCell(cell) {
+  if (cell == null || cell === '') return '—'
+  if (typeof cell === 'string' || typeof cell === 'number') return String(cell)
+  if (cell.to && cell.label) {
+    return <Link to={cell.to}>{cell.label}</Link>
+  }
+  return cell.label || '—'
+}
+
 /**
  * Floating DKP Inquisitor chat. Authenticated users only (parent gates mount).
  * Bot-specific network fetches are gated on `open` (except shared SWR caches when warm).
@@ -393,7 +403,35 @@ export default function RoastBot({ profile, session, factsOverride = null, openO
                 data-testid={msg.role === 'bot' ? 'roast-bot-reply' : 'roast-bot-user-msg'}
               >
                 <div>{msg.text}</div>
-                {msg.links?.length ? (
+                {msg.table?.rows?.length ? (
+                  <div className="roast-bot-table-wrap">
+                    <table className="roast-bot-table">
+                      <thead>
+                        <tr>
+                          {(msg.table.columns || []).map((col) => (
+                            <th key={col}>{col}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {msg.table.rows.map((row, rowIdx) => (
+                          <tr key={`row-${rowIdx}`}>
+                            {(msg.table.columns || []).map((col) => {
+                              const key = col.toLowerCase()
+                              const cell = row[key]
+                              return (
+                                <td key={`${rowIdx}-${col}`}>
+                                  {renderTableCell(cell)}
+                                </td>
+                              )
+                            })}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : null}
+                {!msg.table?.rows?.length && msg.links?.length ? (
                   <div className="roast-bot-links">
                     {msg.links.map((link) => (
                       <Link key={`${link.type}-${link.to}`} to={link.to}>

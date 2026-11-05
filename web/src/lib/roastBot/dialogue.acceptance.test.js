@@ -540,11 +540,22 @@ describe('loot discovery dialogue regression', () => {
     const discoveryAnswer = {
       intent: INTENTS.LOOT_DISCOVERY,
       category: 'general',
-      factText: 'Last Plane of Fire raid — 2026-03-01\n- Whip → Tandiyen\n1 recorded loot award.',
+      factText: 'Last Plane of Fire raid — 2026-03-01\n1 recorded loot award.',
       requiredClaims: ['loot_discovery'],
       placeholders: {},
       referenced: { characters: ['Tandiyen'], items: ['Whip'], raids: [{ id: 'r1', name: 'Fire' }] },
-      links: [{ type: 'raid', label: 'Fire', to: '/raids/r1' }],
+      links: [],
+      table: {
+        columns: ['Item', 'Character', 'Date', 'Raid'],
+        rows: [
+          {
+            item: { type: 'item', label: 'Whip', to: '/items/Whip' },
+            character: { type: 'character', label: 'Tandiyen', to: '/characters/Tandiyen' },
+            date: '2026-03-01',
+            raid: { type: 'raid', label: 'Fire', to: '/raids/r1' },
+          },
+        ],
+      },
       reasonCode: 'loot_discovery',
       allowFlavor: false,
       templateId: 'LOOT_DISCOVERY',
@@ -558,6 +569,6 @@ describe('loot discovery dialogue regression', () => {
     })
     assert.equal(intent, INTENTS.LOOT_DISCOVERY)
     assert.match(response.text, /Plane of Fire|recorded loot/i)
-    assert.ok(response.links.some((l) => l.type === 'raid' && l.to === '/raids/r1'))
+    assert.equal(response.table?.rows?.[0]?.raid?.to, '/raids/r1')
   })
 })

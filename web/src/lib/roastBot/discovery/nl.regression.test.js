@@ -118,9 +118,14 @@ describe('discovery Quarm ring end-to-end', () => {
     assert.equal(awards[0].itemName, 'Band of the Eternal')
     assert.equal(awards[0].characterName, 'Helen')
     assert.equal(awards[0].dateIso, '2026-02-25')
-    assert.match(run.answer.factText, /Band of the Eternal/i)
-    assert.match(run.answer.factText, /Helen/i)
-    assert.ok(run.answer.links?.some((l) => l.type === 'raid' || l.type === 'item' || l.type === 'character'))
+    assert.match(run.answer.factText, /recorded.*finger|finger.*awards/i)
+    const row = run.answer.table?.rows?.[0]
+    assert.ok(row, 'expected award table row')
+    assert.equal(row.item?.label, 'Band of the Eternal')
+    assert.equal(row.character?.label, 'Helen')
+    assert.equal(row.date, '2026-02-25')
+    assert.ok(row.item?.to?.includes('Band'))
+    assert.equal(run.answer.links?.length || 0, 0)
   })
 
   it('what about quarm ring plans catalog window with boss + filterSlot', () => {
@@ -160,7 +165,7 @@ describe('discovery Quarm ring end-to-end', () => {
       skipCache: true,
     })
     assert.match(hist.answer.factText, /recorded/i)
-    assert.match(hist.answer.factText, /Band of the Eternal/i)
+    assert.equal(hist.answer.table?.rows?.[0]?.item?.label, 'Band of the Eternal')
   })
 
   it('empty boss+slot catalog surfaces classification gap', async () => {
@@ -261,11 +266,31 @@ describe('discovery dialogue false-recognition guard', () => {
     const answer = {
       intent: INTENTS.LOOT_DISCOVERY,
       category: 'general',
-      factText: 'Last recorded finger awards for Quarm\n- Band of the Eternal → Helen, 2026-02-25',
+      factText:
+        'Last recorded finger awards for Quarm (most recent 2026-02-25):\nThese are recorded DKP awards joined via item_sources labels, not independently proven in-game drop events.',
       requiredClaims: ['loot_discovery'],
       placeholders: {},
       referenced: { characters: ['Helen'], items: ['Band of the Eternal'], raids: [] },
       links: [],
+      table: {
+        columns: ['Item', 'Character', 'Date', 'Raid'],
+        rows: [
+          {
+            item: {
+              type: 'item',
+              label: 'Band of the Eternal',
+              to: `/items/${encodeURIComponent('Band of the Eternal')}`,
+            },
+            character: {
+              type: 'character',
+              label: 'Helen',
+              to: `/characters/${encodeURIComponent('Helen')}`,
+            },
+            date: '2026-02-25',
+            raid: null,
+          },
+        ],
+      },
       reasonCode: 'loot_discovery',
       allowFlavor: false,
       templateId: 'LOOT_DISCOVERY',
@@ -279,7 +304,9 @@ describe('discovery dialogue false-recognition guard', () => {
       rng: () => 0,
     })
     assert.equal(out.intent, INTENTS.LOOT_DISCOVERY)
-    assert.match(out.response.text, /Band of the Eternal|Helen/i)
+    assert.match(out.response.text, /finger awards for Quarm/i)
+    assert.equal(out.response.table?.rows?.[0]?.item?.label, 'Band of the Eternal')
+    assert.equal(out.response.table?.rows?.[0]?.character?.label, 'Helen')
     assert.doesNotMatch(out.response.text, /award history was not loaded/i)
   })
 })

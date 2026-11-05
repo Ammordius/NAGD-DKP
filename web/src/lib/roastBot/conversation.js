@@ -202,6 +202,7 @@ export function handleMessage({
         reasonCode: 'character_selected',
         links: [],
         cards: [],
+        table: null,
         requiredClaims: ['character_selected'],
         referenced: { characters: [classified.matchedCharacter.name], items: [] },
       }
@@ -242,6 +243,7 @@ export function handleMessage({
       reasonCode: 'ambiguous_item',
       links: [],
       cards: [],
+      table: null,
       requiredClaims: ['need_item'],
       referenced: { characters: [], items: [] },
     }

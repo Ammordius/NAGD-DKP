@@ -1,12 +1,16 @@
 /**
  * Render DiscoveryResult → AnswerFacts for the existing response pipeline.
- * Uses structured links (raid / item / character), not markdown URLs.
+ * Award lists use a structured `table` (React Link cells); not markdown URLs.
  */
 
 import { buildLinks } from '../formatting.js'
 import { INTENTS } from '../intents.js'
 
 const MAX_LINES = 40
+
+const AWARD_COLUMNS = ['Item', 'Character', 'Date', 'Raid']
+const RECIPIENT_COLUMNS = ['Character', 'Date', 'Raid']
+const CATALOG_COLUMNS = ['Item']
 
 /**
  * @param {import('./types.js').DiscoveryResult} result
@@ -22,6 +26,7 @@ export function renderDiscovery(result) {
       placeholders: {},
       referenced: { characters: [], items: result.ambiguous.candidates.slice(0, 5), raids: [] },
       links: [],
+      table: null,
       reasonCode: 'need_item',
       allowFlavor: false,
       templateId: 'NEED_ITEM',
@@ -42,6 +47,7 @@ export function renderDiscovery(result) {
       placeholders: {},
       referenced: emptyRefs(),
       links: [],
+      table: null,
       reasonCode: 'loot_discovery',
       allowFlavor: false,
       templateId: 'LOOT_DISCOVERY',
@@ -52,26 +58,28 @@ export function renderDiscovery(result) {
   let factText = ''
   /** @type {ReturnType<typeof buildLinks>} */
   let links = []
+  /** @type {{ columns: string[], rows: object[] }|null} */
+  let table = null
   const referenced = emptyRefs()
 
   switch (family) {
     case 'boss_catalog':
-      ({ factText, links } = renderCatalog(result, referenced))
+      ;({ factText, links, table } = renderCatalog(result, referenced))
       break
     case 'raid_loot':
     case 'boss_raid_loot':
-      ({ factText, links } = renderRaidLoot(result, referenced))
+      ;({ factText, links, table } = renderRaidLoot(result, referenced))
       break
     case 'item_recipients':
     case 'item_last':
     case 'has_won':
-      ({ factText, links } = renderRecipients(result, referenced))
+      ;({ factText, links, table } = renderRecipients(result, referenced))
       break
     case 'item_count':
-      ({ factText, links } = renderCount(result, referenced))
+      ;({ factText, links, table } = renderCount(result, referenced))
       break
     case 'character_awards':
-      ({ factText, links } = renderCharacterAwards(result, referenced))
+      ;({ factText, links, table } = renderCharacterAwards(result, referenced))
       break
     default:
       factText = 'I could not build a discovery answer for that phrasing.'
@@ -95,6 +103,7 @@ export function renderDiscovery(result) {
     placeholders: {},
     referenced,
     links,
+    table,
     reasonCode: 'loot_discovery',
     allowFlavor: false,
     templateId: 'LOOT_DISCOVERY',
@@ -112,20 +121,19 @@ function emptyRefs() {
 function renderRaidLoot(result, referenced) {
   const raid = result.raid
   const awards = result.awards || []
-  /** @type {ReturnType<typeof buildLinks>} */
-  const links = []
 
   if (!raid?.raidId) {
     return {
       factText: result.query?.phase
         ? `No raid with identifiable ${result.query.phase} awards was found (join of item_sources labels to recorded loot).`
         : `No qualifying raid was found${result.query?.zone ? ` for ${result.query.zone}` : ''}.`,
-      links,
+      links: [],
+      table: null,
     }
   }
 
   referenced.raids.push({ id: raid.raidId, name: raid.raidName || raid.raidId })
-  links.push(...buildLinks({ raidId: raid.raidId, raidName: raid.raidName || `Raid ${raid.raidId}` }))
+  const raidLinks = buildLinks({ raidId: raid.raidId, raidName: raid.raidName || `Raid ${raid.raidId}` })
 
   const phaseNote = result.query?.phase
     ? ` (identifiable ${result.query.phase} awards only; other PoTime loot excluded)`
@@ -142,18 +150,23 @@ function renderRaidLoot(result, referenced) {
   if (!awards.length) {
     return {
       factText: `${header}\nNo recorded loot awards for this qualifying set (empty awards ≠ missing raid).`,
-      links,
+      links: raidLinks,
+      table: null,
     }
   }
 
-  const lines = awards.slice(0, MAX_LINES).map((a) => formatAwardLine(a, referenced, links))
+  const rows = awards.slice(0, MAX_LINES).map((a) => formatAwardRow(a, referenced))
   const total = result.totalCount ?? awards.length
   const trunc =
     result.truncated || awards.length > MAX_LINES
       ? `\nShowing ${Math.min(awards.length, MAX_LINES)} of ${total} recorded loot awards.`
       : `\n${total} recorded loot award${total === 1 ? '' : 's'}.`
 
-  return { factText: `${header}\n${lines.join('\n')}${trunc}`, links: dedupeLinks(links) }
+  return {
+    factText: `${header}${trunc}`,
+    links: [],
+    table: { columns: AWARD_COLUMNS, rows },
+  }
 }
 
 /**
@@ -163,23 +176,23 @@ function renderRaidLoot(result, referenced) {
 function renderRecipients(result, referenced) {
   const awards = result.awards || []
   const item = result.query?.itemQuery || awards[0]?.itemName || 'item'
-  /** @type {ReturnType<typeof buildLinks>} */
-  const links = []
-  links.push(...buildLinks({ itemName: item }))
   referenced.items.push(item)
+  const itemLinks = buildLinks({ itemName: item })
 
   if (result.query?.family === 'has_won') {
     const char = result.query.character
     if (!awards.length) {
       return {
         factText: `No recorded award of ${item} to ${char} was found. This is absence from DKP award records, not proof they never saw the item in-game.`,
-        links: dedupeLinks(links),
+        links: itemLinks,
+        table: null,
       }
     }
-    const lines = awards.slice(0, 5).map((a) => formatAwardLine(a, referenced, links))
+    const rows = awards.slice(0, 5).map((a) => formatAwardRow(a, referenced))
     return {
-      factText: `Yes — ${char} has recorded award(s) of ${item}:\n${lines.join('\n')}`,
-      links: dedupeLinks(links),
+      factText: `Yes — ${char} has recorded award(s) of ${item}:`,
+      links: [],
+      table: { columns: AWARD_COLUMNS, rows },
     }
   }
 
@@ -190,44 +203,39 @@ function renderRecipients(result, referenced) {
     !lookupNamedItem(result.query?.itemQuery)
 
   if (multiFilter) {
-    return renderCatalogWindowAwards(result, referenced, links)
+    return renderCatalogWindowAwards(result, referenced)
   }
 
   if (!awards.length) {
     return {
       factText: `No recorded awards found for ${item}.`,
-      links: dedupeLinks(links),
+      links: itemLinks,
+      table: null,
     }
   }
 
   const most = awards[0]
   const recipient = most.characterName || most.assignedCharacterName || 'unknown'
   if (most.characterName) referenced.characters.push(most.characterName)
-  links.push(...buildLinks({ characterName: recipient, raidId: most.raidId, raidName: most.raidName }))
   if (most.raidId) referenced.raids.push({ id: most.raidId, name: most.raidName || most.raidId })
 
-  const others = awards.slice(1, 8)
-  const otherLines = others.map((a) => {
-    const who = a.characterName || a.assignedCharacterName || 'unknown'
-    if (a.characterName) referenced.characters.push(a.characterName)
-    if (a.raidId) {
-      referenced.raids.push({ id: a.raidId, name: a.raidName || a.raidId })
-      links.push(...buildLinks({ raidId: a.raidId, raidName: a.raidName || a.raidId }))
-    }
-    links.push(...buildLinks({ characterName: who }))
-    return `- ${who} on ${a.dateIso || 'unknown date'}`
-  })
+  const others = awards.slice(0, 8)
+  const rows = others.map((a) => formatRecipientRow(a, referenced))
 
   let factText = `Who got ${item}?\nMost recent recorded recipient: ${recipient} on ${
     most.dateIso || 'unknown date'
   }`
-  if (otherLines.length) {
-    factText += `\nOther recorded recipients:\n${otherLines.join('\n')}`
+  if (rows.length) {
+    factText += `\nRecorded recipients:`
   }
   factText +=
     '\nThese are recorded DKP awards/recipients, not independently proven in-game drop events.'
 
-  return { factText, links: dedupeLinks(links) }
+  return {
+    factText,
+    links: [],
+    table: { columns: RECIPIENT_COLUMNS, rows },
+  }
 }
 
 function lookupNamedItem(itemQuery) {
@@ -239,9 +247,8 @@ function lookupNamedItem(itemQuery) {
 /**
  * @param {import('./types.js').DiscoveryResult} result
  * @param {object} referenced
- * @param {object[]} links
  */
-function renderCatalogWindowAwards(result, referenced, links) {
+function renderCatalogWindowAwards(result, referenced) {
   const awards = result.awards || []
   const boss = result.query?.boss ? prettyBoss(result.query.boss) : null
   const slot = result.query?.slot ? String(result.query.slot).toLowerCase() : null
@@ -261,16 +268,19 @@ function renderCatalogWindowAwards(result, referenced, links) {
       : ''
     return {
       factText: `${header}: no recorded awards matched.${gapHint}\nAbsence from DKP award history is not proof the item never dropped in-game.`,
-      links: dedupeLinks(links),
+      links: [],
+      table: null,
     }
   }
 
-  const lines = awards.slice(0, MAX_LINES).map((a) => formatAwardLine(a, referenced, links))
+  const rows = awards.slice(0, MAX_LINES).map((a) => formatAwardRow(a, referenced))
   const most = awards[0]
-  let factText = `${header} (most recent ${most.dateIso || 'unknown date'}):\n${lines.join('\n')}`
-  factText +=
-    '\nThese are recorded DKP awards joined via item_sources labels, not independently proven in-game drop events.'
-  return { factText, links: dedupeLinks(links) }
+  const factText = `${header} (most recent ${most.dateIso || 'unknown date'}):\nThese are recorded DKP awards joined via item_sources labels, not independently proven in-game drop events.`
+  return {
+    factText,
+    links: [],
+    table: { columns: AWARD_COLUMNS, rows },
+  }
 }
 
 /**
@@ -287,19 +297,15 @@ function renderCount(result, referenced) {
       ? `Could not count recorded awards for ${item}.`
       : `${item} has ${n} recorded award${n === 1 ? '' : 's'} in DKP loot history.`
   const recent = (result.awards || []).slice(0, 3)
-  const extra = recent.length
-    ? `\nMost recent: ${recent
-        .map((a) => `${a.characterName || 'unknown'} on ${a.dateIso || 'unknown date'}`)
-        .join('; ')}.`
-    : ''
-  for (const a of recent) {
-    if (a.characterName) referenced.characters.push(a.characterName)
-    if (a.raidId) {
-      referenced.raids.push({ id: a.raidId, name: a.raidName || a.raidId })
-      links.push(...buildLinks({ raidId: a.raidId, raidName: a.raidName }))
-    }
+  if (!recent.length) {
+    return { factText, links: dedupeLinks(links), table: null }
   }
-  return { factText: factText + extra, links: dedupeLinks(links) }
+  const rows = recent.map((a) => formatRecipientRow(a, referenced))
+  return {
+    factText: `${factText}\nMost recent:`,
+    links: [],
+    table: { columns: RECIPIENT_COLUMNS, rows },
+  }
 }
 
 /**
@@ -309,22 +315,24 @@ function renderCount(result, referenced) {
 function renderCharacterAwards(result, referenced) {
   const char = result.query?.character || 'character'
   referenced.characters.push(char)
-  const links = buildLinks({ characterName: char })
+  const charLinks = buildLinks({ characterName: char })
   const awards = result.awards || []
   const window = result.query?.timeRange?.label ? ` ${result.query.timeRange.label}` : ''
   if (!awards.length) {
     return {
       factText: `No recorded awards for ${char}${window}.`,
-      links,
+      links: charLinks,
+      table: null,
     }
   }
-  const lines = awards.slice(0, MAX_LINES).map((a) => formatAwardLine(a, referenced, links))
+  const rows = awards.slice(0, MAX_LINES).map((a) => formatAwardRow(a, referenced))
   const trunc = result.truncated
     ? `\nShowing ${Math.min(awards.length, MAX_LINES)} recorded awards (truncated).`
     : `\n${awards.length} recorded award${awards.length === 1 ? '' : 's'}.`
   return {
-    factText: `Recorded awards for ${char}${window}:\n${lines.join('\n')}${trunc}`,
-    links: dedupeLinks(links),
+    factText: `Recorded awards for ${char}${window}:${trunc}`,
+    links: [],
+    table: { columns: AWARD_COLUMNS, rows },
   }
 }
 
@@ -335,42 +343,77 @@ function renderCharacterAwards(result, referenced) {
 function renderCatalog(result, referenced) {
   const boss = prettyBoss(result.query?.boss || 'boss')
   const items = result.catalogItems || []
-  const links = []
   if (!items.length) {
     return {
       factText: `No authoritative catalog drops listed for ${boss}. (This is "what can drop," not a historical kill.)`,
-      links,
+      links: [],
+      table: null,
     }
   }
-  for (const it of items.slice(0, MAX_LINES)) {
+  const rows = items.slice(0, MAX_LINES).map((it) => {
     referenced.items.push(it.name)
-    links.push(...buildLinks({ itemName: it.name, itemId: it.itemId }))
-  }
+    const [item] = buildLinks({ itemName: it.name, itemId: it.itemId })
+    return { item: item || { type: 'text', label: it.name } }
+  })
   return {
-    factText: `Catalog drops for ${boss} (item_sources / classification; not a historical kill list):\n${items
-      .slice(0, MAX_LINES)
-      .map((i) => `- ${i.name}`)
-      .join('\n')}`,
-    links: dedupeLinks(links),
+    factText: `Catalog drops for ${boss} (item_sources / classification; not a historical kill list):`,
+    links: [],
+    table: { columns: CATALOG_COLUMNS, rows },
   }
 }
 
 /**
  * @param {import('./types.js').LedgerAward} a
  * @param {object} referenced
- * @param {object[]} links
  */
-function formatAwardLine(a, referenced, links) {
+function formatAwardRow(a, referenced) {
   const who = a.characterName || a.assignedCharacterName || 'unknown'
   referenced.items.push(a.itemName)
   if (a.characterName) referenced.characters.push(a.characterName)
-  links.push(...buildLinks({ itemName: a.itemName, characterName: who }))
   if (a.raidId) {
     referenced.raids.push({ id: a.raidId, name: a.raidName || a.raidId })
-    links.push(...buildLinks({ raidId: a.raidId, raidName: a.raidName || a.raidId }))
   }
-  const date = a.dateIso ? `, ${a.dateIso}` : ''
-  return `- ${a.itemName} → ${who}${date}`
+
+  const built = buildLinks({
+    itemName: a.itemName,
+    characterName: who !== 'unknown' ? who : undefined,
+    raidId: a.raidId,
+    raidName: a.raidName || a.raidId,
+  })
+  const item = built.find((l) => l.type === 'item') || { type: 'text', label: a.itemName || 'unknown' }
+  const character =
+    built.find((l) => l.type === 'character') || { type: 'text', label: who }
+  const raid = built.find((l) => l.type === 'raid') || null
+
+  return {
+    item,
+    character,
+    date: a.dateIso || 'unknown date',
+    raid,
+  }
+}
+
+/**
+ * Recipient-only row (item already named in header / count text).
+ * @param {import('./types.js').LedgerAward} a
+ * @param {object} referenced
+ */
+function formatRecipientRow(a, referenced) {
+  const who = a.characterName || a.assignedCharacterName || 'unknown'
+  if (a.characterName) referenced.characters.push(a.characterName)
+  if (a.raidId) {
+    referenced.raids.push({ id: a.raidId, name: a.raidName || a.raidId })
+  }
+  const built = buildLinks({
+    characterName: who !== 'unknown' ? who : undefined,
+    raidId: a.raidId,
+    raidName: a.raidName || a.raidId,
+  })
+  return {
+    character: built.find((l) => l.type === 'character') || { type: 'text', label: who },
+    date: a.dateIso || 'unknown date',
+    raid: built.find((l) => l.type === 'raid') || null,
+  }
 }
 
 function prettyBoss(boss) {

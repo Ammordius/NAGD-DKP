@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { renderDiscovery } from './render.js'
 
 describe('discovery render', () => {
-  it('raid loot includes raid/item/character links pointing at source records', () => {
+  it('raid loot includes table rows with raid/item/character links', () => {
     const answer = renderDiscovery({
       ok: true,
       family: 'raid_loot',
@@ -23,17 +23,18 @@ describe('discovery render', () => {
       notes: [],
     })
     assert.match(answer.factText, /Plane of Fire/)
-    assert.match(answer.factText, /Blazing Whip of Trillia/)
-    assert.match(answer.factText, /Tandiyen/)
-    const raid = answer.links.find((l) => l.type === 'raid')
-    const item = answer.links.find((l) => l.type === 'item')
-    const character = answer.links.find((l) => l.type === 'character')
-    assert.equal(raid?.to, '/raids/r-fire-new')
-    assert.equal(item?.to, `/items/${encodeURIComponent('Blazing Whip of Trillia')}`)
-    assert.equal(character?.to, `/characters/${encodeURIComponent('Tandiyen')}`)
+    assert.match(answer.factText, /1 recorded loot award/)
+    assert.ok(answer.table?.rows?.length === 1)
+    assert.deepEqual(answer.table.columns, ['Item', 'Character', 'Date', 'Raid'])
+    const row = answer.table.rows[0]
+    assert.equal(row.item?.to, `/items/${encodeURIComponent('Blazing Whip of Trillia')}`)
+    assert.equal(row.character?.to, `/characters/${encodeURIComponent('Tandiyen')}`)
+    assert.equal(row.raid?.to, '/raids/r-fire-new')
+    assert.equal(row.date, '2026-03-01')
+    assert.equal(answer.links?.length || 0, 0)
   })
 
-  it('who-got wording distinguishes recorded awards', () => {
+  it('who-got wording distinguishes recorded awards with recipient table', () => {
     const answer = renderDiscovery({
       ok: true,
       family: 'item_recipients',
@@ -50,7 +51,65 @@ describe('discovery render', () => {
     })
     assert.match(answer.factText, /recorded/i)
     assert.match(answer.factText, /Frank/)
-    assert.ok(answer.links.some((l) => l.type === 'item' && l.to.includes('Cloak')))
+    assert.match(answer.factText, /Cloak of Wishes/)
+    assert.ok(answer.table?.rows?.length === 1)
+    assert.deepEqual(answer.table.columns, ['Character', 'Date', 'Raid'])
+    assert.equal(answer.table.rows[0].character?.to, `/characters/${encodeURIComponent('Frank')}`)
+    assert.equal(answer.table.rows[0].raid?.to, '/raids/r1')
+    assert.equal(answer.links?.length || 0, 0)
+  })
+
+  it('boss+slot catalog window awards use item/character/date/raid table', () => {
+    const answer = renderDiscovery({
+      ok: true,
+      family: 'item_last',
+      query: {
+        family: 'item_last',
+        boss: 'Quarm',
+        slot: 'FINGER',
+        itemQuery: 'ring',
+        raw: 'x',
+      },
+      awards: [
+        {
+          raidId: 'r-quarm',
+          raidName: 'Time Day 2',
+          dateIso: '2026-02-25',
+          itemName: 'Band of the Eternal',
+          characterName: 'Helen',
+        },
+      ],
+    })
+    assert.match(answer.factText, /Last recorded finger awards for Quarm/i)
+    assert.match(answer.factText, /item_sources/i)
+    assert.doesNotMatch(answer.factText, /Band of the Eternal →/)
+    const row = answer.table?.rows?.[0]
+    assert.ok(row)
+    assert.equal(row.item?.label, 'Band of the Eternal')
+    assert.equal(row.item?.to, `/items/${encodeURIComponent('Band of the Eternal')}`)
+    assert.equal(row.character?.label, 'Helen')
+    assert.equal(row.character?.to, `/characters/${encodeURIComponent('Helen')}`)
+    assert.equal(row.raid?.to, '/raids/r-quarm')
+    assert.equal(row.date, '2026-02-25')
+    assert.equal(answer.links?.length || 0, 0)
+  })
+
+  it('catalog drops render one-column item table', () => {
+    const answer = renderDiscovery({
+      ok: true,
+      family: 'boss_catalog',
+      query: { family: 'boss_catalog', boss: 'Quarm', raw: 'x' },
+      catalogItems: [
+        { name: 'Band of the Eternal', itemId: 90003 },
+        { name: 'Quarm Tooth', itemId: 90001 },
+      ],
+    })
+    assert.match(answer.factText, /Catalog drops/i)
+    assert.match(answer.factText, /not a historical kill/i)
+    assert.deepEqual(answer.table?.columns, ['Item'])
+    assert.equal(answer.table?.rows?.length, 2)
+    assert.equal(answer.table.rows[0].item?.to, `/items/${encodeURIComponent('Band of the Eternal')}`)
+    assert.equal(answer.links?.length || 0, 0)
   })
 
   it('P3 note appears when phase filter applied', () => {
@@ -73,6 +132,7 @@ describe('discovery render', () => {
     })
     assert.match(answer.factText, /P3/)
     assert.match(answer.factText, /identifiable/i)
+    assert.ok(answer.table?.rows?.[0]?.item?.label === 'Cloak of Wishes')
   })
 
   it('ambiguous item asks for clarification', () => {
@@ -88,5 +148,6 @@ describe('discovery render', () => {
     })
     assert.equal(answer.reasonCode, 'need_item')
     assert.match(answer.factText, /Candidates/)
+    assert.equal(answer.table, null)
   })
 })
