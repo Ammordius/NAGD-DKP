@@ -149,4 +149,81 @@ describe('discovery resolve', () => {
     assert.equal(resolved.itemUnmatched, true)
     assert.ok(resolved.gaps?.length)
   })
+
+  it('plate BP resolves to Timeless Breastplate Mold', () => {
+    const resolved = resolveDiscoveryEntities(
+      {
+        family: 'item_last',
+        intent: 'last_award',
+        itemQuery: 'plate bp',
+        slot: 'CHEST',
+        raw: "when's the last time plate BP dropped",
+      },
+      { knownItemSources: known, itemStats: FIXTURE_ITEM_STATS },
+    )
+    assert.equal(resolved.item?.name, 'Timeless Breastplate Mold')
+    assert.equal(resolved.itemAmbiguous, null)
+  })
+
+  it('silk arms resolves to Elemental Silk Sleeve Pattern', () => {
+    const resolved = resolveDiscoveryEntities(
+      {
+        family: 'item_last',
+        intent: 'last_award',
+        itemQuery: 'silk arms',
+        slot: 'ARMS',
+        raw: "when's the last time silk arms dropped",
+      },
+      { knownItemSources: known, itemStats: FIXTURE_ITEM_STATS },
+    )
+    assert.equal(resolved.item?.name, 'Elemental Silk Sleeve Pattern')
+  })
+
+  it('plate arms resolves to Elemental Vambrace Mold', () => {
+    const resolved = resolveDiscoveryEntities(
+      {
+        family: 'item_recipients',
+        intent: 'recipients',
+        itemQuery: 'plate arms',
+        raw: 'who got plate arms',
+      },
+      { knownItemSources: known },
+    )
+    assert.equal(resolved.item?.name, 'Elemental Vambrace Mold')
+  })
+
+  it('ele mold builds multi-item selector of all molds', () => {
+    const resolved = resolveDiscoveryEntities(
+      {
+        family: 'item_last',
+        intent: 'last_award',
+        itemQuery: 'ele mold',
+        raw: "when's the last time ele mold dropped",
+      },
+      { knownItemSources: known },
+    )
+    assert.equal(resolved.item, null)
+    assert.equal(resolved.itemSelector?.match, 'item')
+    assert.equal(resolved.itemSelector?.names?.size, 28)
+  })
+
+  it('unique typo soft-match sets itemCorrection', () => {
+    const resolved = resolveDiscoveryEntities(
+      {
+        family: 'item_last',
+        intent: 'last_award',
+        itemQuery: 'timless breastplate mold',
+        raw: "when's the last time timless breastplate mold dropped",
+      },
+      {
+        knownItemSources: known,
+        itemStats: {
+          16375: { name: 'Timeless Breastplate Mold', classes: 'WAR CLR PAL SHD BRD' },
+        },
+      },
+    )
+    assert.equal(resolved.item?.name, 'Timeless Breastplate Mold')
+    assert.equal(resolved.itemCorrection?.from, 'timless breastplate mold')
+    assert.equal(resolved.itemCorrection?.to, 'Timeless Breastplate Mold')
+  })
 })

@@ -150,4 +150,34 @@ describe('discovery render', () => {
     assert.match(answer.factText, /Candidates/)
     assert.equal(answer.table, null)
   })
+
+  it('spelling ambiguity enables roast flavor', () => {
+    const answer = renderDiscovery({
+      ok: false,
+      family: 'item_recipients',
+      query: { family: 'item_recipients', raw: 'x' },
+      ambiguous: {
+        kind: 'item',
+        candidates: ['Cloak of Wishes', 'Cloak of Wishes II'],
+        message: 'Did you mean Cloak of Wishes, or Cloak of Wishes II?',
+        spelling: true,
+      },
+    })
+    assert.equal(answer.allowFlavor, true)
+    assert.match(answer.factText, /Did you mean/)
+  })
+
+  it('itemCorrection preface and allowFlavor', () => {
+    const answer = renderDiscovery({
+      ok: true,
+      family: 'item_last',
+      query: { family: 'item_last', raw: 'timless breastplate mold' },
+      awards: [],
+      itemCorrection: { from: 'timless breastplate mold', to: 'Timeless Breastplate Mold' },
+      gaps: [],
+      notes: [],
+    })
+    assert.match(answer.factText, /Assuming you meant Timeless Breastplate Mold/)
+    assert.equal(answer.allowFlavor, true)
+  })
 })

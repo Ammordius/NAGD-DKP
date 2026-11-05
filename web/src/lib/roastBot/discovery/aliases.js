@@ -80,6 +80,7 @@ export const SLOT_ALIASES = {
   circlet: 'HEAD',
   chest: 'CHEST',
   breastplate: 'CHEST',
+  bp: 'CHEST',
   legs: 'LEGS',
   greaves: 'LEGS',
   feet: 'FEET',

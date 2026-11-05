@@ -1,6 +1,6 @@
 /**
  * Entity resolution for discovery queries against static catalogs.
- * Prefer exact names / aliases, then constrained tokens, then cautious fuzzy.
+ * Prefer exact names / aliases / molds, then constrained tokens, then JSON typo soft-match.
  */
 
 import { matchItemName } from '../formatting.js'
@@ -19,6 +19,8 @@ import {
   isPhaseMob,
 } from './aliases.js'
 import { catalogEntriesFromKnownSources } from '../../itemSourceLookup.js'
+import { ELEMENTAL_MOLDS, looksLikeMoldPhrase, resolveMoldPhrase } from './molds.js'
+import { softMatchNames } from './fuzzy.js'
 
 /**
  * @typedef {{
@@ -26,6 +28,7 @@ import { catalogEntriesFromKnownSources } from '../../itemSourceLookup.js'
  *   item?: { name: string, itemId?: string|number|null }|null,
  *   itemAmbiguous?: { candidates: Array<{ name: string }>, message: string }|null,
  *   itemUnmatched?: boolean,
+ *   itemCorrection?: { from: string, to: string }|null,
  *   phaseItemNames?: Set<string>,
  *   itemSelector?: { names: Set<string>, match: 'boss'|'zone'|'phase'|'item'|null }|null,
  *   gaps?: string[],
@@ -56,9 +59,15 @@ export function resolveDiscoveryEntities(query, ctx = {}) {
   let item = null
   let itemAmbiguous = null
   let itemUnmatched = false
+  /** @type {{ from: string, to: string }|null} */
+  let itemCorrection = null
+  /** @type {{ names: Set<string>, match: 'item' }|null} */
+  let moldSelector = null
 
   // Boss + slot/role history uses a multi-item catalog selector (skip single-item resolve).
   // Phase/zone + slot without boss still tries constrained single-item resolution (P3 shoulders).
+  // Mold phrases always resolve via mold catalog (single or multi), never boss multi-catalog.
+  const moldHint = looksLikeMoldPhrase(query.itemQuery || '') || looksLikeMoldPhrase(query.raw || '')
   const multiCatalog =
     Boolean(query.boss) &&
     Boolean(query.slot || query.classesHint) &&
@@ -66,7 +75,8 @@ export function resolveDiscoveryEntities(query, ctx = {}) {
       query.intent === 'recipients' ||
       query.family === 'item_last') &&
     !lookupItemAlias(query.itemQuery || '')?.name &&
-    !looksLikeNamedItem(query.itemQuery)
+    !looksLikeNamedItem(query.itemQuery) &&
+    !moldHint
 
   if (query.itemQuery && !multiCatalog) {
     const resolved = resolveItemQuery(query.itemQuery, query, ctx, phaseItemNames)
@@ -74,12 +84,18 @@ export function resolveDiscoveryEntities(query, ctx = {}) {
       itemAmbiguous = {
         candidates: resolved.candidates,
         message: resolved.message || 'Which item did you mean?',
+        spelling: Boolean(resolved.spelling),
       }
+    } else if (resolved.moldNames) {
+      moldSelector = { names: resolved.moldNames, match: /** @type {const} */ ('item') }
     } else if (resolved.unmatched) {
       itemUnmatched = true
       gaps.push(`Could not resolve item "${query.itemQuery}" against the loot catalog.`)
     } else {
       item = resolved.item
+      if (resolved.correctedFrom && item?.name) {
+        itemCorrection = { from: resolved.correctedFrom, to: item.name }
+      }
     }
   }
 
@@ -94,7 +110,8 @@ export function resolveDiscoveryEntities(query, ctx = {}) {
     }
   }
 
-  const itemSelector = composeItemSelector(query, known, phaseItemNames, ctx, item)
+  const itemSelector =
+    moldSelector || composeItemSelector(query, known, phaseItemNames, ctx, item)
 
   if (multiCatalog && itemSelector?.names && itemSelector.names.size === 0) {
     const where = query.boss
@@ -111,11 +128,12 @@ export function resolveDiscoveryEntities(query, ctx = {}) {
   return {
     query: {
       ...query,
-      itemQuery: item?.name || (multiCatalog ? null : query.itemQuery),
+      itemQuery: item?.name || (multiCatalog || moldSelector ? null : query.itemQuery),
     },
     item,
     itemAmbiguous,
     itemUnmatched,
+    itemCorrection,
     phaseItemNames,
     itemSelector,
     gaps,
@@ -223,26 +241,74 @@ function resolveItemQuery(hint, query, ctx, phaseItemNames) {
     return { item: { name: alias.name, itemId: null } }
   }
 
+  // Elemental / Timeless molds (colloquial + canonical) before wear-slot constrained resolve
+  const mold = resolveMoldPhrase(hint) || resolveMoldPhrase(query.raw || '')
+  if (mold?.name) {
+    return {
+      item: { name: mold.name, itemId: mold.itemId ?? null },
+      correctedFrom: mold.correctedFrom || undefined,
+    }
+  }
+  if (mold?.names?.size) {
+    return { moldNames: mold.names }
+  }
+  if (mold?.ambiguous) {
+    return {
+      ambiguous: true,
+      spelling: Boolean(mold.spelling),
+      candidates: mold.candidates,
+      message: mold.message || `Which mold? Candidates: ${(mold.candidates || []).map((c) => c.name).slice(0, 5).join(', ')}.`,
+    }
+  }
+
   const roleHint = alias?.classesHint || query.classesHint || resolveClassesHint(hint)
 
   // Constrained: slot (+ optional role/phase) e.g. "p3 priest shoulders" / "tank shoulders"
+  // Skip for mold phrases — molds have no wear slot in item_stats.
   // Only short-circuit on a hit or ambiguity — unmatched falls through so names like
   // "Cloak of Wishes" / "Mask of Conceptual Energy" still exact-match despite slot tokens.
-  if (alias?.slot || slotFromHint) {
+  if ((alias?.slot || slotFromHint) && !looksLikeMoldPhrase(hint)) {
     const constrained = resolveConstrainedItem(hint, alias, query, ctx, phaseItemNames, slotFromHint, roleHint)
     if (constrained && !constrained.unmatched) return constrained
   }
 
   const match = matchItemName(hint, catalog)
-  if (!match) return { unmatched: true, hint }
-  if (match.ambiguous) {
+  if (match?.ambiguous) {
     return {
       ambiguous: true,
       candidates: match.candidates.map((c) => ({ name: c.name })),
       message: `Which item? Candidates: ${match.candidates.map((c) => c.name).slice(0, 5).join(', ')}.`,
     }
   }
-  return { item: { name: match.name, itemId: match.itemId ?? match.id ?? null } }
+  if (match) {
+    return { item: { name: match.name, itemId: match.itemId ?? match.id ?? null } }
+  }
+
+  // JSON-catalog typo soft-match (1–2 char); suggest correction; never fuzz Supabase
+  const softPool = [
+    ...catalog,
+    ...ELEMENTAL_MOLDS.map((m) => ({ name: m.name, itemId: m.id })),
+  ]
+  const soft = softMatchNames(hint, softPool)
+  if (soft?.unique) {
+    return {
+      item: { name: soft.unique.name, itemId: soft.unique.itemId ?? null },
+      correctedFrom: String(hint).trim(),
+    }
+  }
+  if (soft?.ambiguous?.length) {
+    return {
+      ambiguous: true,
+      spelling: true,
+      candidates: soft.ambiguous.map((c) => ({ name: c.name })),
+      message: `Did you mean ${soft.ambiguous
+        .map((c) => c.name)
+        .slice(0, 5)
+        .join(', or ')}? Your spelling left a few possibilities.`,
+    }
+  }
+
+  return { unmatched: true, hint }
 }
 
 /**

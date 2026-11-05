@@ -31,13 +31,15 @@ export function planDiscovery(query, resolved = null) {
   const scope = query.scope || (query.mostRecentRaidFirst ? 'last_raid_night' : 'history')
   const selector = resolved?.itemSelector || null
   const multiNames = selector?.names && selector.names.size > 0 ? selector.names : null
-  // Multi-name historical window: boss/zone/phase + slot (or boss+slot without single item).
+  // Multi-name historical window: boss/zone/phase + slot, boss+slot, or explicit item-set (molds).
   // Never divert last_raid_night dumps onto catalog-window awards.
   const useMulti =
     scope !== 'last_raid_night' &&
     Boolean(multiNames) &&
     !itemName &&
-    (Boolean(query.boss) || ((query.zone || query.phase) && query.slot)) &&
+    (Boolean(query.boss) ||
+      ((query.zone || query.phase) && query.slot) ||
+      selector?.match === 'item') &&
     (intent === 'last_award' || intent === 'recipients')
 
   // Slot on a phase/zone raid dump → prefer historical awards for resolved single item
@@ -110,13 +112,15 @@ export function planDiscovery(query, resolved = null) {
     return { ops, query, notes }
   }
 
-  // Multi-name catalog window: boss/zone/phase (+ optional slot) historical awards
+  // Multi-name catalog window: boss/zone/phase (+ optional slot) or explicit mold item-set
   if (useMulti || (intent === 'last_award' && query.boss && (query.slot || query.classesHint) && !itemName)) {
-    const match = query.boss ? 'boss' : query.phase ? 'phase' : 'zone'
+    const match =
+      selector?.match === 'item' ? 'item' : query.boss ? 'boss' : query.phase ? 'phase' : 'zone'
     ops.push({
       op: 'awards_for_catalog_window',
       params: {
         match,
+        itemNames: selector?.match === 'item' && multiNames ? [...multiNames] : null,
         boss: query.boss || null,
         zone: query.zone || null,
         phase: query.phase || null,
@@ -125,13 +129,17 @@ export function planDiscovery(query, resolved = null) {
         toIso: query.timeRange?.toIso || null,
         select: LOOT_SELECT,
         limit: Math.min(limit, intent === 'last_award' ? 10 : limit),
-        filterSlot: query.slot || null,
+        // Mold item-sets already encode slot/type; don't re-filter by wear slot
+        filterSlot: selector?.match === 'item' ? null : query.slot || null,
       },
     })
     if (query.boss && query.slot) {
       notes.push(
         'Boss+slot answers join item_sources mob labels to recorded awards, then filter by equipment slot.',
       )
+    }
+    if (selector?.match === 'item') {
+      notes.push('Elemental/Timeless mold answers search recorded awards for the matching mold/pattern names.')
     }
     return { ops, query: { ...query, family: 'item_last', intent: intent === 'recipients' ? 'recipients' : 'last_award' }, notes }
   }

@@ -37,6 +37,13 @@ export {
   BOSS_ALIASES,
 } from './aliases.js'
 export { resolveDiscoveryEntities, authoritativeItemSource } from './resolve.js'
+export {
+  ELEMENTAL_MOLDS,
+  resolveMoldPhrase,
+  looksLikeMoldPhrase,
+  extractMoldItemQuery,
+} from './molds.js'
+export { softMatchNames, editDistance } from './fuzzy.js'
 export { planDiscovery } from './queryPlan.js'
 export { executeDiscovery, resetDiscoveryCache, escapeIlike, getDiscoveryCacheKey } from './fetch.js'
 export { discoverySwrKey, fingerprintQuery, DISCOVERY_DEDUPING_MS } from './cacheKey.js'
@@ -127,6 +134,7 @@ export async function runDiscovery(client, text, ctx = {}) {
         kind: 'item',
         candidates: prepared.resolved.itemAmbiguous.candidates.map((c) => c.name),
         message: prepared.resolved.itemAmbiguous.message,
+        spelling: Boolean(prepared.resolved.itemAmbiguous.spelling),
       },
       awards: [],
       gaps: prepared.resolved.gaps || [],
@@ -139,5 +147,8 @@ export async function runDiscovery(client, text, ctx = {}) {
     resolved: prepared.resolved,
     skipCache: ctx.skipCache,
   })
+  if (result && prepared.resolved?.itemCorrection) {
+    result.itemCorrection = prepared.resolved.itemCorrection
+  }
   return { prepared, result, answer: renderDiscovery(result), recognition: prepared.recognition }
 }

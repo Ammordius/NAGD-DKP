@@ -18,6 +18,7 @@ const CATALOG_COLUMNS = ['Item']
  */
 export function renderDiscovery(result) {
   if (result?.ambiguous?.kind === 'item') {
+    const spelling = Boolean(result.ambiguous.spelling)
     return {
       intent: INTENTS.LOOT_DISCOVERY,
       category: 'general',
@@ -28,7 +29,8 @@ export function renderDiscovery(result) {
       links: [],
       table: null,
       reasonCode: 'need_item',
-      allowFlavor: false,
+      // Roast the typo when soft-match left multiple candidates
+      allowFlavor: spelling,
       templateId: 'NEED_ITEM',
       clarification: {
         slot: 'item',
@@ -85,6 +87,12 @@ export function renderDiscovery(result) {
       factText = 'I could not build a discovery answer for that phrasing.'
   }
 
+  const correction = result?.itemCorrection
+  if (correction?.from && correction?.to) {
+    const preface = `Assuming you meant ${correction.to} (not "${correction.from}").`
+    factText = factText ? `${preface} ${factText}` : preface
+  }
+
   const extras = [
     ...(result?.gaps || []),
     // Soft methodology notes only when we actually found a raid (avoid double-failure walls of text)
@@ -105,8 +113,10 @@ export function renderDiscovery(result) {
     links,
     table,
     reasonCode: 'loot_discovery',
-    allowFlavor: false,
+    // Enable roast flavor when we had to correct their spelling
+    allowFlavor: Boolean(correction?.from && correction?.to),
     templateId: 'LOOT_DISCOVERY',
+    itemCorrection: correction || null,
   }
 }
 

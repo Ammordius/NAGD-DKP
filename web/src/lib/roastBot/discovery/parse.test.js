@@ -144,4 +144,27 @@ describe('discovery parse', () => {
     assert.equal(melee?.classesHint, 'melee')
     assert.equal(melee?.slot, 'SHOULDERS')
   })
+
+  it('keeps silk arms mold phrase in itemQuery', () => {
+    const q = tryParseDiscovery("When's the last time silk arms dropped?")
+    assert.ok(q)
+    assert.equal(q.family, 'item_last')
+    assert.match(String(q.itemQuery || ''), /silk arms/i)
+  })
+
+  it('parses plate BP and ele mold discovery phrases', () => {
+    const bp = tryParseDiscovery("When's the last time plate BP dropped?")
+    assert.ok(bp)
+    assert.equal(bp.family, 'item_last')
+    assert.match(String(bp.itemQuery || ''), /plate bp/i)
+
+    const ele = tryParseDiscovery("When's the last time ele mold dropped?")
+    assert.ok(ele)
+    assert.equal(ele.family, 'item_last')
+    assert.match(String(ele.itemQuery || ''), /ele mold/i)
+
+    const about = tryParseDiscovery('what about plate arms?')
+    assert.ok(about)
+    assert.match(String(about.itemQuery || ''), /plate arms/i)
+  })
 })

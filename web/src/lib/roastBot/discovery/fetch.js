@@ -394,6 +394,12 @@ function slotItemNameSet(slotWant, itemStats) {
  * @returns {Set<string>}
  */
 function resolveCatalogItemNames(known, params, phaseNames) {
+  // Explicit item-set (e.g. elemental mold multi-match) — do not re-derive from boss/zone
+  if (params.match === 'item' || (Array.isArray(params.itemNames) && params.itemNames.length)) {
+    return new Set(
+      [...(params.itemNames || [])].map((n) => String(n || '').trim()).filter(Boolean),
+    )
+  }
   if (params.match === 'phase' || params.mobs?.length) {
     if (phaseNames?.size) return phaseNames
     return itemNamesForPhaseMobs(known, params.mobs || P3_MOBS)

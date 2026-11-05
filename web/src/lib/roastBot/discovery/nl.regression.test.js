@@ -81,6 +81,21 @@ const PARSE_CASES = [
     text: 'Where does Cloak of Wishes drop?',
     expect: { status: 'not_discovery' },
   },
+  {
+    name: 'silk arms mold last drop',
+    text: "When's the last time silk arms dropped?",
+    expect: { status: 'recognized', family: 'item_last', slot: 'ARMS' },
+  },
+  {
+    name: 'plate BP mold last drop',
+    text: "When's the last time plate BP dropped?",
+    expect: { status: 'recognized', family: 'item_last', slot: 'CHEST' },
+  },
+  {
+    name: 'ele mold last drop',
+    text: "When's the last time ele mold dropped?",
+    expect: { status: 'recognized', family: 'item_last' },
+  },
 ]
 
 describe('discovery NL paraphrase suite', () => {
@@ -97,6 +112,42 @@ describe('discovery NL paraphrase suite', () => {
       }
     })
   }
+})
+
+describe('discovery mold phrases', () => {
+  it('silk arms resolves to Elemental Silk Sleeve Pattern', () => {
+    const prepared = prepareDiscovery("When's the last time silk arms dropped?", {
+      knownItemSources: known,
+      itemStats: FIXTURE_ITEM_STATS,
+    })
+    assert.ok(prepared?.resolved)
+    assert.equal(prepared.resolved.item?.name, 'Elemental Silk Sleeve Pattern')
+    assert.equal(prepared.plan?.ops?.[0]?.op, 'awards_for_item')
+  })
+
+  it('ele mold plans multi-name catalog window', () => {
+    const prepared = prepareDiscovery("When's the last time ele mold dropped?", {
+      knownItemSources: known,
+      itemStats: FIXTURE_ITEM_STATS,
+    })
+    assert.ok(prepared?.plan)
+    assert.equal(prepared.resolved?.itemSelector?.names?.size, 28)
+    assert.equal(prepared.plan.ops[0].op, 'awards_for_catalog_window')
+    assert.equal(prepared.plan.ops[0].params.match, 'item')
+    assert.equal(prepared.plan.ops[0].params.itemNames?.length, 28)
+  })
+
+  it('typo correction metadata surfaces on prepare', () => {
+    const prepared = prepareDiscovery("When's the last time timless breastplate mold dropped?", {
+      knownItemSources: known,
+      itemStats: {
+        ...FIXTURE_ITEM_STATS,
+        16375: { name: 'Timeless Breastplate Mold', classes: 'WAR CLR PAL SHD BRD' },
+      },
+    })
+    assert.equal(prepared?.resolved?.item?.name, 'Timeless Breastplate Mold')
+    assert.equal(prepared?.resolved?.itemCorrection?.to, 'Timeless Breastplate Mold')
+  })
 })
 
 describe('discovery Quarm ring end-to-end', () => {

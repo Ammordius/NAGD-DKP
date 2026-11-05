@@ -12,6 +12,7 @@ import {
   lookupItemAlias,
   normAliasKey,
 } from './aliases.js'
+import { extractMoldItemQuery, looksLikeMoldPhrase } from './molds.js'
 
 const DEFAULT_LIMIT = 40
 const RECIPIENT_LIMIT = 10
@@ -198,13 +199,16 @@ function extractEntities(text, nowIso) {
   const boss = extractBoss(text)
   const character = extractCharacter(text)
   const itemAlias = lookupItemAlias(text)
+  const moldQuery = extractMoldItemQuery(text)
   let slot =
     itemAlias?.name && !itemAlias.slot ? null : itemAlias?.slot || resolveSlotAlias(text)
   const classesHint = itemAlias?.classesHint || resolveClassesHint(text) || null
-  let itemQuery = extractItemQuery(text, { phase, zone, boss, character, slot, classesHint })
+  let itemQuery =
+    moldQuery ||
+    extractItemQuery(text, { phase, zone, boss, character, slot, classesHint })
 
   // Strip boss name tokens from itemQuery when boss was also extracted (avoid "quarm" as item)
-  if (itemQuery && boss) {
+  if (itemQuery && boss && !looksLikeMoldPhrase(itemQuery)) {
     const bossKey = normAliasKey(boss)
     itemQuery = itemQuery
       .split(/\s+/)
@@ -214,7 +218,8 @@ function extractEntities(text, nowIso) {
   }
 
   // Slot-only fragment left in itemQuery (e.g. "ring") — prefer slot filter, clear itemQuery
-  if (itemQuery && slot) {
+  // Keep mold phrases ("silk arms", "plate bp") intact for mold resolution.
+  if (itemQuery && slot && !looksLikeMoldPhrase(itemQuery) && !moldQuery) {
     const onlySlot = resolveSlotAlias(itemQuery) === slot && !lookupItemAlias(itemQuery)?.name
     if (onlySlot || normAliasKey(itemQuery) === normAliasKey(String(slot))) {
       itemQuery = null
@@ -222,7 +227,7 @@ function extractEntities(text, nowIso) {
   }
 
   // "finger" / "ring" alone after clean → slot
-  if (!slot && itemQuery) {
+  if (!slot && itemQuery && !looksLikeMoldPhrase(itemQuery)) {
     const asSlot = resolveSlotAlias(itemQuery)
     if (asSlot && !lookupItemAlias(itemQuery)?.name && itemQuery.split(/\s+/).length <= 2) {
       slot = asSlot
@@ -722,11 +727,21 @@ function extractItemQuery(text, ctx) {
     return alias.alias
   }
 
+  const moldQ = extractMoldItemQuery(t)
+  if (moldQ) return moldQ
+
   const who = t.match(/\bwho (?:got|won|received)(?:\s+the\s+last)?\s+(.+?)(?:\s*\?|$)/)
   if (who) return cleanItemFragment(who[1], ctx)
 
   const when = t.match(/\bwhen(?:'?s| is| was)? the last time\s+(.+?)\s+dropped\b/)
   if (when) return cleanItemFragment(when[1], ctx)
+
+  // "when did silk arms last drop" — item before last drop (boss pattern already tried)
+  const whenDidItemLast = t.match(/\bwhen did\s+(.+?)\s+last\s+drop\b/)
+  if (whenDidItemLast && !ctx.boss) {
+    const frag = cleanItemFragment(whenDidItemLast[1], ctx)
+    if (frag && (looksLikeMoldPhrase(frag) || frag.split(/\s+/).length >= 2)) return frag
+  }
 
   const whenDidDrop = t.match(/\bwhen did\s+.+?\s+last\s+drop\s+(.+?)(?:\s*\?|$)/)
   if (whenDidDrop) return cleanItemFragment(whenDidDrop[1], ctx)
@@ -736,6 +751,12 @@ function extractItemQuery(text, ctx) {
 
   const ever = t.match(/\bever (?:won|got|gotten|received|get)\s+(.+?)(?:\s*\?|$)/)
   if (ever) return cleanItemFragment(ever[1], ctx)
+
+  const whatAbout = t.match(/\bwhat about\s+(.+?)(?:\s*\?|$)/)
+  if (whatAbout) {
+    const frag = cleanItemFragment(whatAbout[1], ctx)
+    if (frag && looksLikeMoldPhrase(frag)) return frag
+  }
 
   // "last quarm ring" / "what about quarm ring" — leave itemQuery null; boss+slot handle it
   if (ctx.boss && ctx.slot) return null
