@@ -176,6 +176,7 @@ describe('discovery Quarm ring end-to-end', () => {
     assert.equal(row.character?.label, 'Helen')
     assert.equal(row.date, '2026-02-25')
     assert.ok(row.item?.to?.includes('Band'))
+    assert.equal(row.dkp, '75')
     assert.equal(run.answer.links?.length || 0, 0)
   })
 

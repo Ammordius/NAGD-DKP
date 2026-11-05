@@ -431,7 +431,7 @@ export default function RoastBot({ profile, session, factsOverride = null, openO
                     </table>
                   </div>
                 ) : null}
-                {!msg.table?.rows?.length && msg.links?.length ? (
+                {msg.links?.length ? (
                   <div className="roast-bot-links">
                     {msg.links.map((link) => (
                       <Link key={`${link.type}-${link.to}`} to={link.to}>

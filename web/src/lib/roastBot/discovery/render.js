@@ -3,13 +3,13 @@
  * Award lists use a structured `table` (React Link cells); not markdown URLs.
  */
 
-import { buildLinks } from '../formatting.js'
+import { buildLinks, formatDkp } from '../formatting.js'
 import { INTENTS } from '../intents.js'
 
 const MAX_LINES = 40
 
-const AWARD_COLUMNS = ['Item', 'Character', 'Date', 'Raid']
-const RECIPIENT_COLUMNS = ['Character', 'Date', 'Raid']
+const AWARD_COLUMNS = ['Item', 'Character', 'Date', 'Raid', 'DKP']
+const RECIPIENT_COLUMNS = ['Character', 'Date', 'DKP']
 const CATALOG_COLUMNS = ['Item']
 
 /**
@@ -233,7 +233,7 @@ function renderRecipients(result, referenced) {
   const rows = others.map((a) => formatRecipientRow(a, referenced))
 
   let factText = `Who got ${item}?\nMost recent recorded recipient: ${recipient} on ${
-    most.dateIso || 'unknown date'
+    truncateDateIso(most.dateIso)
   }`
   if (rows.length) {
     factText += `\nRecorded recipients:`
@@ -243,7 +243,7 @@ function renderRecipients(result, referenced) {
 
   return {
     factText,
-    links: [],
+    links: itemLinks,
     table: { columns: RECIPIENT_COLUMNS, rows },
   }
 }
@@ -285,7 +285,7 @@ function renderCatalogWindowAwards(result, referenced) {
 
   const rows = awards.slice(0, MAX_LINES).map((a) => formatAwardRow(a, referenced))
   const most = awards[0]
-  const factText = `${header} (most recent ${most.dateIso || 'unknown date'}):\nThese are recorded DKP awards joined via item_sources labels, not independently proven in-game drop events.`
+  const factText = `${header} (most recent ${truncateDateIso(most.dateIso)}):\nThese are recorded DKP awards joined via item_sources labels, not independently proven in-game drop events.`
   return {
     factText,
     links: [],
@@ -378,6 +378,7 @@ function renderCatalog(result, referenced) {
  */
 function formatAwardRow(a, referenced) {
   const who = a.characterName || a.assignedCharacterName || 'unknown'
+  const dateLabel = truncateDateIso(a.dateIso)
   referenced.items.push(a.itemName)
   if (a.characterName) referenced.characters.push(a.characterName)
   if (a.raidId) {
@@ -398,18 +399,21 @@ function formatAwardRow(a, referenced) {
   return {
     item,
     character,
-    date: a.dateIso || 'unknown date',
+    date: dateLabel,
     raid,
+    dkp: formatDkp(a.cost) ?? '—',
   }
 }
 
 /**
  * Recipient-only row (item already named in header / count text).
+ * Raid cell uses truncated date as the link label (not raid name).
  * @param {import('./types.js').LedgerAward} a
  * @param {object} referenced
  */
 function formatRecipientRow(a, referenced) {
   const who = a.characterName || a.assignedCharacterName || 'unknown'
+  const dateLabel = truncateDateIso(a.dateIso)
   if (a.characterName) referenced.characters.push(a.characterName)
   if (a.raidId) {
     referenced.raids.push({ id: a.raidId, name: a.raidName || a.raidId })
@@ -417,13 +421,21 @@ function formatRecipientRow(a, referenced) {
   const built = buildLinks({
     characterName: who !== 'unknown' ? who : undefined,
     raidId: a.raidId,
-    raidName: a.raidName || a.raidId,
+    raidName: dateLabel,
   })
   return {
     character: built.find((l) => l.type === 'character') || { type: 'text', label: who },
-    date: a.dateIso || 'unknown date',
-    raid: built.find((l) => l.type === 'raid') || null,
+    date: built.find((l) => l.type === 'raid') || { type: 'text', label: dateLabel },
+    dkp: formatDkp(a.cost) ?? '—',
   }
+}
+
+/** Prefer YYYY-MM-DD when dateIso is a full timestamp. */
+function truncateDateIso(dateIso) {
+  const s = String(dateIso || '').trim()
+  if (!s) return 'unknown date'
+  const m = s.match(/^(\d{4}-\d{2}-\d{2})/)
+  return m ? m[1] : s
 }
 
 function prettyBoss(boss) {

@@ -25,12 +25,13 @@ describe('discovery render', () => {
     assert.match(answer.factText, /Plane of Fire/)
     assert.match(answer.factText, /1 recorded loot award/)
     assert.ok(answer.table?.rows?.length === 1)
-    assert.deepEqual(answer.table.columns, ['Item', 'Character', 'Date', 'Raid'])
+    assert.deepEqual(answer.table.columns, ['Item', 'Character', 'Date', 'Raid', 'DKP'])
     const row = answer.table.rows[0]
     assert.equal(row.item?.to, `/items/${encodeURIComponent('Blazing Whip of Trillia')}`)
     assert.equal(row.character?.to, `/characters/${encodeURIComponent('Tandiyen')}`)
     assert.equal(row.raid?.to, '/raids/r-fire-new')
     assert.equal(row.date, '2026-03-01')
+    assert.equal(row.dkp, '—')
     assert.equal(answer.links?.length || 0, 0)
   })
 
@@ -43,20 +44,25 @@ describe('discovery render', () => {
         {
           raidId: 'r1',
           raidName: 'Time',
-          dateIso: '2026-02-10',
+          dateIso: '2026-02-10T21:00:00-04:00',
           itemName: 'Cloak of Wishes',
           characterName: 'Frank',
+          cost: 41,
         },
       ],
     })
     assert.match(answer.factText, /recorded/i)
     assert.match(answer.factText, /Frank/)
     assert.match(answer.factText, /Cloak of Wishes/)
+    assert.match(answer.factText, /2026-02-10/)
+    assert.doesNotMatch(answer.factText, /21:00:00/)
     assert.ok(answer.table?.rows?.length === 1)
-    assert.deepEqual(answer.table.columns, ['Character', 'Date', 'Raid'])
+    assert.deepEqual(answer.table.columns, ['Character', 'Date', 'DKP'])
     assert.equal(answer.table.rows[0].character?.to, `/characters/${encodeURIComponent('Frank')}`)
-    assert.equal(answer.table.rows[0].raid?.to, '/raids/r1')
-    assert.equal(answer.links?.length || 0, 0)
+    assert.equal(answer.table.rows[0].date?.to, '/raids/r1')
+    assert.equal(answer.table.rows[0].date?.label, '2026-02-10')
+    assert.equal(answer.table.rows[0].dkp, '41')
+    assert.equal(answer.links?.[0]?.to, `/items/${encodeURIComponent('Cloak of Wishes')}`)
   })
 
   it('boss+slot catalog window awards use item/character/date/raid table', () => {
