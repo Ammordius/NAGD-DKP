@@ -28,6 +28,27 @@ export function planDiscovery(query, resolved = null) {
   const limit = query.limit || 40
   const phaseMobs = phaseMobsForFilter(query.phase)
 
+  // Slot is a hard constraint: never dump a full phase/zone raid night when we can
+  // answer via historical awards for the resolved item (last drop may be an older raid).
+  if (query.family === 'raid_loot' && query.slot && itemName && resolved?.item?.name) {
+    ops.push({
+      op: 'awards_for_item',
+      params: {
+        itemName: resolved.item.name,
+        fromIso: query.timeRange?.fromIso || null,
+        toIso: query.timeRange?.toIso || null,
+        select: LOOT_SELECT,
+        limit: Math.min(limit, 10),
+        countExact: false,
+      },
+    })
+    return {
+      ops,
+      query: { ...query, family: 'item_last', itemQuery: resolved.item.name },
+      notes,
+    }
+  }
+
   switch (query.family) {
     case 'boss_catalog':
       ops.push({
@@ -51,6 +72,8 @@ export function planDiscovery(query, resolved = null) {
           op: 'loot_for_raid',
           params: {
             filterPhaseMobs: phaseMobs,
+            // If slot somehow survived without a resolved item, still narrow awards client-side
+            filterSlot: query.slot || null,
             select: RAID_LOOT_SELECT,
             limit,
           },
@@ -65,7 +88,11 @@ export function planDiscovery(query, resolved = null) {
         })
         ops.push({
           op: 'loot_for_raid',
-          params: { select: RAID_LOOT_SELECT, limit },
+          params: {
+            select: RAID_LOOT_SELECT,
+            limit,
+            filterSlot: query.slot || null,
+          },
         })
       } else if (query.zone || query.timeRange) {
         ops.push({
@@ -79,6 +106,7 @@ export function planDiscovery(query, resolved = null) {
             toIso: query.timeRange?.toIso || null,
             select: LOOT_SELECT,
             limit,
+            filterSlot: query.slot || null,
           },
         })
       } else {

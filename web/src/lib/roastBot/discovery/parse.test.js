@@ -26,7 +26,17 @@ const CASES = [
   {
     name: 'last item award timing',
     text: "When's the last time P3 caster shoulders dropped?",
-    expect: { family: 'item_last', phase: 'P3' },
+    expect: { family: 'item_last', phase: 'P3', slot: 'SHOULDERS' },
+  },
+  {
+    name: 'whens without apostrophe still item_last for p3 shoulders',
+    text: 'whens the last time p3 shoulders dropped',
+    expect: { family: 'item_last', phase: 'P3', slot: 'SHOULDERS' },
+  },
+  {
+    name: 'p3 arms last drop',
+    text: "When's the last time p3 arms dropped?",
+    expect: { family: 'item_last', phase: 'P3', slot: 'ARMS' },
   },
   {
     name: 'who got item',
@@ -102,5 +112,36 @@ describe('discovery parse', () => {
     assert.equal(week?.label, 'last week')
     assert.equal(week?.toIso, '2026-03-05')
     assert.equal(week?.fromIso, '2026-02-26')
+  })
+
+  it('whens p3 shoulders captures itemQuery with shoulders', () => {
+    const q = tryParseDiscovery('whens the last time p3 shoulders dropped')
+    assert.ok(q)
+    assert.equal(q.family, 'item_last')
+    assert.match(String(q.itemQuery || ''), /shoulder/i)
+    assert.equal(q.slot, 'SHOULDERS')
+    assert.notEqual(q.family, 'raid_loot')
+  })
+
+  it('named cloak item does not inherit BACK slot from cloak token', () => {
+    const q = tryParseDiscovery('Who got Cloak of Wishes?')
+    assert.ok(q)
+    assert.equal(q.family, 'item_recipients')
+    assert.equal(q.slot, null)
+  })
+
+  it('parses priest / tank / melee class hints with slot', () => {
+    const priest = tryParseDiscovery("When's the last time priest shoulders dropped?")
+    assert.equal(priest?.family, 'item_last')
+    assert.equal(priest?.classesHint, 'priest')
+    assert.equal(priest?.slot, 'SHOULDERS')
+
+    const tank = tryParseDiscovery("When's the last time tank shoulders dropped?")
+    assert.equal(tank?.classesHint, 'tank')
+    assert.equal(tank?.slot, 'SHOULDERS')
+
+    const melee = tryParseDiscovery("When's the last time melee shoulders dropped?")
+    assert.equal(melee?.classesHint, 'melee')
+    assert.equal(melee?.slot, 'SHOULDERS')
   })
 })

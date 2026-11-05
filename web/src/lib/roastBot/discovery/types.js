@@ -22,6 +22,8 @@
  *   phase?: string|null,
  *   boss?: string|null,
  *   itemQuery?: string|null,
+ *   slot?: string|null,
+ *   classesHint?: 'caster'|'priest'|'tank'|'melee'|string|null,
  *   character?: string|null,
  *   timeRange?: DiscoveryTimeRange|null,
  *   mostRecentRaidFirst?: boolean,

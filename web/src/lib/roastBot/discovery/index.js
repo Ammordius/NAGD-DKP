@@ -13,6 +13,9 @@ export {
   resolveZoneAlias,
   resolvePhaseAlias,
   resolveBossAlias,
+  resolveSlotAlias,
+  resolveClassesHint,
+  classesMatchRole,
   lookupItemAlias,
   preferAuthoritativeSource,
   itemNamesForPhaseMobs,
@@ -21,6 +24,8 @@ export {
   P3_MOBS,
   ZONE_ALIASES,
   PHASE_ALIASES,
+  SLOT_ALIASES,
+  ROLE_CLASS_TOKENS,
   ITEM_ALIASES,
   BOSS_ALIASES,
 } from './aliases.js'
@@ -74,6 +79,7 @@ export async function runDiscovery(client, text, ctx = {}) {
   }
   const result = await executeDiscovery(client, prepared.plan, {
     knownItemSources: ctx.knownItemSources,
+    itemStats: ctx.itemStats,
     resolved: prepared.resolved,
     skipCache: ctx.skipCache,
   })

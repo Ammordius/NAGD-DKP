@@ -48,7 +48,9 @@ function needsMageloContext(text, pendingIntent) {
 }
 
 function needsDiscoveryItemStats(text) {
-  return /shoulder|pauldron|caster|slot\b/i.test(String(text || ''))
+  return /shoulder|pauldron|caster|priest|healer|tank|melee|hybrid|slot\b|arms?\b|sleeve|wrist|bracer|head|helm|chest|legs?|feet|boot|hands?|glove|gauntlet|cloak|cape|neck|waist|belt|face|mask|earring|\bring\b/i.test(
+    String(text || ''),
+  )
 }
 
 /**

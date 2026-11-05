@@ -7,12 +7,17 @@ import {
   resolveZoneAlias,
   resolvePhaseAlias,
   resolveBossAlias,
+  resolveSlotAlias,
+  resolveClassesHint,
   lookupItemAlias,
   normAliasKey,
 } from './aliases.js'
 
 const DEFAULT_LIMIT = 40
 const RECIPIENT_LIMIT = 10
+
+/** Matches when's / whens / when is / when was the last time */
+const WHEN_LAST_TIME_RE = /\bwhen('?s| is| was) the last time\b/
 
 /**
  * Normalize for matching (keep words).
@@ -22,6 +27,8 @@ export function normalizeDiscoveryText(text) {
   return String(text || '')
     .toLowerCase()
     .replace(/[^\w\s'-]/g, ' ')
+    // Apostrophe-less "whens" must match when's extractors (looksLikeDiscovery already accepted it)
+    .replace(/\bwhens\b/g, "when's")
     .replace(/\s+/g, ' ')
     .trim()
 }
@@ -71,7 +78,7 @@ export function looksLikeDiscovery(text) {
   if (/\bhow many times\b.*\b(drop|dropped|won|awarded)\b/.test(t)) return true
   if (/\bhow many times did\b/.test(t)) return true
   if (/\bhas \w+ ever (won|got|gotten|received)\b/.test(t)) return true
-  if (/\bwhen('?s| is| was) the last time\b/.test(t)) return true
+  if (WHEN_LAST_TIME_RE.test(t)) return true
   if (/\blast time\b.*\b(drop|dropped|in |pof|potime|p3|fire|time)\b/.test(t)) return true
   if (/\bwhat did \w+ get\b/.test(t)) return true
   if (/\bwhat can \w+ drop\b/.test(t)) return true
@@ -95,7 +102,19 @@ export function tryParseDiscovery(raw, opts = {}) {
   let zone = extractZone(text, phase)
   const boss = extractBoss(text)
   const character = extractCharacter(text)
-  const itemQuery = extractItemQuery(text, { phase, zone, boss, character })
+  const itemAlias = lookupItemAlias(text)
+  // Named item aliases (Cloak of Wishes) must not inherit a slot from tokens inside the name.
+  // Constrained aliases (caster shoulders) keep their slot.
+  let slot =
+    itemAlias?.name && !itemAlias.slot ? null : itemAlias?.slot || resolveSlotAlias(text)
+  const classesHint =
+    itemAlias?.classesHint || resolveClassesHint(text) || null
+  let itemQuery = extractItemQuery(text, { phase, zone, boss, character, slot, classesHint })
+
+  // Slot/role constrained phrases (e.g. "p3 priest shoulders") still need an itemQuery for resolve
+  if (!itemQuery && (slot || classesHint)) {
+    itemQuery = buildSlotConstrainedQuery(text, { phase, slot, classesHint })
+  }
 
   /** @type {import('./types.js').StructuredQuery} */
   const base = {
@@ -104,6 +123,8 @@ export function tryParseDiscovery(raw, opts = {}) {
     phase: phase || null,
     boss: boss || null,
     itemQuery: itemQuery || null,
+    slot: slot || null,
+    classesHint: classesHint || null,
     character: character || null,
     timeRange: timeRange || null,
     mostRecentRaidFirst: false,
@@ -154,9 +175,14 @@ export function tryParseDiscovery(raw, opts = {}) {
     }
   }
 
-  // When's the last time ITEM dropped?
-  if (/\bwhen('?s| is| was) the last time\b/.test(text) && itemQuery) {
-    return { ...base, family: 'item_last', limit: RECIPIENT_LIMIT }
+  // When's the last time ITEM dropped? (slot/role-qualified → item_last, never bare phase raid_loot)
+  if (WHEN_LAST_TIME_RE.test(text) && (itemQuery || slot || classesHint)) {
+    return {
+      ...base,
+      family: 'item_last',
+      itemQuery: itemQuery || buildSlotConstrainedQuery(text, { phase, slot, classesHint }),
+      limit: RECIPIENT_LIMIT,
+    }
   }
 
   // What did CHARACTER get [time]?
@@ -165,7 +191,16 @@ export function tryParseDiscovery(raw, opts = {}) {
   }
 
   // What dropped last time in ZONE / in P3 / in Time?
+  // Slot on the same utterance is a hard constraint → item award path, not full raid dump.
   if (/\bwhat dropped\b/.test(text) || /\bdropped last time\b/.test(text)) {
+    if ((slot || classesHint) && (itemQuery || phase || zone || slot)) {
+      return {
+        ...base,
+        family: 'item_last',
+        itemQuery: itemQuery || buildSlotConstrainedQuery(text, { phase, slot, classesHint }),
+        limit: RECIPIENT_LIMIT,
+      }
+    }
     if (boss && !phase && !zone) {
       return {
         ...base,
@@ -188,12 +223,33 @@ export function tryParseDiscovery(raw, opts = {}) {
 
   // Fallback: if we have enough entities, treat as raid_loot / item_recipients
   if (itemQuery && character) return { ...base, family: 'has_won', limit: RECIPIENT_LIMIT }
-  if (itemQuery) return { ...base, family: 'item_recipients', limit: RECIPIENT_LIMIT }
-  if ((zone || phase) && /\bdrop/.test(text)) {
+  if (itemQuery || slot || classesHint) {
+    return {
+      ...base,
+      family: 'item_recipients',
+      itemQuery: itemQuery || buildSlotConstrainedQuery(text, { phase, slot, classesHint }),
+      limit: RECIPIENT_LIMIT,
+    }
+  }
+  // Never dump full phase/zone raid loot when a gear slot/role was specified
+  if ((zone || phase) && /\bdrop/.test(text) && !slot && !classesHint) {
     return { ...base, family: 'raid_loot', mostRecentRaidFirst: !timeRange, limit: DEFAULT_LIMIT }
   }
 
   return null
+}
+
+/**
+ * @param {string} text
+ * @param {{ phase?: string|null, slot?: string|null, classesHint?: string|null }} ctx
+ */
+function buildSlotConstrainedQuery(text, ctx) {
+  const parts = []
+  if (ctx.phase) parts.push(String(ctx.phase).toLowerCase())
+  const role = ctx.classesHint || resolveClassesHint(text)
+  if (role) parts.push(role)
+  if (ctx.slot) parts.push(String(ctx.slot).toLowerCase())
+  return parts.length ? parts.join(' ') : null
 }
 
 /**
@@ -262,7 +318,7 @@ function extractCharacter(text) {
 
 /**
  * @param {string} text
- * @param {{ phase?: string|null, zone?: string|null, boss?: string|null, character?: string|null }} ctx
+ * @param {{ phase?: string|null, zone?: string|null, boss?: string|null, character?: string|null, slot?: string|null }} ctx
  */
 function extractItemQuery(text, ctx) {
   const t = normalizeDiscoveryText(text)
@@ -276,7 +332,7 @@ function extractItemQuery(text, ctx) {
   const who = t.match(/\bwho (?:got|won|received)(?:\s+the\s+last)?\s+(.+?)(?:\s*\?|$)/)
   if (who) return cleanItemFragment(who[1], ctx)
 
-  const when = t.match(/\bwhen(?:'s| is| was)? the last time\s+(.+?)\s+dropped\b/)
+  const when = t.match(/\bwhen(?:'?s| is| was)? the last time\s+(.+?)\s+dropped\b/)
   if (when) return cleanItemFragment(when[1], ctx)
 
   const times = t.match(/\bhow many times (?:did|has|have)\s+(.+?)\s+drop/)

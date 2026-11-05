@@ -6,6 +6,7 @@ export const FIXTURE_ITEM_SOURCES = {
   'cloak of wishes': [{ mob: 'P3', zone: 'Plane of Time' }],
   'ossein of limitless time': [{ mob: 'P3', zone: 'Plane of Time' }],
   'pauldrons of purity': [{ mob: 'P3 Guardian', zone: 'Plane of Time' }],
+  'sleeves of temporal force': [{ mob: 'P3', zone: 'Plane of Time' }],
   'mask of conceptual energy': [{ mob: 'P1', zone: 'Plane of Time' }],
   'eye of cazic thule': [{ mob: 'Cazic_Thule', zone: 'Plane of Time' }],
   'quarm tooth': [{ mob: 'Quarm', zone: 'Plane of Time' }],
@@ -50,10 +51,20 @@ export const FIXTURE_ITEM_STATS = {
     slot: 'BACK',
     classes: 'ALL',
   },
+  '77777': {
+    name: 'Sleeves of Temporal Force',
+    slot: 'ARMS',
+    classes: 'ALL',
+  },
   '99999': {
     name: 'Plate of the Warrior',
     slot: 'SHOULDERS',
     classes: 'WAR PAL SHD',
+  },
+  '88888': {
+    name: 'Spaulders of the Wind',
+    slot: 'SHOULDERS',
+    classes: 'RNG MNK BRD ROG BST',
   },
 }
 
@@ -134,6 +145,14 @@ export const FIXTURE_LOOT_BY_RAID = {
       character_name: 'Dave',
       char_id: 'c6',
       cost: '15',
+    },
+    {
+      id: 10,
+      raid_id: 'r-time-p3',
+      item_name: 'Sleeves of Temporal Force',
+      character_name: 'Gina',
+      char_id: 'c10',
+      cost: '12',
     },
   ],
   'r-quarm': [

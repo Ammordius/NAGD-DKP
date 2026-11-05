@@ -6,7 +6,10 @@
 import { matchItemName } from '../formatting.js'
 import {
   lookupItemAlias,
-  CASTER_CLASS_TOKENS,
+  resolveSlotAlias,
+  resolveClassesHint,
+  classesMatchRole,
+  SLOT_NAME_FALLBACK_PATTERNS,
   preferAuthoritativeSource,
   itemNamesForPhaseMobs,
   P3_MOBS,
@@ -105,6 +108,7 @@ function phaseMobsFor(phase) {
 function resolveItemQuery(hint, query, ctx, phaseItemNames) {
   const alias = lookupItemAlias(hint)
   const catalog = buildCatalog(ctx)
+  const slotFromHint = resolveSlotAlias(hint) || query.slot || null
 
   if (alias?.name) {
     const exact = matchItemName(alias.name, catalog)
@@ -112,10 +116,14 @@ function resolveItemQuery(hint, query, ctx, phaseItemNames) {
     return { item: { name: alias.name, itemId: null } }
   }
 
-  // Constrained: slot + caster + optional phase (e.g. "caster shoulders" / "p3 caster shoulders")
-  if (alias?.slot || /\bshoulders?\b/.test(normAliasKey(hint))) {
-    const constrained = resolveConstrainedItem(hint, alias, query, ctx, phaseItemNames)
-    if (constrained) return constrained
+  const roleHint = alias?.classesHint || query.classesHint || resolveClassesHint(hint)
+
+  // Constrained: slot (+ optional role/phase) e.g. "p3 priest shoulders" / "tank shoulders"
+  // Only short-circuit on a hit or ambiguity — unmatched falls through so names like
+  // "Cloak of Wishes" / "Mask of Conceptual Energy" still exact-match despite slot tokens.
+  if (alias?.slot || slotFromHint) {
+    const constrained = resolveConstrainedItem(hint, alias, query, ctx, phaseItemNames, slotFromHint, roleHint)
+    if (constrained && !constrained.unmatched) return constrained
   }
 
   const match = matchItemName(hint, catalog)
@@ -136,19 +144,28 @@ function resolveItemQuery(hint, query, ctx, phaseItemNames) {
  * @param {import('./types.js').StructuredQuery} query
  * @param {object} ctx
  * @param {Set<string>} phaseItemNames
+ * @param {string|null} [slotHint]
+ * @param {string|null} [roleHint]
  */
-function resolveConstrainedItem(hint, alias, query, ctx, phaseItemNames) {
+function resolveConstrainedItem(hint, alias, query, ctx, phaseItemNames, slotHint = null, roleHint = null) {
   const stats = ctx.itemStats || {}
-  const slotWant = (alias?.slot || 'SHOULDERS').toUpperCase()
-  const wantCaster = Boolean(alias?.classesHint === 'caster' || /\bcaster\b/.test(normAliasKey(hint)))
+  const slotWant = String(alias?.slot || slotHint || query.slot || '').toUpperCase()
+  if (!slotWant) return { unmatched: true, hint }
+  const role =
+    roleHint ||
+    alias?.classesHint ||
+    query.classesHint ||
+    resolveClassesHint(hint) ||
+    null
   const phase = alias?.phase || query.phase
+  const nameFallback = SLOT_NAME_FALLBACK_PATTERNS[slotWant] || null
 
-  /** @type {Array<{ name: string, itemId: string }>} */
+  /** @type {Array<{ name: string, itemId: string|null }>} */
   const hits = []
   for (const [id, row] of Object.entries(stats)) {
     if (!row?.name) continue
-    if (String(row.slot || '').toUpperCase() !== slotWant) continue
-    if (wantCaster && !isCasterClasses(row.classes)) continue
+    if (!slotMatches(row.slot, slotWant)) continue
+    if (role && !classesMatchRole(row.classes, role)) continue
     if (phase) {
       const inPhase = phaseItemNames.has(String(row.name).trim())
       // Also accept authoritative source on knownItemSources
@@ -161,13 +178,13 @@ function resolveConstrainedItem(hint, alias, query, ctx, phaseItemNames) {
     hits.push({ name: row.name, itemId: id })
   }
 
-  // Fall back: phase item names intersecting shoulders-like names from catalog
-  if (!hits.length && phaseItemNames.size) {
+  // Fall back: phase item names intersecting slot-like name tokens from catalog
+  if (!hits.length && phaseItemNames.size && nameFallback) {
     for (const name of phaseItemNames) {
-      if (!/pauldron|shoulder/i.test(name)) continue
-      if (wantCaster) {
+      if (!nameFallback.test(name)) continue
+      if (role) {
         const entry = Object.values(stats).find((r) => normAliasKey(r?.name) === normAliasKey(name))
-        if (entry && !isCasterClasses(entry.classes)) continue
+        if (entry && !classesMatchRole(entry.classes, role)) continue
       }
       hits.push({ name, itemId: null })
     }
@@ -185,8 +202,8 @@ function resolveConstrainedItem(hint, alias, query, ctx, phaseItemNames) {
     }
   }
 
-  // Explicit alias name fallback already handled; if Pauldrons of Purity is the known P3 caster shoulders
-  if (phase && wantCaster && slotWant === 'SHOULDERS') {
+  // Soft P3 shoulders known item when role overlaps caster/priest and stats were sparse
+  if (phase && (role === 'caster' || role === 'priest') && slotWant === 'SHOULDERS') {
     const purity = [...phaseItemNames].find((n) => /pauldrons of purity/i.test(n))
     if (purity) return { item: { name: purity, itemId: null } }
   }
@@ -195,15 +212,19 @@ function resolveConstrainedItem(hint, alias, query, ctx, phaseItemNames) {
 }
 
 /**
- * @param {string|null|undefined} classes
+ * item_stats may use SHOULDER or SHOULDERS (and similar singular/plural).
+ * @param {string|null|undefined} rowSlot
+ * @param {string} want
  */
-function isCasterClasses(classes) {
-  const parts = String(classes || '')
-    .toLowerCase()
-    .split(/[\s/,]+/)
-    .filter(Boolean)
-  if (!parts.length) return false
-  return parts.some((p) => CASTER_CLASS_TOKENS.has(p))
+function slotMatches(rowSlot, want) {
+  const have = String(rowSlot || '').toUpperCase()
+  if (!have || !want) return false
+  if (have === want) return true
+  if (want === 'SHOULDERS' && (have === 'SHOULDER' || have === 'SHOULDERS')) return true
+  if (want === 'SHOULDER' && (have === 'SHOULDER' || have === 'SHOULDERS')) return true
+  if (want === 'FINGER' && (have === 'FINGER' || have === 'FINGERS' || have === 'RING')) return true
+  if (want === 'WRIST' && (have === 'WRIST' || have === 'WRISTS' || have === 'BRACER')) return true
+  return false
 }
 
 /**

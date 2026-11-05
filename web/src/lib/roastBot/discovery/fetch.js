@@ -16,6 +16,7 @@ import {
   itemNamesForZone,
   itemNamesForBoss,
   P3_MOBS,
+  SLOT_NAME_FALLBACK_PATTERNS,
   normAliasKey,
   isPhaseMob,
 } from './aliases.js'
@@ -43,6 +44,7 @@ export function resetDiscoveryCache() {
  * @param {import('./types.js').QueryPlan} plan
  * @param {{
  *   knownItemSources?: Record<string, object>,
+ *   itemStats?: Record<string, { name?: string, slot?: string, classes?: string }>,
  *   resolved?: import('./resolve.js').ResolvedDiscovery|null,
  *   skipCache?: boolean,
  * }} [opts]
@@ -96,6 +98,7 @@ export async function executeDiscovery(client, plan, opts = {}) {
   /** @type {{ raidId: string, raidName?: string|null, dateIso?: string|null }|null} */
   let currentRaid = null
   const known = opts.knownItemSources || {}
+  const itemStats = opts.itemStats || {}
   const phaseNames = opts.resolved?.phaseItemNames || itemNamesForPhaseMobs(known, P3_MOBS)
 
   try {
@@ -182,6 +185,17 @@ export async function executeDiscovery(client, plan, opts = {}) {
           }
         }
 
+        if (step.params.filterSlot) {
+          const before = awards.length
+          awards = filterAwardsBySlot(awards, step.params.filterSlot, itemStats)
+          if (before && !awards.length) {
+            result.notes = [
+              ...(result.notes || []),
+              `No ${String(step.params.filterSlot).toLowerCase()} awards on this raid night (slot filter applied).`,
+            ]
+          }
+        }
+
         const limit = step.params.limit || 40
         result.truncated = awards.length > limit
         result.totalCount = awards.length
@@ -218,7 +232,10 @@ export async function executeDiscovery(client, plan, opts = {}) {
       }
 
       if (step.op === 'awards_for_catalog_window') {
-        const catalogNames = resolveCatalogItemNames(known, step.params, phaseNames)
+        let catalogNames = resolveCatalogItemNames(known, step.params, phaseNames)
+        if (step.params.filterSlot) {
+          catalogNames = filterItemNamesBySlot(catalogNames, step.params.filterSlot, itemStats)
+        }
         const packed = await fetchAwardsForItemNamesWindow(client, {
           itemNames: catalogNames,
           fromIso: step.params.fromIso,
@@ -230,7 +247,11 @@ export async function executeDiscovery(client, plan, opts = {}) {
         result.truncated = packed.truncated
         result.totalCount = packed.rows.length
         if (!catalogNames.size) {
-          result.gaps.push('No catalog items mapped for that zone/phase filter.')
+          result.gaps.push(
+            step.params.filterSlot
+              ? `No catalog items mapped for that zone/phase filter in slot ${step.params.filterSlot}.`
+              : 'No catalog items mapped for that zone/phase filter.',
+          )
         }
         continue
       }
@@ -300,6 +321,70 @@ function catalogBossDrops(known, boss, limit) {
   }
   out.sort((a, b) => a.name.localeCompare(b.name))
   return out.slice(0, limit)
+}
+
+/**
+ * @param {import('./types.js').LedgerAward[]} awards
+ * @param {string} slot
+ * @param {Record<string, { name?: string, slot?: string }>} itemStats
+ */
+function filterAwardsBySlot(awards, slot, itemStats) {
+  const want = String(slot || '').toUpperCase()
+  if (!want) return awards
+  const byName = slotItemNameSet(want, itemStats)
+  const namePat = SLOT_NAME_FALLBACK_PATTERNS[want]
+  return awards.filter((a) => {
+    const key = normAliasKey(a.itemName)
+    if (byName.has(key)) return true
+    if (!byName.size && namePat && namePat.test(String(a.itemName || ''))) return true
+    return false
+  })
+}
+
+/**
+ * @param {Set<string>} names
+ * @param {string} slot
+ * @param {Record<string, { name?: string, slot?: string }>} itemStats
+ * @returns {Set<string>}
+ */
+function filterItemNamesBySlot(names, slot, itemStats) {
+  const want = String(slot || '').toUpperCase()
+  if (!want || !names?.size) return names || new Set()
+  const byName = slotItemNameSet(want, itemStats)
+  const namePat = SLOT_NAME_FALLBACK_PATTERNS[want]
+  /** @type {Set<string>} */
+  const out = new Set()
+  for (const name of names) {
+    const key = normAliasKey(name)
+    if (byName.has(key)) {
+      out.add(name)
+      continue
+    }
+    if (!byName.size && namePat && namePat.test(String(name || ''))) out.add(name)
+  }
+  return out
+}
+
+/**
+ * @param {string} slotWant
+ * @param {Record<string, { name?: string, slot?: string }>} itemStats
+ * @returns {Set<string>} normalized item name keys
+ */
+function slotItemNameSet(slotWant, itemStats) {
+  /** @type {Set<string>} */
+  const out = new Set()
+  for (const row of Object.values(itemStats || {})) {
+    if (!row?.name) continue
+    const have = String(row.slot || '').toUpperCase()
+    if (!have) continue
+    const match =
+      have === slotWant ||
+      (slotWant === 'SHOULDERS' && (have === 'SHOULDER' || have === 'SHOULDERS')) ||
+      (slotWant === 'FINGER' && (have === 'FINGER' || have === 'FINGERS' || have === 'RING')) ||
+      (slotWant === 'WRIST' && (have === 'WRIST' || have === 'WRISTS' || have === 'BRACER'))
+    if (match) out.add(normAliasKey(row.name))
+  }
+  return out
 }
 
 /**

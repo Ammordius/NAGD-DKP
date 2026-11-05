@@ -8,9 +8,9 @@
 import { describe, it, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
 import { buildKnownItemSources } from '../../itemSourceLookup.js'
-import { prepareDiscovery, executeDiscovery, resetDiscoveryCache } from './index.js'
+import { prepareDiscovery, executeDiscovery, resetDiscoveryCache, runDiscovery } from './index.js'
 import { createDiscoveryMockClient } from './mockSupabase.js'
-import { FIXTURE_ITEM_SOURCES, FIXTURE_MOB_LOOT } from './fixtures.js'
+import { FIXTURE_ITEM_SOURCES, FIXTURE_MOB_LOOT, FIXTURE_ITEM_STATS } from './fixtures.js'
 
 const known = buildKnownItemSources({
   itemSources: FIXTURE_ITEM_SOURCES,
@@ -188,5 +188,42 @@ describe('discovery fetch', () => {
       result.catalogItems.some((i) => i.name === 'Cloak of Wishes'),
       false,
     )
+  })
+
+  it('whens p3 shoulders returns only Pauldrons awards (not full P3 raid dump)', async () => {
+    const client = createDiscoveryMockClient()
+    const run = await runDiscovery(client, 'whens the last time p3 shoulders dropped', {
+      knownItemSources: known,
+      itemStats: FIXTURE_ITEM_STATS,
+      skipCache: true,
+    })
+    assert.ok(run)
+    assert.equal(run.prepared.query.family, 'item_last')
+    assert.equal(run.prepared.resolved.item?.name, 'Pauldrons of Purity')
+    assert.equal(run.result.family, 'item_last')
+    const names = (run.result.awards || []).map((a) => a.itemName)
+    assert.ok(names.length >= 1)
+    assert.ok(names.every((n) => n === 'Pauldrons of Purity'))
+    assert.equal(names.includes('Cloak of Wishes'), false)
+    assert.equal(names.includes('Ossein of Limitless Time'), false)
+    const text = run.answer?.factText || ''
+    assert.match(text, /Pauldrons of Purity/i)
+    assert.doesNotMatch(text, /identifiable P3 awards only/i)
+    assert.doesNotMatch(text, /Cloak of Wishes/i)
+  })
+
+  it('p3 arms last drop uses item award path', async () => {
+    const client = createDiscoveryMockClient()
+    const run = await runDiscovery(client, "When's the last time p3 arms dropped?", {
+      knownItemSources: known,
+      itemStats: FIXTURE_ITEM_STATS,
+      skipCache: true,
+    })
+    assert.ok(run)
+    assert.equal(run.prepared.query.family, 'item_last')
+    assert.equal(run.prepared.query.slot, 'ARMS')
+    assert.equal(run.prepared.resolved.item?.name, 'Sleeves of Temporal Force')
+    const names = (run.result.awards || []).map((a) => a.itemName)
+    assert.ok(names.every((n) => n === 'Sleeves of Temporal Force'))
   })
 })

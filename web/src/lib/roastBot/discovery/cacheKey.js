@@ -20,6 +20,8 @@ export function fingerprintQuery(query) {
     query.phase || '',
     query.boss || '',
     String(query.itemQuery || '').toLowerCase(),
+    String(query.slot || '').toUpperCase(),
+    String(query.classesHint || '').toLowerCase(),
     String(query.character || '').toLowerCase(),
     query.timeRange?.fromIso || '',
     query.timeRange?.toIso || '',

@@ -58,6 +58,72 @@ export const UNRELIABLE_MOB_KEYS = new Set([
 ])
 
 /**
+ * Gear slot phrases → EQ slot strings used in item_stats.
+ * Longer keys preferred when scanning.
+ * @type {Record<string, string>}
+ */
+export const SLOT_ALIASES = {
+  shoulders: 'SHOULDERS',
+  shoulder: 'SHOULDERS',
+  pauldrons: 'SHOULDERS',
+  pauldron: 'SHOULDERS',
+  arms: 'ARMS',
+  sleeves: 'ARMS',
+  sleeve: 'ARMS',
+  wrists: 'WRIST',
+  wrist: 'WRIST',
+  bracers: 'WRIST',
+  bracer: 'WRIST',
+  head: 'HEAD',
+  helm: 'HEAD',
+  helmet: 'HEAD',
+  circlet: 'HEAD',
+  chest: 'CHEST',
+  breastplate: 'CHEST',
+  legs: 'LEGS',
+  greaves: 'LEGS',
+  feet: 'FEET',
+  boots: 'FEET',
+  hands: 'HANDS',
+  gloves: 'HANDS',
+  gauntlets: 'HANDS',
+  back: 'BACK',
+  cloak: 'BACK',
+  cape: 'BACK',
+  neck: 'NECK',
+  necklace: 'NECK',
+  amulet: 'NECK',
+  waist: 'WAIST',
+  belt: 'WAIST',
+  face: 'FACE',
+  mask: 'FACE',
+  ear: 'EAR',
+  earring: 'EAR',
+  finger: 'FINGER',
+  ring: 'FINGER',
+  fingers: 'FINGER',
+  rings: 'FINGER',
+}
+
+/** Name-token fallbacks when item_stats rows are missing for a constrained slot query. */
+export const SLOT_NAME_FALLBACK_PATTERNS = {
+  SHOULDERS: /pauldron|shoulder/i,
+  ARMS: /sleeve|vambrace|armguard|(?:\barms?\b)/i,
+  WRIST: /bracer|wrist/i,
+  HEAD: /circlet|helm|crown|hood|hat|cap|mask/i,
+  CHEST: /breastplate|chest|tunic|robe|hauberk|vest|breast/i,
+  LEGS: /leg|greave|pant|legging/i,
+  FEET: /boot|shoe|sandal|feet|foot/i,
+  HANDS: /glove|gauntlet|hand/i,
+  BACK: /cloak|cape|back/i,
+  NECK: /necklace|amulet|choker|collar|neck/i,
+  WAIST: /belt|girdle|sash|waist/i,
+  FACE: /mask|veil|face/i,
+  EAR: /earring|ear\b/i,
+  FINGER: /ring\b/i,
+}
+
+/**
  * Item phrase aliases → preferred canonical name or constrained query tokens.
  * Constrained queries (slot/classes/phase) are resolved in resolve.js.
  * @type {Record<string, { name?: string, slot?: string, classesHint?: string, phase?: string }>}
@@ -91,10 +157,68 @@ export const BOSS_ALIASES = {
   'rallos zek': 'Rallos_Zek',
 }
 
-export const CASTER_CLASS_TOKENS = new Set([
-  'clr', 'dru', 'shm', 'nec', 'wiz', 'mag', 'enc',
-  'cleric', 'druid', 'shaman', 'necromancer', 'wizard', 'magician', 'enchanter',
-])
+/**
+ * Role → class tokens (abbrevs + full names) for constrained loot queries.
+ * Partition of the 14 EQ classes:
+ *   caster = NEC WIZ MAG ENC
+ *   priest = CLR DRU SHM
+ *   tank   = WAR PAL SHD
+ *   melee  = RNG MNK BRD ROG BST
+ * @type {Record<string, Set<string>>}
+ */
+export const ROLE_CLASS_TOKENS = {
+  caster: new Set([
+    'nec', 'wiz', 'mag', 'enc',
+    'necromancer', 'wizard', 'magician', 'enchanter',
+  ]),
+  priest: new Set([
+    'clr', 'dru', 'shm',
+    'cleric', 'druid', 'shaman',
+  ]),
+  tank: new Set([
+    'war', 'pal', 'shd',
+    'warrior', 'paladin', 'shadowknight', 'shadow knight', 'sk',
+  ]),
+  melee: new Set([
+    'rng', 'mnk', 'brd', 'rog', 'bst',
+    'ranger', 'monk', 'bard', 'rogue', 'beastlord',
+  ]),
+}
+
+/** @deprecated Prefer ROLE_CLASS_TOKENS.caster — kept for older imports. */
+export const CASTER_CLASS_TOKENS = ROLE_CLASS_TOKENS.caster
+
+/**
+ * @param {string} text
+ * @returns {'caster'|'priest'|'tank'|'melee'|null}
+ */
+export function resolveClassesHint(text) {
+  const key = normAliasKey(text)
+  if (!key) return null
+  if (/\bpriests?\b|\bhealers?\b/.test(key)) return 'priest'
+  if (/\btanks?\b/.test(key)) return 'tank'
+  if (/\bmelee\b|\bhybrids?\b/.test(key)) return 'melee'
+  if (/\bcasters?\b|\bpure casters?\b/.test(key)) return 'caster'
+  return null
+}
+
+/**
+ * True when an item's class string is usable by the role (overlap, or ALL).
+ * @param {string|null|undefined} classes
+ * @param {string|null|undefined} role
+ */
+export function classesMatchRole(classes, role) {
+  if (!role) return true
+  const tokens = ROLE_CLASS_TOKENS[String(role).toLowerCase()]
+  if (!tokens) return true
+  const parts = String(classes || '')
+    .toLowerCase()
+    .split(/[\s/,]+/)
+    .filter(Boolean)
+  if (!parts.length) return false
+  if (parts.includes('all')) return true
+  return parts.some((p) => tokens.has(p))
+}
 
 /**
  * @param {string} raw
@@ -150,6 +274,21 @@ export function resolveBossAlias(text) {
   const entries = Object.entries(BOSS_ALIASES).sort((a, b) => b[0].length - a[0].length)
   for (const [alias, boss] of entries) {
     if (new RegExp(`\\b${escapeRe(alias)}\\b`).test(key)) return boss
+  }
+  return null
+}
+
+/**
+ * @param {string} text
+ * @returns {string|null} Canonical EQ slot (e.g. SHOULDERS) or null
+ */
+export function resolveSlotAlias(text) {
+  const key = normAliasKey(text)
+  if (!key) return null
+  if (SLOT_ALIASES[key]) return SLOT_ALIASES[key]
+  const entries = Object.entries(SLOT_ALIASES).sort((a, b) => b[0].length - a[0].length)
+  for (const [alias, slot] of entries) {
+    if (new RegExp(`\\b${escapeRe(alias)}\\b`).test(key)) return slot
   }
   return null
 }
