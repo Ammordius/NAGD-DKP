@@ -13,12 +13,16 @@ import {
   ENCOUNTER_COUNT,
   RAID_COMMANDS,
   listSynergyIds,
+  dealEnemyDamage,
+  intentWeight,
 } from './gameEngine.js'
 import { ABILITY_COUNT, listAllClassAbilityIds, getClassAbilities, getAbility } from './abilities.js'
 import { CLASS_PASSIVES, getPassive } from './passives.js'
 import { STATUS_IDS } from './statuses.js'
 import { CLASS_ORDER } from './classDefinitions.js'
 import { calculateScore } from './scoring.js'
+import { getDifficulty } from './difficulty.js'
+import { smartAllyTarget, smartEnemyTarget } from './targeting.js'
 import { normalizeExpeditionSave, applyRunToSave, emptyExpeditionSave } from './persistence.js'
 import { countNarratorLines } from './narrator.js'
 import {
@@ -236,6 +240,104 @@ describe('expedition tactical overhaul', () => {
     assert.ok(calculateScore({ encountersCleared: 6, remainingHpPct: 0.5, knockouts: 0, turns: 40, victory: true }) > 0)
     const save = applyRunToSave(emptyExpeditionSave(), { score: 1000, artifactId: 'x' })
     assert.equal(normalizeExpeditionSave(save).completedRuns, 1)
+  })
+
+  it('smart targeting picks lowest-HP ally and valid enemies', () => {
+    const party = [
+      { id: 'a', alive: true, hp: 80, maxHp: 100 },
+      { id: 'b', alive: true, hp: 20, maxHp: 100 },
+      { id: 'c', alive: false, hp: 0, maxHp: 100 },
+    ]
+    assert.equal(smartAllyTarget(party, 'enemy-1'), 'b')
+    assert.equal(smartAllyTarget(party, 'a'), 'a')
+    assert.equal(smartAllyTarget(party, undefined, { dead: true }), 'c')
+    const enemies = [
+      { id: 'e1', alive: false },
+      { id: 'e2', alive: true },
+    ]
+    assert.equal(smartEnemyTarget(enemies, 'a'), 'e2')
+    assert.equal(smartEnemyTarget(enemies, 'e2'), 'e2')
+  })
+
+  it('ally heal with stale enemy targetId still resolves via fallback', () => {
+    const state = startRun(partyOf('Cleric', 'Warrior', 'Paladin'), { seed: 21 })
+    const clr = state.party.find((p) => p.class_name === 'Cleric')
+    const war = state.party.find((p) => p.class_name === 'Warrior')
+    war.hp = Math.round(war.maxHp * 0.3)
+    clr.mana = 999
+    const heal = getClassAbilities('Cleric').find((a) => a.name === 'Fast Remedy')
+    const enemyId = state.enemies.find((e) => e.alive)?.id
+    const actions = autoActions(state)
+    actions[clr.id] = { actionId: heal.id, targetId: enemyId }
+    const before = war.hp
+    const res = commitRound(state, actions)
+    assert.ok(res.ok, (res.errors || []).join(', '))
+    assert.ok(war.hp > before)
+  })
+
+  it('difficulty scoreMult and riskBonus scale score', () => {
+    const base = {
+      encountersCleared: 6,
+      remainingHpPct: 1,
+      knockouts: 0,
+      turns: 42,
+      victory: true,
+    }
+    const normal = calculateScore({ ...base, scoreMult: 1 })
+    const heroic = calculateScore({ ...base, scoreMult: getDifficulty('heroic').scoreMult })
+    const reckless = calculateScore({ ...base, scoreMult: getDifficulty('reckless').scoreMult })
+    const withRisk = calculateScore({ ...base, scoreMult: 1, riskBonus: 350 })
+    assert.ok(heroic > normal)
+    assert.ok(reckless > heroic)
+    assert.equal(withRisk, normal + 350)
+    assert.equal(getDifficulty('heroic').scoreMult, 1.35)
+    assert.equal(getDifficulty('reckless').scoreMult, 1.7)
+  })
+
+  it('treacherous route adds riskBonus', () => {
+    const state = startRun(partyOf('Warrior', 'Cleric', 'Wizard'), { seed: 22 })
+    state.enemies.forEach((e) => { e.hp = 0; e.alive = false })
+    commitRound(state, autoActions(state))
+    assert.equal(state.phase, 'route')
+    selectRoute(state, 'treacherous')
+    assert.equal(state.riskBonus, 350)
+  })
+
+  it('defMult reduces enemy damage', () => {
+    const state = startRun(partyOf('Warrior', 'Cleric', 'Wizard'), { seed: 23 })
+    const war = state.party.find((p) => p.class_name === 'Warrior')
+    const enemy = state.enemies[0]
+    war.hp = war.maxHp
+    war.armorMitigation = 0
+    war.statuses = []
+    state.runBuffs.defMult = 0
+    const raw = dealEnemyDamage(state, enemy, { ...war, statuses: [] }, 1)
+    war.hp = war.maxHp
+    war.statuses = []
+    state.runBuffs.defMult = 0.5
+    const mitigated = dealEnemyDamage(state, enemy, war, 1)
+    assert.ok(mitigated < raw)
+    assert.ok(mitigated <= Math.round(raw * 0.5) + 1)
+  })
+
+  it('ruthless intentWeight prefers hard hits and lowest focus', () => {
+    const soft = { kind: 'single', power: 0.8, target: 'random' }
+    const hard = { kind: 'aoe', power: 1.5, target: 'lowest' }
+    assert.ok(intentWeight(hard, 'ruthless') > intentWeight(soft, 'ruthless'))
+    assert.ok(intentWeight(hard, 'aggressive') > intentWeight(soft, 'standard'))
+    assert.equal(intentWeight(soft, 'standard'), 1)
+  })
+
+  it('ability and support casts feed score', () => {
+    const bare = calculateScore({
+      encountersCleared: 6, remainingHpPct: 1, knockouts: 0, turns: 42, victory: true,
+    })
+    const skilled = calculateScore({
+      encountersCleared: 6, remainingHpPct: 1, knockouts: 0, turns: 42, victory: true,
+      abilityCasts: 10, supportActions: 5,
+    })
+    assert.ok(skilled > bare)
+    assert.equal(skilled - bare, 10 * 25 + 5 * 40)
   })
 
   it('narrator still has 30+ lines and radar works', () => {

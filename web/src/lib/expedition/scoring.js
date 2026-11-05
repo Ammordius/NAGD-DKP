@@ -17,28 +17,35 @@ export const ARTIFACTS = [
  *   knockouts: number,
  *   turns: number,
  *   victory: boolean,
- *   challengeBonus?: number,
+ *   scoreMult?: number,
+ *   riskBonus?: number,
+ *   abilityCasts?: number,
+ *   supportActions?: number,
  * }} input
  */
 export function calculateScore(input) {
-  const totalEncounters = input.totalEncounters ?? 6
   const cleared = Math.max(0, input.encountersCleared | 0)
   const hpPct = Math.max(0, Math.min(1, Number(input.remainingHpPct) || 0))
   const kos = Math.max(0, input.knockouts | 0)
   const turns = Math.max(1, input.turns | 0)
   const victory = Boolean(input.victory)
-  const challenge = Number(input.challengeBonus) || 0
+  const scoreMult = Math.max(0, Number(input.scoreMult) || 1)
+  const riskBonus = Math.max(0, Number(input.riskBonus) || 0)
+  const abilityCasts = Math.max(0, input.abilityCasts | 0)
+  const supportActions = Math.max(0, input.supportActions | 0)
 
   let score = cleared * 800
   score += Math.round(hpPct * 1200)
   score -= kos * 250
-  // Efficiency: fewer turns is better (baseline ~8 turns per fight * cleared)
+  // Efficiency: fewer turns is better (baseline ~7 turns per fight * cleared)
   const expected = Math.max(1, cleared * 7)
   const efficiency = Math.max(0, expected - turns)
-  score += efficiency * 40
+  score += efficiency * 25
   if (victory) score += 2000
-  score += challenge
-  return Math.max(0, Math.round(score))
+  score += Math.min(600, abilityCasts * 25)
+  score += Math.min(480, supportActions * 40)
+  score += riskBonus
+  return Math.max(0, Math.round(score * scoreMult))
 }
 
 /**

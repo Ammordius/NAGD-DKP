@@ -61,6 +61,12 @@ function livingEnemies(state) {
   return (state.enemies || []).filter((e) => e.alive && e.hp > 0)
 }
 
+function lowestHpAlly(state) {
+  const live = livingParty(state)
+  if (!live.length) return null
+  return live.slice().sort((a, b) => a.hp / a.maxHp - b.hp / b.maxHp)[0]
+}
+
 export const RAID_COMMANDS = [
   { id: 'focus_fire', name: 'Focus Fire', description: 'Party deals +25% to chosen enemy this round.', cost: COMMAND_COST },
   { id: 'brace', name: 'Brace', description: 'Party takes −30% AoE damage this round.', cost: COMMAND_COST },
@@ -95,6 +101,9 @@ export function startRun(selectedCharacters, opts = {}) {
     turns: 0,
     knockouts: 0,
     encountersCleared: 0,
+    riskBonus: 0,
+    abilityCasts: 0,
+    supportActions: 0,
     party,
     partyMeta: partyChars,
     identities,
@@ -210,13 +219,71 @@ function currentIntents(enemy) {
   return enemy.intents || []
 }
 
+/**
+ * Weight an intent for difficulty behavior bias.
+ * Exported for tests.
+ * @param {object} intent
+ * @param {'standard'|'aggressive'|'ruthless'|string} behavior
+ */
+export function intentWeight(intent, behavior) {
+  if (!intent) return 1
+  if (behavior === 'standard' || !behavior) return 1
+  let w = 1
+  const power = Number(intent.power) || 1
+  const isAoe = intent.kind === 'aoe'
+  const isFocus = intent.target === 'lowest' || intent.target === 'highest'
+  const isHard = intent.kind === 'cast' || intent.kind === 'fear' || intent.kind === 'mana_burn' || intent.kind === 'apply_vuln'
+  if (behavior === 'aggressive') {
+    if (power >= 1.3) w += 2
+    if (isAoe) w += 2
+    if (isFocus) w += 1
+    if (isHard) w += 1
+  } else if (behavior === 'ruthless') {
+    if (power >= 1.3) w += 3
+    if (isAoe) w += 3
+    if (intent.target === 'lowest') w += 4
+    else if (isFocus) w += 2
+    if (isHard) w += 2
+  }
+  return Math.max(1, w)
+}
+
+function pickWeightedIntent(pool, rng, behavior) {
+  if (!pool.length) return null
+  if (behavior === 'standard' || !behavior) {
+    return pool[Math.floor(rng() * pool.length)]
+  }
+  const weights = pool.map((intent) => intentWeight(intent, behavior))
+  const total = weights.reduce((s, w) => s + w, 0)
+  let roll = rng() * total
+  for (let i = 0; i < pool.length; i++) {
+    roll -= weights[i]
+    if (roll <= 0) return pool[i]
+  }
+  return pool[pool.length - 1]
+}
+
 function rollAllIntents(state) {
   state.intents = {}
+  const behavior = state.difficultyMods?.enemyBehavior || 'standard'
   for (const enemy of livingEnemies(state)) {
     updateQuarmPhase(enemy)
     const pool = currentIntents(enemy)
     if (!pool.length) continue
-    const intent = pool[Math.floor(state.rng() * pool.length)]
+    let intent = pickWeightedIntent(pool, state.rng, behavior)
+    // Ruthless: force lowest-HP focus on single-target harmful intents
+    if (
+      behavior === 'ruthless'
+      && intent
+      && !intent.formation
+      && intent.kind !== 'aoe'
+      && intent.kind !== 'buff_self'
+      && intent.kind !== 'self_shield'
+      && intent.kind !== 'buff_ally_enemy'
+      && intent.kind !== 'debuff_party'
+    ) {
+      intent = { ...intent, target: 'lowest' }
+    }
     state.intents[enemy.id] = intent
     if (enemy.id === state.enemy?.id) state.intent = intent
   }
@@ -298,15 +365,20 @@ export function validateActions(state, actions) {
       continue
     }
     if (match.needsAllyTarget) {
-      const t = state.party.find((x) => x.id === a.targetId && (match.needsDeadAlly ? !x.alive : x.alive))
-      if (!t && !match.needsDeadAlly) errors.push(`${p.name} needs an ally target`)
-      if (match.needsDeadAlly && !state.party.find((x) => x.id === a.targetId && !x.alive)) {
-        errors.push(`${p.name} needs a knocked-out ally`)
+      if (match.needsDeadAlly) {
+        const t = state.party.find((x) => x.id === a.targetId && !x.alive) || state.party.find((x) => !x.alive)
+        if (!t) errors.push(`${p.name} needs a knocked-out ally`)
+        else a.targetId = t.id
+      } else {
+        const t = state.party.find((x) => x.id === a.targetId && x.alive) || lowestHpAlly(state)
+        if (!t) errors.push(`${p.name} needs an ally target`)
+        else a.targetId = t.id
       }
     }
     if (match.needsEnemyTarget) {
       const t = livingEnemies(state).find((x) => x.id === a.targetId) || livingEnemies(state)[0]
       if (!t) errors.push(`${p.name} needs an enemy target`)
+      else a.targetId = t.id
     }
   }
   return errors
@@ -330,8 +402,14 @@ function resolveUnitAction(state, combatant, action) {
   }
 
   // targets
-  if (ability.targetType === 'single_ally' || ability.tags?.includes('resurrect')) {
-    ctx.target = state.party.find((p) => p.id === action.targetId) || combatant
+  if (ability.tags?.includes('resurrect')) {
+    ctx.target = state.party.find((p) => p.id === action.targetId && !p.alive)
+      || state.party.find((p) => !p.alive)
+      || combatant
+  } else if (ability.targetType === 'single_ally') {
+    ctx.target = state.party.find((p) => p.id === action.targetId && p.alive)
+      || lowestHpAlly(state)
+      || combatant
   } else if (ability.targetType === 'single_enemy') {
     ctx.target = livingEnemies(state).find((e) => e.id === action.targetId) || livingEnemies(state)[0]
   } else if (ability.targetType === 'self' || ability.targetType === 'none') {
@@ -348,6 +426,13 @@ function resolveUnitAction(state, combatant, action) {
     return
   }
   spendResource(combatant, ability.resource, cost)
+
+  if (ability.id !== 'basic_attack') {
+    state.abilityCasts = (state.abilityCasts || 0) + 1
+    if (ability.group === 'support' || ability.group === 'defensive') {
+      state.supportActions = (state.supportActions || 0) + 1
+    }
+  }
 
   if (ability.cooldown) {
     combatant.cooldowns[ability.id] = ability.cooldown - (state.runBuffs.cdRelief || 0)
@@ -432,7 +517,8 @@ function resolvePendingCasts(state) {
   }
 }
 
-function dealEnemyDamage(state, enemy, target, power, opts = {}) {
+/** @internal exported for tests */
+export function dealEnemyDamage(state, enemy, target, power, opts = {}) {
   if (!target?.alive) return 0
   // intercept
   let realTarget = target
@@ -451,6 +537,8 @@ function dealEnemyDamage(state, enemy, target, power, opts = {}) {
   if (hasStatus(enemy, 'slow')) dmg *= 0.65
   if (opts.aoe && hasStatus(realTarget, 'brace')) dmg *= 0.7
   if (hasStatus(realTarget, 'regroup_penalty')) { /* noop */ }
+  const defMult = state.runBuffs?.defMult || 0
+  if (defMult > 0) dmg *= Math.max(0.2, 1 - defMult)
   dmg *= 1 - (realTarget.armorMitigation || 0)
   const dr = realTarget.statuses?.find((s) => s.id === 'damage_reduction')
   if (dr) dmg *= 1 - (dr.power || 0.25)
@@ -650,9 +738,9 @@ function checkEncounterEnd(state) {
     // progression: route → event? → boon → consumable
     state.phase = 'route'
     state.routeChoices = [
-      { id: 'safe', name: 'Safe Passage', description: 'Easier next fight, smaller reward.' },
-      { id: 'treacherous', name: 'Treacherous Shortcut', description: 'Harder next fight, stronger reward.' },
-      { id: 'shrine', name: 'Forgotten Shrine', description: 'Restore resources; random complication.' },
+      { id: 'safe', name: 'Safe Passage', description: 'Easier next fight; no score bonus.' },
+      { id: 'treacherous', name: 'Treacherous Shortcut', description: 'Harder next fight; +ATK and score risk bonus.' },
+      { id: 'shrine', name: 'Forgotten Shrine', description: 'Restore resources; chance of harder fight (+score if so).' },
     ]
     return true
   }
@@ -680,7 +768,10 @@ function finishRun(state, victory) {
     knockouts: state.knockouts,
     turns: state.turns,
     victory,
-    challengeBonus: state.difficulty === 'heroic' ? 400 : state.difficulty === 'reckless' ? 900 : 0,
+    scoreMult: state.difficultyMods?.scoreMult || 1,
+    riskBonus: state.riskBonus || 0,
+    abilityCasts: state.abilityCasts || 0,
+    supportActions: state.supportActions || 0,
   })
   state.report = {
     victory,
@@ -804,6 +895,7 @@ export function selectRoute(state, routeId) {
     state.nextEncounterMods = { enemyHp: 0.15, enemyAtk: 0.1, easier: false }
     state.runBuffs.atkMult = (state.runBuffs.atkMult || 0) + 0.1
     for (const p of state.party) p.runAtkMult = state.runBuffs.atkMult
+    state.riskBonus = (state.riskBonus || 0) + 350
   } else if (routeId === 'shrine') {
     for (const p of livingParty(state)) {
       p.hp = Math.min(p.maxHp, p.hp + Math.round(p.maxHp * 0.3))
@@ -811,6 +903,7 @@ export function selectRoute(state, routeId) {
     }
     if (state.rng() < 0.5) {
       state.nextEncounterMods = { enemyHp: 0.08, enemyAtk: 0.05, easier: false }
+      state.riskBonus = (state.riskBonus || 0) + 150
       pushLog(state, 'The shrine exacts a complication.')
     }
   }

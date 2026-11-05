@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { getClassDef } from '../../lib/expedition/classDefinitions.js'
 import { availableActions, RAID_COMMANDS } from '../../lib/expedition/gameEngine.js'
+import { smartAllyTarget, smartEnemyTarget } from '../../lib/expedition/targeting.js'
 
 const ENEMY_SYMBOLS = {
   entrance_guards: '🛡',
@@ -149,7 +150,19 @@ export default function BattleScreen({ state, onCommit, onBoon, onEvent, onRoute
               key={p.id}
               type="button"
               className={`exp-combatant${!p.alive ? ' is-down' : ''}${activeId === p.id ? ' is-selected' : ''}`}
-              onClick={() => p.alive && setActiveId(p.id)}
+              onClick={() => {
+                if (!p.alive) return
+                setActiveId(p.id)
+                const match = active
+                  ? availableActions(state, active).find((o) => o.id === draft[active.id]?.actionId)
+                  : null
+                if (match?.needsAllyTarget && !match.needsDeadAlly) {
+                  setDraft((d) => ({
+                    ...d,
+                    [active.id]: { ...d[active.id], targetId: p.id },
+                  }))
+                }
+              }}
               aria-pressed={activeId === p.id}
               aria-label={`${p.name} ${p.hp} of ${p.maxHp}`}
             >
@@ -193,9 +206,9 @@ export default function BattleScreen({ state, onCommit, onBoon, onEvent, onRoute
                     [active.id]: {
                       actionId: o.id,
                       targetId: o.needsAllyTarget
-                        ? (d[active.id]?.targetId || living[0]?.id)
+                        ? smartAllyTarget(state.party, d[active.id]?.targetId, { dead: o.needsDeadAlly })
                         : o.needsEnemyTarget
-                          ? (d[active.id]?.targetId || enemies[0]?.id)
+                          ? smartEnemyTarget(enemies, d[active.id]?.targetId)
                           : undefined,
                     },
                   }))}
@@ -210,11 +223,12 @@ export default function BattleScreen({ state, onCommit, onBoon, onEvent, onRoute
             const cur = draft[active.id]
             const match = availableActions(state, active).find((o) => o.id === cur?.actionId)
             if (match?.needsAllyTarget) {
+              const allyValue = smartAllyTarget(state.party, cur?.targetId, { dead: match.needsDeadAlly }) || ''
               return (
                 <label className="exp-status">
                   Ally{' '}
                   <select
-                    value={cur?.targetId || ''}
+                    value={allyValue}
                     onChange={(e) => setDraft((d) => ({ ...d, [active.id]: { ...d[active.id], targetId: e.target.value } }))}
                   >
                     {state.party.filter((t) => match.needsDeadAlly ? !t.alive : t.alive).map((t) => (
@@ -225,11 +239,12 @@ export default function BattleScreen({ state, onCommit, onBoon, onEvent, onRoute
               )
             }
             if (match?.needsEnemyTarget) {
+              const enemyValue = smartEnemyTarget(enemies, cur?.targetId) || ''
               return (
                 <label className="exp-status">
                   Enemy{' '}
                   <select
-                    value={cur?.targetId || enemies[0]?.id || ''}
+                    value={enemyValue}
                     onChange={(e) => setDraft((d) => ({ ...d, [active.id]: { ...d[active.id], targetId: e.target.value } }))}
                   >
                     {enemies.filter((e) => e.alive).map((t) => (
@@ -281,14 +296,17 @@ export default function BattleScreen({ state, onCommit, onBoon, onEvent, onRoute
 
 function initialDraft(state) {
   const d = {}
-  const enemyId = (state.enemies || []).find((e) => e.alive)?.id
   for (const p of state.party.filter((x) => x.alive)) {
     const opts = availableActions(state, p)
     const first = opts.find((o) => o.id === 'basic_attack') || opts[0]
     if (!first) continue
     d[p.id] = {
       actionId: first.id,
-      targetId: first.needsAllyTarget ? p.id : first.needsEnemyTarget ? enemyId : undefined,
+      targetId: first.needsAllyTarget
+        ? smartAllyTarget(state.party, p.id, { dead: first.needsDeadAlly })
+        : first.needsEnemyTarget
+          ? smartEnemyTarget(state.enemies, undefined)
+          : undefined,
     }
   }
   return d
