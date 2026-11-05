@@ -11,7 +11,7 @@ const known = buildKnownItemSources({
 })
 
 describe('discovery queryPlan', () => {
-  it('plans last zone raid then loot', () => {
+  it('plans last zone raid via catalog item join then loot', () => {
     const q = {
       family: 'raid_loot',
       zone: 'Plane of Fire',
@@ -20,12 +20,13 @@ describe('discovery queryPlan', () => {
       limit: 40,
     }
     const plan = planDiscovery(q)
-    assert.equal(plan.ops[0].op, 'latest_raid_by_zone')
+    assert.equal(plan.ops[0].op, 'latest_raid_by_catalog')
+    assert.equal(plan.ops[0].params.match, 'zone')
     assert.equal(plan.ops[0].params.zone, 'Plane of Fire')
     assert.equal(plan.ops[1].op, 'loot_for_raid')
   })
 
-  it('plans P3 via mob classification then phase-filtered loot', () => {
+  it('plans P3 via catalog phase items then phase-filtered loot', () => {
     const q = {
       family: 'raid_loot',
       phase: 'P3',
@@ -36,11 +37,12 @@ describe('discovery queryPlan', () => {
     }
     const resolved = resolveDiscoveryEntities(q, { knownItemSources: known })
     const plan = planDiscovery(resolved.query, resolved)
-    assert.equal(plan.ops[0].op, 'latest_raid_for_phase')
+    assert.equal(plan.ops[0].op, 'latest_raid_by_catalog')
+    assert.equal(plan.ops[0].params.match, 'phase')
     assert.ok(plan.ops[0].params.mobs.includes('P3'))
     assert.equal(plan.ops[1].op, 'loot_for_raid')
     assert.ok(plan.ops[1].params.filterPhaseMobs.includes('P3'))
-    assert.ok(plan.notes.some((n) => /P3|phase/i.test(n)))
+    assert.ok(plan.notes.some((n) => /phase|item_sources/i.test(n)))
   })
 
   it('plans item count as count + sample awards', () => {
@@ -63,5 +65,17 @@ describe('discovery queryPlan', () => {
     })
     assert.equal(plan.ops.length, 1)
     assert.equal(plan.ops[0].op, 'catalog_boss_drops')
+  })
+
+  it('plans boss raid via catalog boss items', () => {
+    const plan = planDiscovery({
+      family: 'boss_raid_loot',
+      boss: 'Quarm',
+      raw: 'what dropped off quarm',
+      limit: 40,
+    })
+    assert.equal(plan.ops[0].op, 'latest_raid_by_catalog')
+    assert.equal(plan.ops[0].params.match, 'boss')
+    assert.equal(plan.ops[0].params.boss, 'Quarm')
   })
 })

@@ -16,6 +16,8 @@ export {
   lookupItemAlias,
   preferAuthoritativeSource,
   itemNamesForPhaseMobs,
+  itemNamesForZone,
+  itemNamesForBoss,
   P3_MOBS,
   ZONE_ALIASES,
   PHASE_ALIASES,

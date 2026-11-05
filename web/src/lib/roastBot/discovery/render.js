@@ -118,7 +118,7 @@ function renderRaidLoot(result, referenced) {
   if (!raid?.raidId) {
     return {
       factText: result.query?.phase
-        ? `No raid with identifiable ${result.query.phase} activity was found in raid_classifications.`
+        ? `No raid with identifiable ${result.query.phase} awards was found (join of item_sources labels to recorded loot).`
         : `No qualifying raid was found${result.query?.zone ? ` for ${result.query.zone}` : ''}.`,
       links,
     }

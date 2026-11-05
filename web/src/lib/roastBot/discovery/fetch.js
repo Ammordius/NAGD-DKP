@@ -2,10 +2,10 @@
  * Execute a QueryPlan against Supabase with narrow, parameterized reads.
  * Module-level TTL cache (SWR-compatible key) — no per-message rebuild of indexes.
  *
- * Benchmark note (indexes deferred): existing idx_raid_loot_raid, idx_raid_loot_item_name_trgm,
- * idx_raids_date_iso, and idx_raid_classifications_mob cover the primary paths. Zone filters
- * currently scan raid_classifications by zone without a dedicated index; add
- * idx_raid_classifications_zone only if measured latency exceeds ~500ms on production-sized data.
+ * Zone / phase / boss raid nights: join static item_sources (item→mob/zone) to
+ * raid_loot_history. Does not query raid_classifications.
+ *
+ * Benchmark note: item award paths use idx_raid_loot_item_name_trgm + idx_raid_loot_raid.
  */
 
 import { discoverySwrKey, DISCOVERY_DEDUPING_MS, fingerprintQuery } from './cacheKey.js'
@@ -13,6 +13,8 @@ import { LOOT_SELECT, RAID_LOOT_SELECT } from './queryPlan.js'
 import {
   preferAuthoritativeSource,
   itemNamesForPhaseMobs,
+  itemNamesForZone,
+  itemNamesForBoss,
   P3_MOBS,
   normAliasKey,
   isPhaseMob,
@@ -110,46 +112,21 @@ export async function executeDiscovery(client, plan, opts = {}) {
         continue
       }
 
-      if (step.op === 'latest_raid_by_zone') {
-        currentRaid = await fetchLatestRaidByZone(client, step.params.zone)
+      if (step.op === 'latest_raid_by_catalog') {
+        const catalogNames = resolveCatalogItemNames(known, step.params, phaseNames)
+        currentRaid = await fetchLatestRaidByItemNames(client, catalogNames)
         result.raid = currentRaid
         if (!currentRaid) {
-          result.gaps.push(`No classified raids found for zone "${step.params.zone}".`)
-        }
-        continue
-      }
-
-      if (step.op === 'latest_raid_by_mobs') {
-        currentRaid = await fetchLatestRaidByMobs(client, step.params.mobs, step.params.zone)
-        result.raid = currentRaid
-        if (!currentRaid) {
+          const label =
+            step.params.match === 'phase'
+              ? step.params.phase || 'phase'
+              : step.params.match === 'boss'
+                ? prettyMob(step.params.boss)
+                : step.params.zone || 'catalog'
           result.gaps.push(
-            `No raid_classifications rows for mob(s) ${(step.params.mobs || []).join(', ')}.`,
-          )
-        }
-        continue
-      }
-
-      if (step.op === 'latest_raid_for_phase') {
-        const phaseFind = await fetchLatestRaidForPhase(client, {
-          mobs: step.params.mobs || [],
-          zone: step.params.zone || null,
-          itemNames: phaseNames,
-          phase: step.params.phase || null,
-        })
-        currentRaid = phaseFind.raid
-        result.raid = currentRaid
-        if (phaseFind.via === 'phase_items') {
-          result.notes = [
-            ...(result.notes || []),
-            `Raid night chosen from the most recent recorded award of ${step.params.phase || 'phase'}-labeled items (raid_classifications has no ${step.params.phase || 'phase'} mob rows in this database).`,
-          ]
-        }
-        if (!currentRaid) {
-          result.gaps.push(
-            phaseNames.size
-              ? `No raid_classifications rows for ${(step.params.mobs || []).join(', ')}, and no recorded awards for the ${phaseNames.size} catalog item(s) labeled ${step.params.phase || 'this phase'}.`
-              : `No raid_classifications rows for ${(step.params.mobs || []).join(', ')}, and no phase-labeled items in the static catalog to fall back on.`,
+            catalogNames.size
+              ? `No recorded awards found for the ${catalogNames.size} catalog item(s) matching ${label}.`
+              : `No catalog items mapped to ${label} in item_sources.`,
           )
         }
         continue
@@ -200,7 +177,7 @@ export async function executeDiscovery(client, plan, opts = {}) {
             }))
             result.notes = [
               ...(result.notes || []),
-              'Raid was selected via raid_classifications; item→boss attribution was ambiguous for awards, so boss claims are omitted.',
+              'Raid night chosen via boss-labeled catalog items; item→boss attribution was ambiguous for other awards on that night, so boss claims are omitted for them.',
             ]
           }
         }
@@ -240,11 +217,21 @@ export async function executeDiscovery(client, plan, opts = {}) {
         continue
       }
 
-      if (step.op === 'awards_in_zone_window') {
-        const packed = await fetchAwardsInZoneWindow(client, step.params, known, phaseNames)
-        result.awards = packed.rows
+      if (step.op === 'awards_for_catalog_window') {
+        const catalogNames = resolveCatalogItemNames(known, step.params, phaseNames)
+        const packed = await fetchAwardsForItemNamesWindow(client, {
+          itemNames: catalogNames,
+          fromIso: step.params.fromIso,
+          toIso: step.params.toIso,
+          select: step.params.select || LOOT_SELECT,
+          limit: step.params.limit || 40,
+        })
+        result.awards = packed.rows.map((a) => enrichAward(a, null, known))
         result.truncated = packed.truncated
         result.totalCount = packed.rows.length
+        if (!catalogNames.size) {
+          result.gaps.push('No catalog items mapped for that zone/phase filter.')
+        }
         continue
       }
     }
@@ -316,54 +303,33 @@ function catalogBossDrops(known, boss, limit) {
 }
 
 /**
- * @param {import('@supabase/supabase-js').SupabaseClient} client
- * @param {string} zone
+ * Resolve catalog item names for a zone / phase / boss match (static join keys).
+ * @param {Record<string, object>} known
+ * @param {object} params
+ * @param {Set<string>} phaseNames
+ * @returns {Set<string>}
  */
-async function fetchLatestRaidByZone(client, zone) {
-  const { data: classRows, error } = await client
-    .from('raid_classifications')
-    .select('raid_id')
-    .eq('zone', zone)
-    .limit(2000)
-  if (error) throw new Error(error.message)
-  const ids = uniqueIds(classRows)
-  if (!ids.length) return null
-  return fetchLatestRaidAmong(client, ids)
+function resolveCatalogItemNames(known, params, phaseNames) {
+  if (params.match === 'phase' || params.mobs?.length) {
+    if (phaseNames?.size) return phaseNames
+    return itemNamesForPhaseMobs(known, params.mobs || P3_MOBS)
+  }
+  if (params.match === 'boss' || params.boss) {
+    return itemNamesForBoss(known, params.boss)
+  }
+  if (params.zone) return itemNamesForZone(known, params.zone)
+  return new Set()
 }
 
 /**
+ * Most recent raid that awarded any of the catalog item names.
  * @param {import('@supabase/supabase-js').SupabaseClient} client
- * @param {string[]} mobs
- * @param {string|null} zone
+ * @param {Set<string>|string[]} itemNames
+ * @returns {Promise<{ raidId: string, raidName?: string|null, dateIso?: string|null }|null>}
  */
-async function fetchLatestRaidByMobs(client, mobs, zone) {
-  if (!mobs?.length) return null
-  let q = client.from('raid_classifications').select('raid_id, mob, zone').in('mob', mobs).limit(2000)
-  if (zone) q = q.eq('zone', zone)
-  const { data: classRows, error } = await q
-  if (error) throw new Error(error.message)
-  const ids = uniqueIds(classRows)
-  if (!ids.length) return null
-  return fetchLatestRaidAmong(client, ids)
-}
-
-/**
- * Phase raid night: classifications first, else most recent award among phase-labeled items.
- * @param {import('@supabase/supabase-js').SupabaseClient} client
- * @param {{
- *   mobs: string[],
- *   zone?: string|null,
- *   itemNames: Set<string>|string[],
- *   phase?: string|null,
- * }} args
- * @returns {Promise<{ raid: { raidId: string, raidName?: string|null, dateIso?: string|null }|null, via: 'classifications'|'phase_items'|null }>}
- */
-async function fetchLatestRaidForPhase(client, { mobs, zone, itemNames }) {
-  const fromClass = await fetchLatestRaidByMobs(client, mobs, zone)
-  if (fromClass) return { raid: fromClass, via: 'classifications' }
-
+async function fetchLatestRaidByItemNames(client, itemNames) {
   const names = [...(itemNames || [])].map((n) => String(n || '').trim()).filter(Boolean)
-  if (!names.length) return { raid: null, via: null }
+  if (!names.length) return null
 
   const samples = await Promise.all(
     names.map(async (name) => {
@@ -381,44 +347,66 @@ async function fetchLatestRaidForPhase(client, { mobs, zone, itemNames }) {
 
   /** @type {Array<{ raid_id: string, raid_name?: string, date_iso?: string }>} */
   const hits = samples.filter(Boolean)
-  if (!hits.length) return { raid: null, via: null }
+  if (!hits.length) return null
 
   hits.sort((a, b) => String(b.date_iso || '').localeCompare(String(a.date_iso || '')))
   const top = hits[0]
   return {
-    raid: {
-      raidId: String(top.raid_id),
-      raidName: top.raid_name || null,
-      dateIso: top.date_iso || null,
-    },
-    via: 'phase_items',
+    raidId: String(top.raid_id),
+    raidName: top.raid_name || null,
+    dateIso: top.date_iso || null,
   }
 }
 
 /**
+ * Awards in a date window for any of the catalog item names.
  * @param {import('@supabase/supabase-js').SupabaseClient} client
- * @param {string[]} ids
+ * @param {{
+ *   itemNames: Set<string>|string[],
+ *   fromIso?: string|null,
+ *   toIso?: string|null,
+ *   select?: string,
+ *   limit?: number,
+ * }} params
  */
-async function fetchLatestRaidAmong(client, ids) {
-  // Chunk .in() to stay within PostgREST URL limits
-  /** @type {Array<{ raid_id: string, raid_name?: string, date_iso?: string }>} */
-  let best = []
-  const chunkSize = 150
-  for (let i = 0; i < ids.length; i += chunkSize) {
-    const slice = ids.slice(i, i + chunkSize)
-    const { data, error } = await client
-      .from('raids')
-      .select('raid_id, raid_name, date_iso, date')
-      .in('raid_id', slice)
-      .order('date_iso', { ascending: false, nullsFirst: false })
-      .limit(1)
-    if (error) throw new Error(error.message)
-    if (data?.[0]) best.push(data[0])
+async function fetchAwardsForItemNamesWindow(client, params) {
+  const names = [...(params.itemNames || [])].map((n) => String(n || '').trim()).filter(Boolean)
+  const limit = params.limit || 40
+  if (!names.length) return { rows: [], truncated: false }
+
+  const batches = await Promise.all(
+    names.map(async (name) => {
+      let q = client
+        .from('raid_loot_history')
+        .select(params.select || LOOT_SELECT)
+        .ilike('item_name', escapeIlike(name))
+        .order('date_iso', { ascending: false, nullsFirst: false })
+        .limit(limit)
+      if (params.fromIso) q = q.gte('date_iso', params.fromIso)
+      if (params.toIso) q = q.lte('date_iso', params.toIso)
+      const { data, error } = await q
+      if (error) throw new Error(error.message)
+      return data || []
+    }),
+  )
+
+  /** @type {object[]} */
+  const merged = []
+  const seen = new Set()
+  for (const rows of batches) {
+    for (const row of rows) {
+      const key = row.id != null ? `id:${row.id}` : `${row.raid_id}|${row.item_name}|${row.character_name}|${row.date_iso}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      merged.push(row)
+    }
   }
-  best.sort((a, b) => String(b.date_iso || '').localeCompare(String(a.date_iso || '')))
-  const top = best[0]
-  if (!top) return null
-  return { raidId: String(top.raid_id), raidName: top.raid_name || null, dateIso: top.date_iso || null }
+  merged.sort((a, b) => String(b.date_iso || '').localeCompare(String(a.date_iso || '')))
+  return { rows: merged.slice(0, limit), truncated: merged.length > limit }
+}
+
+function prettyMob(boss) {
+  return String(boss || '').replace(/_/g, ' ') || 'boss'
 }
 
 /**
@@ -507,60 +495,3 @@ async function fetchAwardsForCharacter(client, params) {
   return { rows: rows.slice(0, limit), truncated: rows.length > limit }
 }
 
-/**
- * Zone window: classify raid ids for zone, then history for those raids in date window.
- * @param {import('@supabase/supabase-js').SupabaseClient} client
- * @param {object} params
- * @param {Record<string, object>} known
- * @param {Set<string>} phaseNames
- */
-async function fetchAwardsInZoneWindow(client, params, known, phaseNames) {
-  if (!params.zone) return { rows: [], truncated: false }
-  const { data: classRows, error } = await client
-    .from('raid_classifications')
-    .select('raid_id')
-    .eq('zone', params.zone)
-    .limit(2000)
-  if (error) throw new Error(error.message)
-  const ids = uniqueIds(classRows)
-  if (!ids.length) return { rows: [], truncated: false }
-
-  /** @type {object[]} */
-  const all = []
-  const chunkSize = 100
-  const limit = params.limit || 40
-  for (let i = 0; i < ids.length && all.length <= limit; i += chunkSize) {
-    const slice = ids.slice(i, i + chunkSize)
-    let q = client
-      .from('raid_loot_history')
-      .select(params.select || LOOT_SELECT)
-      .in('raid_id', slice)
-      .order('date_iso', { ascending: false, nullsFirst: false })
-      .limit(limit + 1 - all.length)
-    if (params.fromIso) q = q.gte('date_iso', params.fromIso)
-    if (params.toIso) q = q.lte('date_iso', params.toIso)
-    const { data, error: err } = await q
-    if (err) throw new Error(err.message)
-    all.push(...(data || []))
-  }
-
-  let rows = all.map((a) => enrichAward(a, null, known))
-  if (params.filterPhaseMobs?.length) {
-    const want = new Set([...phaseNames].map((n) => normAliasKey(n)))
-    const mobWant = new Set(params.filterPhaseMobs.map((m) => normAliasKey(m)))
-    rows = rows.filter((a) => {
-      if (want.has(normAliasKey(a.itemName))) return true
-      const auth = authoritativeItemSource(known, a.itemName)
-      return auth?.mob && mobWant.has(normAliasKey(auth.mob))
-    })
-  }
-  return { rows: rows.slice(0, limit), truncated: all.length > limit }
-}
-
-function uniqueIds(rows) {
-  const set = new Set()
-  for (const r of rows || []) {
-    if (r?.raid_id != null) set.add(String(r.raid_id))
-  }
-  return [...set]
-}

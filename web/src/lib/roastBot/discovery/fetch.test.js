@@ -1,10 +1,8 @@
 /**
  * Discovery fetch tests — mock Supabase only (no live DB).
  *
- * Benchmark / index note: these fixtures exercise narrow .eq / .in / .ilike / .limit
- * paths that map to existing indexes (raid_id, item_name trgm, date_iso, classifications.mob).
- * No new indexes shipped; revisit idx_raid_classifications_zone if zone scans exceed ~500ms
- * on production-sized raid_classifications.
+ * Zone/phase/boss raid nights join item_sources → raid_loot_history (no raid_classifications).
+ * Paths use item_name ilike + raid_id loot fetches with limits.
  */
 
 import { describe, it, beforeEach } from 'node:test'
@@ -12,7 +10,7 @@ import assert from 'node:assert/strict'
 import { buildKnownItemSources } from '../../itemSourceLookup.js'
 import { prepareDiscovery, executeDiscovery, resetDiscoveryCache } from './index.js'
 import { createDiscoveryMockClient } from './mockSupabase.js'
-import { FIXTURE_ITEM_SOURCES, FIXTURE_MOB_LOOT, FIXTURE_CLASSIFICATIONS } from './fixtures.js'
+import { FIXTURE_ITEM_SOURCES, FIXTURE_MOB_LOOT } from './fixtures.js'
 
 const known = buildKnownItemSources({
   itemSources: FIXTURE_ITEM_SOURCES,
@@ -57,27 +55,21 @@ describe('discovery fetch', () => {
     assert.equal(names.includes('Eye of Cazic Thule'), false)
   })
 
-  it('P3 falls back to phase-labeled item awards when classifications lack P3', async () => {
-    // Matches live Supabase: no P3/P1 mob rows in raid_classifications.
-    const withoutPhaseMobs = FIXTURE_CLASSIFICATIONS.filter(
-      (r) => r.mob !== 'P3' && r.mob !== 'P3 Guardian' && r.mob !== 'P1',
-    )
-    const client = createDiscoveryMockClient({ classifications: withoutPhaseMobs })
+  it('P3 uses item_sources join only (never needs raid_classifications)', async () => {
+    const callLog = []
+    const client = createDiscoveryMockClient({ callLog, classifications: [] })
     const prepared = prepareDiscovery('What dropped in P3 last time?', { knownItemSources: known })
     const result = await executeDiscovery(client, prepared.plan, {
       knownItemSources: known,
       resolved: prepared.resolved,
       skipCache: true,
     })
-    assert.ok(result.raid?.raidId, 'expected phase-item fallback to find a raid')
-    // Latest Cloak/Pauldrons/Ossein award in fixtures is on r-time-mixed (2026-02-20)
-    assert.equal(result.raid.raidId, 'r-time-mixed')
+    assert.equal(result.raid?.raidId, 'r-time-mixed')
     const names = (result.awards || []).map((a) => a.itemName)
     assert.ok(names.includes('Cloak of Wishes'))
     assert.equal(names.includes('Eye of Cazic Thule'), false)
-    assert.ok((result.notes || []).some((n) => /phase-labeled|raid_classifications has no/i.test(n)))
     assert.equal(
-      (result.gaps || []).some((g) => /No raid_classifications rows for mob/i.test(g)),
+      callLog.some((c) => c.op === 'from' && c.table === 'raid_classifications'),
       false,
     )
   })

@@ -1,5 +1,8 @@
 /**
  * Pure StructuredQuery (+ resolved entities) → QueryPlan. No I/O.
+ *
+ * Zone / phase / boss raid nights are resolved by joining static item_sources
+ * (item → mob/zone) to raid_loot_history — not via raid_classifications.
  */
 
 import { P3_MOBS } from './aliases.js'
@@ -35,14 +38,13 @@ export function planDiscovery(query, resolved = null) {
 
     case 'raid_loot':
       if (query.phase) {
-        // Prefer raid_classifications mob labels; fall back to most recent award of
-        // phase-labeled items (live DB often lacks P3/P1 classification rows).
         ops.push({
-          op: 'latest_raid_for_phase',
+          op: 'latest_raid_by_catalog',
           params: {
+            match: 'phase',
+            phase: query.phase,
             mobs: phaseMobs,
             zone: query.zone || 'Plane of Time',
-            phase: query.phase,
           },
         })
         ops.push({
@@ -54,12 +56,12 @@ export function planDiscovery(query, resolved = null) {
           },
         })
         notes.push(
-          'P3/phase answers include only awards whose items are labeled in item_sources / raid_loot_classification; other PoTime loot on the same night is excluded.',
+          'Phase answers list only awards whose items are labeled in item_sources / raid_loot_classification; other loot on the same night is excluded.',
         )
       } else if (query.zone && query.mostRecentRaidFirst !== false && !query.timeRange) {
         ops.push({
-          op: 'latest_raid_by_zone',
-          params: { zone: query.zone },
+          op: 'latest_raid_by_catalog',
+          params: { match: 'zone', zone: query.zone },
         })
         ops.push({
           op: 'loot_for_raid',
@@ -67,12 +69,14 @@ export function planDiscovery(query, resolved = null) {
         })
       } else if (query.zone || query.timeRange) {
         ops.push({
-          op: 'awards_in_zone_window',
+          op: 'awards_for_catalog_window',
           params: {
+            match: query.phase ? 'phase' : 'zone',
             zone: query.zone || null,
+            phase: query.phase || null,
+            mobs: query.phase ? phaseMobs : null,
             fromIso: query.timeRange?.fromIso || null,
             toIso: query.timeRange?.toIso || null,
-            filterPhaseMobs: query.phase ? phaseMobs : null,
             select: LOOT_SELECT,
             limit,
           },
@@ -85,20 +89,19 @@ export function planDiscovery(query, resolved = null) {
 
     case 'boss_raid_loot':
       ops.push({
-        op: 'latest_raid_by_mobs',
-        params: { mobs: query.boss ? [query.boss] : [], zone: query.zone || null },
+        op: 'latest_raid_by_catalog',
+        params: { match: 'boss', boss: query.boss || null, zone: query.zone || null },
       })
       ops.push({
         op: 'loot_for_raid',
         params: {
           select: RAID_LOOT_SELECT,
           limit,
-          // Prefer filtering to items authoritatively sourced to this boss when available
           filterBoss: query.boss || null,
         },
       })
       notes.push(
-        'Boss-night loot uses raid_classifications for raid selection; item→boss claims prefer item_sources over conflicting dkp_mob_loot rows.',
+        'Boss-night selection joins authoritative item_sources mob labels to recorded awards (not raid_classifications).',
       )
       break
 

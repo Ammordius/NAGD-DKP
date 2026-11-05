@@ -206,7 +206,8 @@ export function preferAuthoritativeSource(sources) {
 }
 
 /**
- * Item names whose authoritative source mob is in the given phase set.
+ * Item names whose sources include a phase mob label (P3 / P3 Guardian / P1).
+ * Phase labels in item_sources win even when unreliable mob rows also exist.
  * @param {Record<string, { displayName?: string, sources?: Array<{ mob?: string, zone?: string }> }>} knownItemSources
  * @param {string[]} phaseMobs
  * @returns {Set<string>}
@@ -219,6 +220,54 @@ export function itemNamesForPhaseMobs(knownItemSources, phaseMobs = P3_MOBS) {
     const sources = entry?.sources || []
     const hit = sources.some((s) => want.has(normAliasKey(s.mob || '')))
     if (hit && entry.displayName) out.add(String(entry.displayName).trim())
+  }
+  return out
+}
+
+/**
+ * Item names whose authoritative source zone matches (client-side join key for zone raids).
+ * @param {Record<string, { displayName?: string, sources?: Array<{ mob?: string, zone?: string }> }>} knownItemSources
+ * @param {string} zone
+ * @returns {Set<string>}
+ */
+export function itemNamesForZone(knownItemSources, zone) {
+  const want = normAliasKey(zone)
+  /** @type {Set<string>} */
+  const out = new Set()
+  if (!want) return out
+  for (const entry of Object.values(knownItemSources || {})) {
+    if (!entry?.displayName) continue
+    const auth = preferAuthoritativeSource(entry.sources || [])
+    if (auth?.zone && normAliasKey(auth.zone) === want) {
+      out.add(String(entry.displayName).trim())
+      continue
+    }
+    // Phase-labeled Time items still count for Plane of Time zone joins
+    const phaseHit = (entry.sources || []).some(
+      (s) => isPhaseMob(s.mob) && normAliasKey(s.zone || '') === want,
+    )
+    if (phaseHit) out.add(String(entry.displayName).trim())
+  }
+  return out
+}
+
+/**
+ * Item names whose authoritative source mob matches a boss (not unreliable placeholders).
+ * @param {Record<string, { displayName?: string, sources?: Array<{ mob?: string, zone?: string }> }>} knownItemSources
+ * @param {string} boss
+ * @returns {Set<string>}
+ */
+export function itemNamesForBoss(knownItemSources, boss) {
+  const want = normAliasKey(String(boss || '').replace(/_/g, ' '))
+  /** @type {Set<string>} */
+  const out = new Set()
+  if (!want) return out
+  for (const entry of Object.values(knownItemSources || {})) {
+    const auth = preferAuthoritativeSource(entry.sources || [])
+    if (!auth?.mob || !entry.displayName) continue
+    if (normAliasKey(String(auth.mob).replace(/_/g, ' ')) === want) {
+      out.add(String(entry.displayName).trim())
+    }
   }
   return out
 }
