@@ -293,9 +293,17 @@ export function stripEventNameSuffix(eventName) {
   return { eventName: name, dateIso }
 }
 
-function inferYearFromIso(dateIso, fallbackYear) {
+/**
+ * Guess calendar year for an MM/DD that has no explicit year.
+ * When the month is more than ~6 months before the reference date's month,
+ * roll forward one year (e.g. pasting an April title in November).
+ * @param {string} dateIso
+ * @param {number} fallbackYear
+ * @param {string} [referenceIso] YYYY-MM-DD (defaults to today in NY)
+ */
+function inferYearFromIso(dateIso, fallbackYear, referenceIso = getTodayNyDate()) {
   const { month } = parseDateIso(dateIso)
-  const today = parseDateIso(getTodayNyDate())
+  const today = parseDateIso(referenceIso)
   let year = fallbackYear
   if (month < today.month - 6) year += 1
   return year
@@ -330,13 +338,21 @@ export function snapToWednesdayOnOrBefore(dateIso) {
 /**
  * @param {string} scheduleTitle
  * @param {number} fallbackYear
+ * @param {{ referenceIso?: string, trustYear?: boolean }} [options]
+ *   trustYear: use fallbackYear as-is (paste rows already established the calendar year).
  * @returns {string | null} YYYY-MM-DD
  */
-export function parseTitlePeriodStart(scheduleTitle, fallbackYear) {
+export function parseTitlePeriodStart(scheduleTitle, fallbackYear, options = {}) {
   const m = String(scheduleTitle || '').match(SCHEDULE_TITLE_RE)
   if (!m) return null
   const [month, day] = m[1].split('/').map(Number)
-  const year = inferYearFromIso(formatDateIso({ year: fallbackYear, month, day }), fallbackYear)
+  const year = options.trustYear
+    ? fallbackYear
+    : inferYearFromIso(
+        formatDateIso({ year: fallbackYear, month, day }),
+        fallbackYear,
+        options.referenceIso || getTodayNyDate(),
+      )
   return formatDateIso({ year, month, day })
 }
 
@@ -352,11 +368,16 @@ export function assignWeeksFromPeriodStart(rows, periodStart) {
   }))
 }
 
-function inferPeriodStart(rows, scheduleTitle) {
+function inferPeriodStart(rows, scheduleTitle, referenceIso = getTodayNyDate()) {
   const fallbackYear = rows.length
     ? parseDateIso(rows[0].dateIso).year
-    : new Date().getFullYear()
-  const titleStart = parseTitlePeriodStart(scheduleTitle, fallbackYear)
+    : parseDateIso(referenceIso).year
+  // When paste lines already carry full dates, keep the title MM/DD in that year
+  // instead of rolling forward from "today" (breaks April schedules pasted in Nov).
+  const titleStart = parseTitlePeriodStart(scheduleTitle, fallbackYear, {
+    referenceIso,
+    trustYear: rows.length > 0,
+  })
   if (titleStart) return snapToWednesdayOnOrBefore(titleStart)
   if (rows.length) {
     const minDate = rows.reduce(
@@ -453,9 +474,9 @@ export function parseSchedulePaste(text, {
   periodStart,
   projectDates = false,
 } = {}) {
-  const rows = parseSchedulePasteRaw(text)
+  const rows = parseSchedulePasteRaw(text, { referenceIso: fromDate })
   const metadata = parseScheduleMetadata(text)
-  const inferredStart = inferPeriodStart(rows, metadata.scheduleTitle)
+  const inferredStart = inferPeriodStart(rows, metadata.scheduleTitle, fromDate)
   const finalRows = inferredStart
     ? assignWeeksFromPeriodStart(rows, inferredStart)
     : rows
@@ -472,14 +493,14 @@ export function parseSchedulePaste(text, {
 }
 
 /** @deprecated internal – use parseSchedulePaste; exposed for tests */
-export function parseSchedulePasteRaw(text) {
+export function parseSchedulePasteRaw(text, { referenceIso = getTodayNyDate() } = {}) {
   const lines = String(text || '')
     .split(/\r?\n/)
     .map((l) => l.trim())
     .filter(Boolean)
 
   let currentWeek = 1
-  let fallbackYear = new Date().getFullYear()
+  let fallbackYear = parseDateIso(referenceIso).year
   const rows = []
 
   for (const rawLine of lines) {
@@ -512,7 +533,11 @@ export function parseSchedulePasteRaw(text) {
     if (!dateIso) {
       const month = Number(monthStr)
       const day = Number(dayStr)
-      const year = inferYearFromIso(formatDateIso({ year: fallbackYear, month, day }), fallbackYear)
+      const year = inferYearFromIso(
+        formatDateIso({ year: fallbackYear, month, day }),
+        fallbackYear,
+        referenceIso,
+      )
       dateIso = formatDateIso({ year, month, day })
     }
 

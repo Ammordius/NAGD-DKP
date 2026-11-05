@@ -268,7 +268,17 @@ describe('discordSchedule', () => {
 
   it('parseTitlePeriodStart extracts the first date from a schedule title', () => {
     assert.equal(
-      parseTitlePeriodStart('04/22 - 05/05 Raid Schedule', 2026),
+      parseTitlePeriodStart('04/22 - 05/05 Raid Schedule', 2026, { referenceIso: '2026-04-01' }),
+      '2026-04-22'
+    )
+    // Bare title in November rolls April into the next year
+    assert.equal(
+      parseTitlePeriodStart('04/22 - 05/05 Raid Schedule', 2026, { referenceIso: '2026-11-05' }),
+      '2027-04-22'
+    )
+    // Pasted rows already established 2026 — trust that year
+    assert.equal(
+      parseTitlePeriodStart('04/22 - 05/05 Raid Schedule', 2026, { trustYear: true }),
       '2026-04-22'
     )
   })
@@ -287,7 +297,9 @@ describe('discordSchedule', () => {
   })
 
   it('parseSchedulePaste keeps original dates by default', () => {
-    const { rows, metadata, periodStart } = parseSchedulePaste(SAMPLE_PASTE)
+    const { rows, metadata, periodStart } = parseSchedulePaste(SAMPLE_PASTE, {
+      fromDate: '2026-11-05',
+    })
     assert.equal(rows.length, 6)
     assert.deepEqual(
       rows.map((r) => r.dateIso),
@@ -308,6 +320,7 @@ describe('discordSchedule', () => {
   })
 
   it('parseSchedulePaste projects parsed rows when projectDates is true', () => {
+    // fromDate pins both projection window and year-inference reference
     const { rows, metadata } = parseSchedulePaste(SAMPLE_PASTE, {
       fromDate: '2026-06-01',
       projectDates: true,
