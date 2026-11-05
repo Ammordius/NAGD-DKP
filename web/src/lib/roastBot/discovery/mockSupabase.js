@@ -10,11 +10,12 @@ import {
 } from './fixtures.js'
 
 /**
- * @param {{ callLog?: object[] }} [opts]
+ * @param {{ callLog?: object[], classifications?: object[]|null }} [opts]
  */
 export function createDiscoveryMockClient(opts = {}) {
   const callLog = opts.callLog || []
   const history = fixtureHistoryRows()
+  const classifications = opts.classifications != null ? opts.classifications : FIXTURE_CLASSIFICATIONS
 
   function table(name) {
     /** @type {object} */
@@ -76,7 +77,7 @@ export function createDiscoveryMockClient(opts = {}) {
     function finalize(single) {
       callLog.push({ table: name, op: 'execute', filters: [...state.filters], limit: state.limitN })
       if (name === 'raid_classifications') {
-        let rows = [...FIXTURE_CLASSIFICATIONS]
+        let rows = [...classifications]
         for (const f of state.filters) {
           if (f.type === 'eq' && f.col === 'zone') rows = rows.filter((r) => r.zone === f.val)
           if (f.type === 'eq' && f.col === 'mob') rows = rows.filter((r) => r.mob === f.val)

@@ -77,11 +77,14 @@ export function renderDiscovery(result) {
       factText = 'I could not build a discovery answer for that phrasing.'
   }
 
-  if (result?.gaps?.length) {
-    const gapLines = result.gaps.filter(Boolean)
-    // Avoid duplicating long phase notes already inlined
-    const unique = [...new Set(gapLines)].slice(0, 3)
-    if (unique.length) factText = `${factText}\n\nNote: ${unique.join(' ')}`.trim()
+  const extras = [
+    ...(result?.gaps || []),
+    // Soft methodology notes only when we actually found a raid (avoid double-failure walls of text)
+    ...(result?.raid ? result.notes || [] : []),
+  ].filter(Boolean)
+  if (extras.length) {
+    const unique = [...new Set(extras)].slice(0, 2)
+    factText = `${factText}\n\nNote: ${unique.join(' ')}`.trim()
   }
 
   return {

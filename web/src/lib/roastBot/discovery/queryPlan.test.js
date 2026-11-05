@@ -36,7 +36,7 @@ describe('discovery queryPlan', () => {
     }
     const resolved = resolveDiscoveryEntities(q, { knownItemSources: known })
     const plan = planDiscovery(resolved.query, resolved)
-    assert.equal(plan.ops[0].op, 'latest_raid_by_mobs')
+    assert.equal(plan.ops[0].op, 'latest_raid_for_phase')
     assert.ok(plan.ops[0].params.mobs.includes('P3'))
     assert.equal(plan.ops[1].op, 'loot_for_raid')
     assert.ok(plan.ops[1].params.filterPhaseMobs.includes('P3'))

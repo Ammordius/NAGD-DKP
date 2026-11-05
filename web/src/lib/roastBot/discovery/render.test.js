@@ -68,8 +68,8 @@ describe('discovery render', () => {
         },
       ],
       totalCount: 1,
-      gaps: ['P3/phase answers include only awards whose items are labeled'],
-      notes: [],
+      gaps: [],
+      notes: ['P3/phase answers include only awards whose items are labeled'],
     })
     assert.match(answer.factText, /P3/)
     assert.match(answer.factText, /identifiable/i)

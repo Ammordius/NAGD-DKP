@@ -35,9 +35,15 @@ export function planDiscovery(query, resolved = null) {
 
     case 'raid_loot':
       if (query.phase) {
+        // Prefer raid_classifications mob labels; fall back to most recent award of
+        // phase-labeled items (live DB often lacks P3/P1 classification rows).
         ops.push({
-          op: 'latest_raid_by_mobs',
-          params: { mobs: phaseMobs, zone: query.zone || 'Plane of Time' },
+          op: 'latest_raid_for_phase',
+          params: {
+            mobs: phaseMobs,
+            zone: query.zone || 'Plane of Time',
+            phase: query.phase,
+          },
         })
         ops.push({
           op: 'loot_for_raid',

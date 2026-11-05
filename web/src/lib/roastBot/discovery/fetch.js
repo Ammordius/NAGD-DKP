@@ -84,8 +84,9 @@ export async function executeDiscovery(client, plan, opts = {}) {
     totalCount: null,
     truncated: false,
     catalogItems: [],
-    gaps: [...(plan.notes || []), ...(opts.resolved?.gaps || [])],
-    notes: plan.notes || [],
+    // Methodology notes stay in `notes`; `gaps` is only for missing-data / failure messages.
+    gaps: [...(opts.resolved?.gaps || [])],
+    notes: [...(plan.notes || [])],
     ambiguous: null,
     error: null,
   }
@@ -124,6 +125,31 @@ export async function executeDiscovery(client, plan, opts = {}) {
         if (!currentRaid) {
           result.gaps.push(
             `No raid_classifications rows for mob(s) ${(step.params.mobs || []).join(', ')}.`,
+          )
+        }
+        continue
+      }
+
+      if (step.op === 'latest_raid_for_phase') {
+        const phaseFind = await fetchLatestRaidForPhase(client, {
+          mobs: step.params.mobs || [],
+          zone: step.params.zone || null,
+          itemNames: phaseNames,
+          phase: step.params.phase || null,
+        })
+        currentRaid = phaseFind.raid
+        result.raid = currentRaid
+        if (phaseFind.via === 'phase_items') {
+          result.notes = [
+            ...(result.notes || []),
+            `Raid night chosen from the most recent recorded award of ${step.params.phase || 'phase'}-labeled items (raid_classifications has no ${step.params.phase || 'phase'} mob rows in this database).`,
+          ]
+        }
+        if (!currentRaid) {
+          result.gaps.push(
+            phaseNames.size
+              ? `No raid_classifications rows for ${(step.params.mobs || []).join(', ')}, and no recorded awards for the ${phaseNames.size} catalog item(s) labeled ${step.params.phase || 'this phase'}.`
+              : `No raid_classifications rows for ${(step.params.mobs || []).join(', ')}, and no phase-labeled items in the static catalog to fall back on.`,
           )
         }
         continue
@@ -319,6 +345,54 @@ async function fetchLatestRaidByMobs(client, mobs, zone) {
   const ids = uniqueIds(classRows)
   if (!ids.length) return null
   return fetchLatestRaidAmong(client, ids)
+}
+
+/**
+ * Phase raid night: classifications first, else most recent award among phase-labeled items.
+ * @param {import('@supabase/supabase-js').SupabaseClient} client
+ * @param {{
+ *   mobs: string[],
+ *   zone?: string|null,
+ *   itemNames: Set<string>|string[],
+ *   phase?: string|null,
+ * }} args
+ * @returns {Promise<{ raid: { raidId: string, raidName?: string|null, dateIso?: string|null }|null, via: 'classifications'|'phase_items'|null }>}
+ */
+async function fetchLatestRaidForPhase(client, { mobs, zone, itemNames }) {
+  const fromClass = await fetchLatestRaidByMobs(client, mobs, zone)
+  if (fromClass) return { raid: fromClass, via: 'classifications' }
+
+  const names = [...(itemNames || [])].map((n) => String(n || '').trim()).filter(Boolean)
+  if (!names.length) return { raid: null, via: null }
+
+  const samples = await Promise.all(
+    names.map(async (name) => {
+      const { data, error } = await client
+        .from('raid_loot_history')
+        .select('raid_id, raid_name, date_iso, item_name')
+        .ilike('item_name', escapeIlike(name))
+        .order('date_iso', { ascending: false, nullsFirst: false })
+        .order('id', { ascending: false })
+        .limit(1)
+      if (error) throw new Error(error.message)
+      return data?.[0] || null
+    }),
+  )
+
+  /** @type {Array<{ raid_id: string, raid_name?: string, date_iso?: string }>} */
+  const hits = samples.filter(Boolean)
+  if (!hits.length) return { raid: null, via: null }
+
+  hits.sort((a, b) => String(b.date_iso || '').localeCompare(String(a.date_iso || '')))
+  const top = hits[0]
+  return {
+    raid: {
+      raidId: String(top.raid_id),
+      raidName: top.raid_name || null,
+      dateIso: top.date_iso || null,
+    },
+    via: 'phase_items',
+  }
 }
 
 /**
