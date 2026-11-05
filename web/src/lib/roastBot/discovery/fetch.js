@@ -52,7 +52,7 @@ export function resetDiscoveryCache() {
  */
 export async function executeDiscovery(client, plan, opts = {}) {
   const query = plan.query
-  const key = fingerprintQuery(query)
+  const key = fingerprintQuery(query, opts.resolved || null)
   if (!opts.skipCache) {
     const hit = memoryCache.get(key)
     if (hit && Date.now() - hit.at < DISCOVERY_DEDUPING_MS) {
@@ -74,7 +74,7 @@ export async function executeDiscovery(client, plan, opts = {}) {
       notes: plan.notes || [],
       awards: [],
     }
-    cachePut(key, result)
+    // Do not cache clarification / failed outcomes
     return result
   }
 
@@ -260,7 +260,10 @@ export async function executeDiscovery(client, plan, opts = {}) {
     result.error = err?.message || String(err)
   }
 
-  cachePut(key, result)
+  // Cache successful results only — never replay failures or clarifications.
+  if (result.ok !== false) {
+    cachePut(key, result)
+  }
   return result
 }
 

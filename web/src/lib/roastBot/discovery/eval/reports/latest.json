@@ -1,0 +1,23 @@
+{
+  "generatedAt": "2026-11-05T19:29:19.160Z",
+  "total": 340,
+  "passed": 340,
+  "failed": 0,
+  "interpretationRate": 1,
+  "retrievalRate": 1,
+  "clarificationRate": 1,
+  "wrongEntityCount": 0,
+  "staleReuseCount": 0,
+  "unsupportedRecognizedCount": 0,
+  "metaFailures": 32,
+  "failuresByCategory": {},
+  "sampleFailures": [],
+  "gates": {
+    "corpus >= 300": true,
+    "interpretation >= 95% in-scope": true,
+    "retrieval 100% on fixture award cases": true,
+    "zero wrong-entity": true,
+    "zero stale-reuse": true,
+    "seed five-turn covered": true
+  }
+}

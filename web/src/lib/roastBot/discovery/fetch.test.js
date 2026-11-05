@@ -226,4 +226,60 @@ describe('discovery fetch', () => {
     const names = (run.result.awards || []).map((a) => a.itemName)
     assert.ok(names.every((n) => n === 'Sleeves of Temporal Force'))
   })
+
+  it('cache hit for identical query; miss when item constraint changes', async () => {
+    const callLog = []
+    const client = createDiscoveryMockClient({ callLog })
+    const ctx = {
+      knownItemSources: known,
+      itemStats: FIXTURE_ITEM_STATS,
+      skipCache: false,
+    }
+    const a1 = await runDiscovery(client, 'who got the last plate bp', ctx)
+    const callsAfterFirst = callLog.length
+    const a2 = await runDiscovery(client, 'who got the last plate bp', ctx)
+    assert.equal(callLog.length, callsAfterFirst, 'identical query should not refetch')
+    assert.equal(a1.result.awards?.[0]?.characterName, a2.result.awards?.[0]?.characterName)
+
+    const b = await runDiscovery(client, 'who got the most recent silk robe', ctx)
+    assert.ok(callLog.length > callsAfterFirst, 'changed item must miss cache and refetch')
+    assert.equal(a1.result.awards?.[0]?.characterName, 'PlateWinner')
+    assert.equal(b.result.awards?.[0]?.characterName, 'SilkWinner')
+    assert.notEqual(
+      a1.prepared.query.itemQuery,
+      b.prepared.query.itemQuery,
+    )
+  })
+
+  it('does not cache failed discovery results', async () => {
+    const { fingerprintQuery } = await import('./cacheKey.js')
+    const client = {
+      from() {
+        throw new Error('boom')
+      },
+    }
+    const prepared = prepareDiscovery('Who got Cloak of Wishes?', { knownItemSources: known })
+    assert.ok(prepared?.plan)
+    const result = await executeDiscovery(client, prepared.plan, {
+      knownItemSources: known,
+      resolved: prepared.resolved,
+      skipCache: false,
+    })
+    assert.equal(result.ok, false)
+    const key = fingerprintQuery(prepared.query, prepared.resolved)
+    // Second call should attempt again (not serve cached failure). Spy via fresh throw.
+    let hits = 0
+    const client2 = {
+      from() {
+        hits += 1
+        throw new Error('boom2')
+      },
+    }
+    await executeDiscovery(client2, prepared.plan, {
+      knownItemSources: known,
+      resolved: prepared.resolved,
+      skipCache: false,
+    })
+    assert.equal(hits, 1, `failed key ${key} must not short-circuit fetch`)
+  })
 })

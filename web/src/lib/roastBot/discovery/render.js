@@ -72,8 +72,10 @@ export function renderDiscovery(result) {
     case 'boss_raid_loot':
       ;({ factText, links, table } = renderRaidLoot(result, referenced))
       break
-    case 'item_recipients':
     case 'item_last':
+      ;({ factText, links, table } = renderLastAward(result, referenced))
+      break
+    case 'item_recipients':
     case 'has_won':
       ;({ factText, links, table } = renderRecipients(result, referenced))
       break
@@ -176,6 +178,63 @@ function renderRaidLoot(result, referenced) {
     factText: `${header}${trunc}`,
     links: [],
     table: { columns: AWARD_COLUMNS, rows },
+  }
+}
+
+/**
+ * Singular-first answer for "who got the last / most recent X".
+ * @param {import('./types.js').DiscoveryResult} result
+ * @param {object} referenced
+ */
+function renderLastAward(result, referenced) {
+  const awards = result.awards || []
+  const item = result.query?.itemQuery || awards[0]?.itemName || 'item'
+  referenced.items.push(item)
+  const itemLinks = buildLinks({ itemName: item })
+
+  // Boss/zone + slot multi-item last awards (compositional selector)
+  const multiFilter =
+    (result.query?.boss || result.query?.zone || result.query?.phase) &&
+    result.query?.slot &&
+    !lookupNamedItem(result.query?.itemQuery)
+
+  if (multiFilter) {
+    return renderCatalogWindowAwards(result, referenced)
+  }
+
+  if (!awards.length) {
+    return {
+      factText: `No recorded awards found for ${item}.`,
+      links: itemLinks,
+      table: null,
+    }
+  }
+
+  const most = awards[0]
+  const recipient = most.characterName || most.assignedCharacterName || 'unknown'
+  if (most.characterName) referenced.characters.push(most.characterName)
+  if (most.raidId) referenced.raids.push({ id: most.raidId, name: most.raidName || most.raidId })
+
+  let factText = `Last recorded award of ${item}: ${recipient} on ${truncateDateIso(most.dateIso)}`
+  if (most.raidName || most.raidId) {
+    factText += ` (${most.raidName || most.raidId})`
+  }
+  factText += '.'
+
+  // Optional short history after the singular answer — not the primary framing.
+  const prior = awards.slice(1, 4)
+  /** @type {ReturnType<typeof formatRecipientRow>[]} */
+  const rows = [formatRecipientRow(most, referenced), ...prior.map((a) => formatRecipientRow(a, referenced))]
+  if (prior.length) {
+    factText += `\nEarlier recorded awards:`
+  }
+  factText +=
+    '\nThese are recorded DKP awards/recipients, not independently proven in-game drop events.'
+
+  return {
+    factText,
+    links: itemLinks,
+    table: { columns: RECIPIENT_COLUMNS, rows },
   }
 }
 

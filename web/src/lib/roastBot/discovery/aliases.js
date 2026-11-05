@@ -38,6 +38,9 @@ export const PHASE_ALIASES = {
   'phase three': 'P3',
   'p3 guardian': 'P3 Guardian',
   'phase 3 guardian': 'P3 Guardian',
+  p4: 'P4',
+  'phase 4': 'P4',
+  'phase four': 'P4',
 }
 
 /** Mobs treated as Phase-3 identifiable loot labels (item_sources / classifications). */
@@ -68,6 +71,7 @@ export const SLOT_ALIASES = {
   pauldrons: 'SHOULDERS',
   pauldron: 'SHOULDERS',
   arms: 'ARMS',
+  arm: 'ARMS',
   sleeves: 'ARMS',
   sleeve: 'ARMS',
   wrists: 'WRIST',

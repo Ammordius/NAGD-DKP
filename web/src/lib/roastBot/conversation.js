@@ -320,30 +320,35 @@ export function handleMessage({
   }
   state.lastSubject = charSel?.name || state.lastSubject
 
-  if (intent === INTENTS.LOOT_DISCOVERY && discoveryResult?.ok !== false) {
+  // Only persist successful, executable discovery context — never from unsupported/failed turns,
+  // and never retain a prior primary when the current result has neither awards nor a raid.
+  if (
+    intent === INTENTS.LOOT_DISCOVERY &&
+    discoveryResult?.ok !== false &&
+    discoveryRecognition?.status !== 'unsupported' &&
+    discoveryResult?.query
+  ) {
     const awards = discoveryResult?.awards || []
     const primaryAward = awards[0] || null
-    const q = discoveryResult?.query || discoveryRecognition?.query || null
-    if (q) {
-      state.lastDiscovery = {
-        query: q,
-        primary: primaryAward
+    const q = discoveryResult.query
+    state.lastDiscovery = {
+      query: q,
+      primary: primaryAward
+        ? {
+            itemName: primaryAward.itemName || null,
+            characterName: primaryAward.characterName || primaryAward.assignedCharacterName || null,
+            raidId: primaryAward.raidId || null,
+            dateIso: primaryAward.dateIso || null,
+          }
+        : discoveryResult?.raid
           ? {
-              itemName: primaryAward.itemName || null,
-              characterName: primaryAward.characterName || primaryAward.assignedCharacterName || null,
-              raidId: primaryAward.raidId || null,
-              dateIso: primaryAward.dateIso || null,
+              itemName: null,
+              characterName: null,
+              raidId: discoveryResult.raid.raidId,
+              dateIso: discoveryResult.raid.dateIso || null,
             }
-          : discoveryResult?.raid
-            ? {
-                itemName: null,
-                characterName: null,
-                raidId: discoveryResult.raid.raidId,
-                dateIso: discoveryResult.raid.dateIso || null,
-              }
-            : state.lastDiscovery?.primary || null,
-        recognition: discoveryRecognition || null,
-      }
+          : null,
+      recognition: discoveryRecognition || null,
     }
   }
 

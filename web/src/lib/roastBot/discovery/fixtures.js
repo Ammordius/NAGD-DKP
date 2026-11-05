@@ -12,6 +12,8 @@ export const FIXTURE_ITEM_SOURCES = {
   'quarm tooth': [{ mob: 'Quarm', zone: 'Plane of Time' }],
   'band of the eternal': [{ mob: 'Quarm', zone: 'Plane of Time' }],
   'blazing whip of trillia': [{ mob: 'Fennin_Ro_the_Tyrant_of_Fire', zone: 'Plane of Fire' }],
+  'timeless breastplate mold': [{ mob: 'P3', zone: 'Plane of Time' }],
+  'timeless silk robe pattern': [{ mob: 'P3', zone: 'Plane of Time' }],
 }
 
 /** Conflicting dkp_mob_loot-style rows (should NOT override P3 for discovery). */
@@ -20,6 +22,16 @@ export const FIXTURE_MOB_LOOT = {
     mob: 'A_Deadly_Warboar',
     zone: 'Plane of Time',
     loot: [
+      { item_id: 21997, name: 'Cloak of Wishes' },
+      { item_id: 68217, name: 'Ossein of Limitless Time' },
+    ],
+  },
+  'P3|Plane of Time': {
+    mob: 'P3',
+    zone: 'Plane of Time',
+    loot: [
+      { item_id: 16375, name: 'Timeless Breastplate Mold' },
+      { item_id: 16384, name: 'Timeless Silk Robe Pattern' },
       { item_id: 21997, name: 'Cloak of Wishes' },
       { item_id: 68217, name: 'Ossein of Limitless Time' },
     ],
@@ -80,6 +92,16 @@ export const FIXTURE_ITEM_STATS = {
     slot: 'PRIMARY',
     classes: 'ALL',
   },
+  '16375': {
+    name: 'Timeless Breastplate Mold',
+    slot: 'CHEST',
+    classes: 'WAR PAL SHD CLR BRD',
+  },
+  '16384': {
+    name: 'Timeless Silk Robe Pattern',
+    slot: 'CHEST',
+    classes: 'NEC WIZ MAG ENC',
+  },
 }
 
 export const FIXTURE_RAIDS = [
@@ -88,6 +110,9 @@ export const FIXTURE_RAIDS = [
   { raid_id: 'r-time-mixed', raid_name: 'Time P1-P3 + Gods', date_iso: '2026-02-20' },
   { raid_id: 'r-time-p3', raid_name: 'Time P3', date_iso: '2026-02-10' },
   { raid_id: 'r-quarm', raid_name: 'Quarm', date_iso: '2026-02-25' },
+  // Dated before r-time-mixed so "P3 last time" still selects the mixed night for EP-god filter tests
+  { raid_id: 'r-molds-new', raid_name: 'Time Molds Recent', date_iso: '2026-02-18' },
+  { raid_id: 'r-molds-old', raid_name: 'Time Molds Older', date_iso: '2026-01-20' },
   { raid_id: 'r-empty', raid_name: 'Fire empty', date_iso: '2025-12-01' },
 ]
 
@@ -100,6 +125,8 @@ export const FIXTURE_CLASSIFICATIONS = [
   { raid_id: 'r-time-mixed', mob: 'Cazic_Thule', zone: 'Plane of Time' },
   { raid_id: 'r-time-p3', mob: 'P3', zone: 'Plane of Time' },
   { raid_id: 'r-quarm', mob: 'Quarm', zone: 'Plane of Time' },
+  { raid_id: 'r-molds-new', mob: 'P3', zone: 'Plane of Time' },
+  { raid_id: 'r-molds-old', mob: 'P3', zone: 'Plane of Time' },
 ]
 
 /** Loot rows keyed by raid_id (assignment view shape). */
@@ -185,6 +212,42 @@ export const FIXTURE_LOOT_BY_RAID = {
       character_name: 'Helen',
       char_id: 'c11',
       cost: '75',
+    },
+  ],
+  'r-molds-new': [
+    {
+      id: 20,
+      raid_id: 'r-molds-new',
+      item_name: 'Timeless Breastplate Mold',
+      character_name: 'PlateWinner',
+      char_id: 'c20',
+      cost: '200',
+    },
+    {
+      id: 21,
+      raid_id: 'r-molds-new',
+      item_name: 'Timeless Silk Robe Pattern',
+      character_name: 'SilkWinner',
+      char_id: 'c21',
+      cost: '180',
+    },
+  ],
+  'r-molds-old': [
+    {
+      id: 22,
+      raid_id: 'r-molds-old',
+      item_name: 'Timeless Breastplate Mold',
+      character_name: 'OldPlate',
+      char_id: 'c22',
+      cost: '190',
+    },
+    {
+      id: 23,
+      raid_id: 'r-molds-old',
+      item_name: 'Timeless Silk Robe Pattern',
+      character_name: 'OldSilk',
+      char_id: 'c23',
+      cost: '170',
     },
   ],
 }

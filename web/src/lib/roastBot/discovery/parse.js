@@ -112,10 +112,13 @@ export function recognizeDiscovery(raw, opts = {}) {
   // Fragment with no prior and no intent cue → not discovery (unless boss+slot / last+entity)
   const fragmentOk =
     hasEntity &&
-    (/\b(last|drop|dropped|won|got|received|loot|award|awarded|ring|rings)\b/.test(text) ||
+    (/\b(last|latest|most recent|drop|dropped|looted|won|got|received|loot|award|awarded|ring|rings)\b/.test(
+      text,
+    ) ||
       Boolean(entities.boss && entities.slot) ||
+      Boolean(entities.phase && entities.slot) ||
       /^\s*last\b/.test(text) ||
-      /\bwhat about\b/.test(text))
+      /\bwhat about\b|\bhow about\b/.test(text))
 
   if (!intentCue && !fragmentOk) {
     return { status: 'not_discovery' }
@@ -167,24 +170,49 @@ function isPersonalRoast(text) {
  * @param {string} text
  * @returns {string|null} cue tag
  */
+/** Conservative verb-typo set for recipient cues only (not item fuzzy match). */
+const WHO_GOT_RE = /\bwho (got|won|received|go|gott|looted)\b/
+
+function hasLastTemporalCue(text) {
+  return /\bthe last\b|\blast\b|\bmost recent\b|\blatest\b/.test(text)
+}
+
 function detectIntentCue(text) {
   if (/\bwhat can\b/.test(text) && /\bdrop\b/.test(text)) return 'catalog'
-  if (/\bhow many times\b/.test(text)) return 'count'
+  if (/\bhow many times\b/.test(text) || /\bhow many times was\b.+\bawarded\b/.test(text)) return 'count'
+  if (/^\s*show\b.+\b(raid|loot)\b/.test(text) || /\blast\b.+\braid\b/.test(text)) return 'what_dropped'
   if (/\bhas\b.+\bever\b.+\b(won|got|gotten|received)\b/.test(text)) return 'has_won'
   if (/\bdid\s+\w+\s+ever\s+(get|got|win|won|receive)\b/.test(text)) return 'has_won'
-  if (/\bwho (got|won|received)\b/.test(text)) return 'who_got'
+  if (WHO_GOT_RE.test(text)) return 'who_got'
   if (WHEN_LAST_TIME_RE.test(text) || WHEN_DID_RE.test(text)) return 'when_last'
+  // "what did Quarm drop last time" — boss drop, not character awards
+  if (/\bwhat did\b.+\bdrop\b/.test(text)) return 'what_dropped'
   if (/\blast time\b.*\b(drop|dropped|in |pof|potime|p3|fire|time)\b/.test(text)) return 'what_dropped'
-  if (/\bwhat dropped\b/.test(text) || /\bdropped (last time|in p3|in potime|in time|in pof|in fire)\b/.test(text)) {
+  if (/\bdrop(?:ped)?\b.*\blast time\b/.test(text)) return 'what_dropped'
+  if (/\bwhat (?:was |were )?(?:dropped|looted)\b/.test(text) || /\b(?:dropped|looted) (last time|in p3|in potime|in time|in pof|in fire)\b/.test(text)) {
     return 'what_dropped'
   }
   if (/\bdropped off\b|\bdrop(?:ped)? off\b/.test(text)) return 'dropped_off'
   if (/\bwhat did\b.+\bget\b/.test(text) || /\bwhat has\b.+\bwon\b/.test(text)) return 'character_awards'
+  // "last Quarm loot" / "last PoF loot" — raid-night style
+  if (/^\s*last\b/.test(text) && /\bloot\b/.test(text)) return 'what_dropped'
   if (/\blast (drop|award|time)\b/.test(text)) return 'when_last'
-  if (/^\s*last\b/.test(text) && /\b(drop|ring|award|shoulder|arm|leg|boot|wrist|neck|ear|face|back|waist|hand|finger)\b/.test(text)) {
+  // "most recent X" / "latest X" / "last plate bp" item fragments
+  if (
+    (/^\s*(most recent|latest|last)\b/.test(text) || /\b(most recent|latest)\b/.test(text)) &&
+    (looksLikeMoldPhrase(text) ||
+      lookupItemAlias(text)?.name ||
+      /\b(drop|ring|award|shoulder|arm|leg|boot|wrist|neck|ear|face|back|waist|hand|finger|bp|robe|mold|pattern|cloak)\b/.test(
+        text,
+      ))
+  ) {
     return 'when_last'
   }
-  if (/\bwhat about\b/.test(text)) return 'what_about'
+  if (/^\s*last\b/.test(text) && /\b(drop|ring|award|shoulder|arm|leg|boot|wrist|neck|ear|face|back|waist|hand|finger|bp|robe|mold|pattern)\b/.test(text)) {
+    return 'when_last'
+  }
+  if (/\bdid\b.+\bdrop(?:ped)?\s+recently\b|\bdrop(?:ped)?\s+recently\b/.test(text)) return 'when_last'
+  if (/\bwhat about\b|\bhow about\b/.test(text)) return 'what_about'
   return null
 }
 
@@ -320,11 +348,11 @@ function buildQueryFromEntities(text, entities, cue) {
     })
   }
 
-  // Who got (the last) ITEM?
+  // Who got (the last / most recent) ITEM?
   if (cue === 'who_got') {
-    const last = /\bthe last\b|\blast\b/.test(text)
+    const last = hasLastTemporalCue(text)
     // Boss+slot without named item → last_award over catalog selector
-    if (boss && (slot || classesHint) && !lookupItemAlias(text)?.name) {
+    if (boss && (slot || classesHint) && !lookupItemAlias(text)?.name && !looksLikeMoldPhrase(text)) {
       return finalizeQuery({
         ...base,
         intent: last ? 'last_award' : 'recipients',
@@ -375,7 +403,7 @@ function buildQueryFromEntities(text, entities, cue) {
     })
   }
 
-  // Dropped off BOSS / what dropped … boss
+  // Dropped off BOSS / what dropped … boss / last BOSS loot
   if ((cue === 'dropped_off' || cue === 'what_dropped') && boss && !slot && !classesHint) {
     return finalizeQuery({
       ...base,
@@ -408,7 +436,7 @@ function buildQueryFromEntities(text, entities, cue) {
       })
     }
     if (phase || zone) {
-      const lastTimeCue = /\blast time\b/.test(text)
+      const lastTimeCue = /\blast time\b/.test(text) || /^\s*last\b/.test(text)
       return finalizeQuery({
         ...base,
         intent: 'list_awards',
@@ -513,6 +541,7 @@ export function deriveFamily(intent, scope, filters) {
 
 /**
  * Merge a fragment follow-up onto a previous StructuredQuery.
+ * Parses the new utterance independently first; inherits only non-conflicting prior filters.
  * @param {string} text
  * @param {import('./types.js').StructuredQuery} prev
  * @param {object|null} primary
@@ -523,26 +552,84 @@ function tryMergeFollowUp(text, prev, primary, nowIso) {
   const t = normalizeDiscoveryText(text)
   if (isPersonalRoast(t)) return { status: 'not_discovery' }
 
-  const timeRange = extractTimeRange(t, nowIso)
-  const phase = resolvePhaseAlias(t)
-  const zone = extractZone(t, phase)
-  const boss = extractBoss(t)
-  const slot = resolveSlotAlias(t)
-  const classesHint = resolveClassesHint(t)
-  const character = extractCharacter(t) || extractBareCharacterFollowUp(t)
+  // Parse new text independently so molds/items are not invisible to merge.
+  const entities = extractEntities(t, nowIso)
+  const timeRange = entities.timeRange
+  const phase = entities.phase
+  const boss = entities.boss
+  const slot = entities.slot
+  const classesHint = entities.classesHint
+  const character = entities.character || extractBareCharacterFollowUp(t)
+  // Short follow-ups like "Actually, PoF." may not match "in PoF" extractors.
+  const zone =
+    entities.zone ||
+    resolveZoneAlias(
+      t
+        .replace(/^(actually|how about|what about|and)\s+/i, '')
+        .replace(/[?.!]+$/g, '')
+        .trim(),
+    )
   const pronoun = /\b(it|that|them)\b/.test(t)
-  const whoGot = /\bwho (got|won|received)\b/.test(t)
+  const whoGot = WHO_GOT_RE.test(t)
   const howMany = /\bhow many times\b/.test(t)
-  const whatAbout = /\bwhat about\b|\bhow about\b|^and\b/.test(t)
-  const onlyTime = Boolean(timeRange) && !boss && !slot && !phase && !zone && !character && !whoGot && !howMany
-  const onlySlot = Boolean(slot) && !boss && !phase && !zone && !character && !whoGot && !howMany
+  const whatAbout = /\bwhat about\b|\bhow about\b|^and\b|\bactually\b/.test(t)
+  const lastCue = hasLastTemporalCue(t)
+
+  // Explicit item = mold phrase or named alias — not pronouns, not slot-only "finger"/"rings".
+  const moldQ = extractMoldItemQuery(t)
+  const aliasName = lookupItemAlias(t)?.name || entities.itemAlias?.name || null
+  const rawItem = entities.itemQuery
+  const isPronounItem = Boolean(rawItem && /^(it|that|them)$/i.test(String(rawItem).trim()))
+  const explicitNewItem = Boolean(
+    !isPronounItem &&
+      (moldQ ||
+        aliasName ||
+        (rawItem && looksLikeMoldPhrase(rawItem)) ||
+        (rawItem &&
+          !resolveSlotAlias(rawItem) &&
+          String(rawItem).trim().split(/\s+/).length >= 2 &&
+          !/^(it|that|them)$/i.test(rawItem))),
+  )
+  const newItemQuery = aliasName || moldQ || (explicitNewItem ? rawItem : null)
+
+  // Bare "Actually, PoF." / zone-only follow-ups — resolveZoneAlias on short replies
+  const zoneOnlyFollowUp =
+    !boss &&
+    !slot &&
+    !phase &&
+    !character &&
+    !explicitNewItem &&
+    !whoGot &&
+    !howMany &&
+    Boolean(zone || resolveZoneAlias(t.replace(/^(actually|how about|what about)\s+/i, '').trim()))
+
+  const onlyTime =
+    Boolean(timeRange) &&
+    !boss &&
+    !slot &&
+    !phase &&
+    !zone &&
+    !character &&
+    !explicitNewItem &&
+    !whoGot &&
+    !howMany
+  const onlySlot =
+    Boolean(slot) &&
+    !boss &&
+    !phase &&
+    !zone &&
+    !character &&
+    !explicitNewItem &&
+    !whoGot &&
+    !howMany
   const fragment =
     whatAbout ||
     onlyTime ||
     onlySlot ||
     whoGot ||
     howMany ||
-    Boolean(character && /^and\b|\bwhat about\b/.test(t)) ||
+    zoneOnlyFollowUp ||
+    Boolean(character && /^and\b|\bwhat about\b|\bhow about\b/.test(t)) ||
     (pronoun && (whoGot || howMany || whatAbout))
 
   if (!fragment && !whoGot && !howMany) return null
@@ -556,47 +643,73 @@ function tryMergeFollowUp(text, prev, primary, nowIso) {
 
   if (boss) {
     next.boss = boss
-    next.itemQuery = null
+    if (!explicitNewItem) next.itemQuery = null
   }
   if (zone) {
     next.zone = zone
-    next.itemQuery = null
+    if (!explicitNewItem) next.itemQuery = null
   }
   if (phase) {
     next.phase = phase
     next.zone = next.zone || 'Plane of Time'
-    next.itemQuery = null
+    if (!explicitNewItem) next.itemQuery = null
   }
-  if (slot) {
+
+  // Explicit new item/mold replaces prior item identity (never silently keep old item).
+  if (explicitNewItem) {
+    next.itemQuery = newItemQuery
+    next.slot = slot || null
+    next.classesHint = classesHint || null
+    // Named/mold item questions are about that item, not inherited boss raid scope.
+    if (whoGot || whatAbout || looksLikeMoldPhrase(newItemQuery) || lookupItemAlias(newItemQuery)?.name) {
+      next.boss = boss || null
+      if (!boss) {
+        // Keep zone/phase only when the new utterance restated them.
+        if (!zone) next.zone = null
+        if (!phase) next.phase = null
+      }
+    }
+  } else if (slot) {
     next.slot = slot
     // Changing slot clears prior single-item binding
     next.itemQuery = null
   }
-  if (classesHint) next.classesHint = classesHint
+
+  if (classesHint && !explicitNewItem) next.classesHint = classesHint
   if (character) next.character = character
   if (timeRange) next.timeRange = timeRange
 
-  if (whoGot || (pronoun && whoGot)) {
-    next.intent = 'recipients'
+  if (whoGot) {
+    next.intent = lastCue ? 'last_award' : 'recipients'
     next.scope = 'history'
-    if (pronoun && primary?.itemName) {
+    if (explicitNewItem) {
+      // already set itemQuery above
+    } else if (pronoun && primary?.itemName) {
       next.itemQuery = primary.itemName
       next.slot = null
     } else if (pronoun && prev.itemQuery) {
       next.itemQuery = prev.itemQuery
     }
+    // who got without pronoun or new item: keep inherited itemQuery from prev
     next.limit = RECIPIENT_LIMIT
   } else if (howMany) {
     next.intent = 'count'
     next.scope = 'history'
-    if (pronoun && primary?.itemName) next.itemQuery = primary.itemName
+    if (explicitNewItem) {
+      // keep new item
+    } else if (pronoun && primary?.itemName) next.itemQuery = primary.itemName
     else if (pronoun && prev.itemQuery) next.itemQuery = prev.itemQuery
     next.limit = 1
   } else if (onlyTime) {
     // Keep prior intent; widen to history window
     next.scope = 'history'
     next.mostRecentRaidFirst = false
-  } else if (onlySlot || (whatAbout && slot)) {
+  } else if (explicitNewItem && (whatAbout || looksLikeMoldPhrase(newItemQuery))) {
+    next.intent = 'last_award'
+    next.scope = 'history'
+    next.limit = RECIPIENT_LIMIT
+    next.mostRecentRaidFirst = false
+  } else if (onlySlot || (whatAbout && slot && !explicitNewItem)) {
     next.intent = 'last_award'
     next.scope = 'history'
     next.limit = RECIPIENT_LIMIT
@@ -604,12 +717,47 @@ function tryMergeFollowUp(text, prev, primary, nowIso) {
     next.intent = 'list_awards'
     next.scope = 'history'
   } else if (whatAbout && (boss || slot || phase || zone)) {
-    next.intent = next.boss && next.slot ? 'last_award' : prev.intent
-    next.scope = next.boss && next.slot ? 'history' : prev.scope
+    if (zone && !boss && !slot && !phase && !explicitNewItem) {
+      next.boss = null
+      next.itemQuery = null
+      next.intent = 'list_awards'
+      next.scope = 'last_raid_night'
+      next.mostRecentRaidFirst = true
+    } else {
+      next.intent = next.boss && next.slot ? 'last_award' : prev.intent
+      next.scope = next.boss && next.slot ? 'history' : prev.scope
+    }
+  } else if (zoneOnlyFollowUp && zone) {
+    next.zone = zone
+    next.boss = null
+    next.itemQuery = null
+    next.intent = 'list_awards'
+    next.scope = 'last_raid_night'
+    next.mostRecentRaidFirst = true
   }
 
   next.family = deriveFamily(next.intent, next.scope, next)
   next.mostRecentRaidFirst = next.scope === 'last_raid_night'
+
+  // User tried to name something (what about X) but we could not extract a replacement entity.
+  if (
+    whatAbout &&
+    !explicitNewItem &&
+    !boss &&
+    !slot &&
+    !phase &&
+    !zone &&
+    !character &&
+    !timeRange &&
+    !pronoun
+  ) {
+    return {
+      status: 'unsupported',
+      reason:
+        'I could not tell which item, boss, zone, phase, slot, or character you meant. Name one explicitly.',
+      missing: ['filters'],
+    }
+  }
 
   if (!next.boss && !next.zone && !next.phase && !next.slot && !next.itemQuery && !next.character) {
     return {
@@ -647,6 +795,10 @@ function buildSlotConstrainedQuery(text, ctx) {
  */
 function extractZone(text, phase) {
   const t = normalizeDiscoveryText(text)
+  // "last Time loot" means Plane of Time raid loot — not the temporal idiom "last time"
+  if (/\blast\s+time\s+loot\b/.test(t) || /\blast\s+plane of time\b/.test(t)) {
+    return 'Plane of Time'
+  }
   // Strip "last time" so bare "time" alias is not false-triggered by that phrase alone
   const stripped = t.replace(/\blast time\b/g, ' ').replace(/\s+/g, ' ').trim()
 
@@ -690,6 +842,11 @@ function extractBoss(text) {
     const b = resolveBossAlias(can[1].trim())
     if (b) return b
   }
+  const whatDidDrop = t.match(/\bwhat did\s+([a-z][a-z0-9_ ']+?)\s+drop\b/)
+  if (whatDidDrop) {
+    const b = resolveBossAlias(whatDidDrop[1].trim())
+    if (b) return b
+  }
   const whenDid = t.match(/\bwhen did\s+([a-z][a-z0-9_ ']+?)\s+last\s+drop\b/)
   if (whenDid) {
     const b = resolveBossAlias(whenDid[1].trim())
@@ -730,8 +887,21 @@ function extractItemQuery(text, ctx) {
   const moldQ = extractMoldItemQuery(t)
   if (moldQ) return moldQ
 
-  const who = t.match(/\bwho (?:got|won|received)(?:\s+the\s+last)?\s+(.+?)(?:\s*\?|$)/)
+  const who = t.match(
+    /\bwho (?:got|won|received|go|gott|looted)(?:\s+the)?(?:\s+(?:last|most recent|latest))?\s+(.+?)(?:\s*\?|$)/,
+  )
   if (who) return cleanItemFragment(who[1], ctx)
+
+  const whoMostRecently = t.match(
+    /\bwho (?:got|won|received|looted)\s+(.+?)\s+most recently\b/,
+  )
+  if (whoMostRecently) return cleanItemFragment(whoMostRecently[1], ctx)
+
+  const latestRecipient = t.match(/^\s*(?:latest|most recent)\s+(.+?)\s+recipient\b/)
+  if (latestRecipient) return cleanItemFragment(latestRecipient[1], ctx)
+
+  const timesAwarded = t.match(/\bhow many times was\s+(.+?)\s+awarded\b/)
+  if (timesAwarded) return cleanItemFragment(timesAwarded[1], ctx)
 
   const when = t.match(/\bwhen(?:'?s| is| was)? the last time\s+(.+?)\s+dropped\b/)
   if (when) return cleanItemFragment(when[1], ctx)
@@ -770,7 +940,7 @@ function extractItemQuery(text, ctx) {
  */
 function cleanItemFragment(frag, ctx) {
   let s = normalizeDiscoveryText(frag)
-  s = s.replace(/\b(the last|last)\b/g, ' ')
+  s = s.replace(/\b(the last|last|most recent|latest)\b/g, ' ')
   s = s.replace(/\b(drop|dropped|award|awarded)\b/g, ' ')
   if (ctx.character) {
     s = s.replace(new RegExp(`\\b${escapeRe(normAliasKey(ctx.character))}\\b`, 'g'), ' ')
@@ -783,7 +953,12 @@ function cleanItemFragment(frag, ctx) {
 }
 
 function extractAfterWhoGot(text) {
-  const m = normalizeDiscoveryText(text).match(/\bwho (?:got|won|received)(?:\s+the\s+last)?\s+(.+)/)
+  const t = normalizeDiscoveryText(text)
+  const mostRecently = t.match(/\bwho (?:got|won|received|looted)\s+(.+?)\s+most recently\b/)
+  if (mostRecently) return cleanItemFragment(mostRecently[1], {})
+  const m = t.match(
+    /\bwho (?:got|won|received|go|gott|looted)(?:\s+the)?(?:\s+(?:last|most recent|latest))?\s+(.+)/,
+  )
   return m ? cleanItemFragment(m[1], {}) : null
 }
 
