@@ -3,6 +3,8 @@
  * Character/class/item entity resolution is separate from intent detection.
  */
 
+import { softMatchNames } from './discovery/fuzzy.js'
+
 export const INTENTS = {
   GREETING: 'greeting',
   GENERAL_ROAST: 'general_roast',
@@ -250,7 +252,13 @@ function isLikelyClarificationReply(text, matchedCharacter) {
 function isBareCharacterName(text, matchedCharacter) {
   const name = normalizeMessage(matchedCharacter.name || matchedCharacter.displayName || '')
   if (!name) return false
-  return text === name || text === `my ${name}`
+  if (text === name || text === `my ${name}`) return true
+  // Soft-matched typo of the same toon (e.g. "andiyen" → Tandiyen)
+  if (!/\s/.test(text) && text.length >= 4) {
+    const soft = softMatchNames(text, [{ name: matchedCharacter.name || matchedCharacter.displayName || '' }])
+    if (soft?.unique) return true
+  }
+  return false
 }
 
 /**
@@ -267,6 +275,22 @@ export function matchCharacterMention(text, characters) {
     const name = normalizeMessage(ch.name || ch.displayName || '')
     if (name && (normalized === name || new RegExp(`\\b${escapeRegExp(name)}\\b`).test(normalized))) {
       return ch
+    }
+  }
+  // Bare single-token typo → unique soft match (e.g. "andiyen" → Tandiyen). Not used mid-sentence.
+  if (normalized && !/\s/.test(normalized) && normalized.length >= 4 && !isCharacterPronoun(normalized)) {
+    const soft = softMatchNames(
+      normalized,
+      (characters || []).map((c) => ({
+        name: c.name || c.displayName || '',
+        itemId: c.char_id ?? null,
+      })),
+    )
+    if (soft?.unique?.name) {
+      const hit = (characters || []).find(
+        (c) => normalizeMessage(c.name || c.displayName || '') === normalizeMessage(soft.unique.name),
+      )
+      if (hit) return hit
     }
   }
   const classMap = {
@@ -485,6 +509,20 @@ export function extractSubjectCharacterName(raw, opts = {}) {
   return null
 }
 
+/**
+ * Reject item pronouns and character pronouns so "for him" is not an item hint.
+ * @param {string|null|undefined} hint
+ */
+function isUsableItemHint(hint) {
+  if (!hint) return false
+  const t = String(hint).trim()
+  if (!t) return false
+  const lower = t.toLowerCase()
+  if (PRONOUN_ITEMS.has(lower)) return false
+  if (isCharacterPronoun(t)) return false
+  return true
+}
+
 function extractQuotedOrTrailingItem(text) {
   const quoted = text.match(/["']([^"']{2,80})["']/)
   if (quoted) return quoted[1].trim()
@@ -493,7 +531,7 @@ function extractQuotedOrTrailingItem(text) {
   )
   if (howMuch) {
     const hint = howMuch[1].replace(/\?+$/, '').trim()
-    if (hint && !PRONOUN_ITEMS.has(hint.toLowerCase())) return hint
+    if (isUsableItemHint(hint)) return hint
     return null
   }
   const afford = text.match(
@@ -501,17 +539,17 @@ function extractQuotedOrTrailingItem(text) {
   )
   if (afford) {
     const hint = afford[1].replace(/\?+$/, '').trim()
-    if (hint && !PRONOUN_ITEMS.has(hint.toLowerCase())) return hint
+    if (isUsableItemHint(hint)) return hint
   }
   const about = text.match(/(?:about|find|lookup|look up|search|for)\s+(.{3,80})$/i)
   if (about) {
     const hint = about[1].trim()
-    if (hint && !PRONOUN_ITEMS.has(hint.toLowerCase())) return hint
+    if (isUsableItemHint(hint)) return hint
   }
   const where = text.match(/(?:where does|where do|source (?:of|for))\s+(.+?)(?:\s+drop|\s+come)?$/i)
   if (where) {
     const hint = where[1].replace(/\?+$/, '').trim()
-    if (hint && !PRONOUN_ITEMS.has(hint.toLowerCase())) return hint
+    if (isUsableItemHint(hint)) return hint
   }
   return null
 }

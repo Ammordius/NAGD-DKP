@@ -107,6 +107,23 @@ describe('character spend / eligibility / stats intents', () => {
     assert.equal(out.intent, INTENTS.UNKNOWN)
   })
 
+  it('soft-matches bare typo andiyen → Tandiyen', () => {
+    const withTand = [...chars, { char_id: 't1', name: 'Tandiyen', class_name: 'Shadow Knight' }]
+    const out = classifyIntent('andiyen', { characters: withTand })
+    assert.equal(out.matchedCharacter?.name, 'Tandiyen')
+    assert.equal(out.intent, INTENTS.FOLLOWUP)
+    assert.equal(out.bareCharacterName, true)
+  })
+
+  it('does not treat for him as an item hint on upgrades', () => {
+    const out = classifyIntent('what would be a good upgrade for him', {
+      characters: chars,
+      lastSubject: 'Iaminae',
+    })
+    assert.equal(out.intent, INTENTS.UPGRADES)
+    assert.equal(out.matchedItemHint, null)
+  })
+
   it('isCharacterSwapFollowUp only after repeatable character intents', () => {
     assert.equal(isRepeatableCharacterSwapIntent(INTENTS.GEAR_ASSESSMENT), true)
     assert.equal(isRepeatableCharacterSwapIntent(INTENTS.WHO_IS), true)

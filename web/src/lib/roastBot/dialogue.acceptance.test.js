@@ -929,6 +929,65 @@ describe('loot discovery dialogue regression', () => {
     assert.doesNotMatch(second.response.text, /psychic services/i)
   })
 
+  it('andiyen typo then upgrade for him resolves Tandiyen upgrades not Shim items', () => {
+    const facts = fixtureFacts({
+      characters: [
+        { char_id: 'e1', name: 'Iaminae', class_name: 'Enchanter' },
+        { char_id: 't1', name: 'Tandiyen', class_name: 'Shadow Knight' },
+      ],
+      itemCatalog: [
+        { name: 'Glowing Steel Shim', itemId: 701 },
+        { name: 'Shimmering Sleeves of Flame', itemId: 702 },
+        { name: 'Bulwark of Shimmering Steel', itemId: 703 },
+        { name: 'Beguiler Circlet', itemId: 501 },
+      ],
+    })
+    const rankings = {
+      ...rankingsFixture,
+      characters: [
+        ...rankingsFixture.characters,
+        {
+          name: 'Tandiyen',
+          class: 'Shadow Knight',
+          overall_score: 700,
+          inventory: [{ slot_id: 2, item_id: 100, item_name: 'Old Circlet' }],
+        },
+      ],
+      classWeights: {
+        ...rankingsFixture.classWeights,
+        'Shadow Knight': { ac_pct: 1, hp_pct: 1, mana_pct: 0, resists_pct: 0 },
+      },
+    }
+    const upgradeContext = {
+      rankings,
+      itemStats: itemStatsFixture,
+      raidItemIds: new Set([100, 501]),
+    }
+
+    let state = createConversationState()
+    const select = handleMessage({
+      text: 'andiyen',
+      facts,
+      state,
+      rng: () => 0,
+    })
+    assert.equal(select.state.selectedCharacterId, 't1')
+    assert.equal(select.state.lastSubject, 'Tandiyen')
+    state = select.state
+
+    const upgrade = handleMessage({
+      text: 'what would be a good upgrade for him',
+      facts,
+      state,
+      upgradeContext,
+      rng: () => 0,
+    })
+    assert.equal(upgrade.intent, INTENTS.UPGRADES)
+    assert.notEqual(upgrade.response.templateId, 'AMBIGUOUS_ITEM')
+    assert.doesNotMatch(upgrade.response.text, /Glowing Steel Shim|Shimmering Sleeves|Which item\?/i)
+    assert.match(upgrade.response.text, /Tandiyen/i)
+  })
+
   it('is he raid ready with no sticky subject asks for a character name', () => {
     const facts = fixtureFacts()
     const { response, intent, answer } = handleMessage({

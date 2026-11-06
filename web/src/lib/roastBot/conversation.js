@@ -15,6 +15,7 @@ import {
   isRepeatableCharacterSwapIntent,
   isCharacterPronoun,
   messageUsesCharacterPronoun,
+  CHARACTER_SCOPED_INTENTS,
 } from './intents.js'
 import { renderAnswer, greetingMessage } from './responseBuilder.js'
 import { matchItemName, suggestionChips, formatDkp } from './formatting.js'
@@ -498,6 +499,20 @@ export function handleMessage({
   if (charSel?.ambiguous) {
     ambiguousClass = charSel
     charSel = null
+  }
+  // Character-scoped asks with "him/her" reuse sticky subject when no explicit match.
+  if (
+    !charSel &&
+    CHARACTER_SCOPED_INTENTS.has(intent) &&
+    !guildWideSubjectIntents.has(intent) &&
+    stickySubjectName(state) &&
+    (messageUsesCharacterPronoun(text) || classified.bareCharacterPronoun)
+  ) {
+    const sticky = stickySubjectName(state)
+    const fromRoster = (facts.characters || []).find(
+      (c) => String(c.name || '').toLowerCase() === String(sticky).toLowerCase(),
+    )
+    if (fromRoster) charSel = fromRoster
   }
   // Spend / viability / stats can name any guild toon, not only linked roster.
   if (!charSel && guildWideSubjectIntents.has(intent)) {
