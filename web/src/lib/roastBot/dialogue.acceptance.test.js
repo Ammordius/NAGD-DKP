@@ -59,11 +59,37 @@ describe('roastBot dialogue acceptance', () => {
     assert.equal(second.state.selectedCharacterId, 'e1')
     assert.match(second.response.text, /Iaminae/i)
     assert.match(second.response.text, /%/)
-    assert.ok(second.response.requiredClaims.includes('gear_pct') || second.response.text.includes('Magelo'))
+    assert.ok(second.response.requiredClaims.includes('gear_pct') || second.response.text.includes('%'))
     assert.ok(second.response.referenced.characters.includes('Iaminae'))
     assert.equal(second.response.templateId === 'A01' || /authorized them/.test(second.response.text), false)
-    // Must not be a pure general roast without assessment language
-    assert.match(second.response.text, /geared|gear score|Magelo|relative|%|unavailable|invent/i)
+    // Roast-first assessment (not a Magelo methodology dump)
+    assert.match(second.response.text, /geared|buttons|rotation|shopping list|excuses|%|unavailable|invent/i)
+    assert.doesNotMatch(second.response.text, /This is not a claim of true BiS/i)
+  })
+
+  it('strong gear assessment still insults play skill', () => {
+    const facts = fixtureFacts()
+    const { response, intent } = handleMessage({
+      text: 'Is Iaminae geared?',
+      facts,
+      state: createConversationState(),
+      upgradeContext: {
+        rankings: {
+          ...rankingsFixture,
+          characters: rankingsFixture.characters.map((c) =>
+            c.name === 'Iaminae' ? { ...c, overall_score: 980 } : c,
+          ),
+        },
+        itemStats: itemStatsFixture,
+        raidItemIds: new Set([100, 501]),
+      },
+      rng: () => 0,
+    })
+    assert.equal(intent, INTENTS.GEAR_ASSESSMENT)
+    assert.match(response.text, /Iaminae/)
+    assert.match(response.text, /9[0-9]%/)
+    assert.match(response.text, /buttons|fight|rotation|damned/i)
+    assert.ok(response.text.length <= 320, `too long: ${response.text.length}`)
   })
 
   it('Why am I broke returns balance and verified spending facts, not a greeting', () => {
@@ -76,9 +102,10 @@ describe('roastBot dialogue acceptance', () => {
     })
     assert.equal(intent, INTENTS.WHY_BROKE)
     assert.match(response.text, /42/)
-    assert.match(response.text, /Beguiler Circlet|220|800|758/i)
+    assert.match(response.text, /Beguiler Circlet|220/i)
     assert.ok(answer.requiredClaims.includes('balance'))
     assert.equal(/disappointed already|Welcome to the DKP Inquisitor/i.test(response.text), false)
+    assert.ok(response.text.length <= 320, `too long: ${response.text.length}`)
   })
 
   it('How does DKP work actually explains DKP', () => {
@@ -620,7 +647,9 @@ describe('loot discovery dialogue regression', () => {
     assert.ok(answer.requiredClaims.includes('character_dkp_spent'))
     assert.match(response.text, /1840/)
     assert.match(response.text, /Tandiyen/)
-    assert.doesNotMatch(response.text, /cannot suggest upgrades|Magelo rankings data is not loaded/i)
+    assert.match(response.text, /keys|judgment|armor|press/i)
+    assert.doesNotMatch(response.text, /cannot suggest upgrades|Magelo rankings data is not loaded|character-attributed loot spend/i)
+    assert.ok(response.text.length <= 280, `too long: ${response.text.length}`)
   })
 
   it('quarm eligibility not in rankings is honest', () => {

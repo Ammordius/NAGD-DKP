@@ -1,5 +1,6 @@
 /**
- * Fact-first response assembly: required claims first, sarcasm as flavor only.
+ * Response assembly: topic templates or baked roast-first factText.
+ * Do not glue random general A-lines onto answers that already carry tone (or cards/tables).
  */
 
 import { fillTemplate, TEMPLATES } from './templates.js'
@@ -109,26 +110,8 @@ export function renderAnswer({ answer, state, facts, rng = Math.random }) {
       answer.reasonCode === 'quarm_not_in_rankings' || answer.reasonCode === 'character_stats' ||
       answer.reasonCode === 'stats_not_in_rankings' || answer.reasonCode === 'stats_missing' ||
       answer.reasonCode === 'loot_discovery' || answer.templateId === 'LOOT_DISCOVERY') {
-    // Data/error paths: flavor only when allowFlavor is explicit and reason is not a hard error.
-    let text = answer.factText
-    const noFlavorCodes = new Set([
-      'need_character',
-      'need_item',
-      'magelo_unavailable',
-      'magelo_fetch_failed',
-      'upgrades_unavailable',
-      'character_not_in_magelo',
-      'missing_magelo_export',
-      'missing_gear_score',
-    ])
-    if (answer.allowFlavor && !noFlavorCodes.has(answer.reasonCode)) {
-      const flavor = pickFlavorSentence(state.recentTemplateIds, state.turnCount, rng)
-      if (flavor?.text && !text.includes(flavor.text)) {
-        text = `${text} ${flavor.text}`
-        // track flavor id separately in recent via caller
-        answer._flavorId = flavor.template?.id
-      }
-    }
+    // Baked / authored fact text — never append random A-flavor (tone is already in factText, or cards/tables carry detail).
+    const text = answer.factText
     // Table answers carry links in cells; do not rebuild a footer dump from referenced.
     const links = answer.table?.rows?.length
       ? answer.links || []
@@ -178,14 +161,18 @@ export function renderAnswer({ answer, state, facts, rng = Math.random }) {
     }
   }
 
-  if (answer.allowFlavor !== false) {
+  // Topic templates already carry insult voice; do not append a second random A-sentence.
+  // Optional flavor only when the handler explicitly opted in AND there is no template hit
+  // AND no structured cards/table (those paths already have enough content).
+  const hasStructured = Boolean(answer.cards?.length || answer.table?.rows?.length)
+  if (answer.allowFlavor === true && !pool.length && !hasStructured) {
     const flavor = pickFlavorSentence(
       [...(state.recentTemplateIds || []), templateId],
       state.turnCount,
       rng,
     )
     if (flavor?.text && !text.includes(flavor.text.slice(0, 40))) {
-      text = `${text} ${flavor.text}`
+      text = `${text}\n${flavor.text}`
       answer._flavorId = flavor.template?.id
     }
   }

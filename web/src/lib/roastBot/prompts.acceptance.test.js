@@ -188,13 +188,15 @@ describe('roastBot prompt smoke — every intent', () => {
     assert.ok(out.answer.requiredClaims.includes('green_display_cutoff'), out.response.text)
     assert.ok(out.answer.requiredClaims.includes('raid_ready_sheet'), out.response.text)
     assert.match(out.response.text, /Iaminae/)
-    assert.match(out.response.text, /class ranking:\s*90%/i)
-    assert.match(out.response.text, /Raid-ready cutoff:\s*>75%/i)
-    assert.match(out.response.text, /Green display cutoff:\s*>85%/i)
+    assert.match(out.response.text, /90%/)
+    assert.match(out.response.text, /Raid-ready >75%/i)
+    assert.match(out.response.text, /green >85%/i)
+    assert.match(out.response.text, /buttons|fight|coverage|ambition/i)
     assert.match(out.response.text, /4200 HP/)
     assert.match(out.response.text, /average save 35/)
     assert.doesNotMatch(out.response.text, /forgot to work on|lowest save/i)
     assert.doesNotMatch(out.response.text, /\b500 AC\b|\bAC 500\b/)
+    assert.doesNotMatch(out.response.text, /officer Raider Activity|Same numbers as/i)
   })
 
   it('raid ready phrasing uses the same quantitative answer', () => {
@@ -209,7 +211,8 @@ describe('roastBot prompt smoke — every intent', () => {
       }),
     })
     assert.equal(out.intent, INTENTS.QUARM_ELIGIBILITY)
-    assert.match(out.response.text, /class ranking:\s*90%/i)
+    assert.match(out.response.text, /90%/)
+    assert.match(out.response.text, /raid-ready|buttons|fight/i)
   })
 
   it('tank raid-ready answer includes AC and stylistic low-save roast when avg >= 150', () => {
@@ -248,11 +251,11 @@ describe('roastBot prompt smoke — every intent', () => {
       /forgot to work on poison resist at 127 despite an average save of 193/i,
     )
     assert.match(out.response.text, /3100 AC/)
-    assert.match(out.response.text, /Raid-ready cutoff:\s*>85%/i)
-    assert.match(out.response.text, /Green display cutoff:\s*>92%/i)
+    assert.match(out.response.text, /Raid-ready >85%/i)
+    assert.match(out.response.text, /green >92%/i)
   })
 
-  it('CHARACTER_STATS formats Magelo sheet stats', () => {
+  it('CHARACTER_STATS formats Magelo sheet stats with roast opener', () => {
     const out = turn(createConversationState(), "what are Iaminae's stats", {
       upgradeContext: defaultUpgradeContext({
         rankings: {
@@ -284,9 +287,26 @@ describe('roastBot prompt smoke — every intent', () => {
     })
     assert.equal(out.intent, INTENTS.CHARACTER_STATS)
     assert.ok(out.answer.requiredClaims.includes('character_stats'))
+    assert.match(out.response.text, /rotation|buttons|unused/i)
     assert.match(out.response.text, /4200/)
     assert.match(out.response.text, /INT 140/)
     assert.match(out.response.text, /MR 40/)
+    assert.match(out.response.text, /\n/)
+  })
+
+  it('high character spend still insults', () => {
+    const out = turn(createConversationState(), 'how much dkp has been spent on Iaminae', {
+      characterSpendResult: {
+        status: 'ok',
+        characterName: 'Iaminae',
+        charId: 'e1',
+        totalSpent: 5200,
+      },
+    })
+    assert.equal(out.intent, INTENTS.CHARACTER_DKP_SPENT)
+    assert.match(out.response.text, /5200/)
+    assert.match(out.response.text, /keys|armor|press/i)
+    assert.ok(out.response.text.length <= 280, `too long: ${out.response.text.length}`)
   })
 
   it('AFFORDABILITY named item', () => {

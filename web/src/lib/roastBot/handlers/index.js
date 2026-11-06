@@ -12,6 +12,11 @@ import {
   findMageloCharacter,
 } from '../upgrades.js'
 import { assessCharacterGear } from '../gearAssessment.js'
+import {
+  characterSpendRoast,
+  characterStatsRoast,
+  raidReadyRoast,
+} from '../bandRoasts.js'
 import { scopedPurchaseFacts, pickSpendPurchase } from '../facts.js'
 import { FULL_GEAR_COST_REFUSAL, INITIAL_GREETING, NO_ACCOUNT_HINT } from '../templates.js'
 import { lookupItemSource } from '../../itemSourceLookup.js'
@@ -247,13 +252,13 @@ function handleCharacterDkpSpent(args) {
   return {
     intent: INTENTS.CHARACTER_DKP_SPENT,
     category: 'general',
-    factText: `Recorded DKP spent on ${name}: ${formatted} DKP. That is character-attributed loot spend (assignment when set), not the account balance.`,
+    factText: characterSpendRoast(total, name, formatDkp),
     requiredClaims: ['character_dkp_spent'],
     placeholders: { toon: name, cost: formatted },
     referenced: withRefs([name], []),
     links: buildLinks({ characterName: name }),
     reasonCode: 'character_dkp_spent',
-    allowFlavor: true,
+    allowFlavor: false,
     templateId: 'CHARACTER_DKP_SPENT',
   }
 }
@@ -334,23 +339,18 @@ function handleQuarmEligibility(args) {
   const isTank = TANK_CLASS_ABBREVS.has(String(abbrev || '').toUpperCase())
   const pctLabel = pct != null && Number.isFinite(pct) ? `${pct}%` : 'unknown %'
   const classLabel = abbrev || magelo.class || character.class_name || 'unknown class'
-  const tankNote = isTank
-    ? 'Tanks (WAR/PAL/SHD) use higher cutoffs than other classes'
-    : 'Non-tanks use the general cutoffs (tanks WAR/PAL/SHD are higher)'
-  const raidReadyLabel = viable ? 'meets raid-ready' : 'below raid-ready'
-  const greenLabel = green ? 'meets green display' : 'below green display'
   const sheetBits = formatRaidReadySheetBits(magelo, { includeAc: isTank })
 
-  const factText = [
-    `${character.name} Magelo class ranking: ${pctLabel} (${classLabel}).`,
-    `Raid-ready cutoff: >${viabilityCut}%. Green display cutoff: >${greenCut}%.`,
-    `${tankNote}.`,
-    `Status: ${raidReadyLabel}; ${greenLabel}.`,
-    sheetBits ? `${sheetBits}.` : null,
-    'Same numbers as the officer Raider Activity class-coverage pills.',
-  ]
-    .filter(Boolean)
-    .join(' ')
+  const factText = raidReadyRoast({
+    name: character.name,
+    pctLabel,
+    classLabel,
+    viable,
+    green,
+    viabilityCut,
+    greenCut,
+    sheetBits,
+  })
 
   const claims = [
     'class_ranking_pct',
@@ -372,7 +372,7 @@ function handleQuarmEligibility(args) {
     referenced: withRefs([character.name], []),
     links: buildLinks({ characterName: character.name }),
     reasonCode: viable ? 'quarm_eligible' : 'quarm_not_eligible',
-    allowFlavor: true,
+    allowFlavor: false,
     templateId: 'QUARM_ELIGIBILITY',
   }
 }
@@ -551,7 +551,7 @@ function formatMageloStatsFact(name, magelo, stats) {
     }
     return null
   }
-  const parts = [`${name} Magelo sheet stats (${magelo.class || 'unknown class'}):`]
+  const bodyLines = []
   const combat = [
     ['HP', pick('hp')],
     ['Mana', pick('mana')],
@@ -562,7 +562,7 @@ function formatMageloStatsFact(name, magelo, stats) {
   ]
     .filter(([, v]) => v != null)
     .map(([label, v]) => `${label} ${v}`)
-  if (combat.length) parts.push(combat.join(' · '))
+  if (combat.length) bodyLines.push(combat.join(' · '))
 
   const attrs = ['STR', 'STA', 'AGI', 'DEX', 'WIS', 'INT', 'CHA']
     .map((k) => {
@@ -570,7 +570,7 @@ function formatMageloStatsFact(name, magelo, stats) {
       return v != null ? `${k} ${v}` : null
     })
     .filter(Boolean)
-  if (attrs.length) parts.push(attrs.join(' · '))
+  if (attrs.length) bodyLines.push(attrs.join(' · '))
 
   const resistsSrc =
     (magelo.individual_resists && typeof magelo.individual_resists === 'object'
@@ -581,12 +581,12 @@ function formatMageloStatsFact(name, magelo, stats) {
     const resistBits = ['MR', 'FR', 'CR', 'DR', 'PR']
       .map((k) => (resistsSrc[k] != null ? `${k} ${resistsSrc[k]}` : null))
       .filter(Boolean)
-    if (resistBits.length) parts.push(`Resists: ${resistBits.join(' · ')}`)
+    if (resistBits.length) bodyLines.push(`Resists: ${resistBits.join(' · ')}`)
   } else if (pick('resists')) {
-    parts.push(`Resists: ${pick('resists')}`)
+    bodyLines.push(`Resists: ${pick('resists')}`)
   }
 
-  return parts.join(' ')
+  return characterStatsRoast(name, magelo.class || 'unknown class', bodyLines)
 }
 
 function handleWhoIs(args) {
@@ -790,54 +790,45 @@ function handleWhyBroke(args) {
   const blocked = requireAccount(args, INTENTS.WHY_BROKE)
   if (blocked) return blocked
   const { facts } = args
-  const parts = []
   const claims = []
   const refs = emptyReferenced()
-
-  if (facts.currentDkp != null) {
-    parts.push(`Current verified balance: ${formatDkp(facts.currentDkp)} DKP.`)
-    claims.push('balance')
-  } else {
-    parts.push('Current balance is unavailable in the loaded summary.')
-    claims.push('balance_unknown')
-  }
-
-  const earned = facts.earnedDkp
-  const spent = facts.spentDkp
-  if (earned != null && spent != null) {
-    parts.push(`Account summary shows ${formatDkp(earned)} earned and ${formatDkp(spent)} spent.`)
-    claims.push('earned_spent')
-  } else if (spent != null) {
-    parts.push(`Recorded spent total: ${formatDkp(spent)} DKP.`)
-    claims.push('spent')
-  } else {
-    parts.push('Earned/spent summary totals were not fully available; observations below use purchase history only where verified.')
-    claims.push('incomplete_totals')
-  }
-
   const biggest = facts.biggestPurchase
+  const balance = facts.currentDkp != null ? formatDkp(facts.currentDkp) : null
+
+  if (facts.currentDkp != null) claims.push('balance')
+  else claims.push('balance_unknown')
+
+  let factText
+  let category = 'purchase_unknown_value'
   if (biggest?.itemName && biggest.cost != null) {
-    const who = biggest.attributedCharacterName || biggest.buyerName || 'your account'
-    parts.push(
-      `Largest verified purchase on record: ${biggest.itemName} for ${formatDkp(biggest.cost)} DKP (attributed toward ${who}).`,
-    )
+    const cost = formatDkp(biggest.cost)
+    factText =
+      balance != null
+        ? `You're at ${balance} DKP because ${biggest.itemName} ate ${cost} — among other decisions the ledger refuses to forget.`
+        : `${biggest.itemName} for ${cost} DKP is the loudest entry. The rest of the ledger is equally unhelpful to your dignity.`
     claims.push('largest_purchase')
     refs.items.push(biggest.itemName)
     if (biggest.attributedCharacterName) refs.characters.push(biggest.attributedCharacterName)
+    category = 'biggest_purchase'
   } else if ((facts.totalRecordedPurchases || 0) === 0) {
-    parts.push('No verified loot purchases are loaded for this account, so spending is not the obvious culprit in the available history.')
+    factText =
+      balance != null
+        ? `Balance ${balance} DKP, zero verified purchases loaded. Broke without a shopping trail — remarkable.`
+        : 'No verified purchases and no balance to inspect. Mystery poverty is still poverty.'
     claims.push('no_purchases')
+    category = facts.currentDkp != null && Number(facts.currentDkp) <= 50 ? 'balance_low' : 'purchase_unknown_value'
+  } else if (balance != null) {
+    factText = `You're sitting on ${balance} DKP. The ledger has opinions; none of them are flattering.`
+    category = Number(facts.currentDkp) <= 50 ? 'balance_low' : 'balance_mid'
+  } else {
+    factText = 'Balance unavailable and the purchase history will not invent a scapegoat. Ask something more specific.'
   }
-
-  parts.push(
-    'That is an observation from available records, not proof of a single cause. Incomplete history may hide older spends or adjustments.',
-  )
   claims.push('causality_disclaimer')
 
   return {
     intent: INTENTS.WHY_BROKE,
-    category: facts.currentDkp != null && Number(facts.currentDkp) <= 50 ? 'balance_low' : 'purchase_unknown_value',
-    factText: parts.join(' '),
+    category,
+    factText,
     requiredClaims: claims,
     placeholders: {
       balance: facts.currentDkp,
@@ -847,7 +838,7 @@ function handleWhyBroke(args) {
     },
     referenced: withRefs(refs.characters, refs.items),
     reasonCode: 'why_broke',
-    allowFlavor: true,
+    allowFlavor: false,
   }
 }
 
@@ -916,10 +907,9 @@ function handleGearAssessment(args) {
     }
   }
 
-  const parts = [assessment.summary]
+  let factText = assessment.summary
   const cards = []
   if (assessment.upgradeSuggestions?.length) {
-    parts.push('Verified Magelo inventory upgrades worth considering:')
     for (const u of assessment.upgradeSuggestions.slice(0, 3)) {
       cards.push({
         type: 'upgrade',
@@ -932,14 +922,14 @@ function handleGearAssessment(args) {
         to: `/items/${encodeURIComponent(u.itemName)}`,
       })
     }
-  } else if (assessment.upgradeReason) {
-    parts.push(`Slot upgrade suggestions are unavailable (${assessment.upgradeReason.replace(/_/g, ' ')}).`)
+  } else if (assessment.band === 'strong') {
+    factText = `${assessment.summary} Slots look finished — now try finishing the fight.`
   }
 
   return {
     intent: INTENTS.GEAR_ASSESSMENT,
     category: 'upgrade_any',
-    factText: parts.join(' '),
+    factText,
     requiredClaims: assessment.claims,
     placeholders: {
       toon: character.name,
@@ -950,7 +940,7 @@ function handleGearAssessment(args) {
     referenced: assessment.referenced,
     cards,
     reasonCode: 'gear_assessment',
-    allowFlavor: true,
+    allowFlavor: false,
     templateId: 'GEAR_ASSESSMENT',
   }
 }

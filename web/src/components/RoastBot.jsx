@@ -114,6 +114,7 @@ export default function RoastBot({ profile, session, factsOverride = null, openO
   const [upgradeContext, setUpgradeContext] = useState(null)
   const [busy, setBusy] = useState(false)
   const listRef = useRef(null)
+  const stickToBottomRef = useRef(true)
   const startedRef = useRef(false)
 
   const botActive = open && !factsOverride
@@ -259,10 +260,36 @@ export default function RoastBot({ profile, session, factsOverride = null, openO
   }, [open, factsLoading, facts, userId, accountId])
 
   useEffect(() => {
-    if (listRef.current) {
-      listRef.current.scrollTop = listRef.current.scrollHeight
+    if (!open) return
+    stickToBottomRef.current = true
+  }, [open])
+
+  useEffect(() => {
+    const el = listRef.current
+    if (!el || !open) return
+    if (stickToBottomRef.current) {
+      el.scrollTop = el.scrollHeight
     }
   }, [messages, open])
+
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e) => {
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        setOpen(false)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [open])
+
+  const onMessagesScroll = () => {
+    const el = listRef.current
+    if (!el) return
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
+    stickToBottomRef.current = distanceFromBottom < 80
+  }
 
   const ensureUpgradeContext = useCallback(async () => {
     // Always try loadClassRankings (retryable after failure); refresh React ctx when rankings arrive
@@ -483,7 +510,12 @@ export default function RoastBot({ profile, session, factsOverride = null, openO
             </div>
           ) : null}
 
-          <div className="roast-bot-messages" ref={listRef} data-testid="roast-bot-messages">
+          <div
+            className="roast-bot-messages"
+            ref={listRef}
+            data-testid="roast-bot-messages"
+            onScroll={onMessagesScroll}
+          >
             {factsLoading ? (
               <div className="roast-bot-loading" data-testid="roast-bot-loading">
                 Reviewing your loot history…

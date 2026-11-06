@@ -12,6 +12,7 @@ import {
   extractRawGearScore,
 } from '../classCoverage.js'
 import { computeCharacterUpgrades } from './upgrades.js'
+import { gearBandRoast } from './bandRoasts.js'
 
 /**
  * @param {{
@@ -77,15 +78,12 @@ export function assessCharacterGear({ character, rankings, itemStats = null, rai
   const band = pct >= 92 ? 'strong' : pct > threshold ? 'viable' : 'under'
   const interpretation =
     band === 'strong'
-      ? 'well geared relative to this export'
+      ? 'well geared'
       : band === 'viable'
-        ? 'acceptably geared versus the class viability bar in this export'
-        : 'under-geared relative to the class viability bar in this export'
-
-  const basis =
-    classMax != null && raw != null
-      ? `Relative gear score ${pct}% of the best raw score (${classMax}) for ${abbrev || 'this class'} in the Magelo export (raw ${raw}). This is not a claim of true BiS.`
-      : `Relative gear score ${pct}% versus the best raw score for ${abbrev || 'this class'} in the Magelo export. This is not a claim of true BiS.`
+        ? 'acceptably geared'
+        : 'under-geared'
+  const basis = `Relative gear score ${pct}% versus class export max.`
+  const summary = gearBandRoast(band, { name: character.name, pct })
 
   /** @type {object[]} */
   let upgradeSuggestions = []
@@ -132,6 +130,6 @@ export function assessCharacterGear({ character, rankings, itemStats = null, rai
       characters: [character.name],
       items: upgradeSuggestions.map((u) => u.itemName).filter(Boolean),
     },
-    summary: `${character.name} is ${interpretation}: ${basis}`,
+    summary,
   }
 }

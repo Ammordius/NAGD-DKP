@@ -32,8 +32,8 @@
   position: absolute;
   right: 0;
   bottom: 3.75rem;
-  width: min(24rem, calc(100vw - 2rem));
-  height: min(32rem, calc(100vh - 6rem));
+  width: min(32rem, calc(100vw - 2rem));
+  height: min(70vh, 36rem);
   display: flex;
   flex-direction: column;
   background: var(--dkp-card-bg, #18181b);
@@ -113,7 +113,10 @@
 
 .roast-bot-messages {
   flex: 1;
+  min-height: 8rem;
   overflow-y: auto;
+  overflow-x: auto;
+  overscroll-behavior: contain;
   padding: 0.75rem;
   display: flex;
   flex-direction: column;
@@ -122,11 +125,14 @@
 
 .roast-bot-msg {
   max-width: 95%;
+  min-width: 0;
   padding: 0.55rem 0.7rem;
   border-radius: 8px;
   font-size: 0.9rem;
   line-height: 1.4;
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .roast-bot-msg-bot {
@@ -225,6 +231,10 @@
   gap: 0.35rem;
   padding: 0.45rem 0.75rem;
   border-top: 1px solid var(--dkp-border, #3f3f46);
+  max-height: 4.5rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  flex-shrink: 0;
 }
 
 .roast-bot-chip {
@@ -247,6 +257,14 @@
   padding: 0.35rem 0.75rem 0;
   font-size: 0.8rem;
   color: #a1a1aa;
+  flex-shrink: 0;
+}
+
+.roast-bot-char-select label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  width: 100%;
 }
 
 .roast-bot-char-select-pending {
@@ -255,12 +273,14 @@
 }
 
 .roast-bot-char-select select {
-  margin-left: 0.35rem;
+  width: 100%;
+  max-width: 100%;
   background: #27272a;
   color: #e4e4e7;
   border: 1px solid #3f3f46;
   border-radius: 4px;
-  padding: 0.15rem 0.35rem;
+  padding: 0.25rem 0.35rem;
+  box-sizing: border-box;
 }
 
 .roast-bot-input-row {
@@ -308,6 +328,7 @@
 
   .roast-bot-panel {
     width: calc(100vw - 1rem);
-    height: min(70vh, 32rem);
+    height: calc(100vh - 5rem);
+    max-height: calc(100dvh - 5rem);
   }
 }
