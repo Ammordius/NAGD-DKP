@@ -15,6 +15,9 @@ export {
   isQuarmEligibilityQuestion,
   isCharacterStatsQuestion,
   extractSubjectCharacterName,
+  extractCharacterSwapFollowUp,
+  CHARACTER_SWAP_REPEATABLE_INTENTS,
+  isRepeatableCharacterSwapIntent,
 } from './intents.js'
 export { looksLikeWhoIs, extractWhoIsName, lookupWhoIs, resolveWhoIsFromMaps } from './whoIs.js'
 export {
@@ -58,6 +61,7 @@ export {
   resetIfIdentityChanged,
   selectCharacterId,
   isUpgradeSlotFollowUp,
+  isCharacterSwapFollowUp,
 } from './conversation.js'
 export { greetingMessage, buildResponse, renderAnswer } from './responseBuilder.js'
 export {

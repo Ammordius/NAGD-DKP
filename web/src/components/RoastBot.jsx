@@ -25,9 +25,12 @@ import {
   createConversationState,
   selectCharacterId,
   isUpgradeSlotFollowUp,
+  isCharacterSwapFollowUp,
+  extractCharacterSwapFollowUp,
   loadClassRankings,
   collectRaidLootItemIds,
   resetUpgradeCaches,
+  INTENTS,
 } from '../lib/roastBot/index.js'
 import { recognizeDiscovery, runDiscovery } from '../lib/roastBot/discovery/index.js'
 import { extractWhoIsName, looksLikeWhoIs, lookupWhoIs } from '../lib/roastBot/whoIs.js'
@@ -65,6 +68,16 @@ function needsMageloContext(text, pendingIntent, lastIntent = null) {
     return true
   }
   if (isUpgradeSlotFollowUp(text, { lastIntent, pendingIntent })) {
+    return true
+  }
+  if (
+    isCharacterSwapFollowUp(text, { lastIntent, pendingIntent }) &&
+    (lastIntent === 'gear_assessment' ||
+      lastIntent === 'upgrades' ||
+      lastIntent === 'quarm_eligibility' ||
+      lastIntent === 'character_stats' ||
+      lastIntent === 'character_roast')
+  ) {
     return true
   }
   if (isQuarmEligibilityQuestion(lower) || isCharacterStatsQuestion(lower)) {
@@ -332,9 +345,11 @@ export default function RoastBot({ profile, session, factsOverride = null, openO
         let whoIsName = null
         let characterSpendResult = null
         const skipDiscoveryForUpgradeSlot = isUpgradeSlotFollowUp(text, convState)
+        const characterSwap = isCharacterSwapFollowUp(text, convState)
+        const swapName = characterSwap ? extractCharacterSwapFollowUp(text) : null
         if (!factsOverride) {
-          if (looksLikeWhoIs(text)) {
-            whoIsName = extractWhoIsName(text)
+          if (looksLikeWhoIs(text) || (characterSwap && convState.lastIntent === INTENTS.WHO_IS)) {
+            whoIsName = looksLikeWhoIs(text) ? extractWhoIsName(text) : swapName
             if (whoIsName) {
               try {
                 whoIsResult = await lookupWhoIs(supabase, whoIsName)
@@ -351,11 +366,15 @@ export default function RoastBot({ profile, session, factsOverride = null, openO
             }
           } else if (
             isCharacterDkpSpentQuestion(text) ||
-            looksLikeCharacterDkpSpent(text)
+            looksLikeCharacterDkpSpent(text) ||
+            (characterSwap && convState.lastIntent === INTENTS.CHARACTER_DKP_SPENT)
           ) {
-            const spendName = extractSpendCharacterName(text, {
-              characters: facts.characters || [],
-            })
+            const spendName =
+              characterSwap && convState.lastIntent === INTENTS.CHARACTER_DKP_SPENT
+                ? swapName
+                : extractSpendCharacterName(text, {
+                    characters: facts.characters || [],
+                  })
             if (spendName) {
               try {
                 characterSpendResult = await lookupCharacterDkpSpent(supabase, spendName)
@@ -369,7 +388,7 @@ export default function RoastBot({ profile, session, factsOverride = null, openO
                 }
               }
             }
-          } else if (!skipDiscoveryForUpgradeSlot) {
+          } else if (!skipDiscoveryForUpgradeSlot && !characterSwap) {
             const prev = convState.lastDiscovery?.query || null
             const prevPrimary = convState.lastDiscovery?.primary || null
             discoveryRecognition = recognizeDiscovery(text, { prev, prevPrimary })

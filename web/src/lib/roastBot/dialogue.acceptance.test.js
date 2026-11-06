@@ -534,6 +534,8 @@ describe('roastBot open-gate contract', () => {
     assert.match(src, /enabled: botActive && Boolean\(userId\)/)
     assert.match(src, /botActive && userId \? 'roast-bot-sale-costs'/)
     assert.match(src, /needsMageloContext/)
+    assert.match(src, /isCharacterSwapFollowUp/)
+    assert.match(src, /extractCharacterSwapFollowUp/)
     assert.match(src, /recognizeDiscovery/)
     assert.match(src, /runDiscovery/)
     assert.match(src, /looksLikeWhoIs/)
@@ -668,6 +670,161 @@ describe('loot discovery dialogue regression', () => {
     assert.equal(intent, INTENTS.QUARM_ELIGIBILITY)
     assert.ok(answer.requiredClaims.includes('quarm_not_in_rankings'))
     assert.match(response.text, /not in the current Magelo rankings/i)
+  })
+
+  it('gear assessment → what about other linked character reuses GEAR_ASSESSMENT', () => {
+    const facts = fixtureFacts()
+    const upgradeContext = {
+      rankings: rankingsFixture,
+      itemStats: itemStatsFixture,
+      raidItemIds: new Set([100, 501]),
+    }
+    let state = createConversationState()
+    const first = handleMessage({
+      text: 'how well geared is Iaminae',
+      facts,
+      state,
+      upgradeContext,
+      rng: () => 0,
+    })
+    assert.equal(first.intent, INTENTS.GEAR_ASSESSMENT)
+    assert.match(first.response.text, /Iaminae/i)
+    state = first.state
+    assert.equal(state.lastIntent, INTENTS.GEAR_ASSESSMENT)
+
+    const second = handleMessage({
+      text: 'what about Charmalt?',
+      facts,
+      state,
+      upgradeContext,
+      discoveryRecognition: {
+        status: 'unsupported',
+        reason: 'I recognized a loot question but could not build a safe query from that phrasing.',
+        missing: ['filters'],
+      },
+      rng: () => 0,
+    })
+    assert.equal(second.intent, INTENTS.GEAR_ASSESSMENT)
+    assert.equal(second.state.selectedCharacterId, 'e2')
+    assert.equal(second.state.lastIntent, INTENTS.GEAR_ASSESSMENT)
+    assert.match(second.response.text, /Charmalt/i)
+    assert.doesNotMatch(second.response.text, /could not build a safe query/i)
+  })
+
+  it('spend → what about character reuses CHARACTER_DKP_SPENT with prefetch', () => {
+    const facts = fixtureFacts()
+    let state = createConversationState()
+    const first = handleMessage({
+      text: 'how much dkp has been spent on Iaminae',
+      facts,
+      state,
+      characterSpendResult: {
+        status: 'ok',
+        characterName: 'Iaminae',
+        charId: 'e1',
+        totalSpent: 220,
+      },
+      rng: () => 0,
+    })
+    assert.equal(first.intent, INTENTS.CHARACTER_DKP_SPENT)
+    state = first.state
+
+    const second = handleMessage({
+      text: 'what about Zender?',
+      facts,
+      state,
+      characterSpendResult: {
+        status: 'ok',
+        characterName: 'Zender',
+        charId: 'w1',
+        totalSpent: 90,
+      },
+      discoveryRecognition: {
+        status: 'unsupported',
+        reason: 'I recognized a loot question but could not build a safe query from that phrasing.',
+        missing: ['filters'],
+      },
+      rng: () => 0,
+    })
+    assert.equal(second.intent, INTENTS.CHARACTER_DKP_SPENT)
+    assert.match(second.response.text, /Zender/i)
+    assert.match(second.response.text, /90/)
+    assert.doesNotMatch(second.response.text, /could not build a safe query/i)
+  })
+
+  it('who-is → what about character reuses WHO_IS with prefetch', () => {
+    const facts = fixtureFacts()
+    let state = createConversationState()
+    const first = handleMessage({
+      text: 'who is Tandiyen',
+      facts,
+      state,
+      whoIsName: 'Tandiyen',
+      whoIsResult: {
+        status: 'ok',
+        characterName: 'Tandiyen',
+        accountId: 'a1',
+        accountName: 'RaidDad',
+        lastRaidDate: '2026-02-14',
+        charId: '7',
+      },
+      rng: () => 0,
+    })
+    assert.equal(first.intent, INTENTS.WHO_IS)
+    state = first.state
+
+    const second = handleMessage({
+      text: 'what about Badammo?',
+      facts,
+      state,
+      whoIsName: 'Badammo',
+      whoIsResult: {
+        status: 'ok',
+        characterName: 'Badammo',
+        accountId: 'a2',
+        accountName: 'TankAlts',
+        lastRaidDate: '2026-11-02',
+        charId: '9',
+      },
+      discoveryRecognition: {
+        status: 'unsupported',
+        reason: 'I recognized a loot question but could not build a safe query from that phrasing.',
+        missing: ['filters'],
+      },
+      rng: () => 0,
+    })
+    assert.equal(second.intent, INTENTS.WHO_IS)
+    assert.match(second.response.text, /Badammo/)
+    assert.match(second.response.text, /TankAlts/)
+    assert.doesNotMatch(second.response.text, /could not build a safe query/i)
+  })
+
+  it('unsupported discovery on character swap does not stick lastIntent to loot', () => {
+    const facts = fixtureFacts()
+    const state = createConversationState()
+    state.lastIntent = INTENTS.GEAR_ASSESSMENT
+    state.selectedCharacterId = 'e1'
+    state.lastSubject = 'Iaminae'
+    // Force the failure path: no characterSwapHit if somehow recognition wins —
+    // with characterSwapHit, intent is gear; assert lastIntent preserved either way.
+    const out = handleMessage({
+      text: 'what about Charmalt?',
+      facts,
+      state,
+      upgradeContext: {
+        rankings: rankingsFixture,
+        itemStats: itemStatsFixture,
+        raidItemIds: new Set([100, 501]),
+      },
+      discoveryRecognition: {
+        status: 'unsupported',
+        reason: 'I recognized a loot question but could not build a safe query from that phrasing.',
+        missing: ['filters'],
+      },
+      rng: () => 0,
+    })
+    assert.notEqual(out.intent, INTENTS.LOOT_DISCOVERY)
+    assert.equal(out.state.lastIntent, INTENTS.GEAR_ASSESSMENT)
   })
 
   it('what about shoulder after buy stays UPGRADES and returns slot cards/chips', () => {

@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
-import { tryParseDiscovery, looksLikeDiscovery, extractTimeRange } from './parse.js'
+import { tryParseDiscovery, looksLikeDiscovery, extractTimeRange, recognizeDiscovery } from './parse.js'
 
 const CASES = [
   {
@@ -166,5 +166,16 @@ describe('discovery parse', () => {
     const about = tryParseDiscovery('what about plate arms?')
     assert.ok(about)
     assert.match(String(about.itemQuery || ''), /plate arms/i)
+  })
+
+  it('bare what about character name without prior is not_discovery', () => {
+    const rec = recognizeDiscovery('what about badammo?')
+    assert.equal(rec.status, 'not_discovery')
+  })
+
+  it('what about plate arms still recognizes without prior', () => {
+    const rec = recognizeDiscovery('what about plate arms?')
+    assert.equal(rec.status, 'recognized')
+    assert.match(String(rec.query?.itemQuery || ''), /plate arms/i)
   })
 })

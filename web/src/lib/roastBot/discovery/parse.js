@@ -133,6 +133,10 @@ export function recognizeDiscovery(raw, opts = {}) {
 
   const built = buildQueryFromEntities(text, entities, intentCue)
   if (!built) {
+    // Bare “what/how about <name>?” with no loot entities is a character follow-up, not loot.
+    if (!opts.prev && isBareCharacterWhatAbout(text, entities, hasEntity)) {
+      return { status: 'not_discovery' }
+    }
     if (intentCue || fragmentOk) {
       return {
         status: 'unsupported',
@@ -788,6 +792,21 @@ function extractBareCharacterFollowUp(text) {
   const m = text.match(/^(?:and|what about|how about)\s+([a-z][a-z0-9']{2,24})\s*\??$/)
   if (m) return capitalizeName(m[1])
   return null
+}
+
+/**
+ * Fresh “what/how about &lt;single token&gt;?” with no loot entities → not loot discovery.
+ * @param {string} text
+ * @param {ReturnType<typeof extractEntities>} entities
+ * @param {boolean} hasEntity
+ */
+function isBareCharacterWhatAbout(text, entities, hasEntity) {
+  if (hasEntity) return false
+  if (entities?.boss || entities?.zone || entities?.phase || entities?.slot || entities?.itemQuery) {
+    return false
+  }
+  if (entities?.classesHint || entities?.character) return false
+  return Boolean(extractBareCharacterFollowUp(text))
 }
 
 /**

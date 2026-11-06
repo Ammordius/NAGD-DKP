@@ -11,7 +11,10 @@ import {
   isQuarmEligibilityQuestion,
   isCharacterStatsQuestion,
   extractSubjectCharacterName,
+  extractCharacterSwapFollowUp,
+  isRepeatableCharacterSwapIntent,
 } from './intents.js'
+import { isCharacterSwapFollowUp } from './conversation.js'
 
 const chars = [
   { char_id: 'e1', name: 'Iaminae', class_name: 'Enchanter' },
@@ -61,5 +64,30 @@ describe('character spend / eligibility / stats intents', () => {
     assert.equal(isCharacterDkpSpentQuestion('total dkp spent on Zender'), true)
     assert.equal(isQuarmEligibilityQuestion('is Zender raid viable'), true)
     assert.equal(isCharacterStatsQuestion('show Zender stats'), true)
+  })
+
+  it('extracts character-swap follow-up name', () => {
+    assert.equal(extractCharacterSwapFollowUp('what about badammo?'), 'Badammo')
+    assert.equal(extractCharacterSwapFollowUp('how about Charmalt'), 'Charmalt')
+    assert.equal(extractCharacterSwapFollowUp('what about shoulder?'), null)
+    assert.equal(extractCharacterSwapFollowUp('what about plate arms?'), null)
+  })
+
+  it('isCharacterSwapFollowUp only after repeatable character intents', () => {
+    assert.equal(isRepeatableCharacterSwapIntent(INTENTS.GEAR_ASSESSMENT), true)
+    assert.equal(isRepeatableCharacterSwapIntent(INTENTS.WHO_IS), true)
+    assert.equal(isRepeatableCharacterSwapIntent(INTENTS.LOOT_DISCOVERY), false)
+    assert.equal(
+      isCharacterSwapFollowUp('what about Badammo?', { lastIntent: INTENTS.GEAR_ASSESSMENT }),
+      true,
+    )
+    assert.equal(
+      isCharacterSwapFollowUp('what about Badammo?', { lastIntent: INTENTS.LOOT_DISCOVERY }),
+      false,
+    )
+    assert.equal(
+      isCharacterSwapFollowUp('what about shoulder?', { lastIntent: INTENTS.UPGRADES }),
+      false,
+    )
   })
 })

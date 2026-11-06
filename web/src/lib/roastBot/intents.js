@@ -65,6 +65,12 @@ export const CHARACTER_SCOPED_INTENTS = new Set([
   INTENTS.CHARACTER_STATS,
 ])
 
+/** Intents that “what/how about &lt;name&gt;?” may reuse with a new subject. */
+export const CHARACTER_SWAP_REPEATABLE_INTENTS = new Set([
+  ...CHARACTER_SCOPED_INTENTS,
+  INTENTS.WHO_IS,
+])
+
 /** @param {string} text already normalized lowercase */
 export const CHARACTER_DKP_SPENT_PATTERNS = [
   /how much dkp .{0,40}\bspent\b/,
@@ -336,7 +342,49 @@ const STOP_SUBJECT = new Set([
   'viable',
   'coverage',
   'class',
+  'shoulder',
+  'shoulders',
+  'arms',
+  'legs',
+  'ring',
+  'rings',
+  'wrist',
+  'wrists',
+  'head',
+  'chest',
+  'feet',
+  'hands',
+  'neck',
+  'waist',
+  'face',
+  'cloak',
+  'cape',
+  'plate',
+  'silk',
+  'chain',
+  'leather',
+  'cloth',
 ])
+
+/**
+ * Bare “what/how about &lt;Name&gt;?” character-swap candidate (single token).
+ * @param {string} raw
+ * @returns {string|null}
+ */
+export function extractCharacterSwapFollowUp(raw) {
+  const original = String(raw || '').trim()
+  const m = original.match(/^(?:what|how)\s+about\s+([A-Za-z][\w']{1,24})\s*\??$/i)
+  if (!m?.[1]) return null
+  const name = String(m[1]).replace(/[?!.]+$/g, '').trim()
+  if (!name || name.length < 2) return null
+  if (STOP_SUBJECT.has(name.toLowerCase())) return null
+  return name.charAt(0).toUpperCase() + name.slice(1)
+}
+
+/** @param {string|null|undefined} intent */
+export function isRepeatableCharacterSwapIntent(intent) {
+  return Boolean(intent && CHARACTER_SWAP_REPEATABLE_INTENTS.has(intent))
+}
 
 /**
  * Best-effort subject character name for spend / viability / stats asks (guild-wide).

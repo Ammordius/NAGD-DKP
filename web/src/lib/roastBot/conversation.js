@@ -7,11 +7,12 @@ import {
   classifyIntent,
   INTENTS,
   matchCharacterMention,
-  CHARACTER_SCOPED_INTENTS,
   isCharacterDkpSpentQuestion,
   isQuarmEligibilityQuestion,
   isCharacterStatsQuestion,
   extractSubjectCharacterName,
+  extractCharacterSwapFollowUp,
+  isRepeatableCharacterSwapIntent,
 } from './intents.js'
 import { renderAnswer, greetingMessage } from './responseBuilder.js'
 import { matchItemName, suggestionChips, formatDkp } from './formatting.js'
@@ -230,6 +231,7 @@ export function handleMessage({
   rng = Math.random,
 }) {
   state.turnCount = (state.turnCount || 0) + 1
+  const priorLastIntent = state.lastIntent
 
   const classified = classifyIntent(text, {
     lastIntent: state.lastIntent,
@@ -244,9 +246,17 @@ export function handleMessage({
   // Who-is identity questions win over discovery (e.g. never treat "who is Foo" as loot).
   // Item-fit (which toons could use this) also wins so prior Quarm/slot context cannot re-hijack.
   // Upgrade slot follow-ups ("what about shoulder") after UPGRADES also beat discovery.
+  // Character-swap follow-ups ("what about Badammo?") reuse prior character intent over loot.
   const whoIsHit = Boolean(whoIsResult) || classified.intent === INTENTS.WHO_IS
   const itemFitHit = !whoIsHit && classified.intent === INTENTS.ITEM_FIT
   const upgradeSlotHint = extractUpgradeSlotHint(text)
+  const characterSwapName = extractCharacterSwapFollowUp(text)
+  const characterSwapHit =
+    !whoIsHit &&
+    !itemFitHit &&
+    Boolean(characterSwapName) &&
+    !upgradeSlotHint &&
+    isCharacterSwapFollowUp(text, state)
   const upgradesContext =
     state.lastIntent === INTENTS.UPGRADES ||
     state.pendingIntent === INTENTS.UPGRADES ||
@@ -263,6 +273,7 @@ export function handleMessage({
     !whoIsHit &&
     !itemFitHit &&
     !upgradesSlotHit &&
+    !characterSwapHit &&
     (discoveryRecognition?.status === 'recognized' ||
       discoveryRecognition?.status === 'ambiguous' ||
       discoveryRecognition?.status === 'unsupported')
@@ -270,6 +281,7 @@ export function handleMessage({
     !whoIsHit &&
     !itemFitHit &&
     !upgradesSlotHit &&
+    !characterSwapHit &&
     Boolean(discoveryResult || discoveryAnswer || recognitionOk)
   let intent = whoIsHit
     ? INTENTS.WHO_IS
@@ -277,11 +289,18 @@ export function handleMessage({
       ? INTENTS.ITEM_FIT
       : upgradesSlotHit
         ? INTENTS.UPGRADES
-        : discoveryHit
-          ? INTENTS.LOOT_DISCOVERY
-          : classified.intent
+        : characterSwapHit
+          ? state.lastIntent
+          : discoveryHit
+            ? INTENTS.LOOT_DISCOVERY
+            : classified.intent
   let ambiguousClass = null
-  const resolvedWhoIsName = whoIsName || classified.whoIsName || null
+  const resolvedWhoIsName =
+    whoIsName ||
+    classified.whoIsName ||
+    (intent === INTENTS.WHO_IS || (characterSwapHit && priorLastIntent === INTENTS.WHO_IS)
+      ? characterSwapName
+      : null)
   // Slot filter for upgrades: follow-up after buy path, or inline slot on an upgrades ask.
   let upgradeSlotIds = null
   let upgradeSlotLabel = null
@@ -382,9 +401,12 @@ export function handleMessage({
     } else if (/worth|bad|good|serious/.test(t) && state.lastReferencedPurchaseId) {
       intent = INTENTS.WORST_PURCHASE
     } else if (classified.matchedCharacter && !classified.bareCharacterName) {
-      intent = state.lastIntent && CHARACTER_SCOPED_INTENTS.has(state.lastIntent)
+      intent = state.lastIntent && isRepeatableCharacterSwapIntent(state.lastIntent)
         ? state.lastIntent
         : INTENTS.UPGRADES
+    } else if (characterSwapName && isRepeatableCharacterSwapIntent(state.lastIntent)) {
+      // Guild-wide / unlinked name after a repeatable character intent
+      intent = state.lastIntent
     } else if (classified.bareCharacterName && classified.matchedCharacter) {
       // Selecting a character without a pending op — acknowledge selection, ask what to do
       state.selectedCharacterId = classified.matchedCharacter.char_id
@@ -422,8 +444,16 @@ export function handleMessage({
     INTENTS.QUARM_ELIGIBILITY,
     INTENTS.CHARACTER_STATS,
   ])
+  // Character-swap may name a roster toon that classifyIntent already matched.
+  let swapMatched = classified.matchedCharacter
+  if (characterSwapHit && characterSwapName && (!swapMatched || swapMatched.ambiguous)) {
+    const fromRoster = (facts.characters || []).find(
+      (c) => String(c.name || '').toLowerCase() === String(characterSwapName).toLowerCase(),
+    )
+    if (fromRoster) swapMatched = fromRoster
+  }
   let charSel =
-    intent === INTENTS.WHO_IS ? null : selectCharacter(facts, classified.matchedCharacter, state)
+    intent === INTENTS.WHO_IS ? null : selectCharacter(facts, swapMatched, state)
   if (charSel?.ambiguous) {
     ambiguousClass = charSel
     charSel = null
@@ -432,6 +462,7 @@ export function handleMessage({
   if (!charSel && guildWideSubjectIntents.has(intent)) {
     const subjectName =
       characterSpendResult?.characterName ||
+      characterSwapName ||
       extractSubjectCharacterName(text, { characters: facts.characters || [], intent })
     if (subjectName) {
       const fromRoster = (facts.characters || []).find(
@@ -579,7 +610,15 @@ export function handleMessage({
     // leave lastItem sticky for intentional "how much" later, but response has no stale links
   }
 
-  state.lastIntent = intent
+  // Defense: unsupported loot must not overwrite a character-scoped prior when the user
+  // tried "what about <name>?" (primary path skips discovery; keep navigation intact).
+  const preserveCharacterLastIntent =
+    intent === INTENTS.LOOT_DISCOVERY &&
+    discoveryRecognition?.status === 'unsupported' &&
+    Boolean(characterSwapName) &&
+    isRepeatableCharacterSwapIntent(priorLastIntent)
+
+  state.lastIntent = preserveCharacterLastIntent ? priorLastIntent : intent
   state.lastAnswer = {
     intent,
     facts: answer.requiredClaims,
@@ -587,7 +626,6 @@ export function handleMessage({
     referenced: response.referenced,
   }
   state.lastSubject = charSel?.name || state.lastSubject
-
   // Only persist successful, executable discovery context — never from unsupported/failed turns,
   // and never retain a prior primary when the current result has neither awards nor a raid.
   if (
@@ -670,6 +708,17 @@ export function isUpgradeSlotFollowUp(text, state = {}) {
     return false
   }
   return Boolean(extractUpgradeSlotHint(text))
+}
+
+/**
+ * True when “what/how about &lt;name&gt;?” should reuse the prior character-scoped intent
+ * instead of loot discovery. Slot follow-ups (“what about shoulder”) are excluded.
+ */
+export function isCharacterSwapFollowUp(text, state = {}) {
+  if (!text) return false
+  if (!isRepeatableCharacterSwapIntent(state.lastIntent)) return false
+  if (extractUpgradeSlotHint(text)) return false
+  return Boolean(extractCharacterSwapFollowUp(text))
 }
 
 export function startConversation(facts) {
