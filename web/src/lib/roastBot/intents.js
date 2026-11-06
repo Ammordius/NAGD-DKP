@@ -252,6 +252,13 @@ function extractQuotedOrTrailingItem(text) {
     if (hint && !PRONOUN_ITEMS.has(hint.toLowerCase())) return hint
     return null
   }
+  const afford = text.match(
+    /(?:can i afford|enough dkp for|within (?:my )?budget for|affordable)\s+(.+?)$/i,
+  )
+  if (afford) {
+    const hint = afford[1].replace(/\?+$/, '').trim()
+    if (hint && !PRONOUN_ITEMS.has(hint.toLowerCase())) return hint
+  }
   const about = text.match(/(?:about|find|lookup|look up|search|for)\s+(.{3,80})$/i)
   if (about) {
     const hint = about[1].trim()

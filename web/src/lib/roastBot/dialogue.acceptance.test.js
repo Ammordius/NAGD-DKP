@@ -1,7 +1,6 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  buildAccountFacts,
   handleMessage,
   createConversationState,
   INTENTS,
@@ -10,110 +9,11 @@ import {
   resetUpgradeCaches,
   loadClassRankings,
 } from './index.js'
-
-const iaminae = { char_id: 'e1', name: 'Iaminae', class_name: 'Enchanter' }
-const otherEnc = { char_id: 'e2', name: 'Charmalt', class_name: 'Enchanter' }
-const warrior = { char_id: 'w1', name: 'Zender', class_name: 'Warrior' }
-const cleric = { char_id: 'c1', name: 'Zenderheals', class_name: 'Cleric' }
-
-function fixtureFacts(overrides = {}) {
-  return buildAccountFacts({
-    accountId: 'acct-1',
-    accountName: 'TestAcct',
-    currentDkp: 42,
-    earnedDkp: 800,
-    spentDkp: 758,
-    characters: [iaminae, otherEnc, warrior, cleric],
-    lootRows: [
-      {
-        id: 1,
-        item_name: 'Beguiler Circlet',
-        cost: 220,
-        char_id: 'e1',
-        character_name: 'Iaminae',
-        assigned_char_id: 'e1',
-        assigned_character_name: 'Iaminae',
-        sale_date: '2026-09-15',
-      },
-      {
-        id: 2,
-        item_name: 'Smooth Onyx Torque',
-        cost: 90,
-        char_id: 'w1',
-        character_name: 'Zender',
-        sale_date: '2026-08-01',
-      },
-    ],
-    recentItemPrices: {
-      'beguiler circlet': { values: [200, 220], avg: '210' },
-      'smooth onyx torque': { values: [150], avg: '150' },
-    },
-    itemCatalog: [
-      { name: 'Beguiler Circlet', itemId: 501 },
-      { name: 'Smooth Onyx Torque', itemId: 99 },
-    ],
-    knownItemSources: {
-      'beguiler circlet': { zone: 'Plane of Time', mob: 'Quarm' },
-      'smooth onyx torque': { zone: 'Plane of Time', mob: 'Quarm' },
-    },
-    attendanceRows: [
-      { raid_id: 'pot', char_id: 'w1', character_name: 'Zender', account_id: 'acct-1' },
-    ],
-    raidsById: {
-      pot: { raid_id: 'pot', raid_name: 'Plane of Time', date_iso: '2026-10-01' },
-    },
-    guildRaidCountInWindow: 20,
-    now: new Date('2026-10-20T12:00:00Z'),
-    ...overrides,
-  })
-}
-
-const rankingsFixture = {
-  characters: [
-    {
-      name: 'Iaminae',
-      class: 'Enchanter',
-      overall_score: 800,
-      inventory: [{ slot_id: 2, item_id: 100, item_name: 'Old Circlet' }],
-    },
-    {
-      name: 'Charmalt',
-      class: 'Enchanter',
-      overall_score: 500,
-      inventory: [{ slot_id: 2, item_id: 100, item_name: 'Old Circlet' }],
-    },
-    {
-      name: 'TopEnc',
-      class: 'Enchanter',
-      overall_score: 1000,
-      inventory: [],
-    },
-  ],
-  classWeights: {
-    // Engine reads hp_pct/mana_pct/ac_pct/resists_pct (not CHA/INT/AC)
-    Enchanter: { ac_pct: 1, hp_pct: 0, mana_pct: 0, resists_pct: 0 },
-  },
-  focusCandidates: {},
-}
-
-const itemStatsFixture = {
-  100: {
-    name: 'Old Circlet',
-    slot: 'HEAD',
-    classes: 'ENC',
-    ac: 5,
-    mods: [],
-    resists: [],
-  },
-  501: {
-    name: 'Beguiler Circlet',
-    slot: 'HEAD',
-    classes: 'ENC',
-    ac: 25,
-    mods: [],
-    resists: [],
-  },
-}
+import {
+  fixtureFacts,
+  rankingsFixture,
+  itemStatsFixture,
+} from './test/dialogueHarness.js'
 
 describe('roastBot dialogue acceptance', () => {
   it('asks which enchanter for gear assessment when two exist', () => {

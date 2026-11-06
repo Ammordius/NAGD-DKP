@@ -285,25 +285,74 @@ export function handleMessage({
     intent = INTENTS.UPGRADES
   }
 
-  // Resume pending clarification
+  // Resume pending clarification — only when the user is answering the ask,
+  // not when they pivot to a confident new domain question.
+  let resumedPending = false
   if (state.pendingIntent && state.pendingSlots?.includes('character')) {
     const matched = classified.matchedCharacter
     if (matched?.ambiguous) {
       ambiguousClass = matched
       intent = state.pendingIntent
+      resumedPending = true
     } else if (matched?.char_id || matched?.name) {
-      state.selectedCharacterId = matched.char_id || state.selectedCharacterId
-      intent = state.pendingIntent
-      clearPending(state)
+      const answeringClarification =
+        classified.clarificationReply ||
+        classified.bareCharacterName ||
+        intent === INTENTS.FOLLOWUP ||
+        intent === state.pendingIntent
+      if (answeringClarification) {
+        state.selectedCharacterId = matched.char_id || state.selectedCharacterId
+        intent = state.pendingIntent
+        clearPending(state)
+        resumedPending = true
+      }
+      // else: keep the new intent; pending abandoned below
     } else if (classified.clarificationReply || classified.bareCharacterName) {
       // name didn't resolve — stay pending
       intent = state.pendingIntent
+      resumedPending = true
     }
   } else if (state.pendingIntent && state.pendingSlots?.includes('item')) {
-    if (classified.matchedItemHint) {
-      intent = state.pendingIntent
-      clearPending(state)
+    let itemHint = classified.matchedItemHint
+    // Bare item name answering need_item (classifier only extracts hints from phrased asks)
+    if (!itemHint) {
+      const bare = resolveItem(facts, String(text || '').trim(), state, false, upgradeContext)
+      if (bare?.name && !bare.ambiguous && !bare.unmatched) {
+        itemHint = bare.name
+        classified.matchedItemHint = bare.name
+      }
     }
+    if (itemHint) {
+      const resolved = resolveItem(facts, itemHint, state, false, upgradeContext)
+      const resolvedOk = Boolean(resolved?.name && !resolved.ambiguous && !resolved.unmatched)
+      if (resolvedOk) {
+        classified.matchedItemHint = resolved.name
+        intent = state.pendingIntent
+        clearPending(state)
+        resumedPending = true
+      } else if (
+        intent === INTENTS.FOLLOWUP ||
+        intent === state.pendingIntent ||
+        intent === INTENTS.UNKNOWN
+      ) {
+        // Clarification-style reply with unmatched name — keep pending intent for need_item UX
+        intent = state.pendingIntent
+        clearPending(state)
+        resumedPending = true
+      }
+      // else: confident new ask whose "item hint" was a false positive (e.g. character after "for")
+    }
+  }
+
+  // Leave clarification mode when the user asks a confident new question.
+  if (
+    state.pendingIntent &&
+    !resumedPending &&
+    intent !== state.pendingIntent &&
+    intent !== INTENTS.FOLLOWUP &&
+    intent !== INTENTS.UNKNOWN
+  ) {
+    clearPending(state)
   }
 
   // Follow-up remapping when not resuming pending
