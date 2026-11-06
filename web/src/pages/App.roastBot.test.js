@@ -29,4 +29,22 @@ describe('App RoastBot wiring', () => {
     assert.match(roastSource, /New judgment/)
     assert.match(roastSource, /startConversation\(facts\)/)
   })
+
+  it('RoastBot mounts after Routes so browser Back keeps conversation', () => {
+    const routesClose = appSource.indexOf('</Routes>')
+    const roastMount = appSource.indexOf('<RoastBot')
+    assert.ok(routesClose >= 0, 'expected </Routes> in App.jsx')
+    assert.ok(roastMount >= 0, 'expected <RoastBot in App.jsx')
+    assert.ok(
+      roastMount > routesClose,
+      'RoastBot must render after </Routes> so SPA Back does not remount the chat',
+    )
+  })
+
+  it('RoastBot outbound links and upgrade cards use React Router Link', () => {
+    assert.match(roastSource, /from 'react-router-dom'/)
+    assert.match(roastSource, /<Link key=\{`\$\{link\.type\}-\$\{link\.to\}`\} to=\{link\.to\}>/)
+    assert.match(roastSource, /<Link to=\{card\.to\}>\{card\.itemName\}<\/Link>/)
+    assert.doesNotMatch(roastSource, /window\.location|href=\{link\.to\}|navigate\(link\.to\)/)
+  })
 })

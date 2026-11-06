@@ -6,6 +6,7 @@ import {
   suggestionChips,
   CAPABILITIES_EXAMPLE_CHIPS,
 } from './formatting.js'
+import { extractUpgradeSlotHint } from './upgrades.js'
 
 describe('buildLinks', () => {
   it('builds raid links to /raids/:id without inventing ids', () => {
@@ -22,6 +23,18 @@ describe('buildLinks', () => {
     assert.equal(links[0].type, 'account')
     assert.equal(links[0].to, '/accounts/a1')
     assert.equal(links[0].label, 'BobAccount')
+  })
+
+  it('builds character and item SPA paths for outbound RoastBot navigation', () => {
+    const character = buildLinks({ characterName: 'Badammo' })
+    assert.equal(character[0].type, 'character')
+    assert.equal(character[0].to, '/characters/Badammo')
+    assert.equal(character[0].label, 'Badammo')
+
+    const item = buildLinks({ itemName: 'Heavy Yttrium Chestplate', itemId: 911 })
+    assert.equal(item[0].type, 'item')
+    assert.equal(item[0].to, `/items/${encodeURIComponent('Heavy Yttrium Chestplate')}`)
+    assert.equal(item[0].itemId, 911)
   })
 })
 
@@ -85,5 +98,21 @@ describe('suggestionChips upgrade slots', () => {
     assert.equal(chips[0], 'What about Shoulder?')
     assert.ok(chips.includes('What about Head?'))
     assert.ok(chips.length <= 6)
+  })
+
+  it('surfaces What about Wrist? chips that extractUpgradeSlotHint can resolve', () => {
+    const chips = suggestionChips({
+      hasAccount: true,
+      lastIntent: 'upgrades',
+      lastUpgradeSlots: [
+        { slotId: 9, slotLabel: 'Wrist', chipLabel: 'Wrist', bestDelta: 0.04, count: 2 },
+        { slotId: 17, slotLabel: 'Chest', chipLabel: 'Chest', bestDelta: 0.03, count: 1 },
+      ],
+    })
+    assert.equal(chips[0], 'What about Wrist?')
+    assert.ok(chips.includes('What about Chest?'))
+    const wrist = extractUpgradeSlotHint(chips[0])
+    assert.equal(wrist?.canonical, 'WRIST')
+    assert.deepEqual(wrist?.slotIds, [9, 10])
   })
 })

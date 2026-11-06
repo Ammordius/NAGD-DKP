@@ -81,6 +81,60 @@ export function chipLabelForSlot(slotId, slotLabel) {
   return slotLabel || SLOT_NAMES_FOR_UI[slotId] || `Slot ${slotId}`
 }
 
+const SLOT_HINT_DETERMINERS = /^(?:his|her|their|my|our|the|a|an)\s+/i
+
+/**
+ * Strip trailing junk and leading possessives/determiners before exact slot resolve.
+ * @param {string} hint
+ * @returns {string}
+ */
+function normalizeSlotHintPhrase(hint) {
+  let cleaned = String(hint || '')
+    .replace(/[?.!,/;:]+$/g, '')
+    .trim()
+  cleaned = cleaned.replace(SLOT_HINT_DETERMINERS, '').trim()
+  cleaned = cleaned.replace(/[?.!,/;:]+$/g, '').trim()
+  return cleaned
+}
+
+/**
+ * Exact-alias resolve for a single whitespace token (punctuation stripped).
+ * @param {string} token
+ * @param {(hint: string) => { canonical: string, slotIds: number[], chipLabel: string }|null} tryResolve
+ * @returns {{ canonical: string, slotIds: number[], chipLabel: string }|null}
+ */
+function tryResolveToken(token, tryResolve) {
+  const cleaned = String(token || '')
+    .replace(/^[?.!,/;:]+|[?.!,/;:]+$/g, '')
+    .replace(SLOT_HINT_DETERMINERS, '')
+    .replace(/^[?.!,/;:]+|[?.!,/;:]+$/g, '')
+    .trim()
+  if (!cleaned) return null
+  return tryResolve(cleaned)
+}
+
+/**
+ * When upgrades / about-follow-up phrasing is present, find a single exact slot token.
+ * Multi-slot phrases return null to avoid ambiguous filters.
+ * @param {string} raw
+ * @param {(hint: string) => { canonical: string, slotIds: number[], chipLabel: string }|null} tryResolve
+ * @returns {{ canonical: string, slotIds: number[], chipLabel: string }|null}
+ */
+function scanSingleSlotToken(raw, tryResolve) {
+  const hits = []
+  const seen = new Set()
+  for (const token of String(raw || '').split(/\s+/).filter(Boolean)) {
+    const hit = tryResolveToken(token, tryResolve)
+    if (!hit) continue
+    const key = hit.canonical
+    if (seen.has(key)) continue
+    seen.add(key)
+    hits.push(hit)
+    if (hits.length > 1) return null
+  }
+  return hits.length === 1 ? hits[0] : null
+}
+
 /**
  * Extract an equipment-slot hint for upgrade follow-ups ("what about shoulder", bare "shoulder").
  * @param {string} text
@@ -91,9 +145,7 @@ export function extractUpgradeSlotHint(text) {
   if (!raw) return null
 
   const tryResolve = (hint) => {
-    const cleaned = String(hint || '')
-      .replace(/[?.!]+$/g, '')
-      .trim()
+    const cleaned = normalizeSlotHintPhrase(hint)
     if (!cleaned) return null
     const canonical = resolveExactSlotAlias(cleaned)
     if (!canonical) return null
@@ -106,23 +158,39 @@ export function extractUpgradeSlotHint(text) {
     }
   }
 
-  // Bare slot reply: "shoulder", "shoulders?"
+  // Bare slot reply: "shoulder", "shoulders?", "his wrist/."
   const direct = tryResolve(raw)
   if (direct) return direct
 
-  // Dialogue chips / follow-ups: "what about shoulder?"
+  // Dialogue chips / follow-ups: "what about shoulder?", "what about his wrist/."
   const about = raw.match(/\b(?:what about|how about)\s+(.+?)(?:\?|$)/i)
   if (about) {
     const fromAbout = tryResolve(about[1])
     if (fromAbout) return fromAbout
   }
 
+  // Noun-first: "what wrist upgrades…", "which shoulder upgrades…"
+  const nounFirst = raw.match(
+    /\b(?:what|which|any|show(?:\s+me)?)\s+(?:(?:his|her|their|my|our|the|a|an)\s+)?(\w+)\s+upgrades?\b/i,
+  )
+  if (nounFirst) {
+    const fromNoun = tryResolve(nounFirst[1])
+    if (fromNoun) return fromNoun
+  }
+
+  // "<slot> upgrades for …"
+  const slotUpgradesFor = raw.match(
+    /\b(?:(?:his|her|their|my|our|the|a|an)\s+)?(\w+)\s+upgrades?\s+(?:for|on|to)\b/i,
+  )
+  if (slotUpgradesFor) {
+    const fromSlotUpgrades = tryResolve(slotUpgradesFor[1])
+    if (fromSlotUpgrades) return fromSlotUpgrades
+  }
+
   // Inline on buy path: "what should I buy for shoulders" or "… for Iaminae shoulders"
   const forSlot = raw.match(/\bfor\s+(.+?)(?:\?|$)/i)
   if (forSlot) {
-    const forHint = String(forSlot[1] || '')
-      .replace(/[?.!]+$/g, '')
-      .trim()
+    const forHint = normalizeSlotHintPhrase(forSlot[1] || '')
     const tokens = forHint.split(/\s+/).filter(Boolean)
     // Prefer a trailing exact slot token (character name + slot)
     if (tokens.length >= 1) {
@@ -131,6 +199,12 @@ export function extractUpgradeSlotHint(text) {
     }
     const fromFor = tryResolve(forHint)
     if (fromFor) return fromFor
+  }
+
+  // Fallback token scan for upgrade / about utterances with a single exact slot word.
+  if (/\bupgrades?\b/i.test(raw) || /\b(?:what about|how about)\b/i.test(raw)) {
+    const scanned = scanSingleSlotToken(raw, tryResolve)
+    if (scanned) return scanned
   }
 
   return null
@@ -509,17 +583,14 @@ export function computeCharacterUpgrades({
   flatAll.sort((a, b) => b.delta - a.delta)
   flatFiltered.sort((a, b) => b.delta - a.delta)
 
-  /** Dedupe by itemId when filtering paired slots (rings/wrists/ears). */
-  let ranked = flatFiltered
-  if (filterSet) {
-    const seen = new Set()
-    ranked = []
-    for (const row of flatFiltered) {
-      const key = row.itemId != null ? String(row.itemId) : `${row.itemName}:${row.slotId}`
-      if (seen.has(key)) continue
-      seen.add(key)
-      ranked.push(row)
-    }
+  /** Dedupe by itemId so paired slots (rings/wrists/ears) do not double-list the same item. */
+  const seen = new Set()
+  const ranked = []
+  for (const row of flatFiltered) {
+    const key = row.itemId != null ? String(row.itemId) : `${row.itemName}:${row.slotId}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    ranked.push(row)
   }
 
   const suggestions = ranked.slice(0, resultLimit)

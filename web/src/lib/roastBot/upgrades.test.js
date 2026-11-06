@@ -600,6 +600,23 @@ describe('roastBot upgrades', () => {
     assert.deepEqual(slotIdsFromCanonical('FINGER'), [15, 16])
   })
 
+  it('extractUpgradeSlotHint handles possessive, punctuation, and noun-first wrist phrasing', () => {
+    const possessive = extractUpgradeSlotHint('what about his wrist/.')
+    assert.equal(possessive?.canonical, 'WRIST')
+    assert.deepEqual(possessive?.slotIds, [9, 10])
+    assert.equal(possessive?.chipLabel, 'Wrist')
+
+    const nounFirst = extractUpgradeSlotHint('what wrist upgrades does badammo have')
+    assert.equal(nounFirst?.canonical, 'WRIST')
+    assert.deepEqual(nounFirst?.slotIds, [9, 10])
+
+    const bareWrist = extractUpgradeSlotHint('wrist')
+    assert.deepEqual(bareWrist?.slotIds, [9, 10])
+
+    assert.equal(extractUpgradeSlotHint('what upgrades does he have'), null)
+    assert.equal(extractUpgradeSlotHint('what about Badammo?'), null)
+  })
+
   it('slot filter returns up to 5 upgrades and lists upgradeSlots', () => {
     resetUpgradeCaches()
     const itemStats = {
@@ -687,5 +704,41 @@ describe('roastBot upgrades', () => {
     assert.equal(result.ok, true, `expected ok, got ${result.reason}`)
     const better = result.suggestions.filter((s) => s.itemId === 90001)
     assert.equal(better.length, 1)
+  })
+
+  it('unfiltered upgrades also dedupe the same wrist item across Wrist 1 and Wrist 2', () => {
+    resetUpgradeCaches()
+    const itemStats = {
+      200: { name: 'Old Bracer', slot: 'WRIST', classes: 'WAR', ac: 5, mods: [], resists: [] },
+      101: { name: 'Old Chest', slot: 'CHEST', classes: 'WAR', ac: 10, mods: [], resists: [] },
+      90010: { name: 'Better Bracer', slot: 'WRIST', classes: 'WAR', ac: 40, mods: [], resists: [] },
+      301: { name: 'New Chest', slot: 'CHEST', classes: 'WAR', ac: 80, mods: [], resists: [] },
+    }
+    const rankings = {
+      classWeights: { Warrior: { ...AC_WEIGHTS } },
+      focusCandidates: {},
+      characters: [
+        {
+          name: 'War',
+          class: 'Warrior',
+          inventory: [
+            { slot_id: 9, item_id: 200, item_name: 'Old Bracer' },
+            { slot_id: 10, item_id: 200, item_name: 'Old Bracer' },
+            { slot_id: 17, item_id: 101, item_name: 'Old Chest' },
+          ],
+        },
+      ],
+    }
+    const result = computeCharacterUpgrades({
+      character: { char_id: 'w1', name: 'War', class_name: 'Warrior' },
+      rankings,
+      itemStats,
+      raidItemIds: new Set(Object.keys(itemStats).map(Number)),
+      limit: 5,
+    })
+    assert.equal(result.ok, true, `expected ok, got ${result.reason}`)
+    const bracers = result.suggestions.filter((s) => s.itemId === 90010)
+    assert.equal(bracers.length, 1)
+    assert.ok(result.upgradeSlots.some((s) => s.slotId === 9 || s.slotId === 10))
   })
 })

@@ -915,4 +915,238 @@ describe('loot discovery dialogue regression', () => {
     assert.match(second.response.text, /shoulder/i)
     assert.ok(second.answer.requiredClaims.includes('upgrade_candidates'))
   })
+
+  it('what about his wrist after buy stays UPGRADES with wrist-only cards', () => {
+    resetUpgradeCaches()
+    const itemStats = {
+      ...itemStatsFixture,
+      200: {
+        name: 'Old Bracer',
+        slot: 'WRIST',
+        classes: 'WAR',
+        ac: 5,
+        mods: [],
+        resists: [],
+      },
+      201: {
+        name: 'Old Chestplate',
+        slot: 'CHEST',
+        classes: 'WAR',
+        ac: 10,
+        mods: [],
+        resists: [],
+      },
+      910: {
+        name: 'Earthen Bracer of Fortitude',
+        slot: 'WRIST',
+        classes: 'WAR',
+        ac: 35,
+        mods: [],
+        resists: [],
+      },
+      911: {
+        name: 'Heavy Yttrium Chestplate',
+        slot: 'CHEST',
+        classes: 'WAR',
+        ac: 80,
+        mods: [],
+        resists: [],
+      },
+      912: {
+        name: 'Clawed Guardian Bracer',
+        slot: 'WRIST',
+        classes: 'WAR',
+        ac: 28,
+        mods: [],
+        resists: [],
+      },
+      913: {
+        name: 'Zombie Flesh Bracer',
+        slot: 'WRIST',
+        classes: 'WAR',
+        ac: 22,
+        mods: [],
+        resists: [],
+      },
+    }
+    const rankings = {
+      ...rankingsFixture,
+      classWeights: {
+        ...rankingsFixture.classWeights,
+        Warrior: { ac_pct: 1, hp_pct: 0, mana_pct: 0, resists_pct: 0 },
+      },
+      characters: [
+        ...rankingsFixture.characters,
+        {
+          name: 'Badammo',
+          class: 'Warrior',
+          overall_score: 900,
+          inventory: [
+            { slot_id: 9, item_id: 200, item_name: 'Old Bracer' },
+            { slot_id: 10, item_id: 200, item_name: 'Old Bracer' },
+            { slot_id: 17, item_id: 201, item_name: 'Old Chestplate' },
+          ],
+        },
+      ],
+    }
+    const upgradeContext = {
+      rankings,
+      itemStats,
+      raidItemIds: new Set([100, 501, 200, 201, 910, 911, 912, 913]),
+    }
+    const facts = fixtureFacts({
+      characters: [
+        { char_id: 'e1', name: 'Iaminae', class_name: 'Enchanter' },
+        { char_id: 'w2', name: 'Badammo', class_name: 'Warrior' },
+      ],
+      itemCatalog: [
+        { name: 'Clawed Guardian Bracer', itemId: 912 },
+        { name: 'Zombie Flesh Bracer', itemId: 913 },
+        { name: 'Threaded Platinum Bracelet', itemId: 914 },
+        { name: 'Bracelet of Sense', itemId: 915 },
+        { name: 'Bracelet of Might', itemId: 916 },
+        { name: 'Earthen Bracer of Fortitude', itemId: 910 },
+        { name: 'Heavy Yttrium Chestplate', itemId: 911 },
+      ],
+    })
+
+    let state = createConversationState()
+    const first = handleMessage({
+      text: 'What should I buy for Badammo?',
+      facts,
+      state,
+      upgradeContext,
+      rng: () => 0,
+    })
+    assert.equal(first.intent, INTENTS.UPGRADES)
+    assert.equal(first.state.selectedCharacterId, 'w2')
+    assert.ok(first.suggestions.some((s) => /what about wrist/i.test(s)))
+    assert.ok(first.response.links?.some((l) => l.type === 'character' && l.to === '/characters/Badammo'))
+    assert.ok(first.response.cards?.every((c) => typeof c.to === 'string' && c.to.startsWith('/items/')))
+    state = first.state
+
+    const chip = first.suggestions.find((s) => /what about wrist/i.test(s))
+    const viaChip = handleMessage({
+      text: chip,
+      facts,
+      state,
+      upgradeContext,
+      rng: () => 0,
+    })
+    assert.equal(viaChip.intent, INTENTS.UPGRADES)
+    assert.ok(viaChip.response.cards?.length >= 1, viaChip.response.text)
+    assert.ok(
+      viaChip.response.cards.every((c) => /wrist/i.test(c.slot || '')),
+      JSON.stringify(viaChip.response.cards),
+    )
+    assert.ok(viaChip.response.links?.some((l) => l.type === 'character' && /Badammo/i.test(l.label)))
+    assert.ok(viaChip.response.cards.every((c) => c.to?.startsWith('/items/')))
+    state = viaChip.state
+
+    const second = handleMessage({
+      text: 'what about his wrist/.',
+      facts,
+      state,
+      upgradeContext,
+      rng: () => 0,
+    })
+    assert.equal(second.intent, INTENTS.UPGRADES)
+    assert.notEqual(second.response.templateId, 'AMBIGUOUS_ITEM')
+    assert.doesNotMatch(second.response.text, /Ambiguous item match/i)
+    assert.ok(second.response.cards?.length >= 1, second.response.text)
+    assert.ok(
+      second.response.cards.every((c) => /wrist/i.test(c.slot || '')),
+      JSON.stringify(second.response.cards),
+    )
+    assert.ok(second.answer.requiredClaims.includes('upgrade_candidates'))
+    assert.ok(second.response.cards.every((c) => c.to?.startsWith('/items/')))
+  })
+
+  it('what wrist upgrades does Badammo have returns wrist-only cards', () => {
+    resetUpgradeCaches()
+    const itemStats = {
+      ...itemStatsFixture,
+      200: {
+        name: 'Old Bracer',
+        slot: 'WRIST',
+        classes: 'WAR',
+        ac: 5,
+        mods: [],
+        resists: [],
+      },
+      201: {
+        name: 'Old Chestplate',
+        slot: 'CHEST',
+        classes: 'WAR',
+        ac: 10,
+        mods: [],
+        resists: [],
+      },
+      910: {
+        name: 'Earthen Bracer of Fortitude',
+        slot: 'WRIST',
+        classes: 'WAR',
+        ac: 35,
+        mods: [],
+        resists: [],
+      },
+      911: {
+        name: 'Heavy Yttrium Chestplate',
+        slot: 'CHEST',
+        classes: 'WAR',
+        ac: 80,
+        mods: [],
+        resists: [],
+      },
+    }
+    const rankings = {
+      ...rankingsFixture,
+      classWeights: {
+        ...rankingsFixture.classWeights,
+        Warrior: { ac_pct: 1, hp_pct: 0, mana_pct: 0, resists_pct: 0 },
+      },
+      characters: [
+        ...rankingsFixture.characters,
+        {
+          name: 'Badammo',
+          class: 'Warrior',
+          overall_score: 900,
+          inventory: [
+            { slot_id: 9, item_id: 200, item_name: 'Old Bracer' },
+            { slot_id: 10, item_id: 200, item_name: 'Old Bracer' },
+            { slot_id: 17, item_id: 201, item_name: 'Old Chestplate' },
+          ],
+        },
+      ],
+    }
+    const upgradeContext = {
+      rankings,
+      itemStats,
+      raidItemIds: new Set([100, 501, 200, 201, 910, 911]),
+    }
+    const facts = fixtureFacts({
+      characters: [
+        { char_id: 'e1', name: 'Iaminae', class_name: 'Enchanter' },
+        { char_id: 'w2', name: 'Badammo', class_name: 'Warrior' },
+      ],
+    })
+
+    const out = handleMessage({
+      text: 'what wrist upgrades does Badammo have',
+      facts,
+      state: createConversationState(),
+      upgradeContext,
+      rng: () => 0,
+    })
+    assert.equal(out.intent, INTENTS.UPGRADES)
+    assert.ok(out.response.cards?.length >= 1, out.response.text)
+    assert.ok(
+      out.response.cards.every((c) => /wrist/i.test(c.slot || '')),
+      JSON.stringify(out.response.cards),
+    )
+    assert.ok(!out.response.cards.some((c) => /chest/i.test(c.slot || '')))
+    assert.ok(out.answer.requiredClaims.includes('upgrade_candidates'))
+    assert.ok(out.response.links?.some((l) => l.type === 'character' && l.to === '/characters/Badammo'))
+    assert.ok(out.response.cards.every((c) => c.to?.startsWith('/items/')))
+  })
 })
