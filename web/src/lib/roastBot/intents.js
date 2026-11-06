@@ -13,6 +13,12 @@ export const INTENTS = {
   WORST_PURCHASE: 'worst_purchase',
   CHARACTERS: 'characters',
   CHARACTER_ROAST: 'character_roast',
+  /** Total DKP spent on a named character (character_dkp_spent / loot attribution). */
+  CHARACTER_DKP_SPENT: 'character_dkp_spent',
+  /** Magelo class-coverage viability (officer Raider Activity Quarm-eligible rule). */
+  QUARM_ELIGIBILITY: 'quarm_eligibility',
+  /** Exact Magelo sheet stats from class_rankings.json. */
+  CHARACTER_STATS: 'character_stats',
   ITEM_SEARCH: 'item_search',
   ITEM_PRICE: 'item_price',
   ITEM_SOURCE: 'item_source',
@@ -54,7 +60,62 @@ export const CHARACTER_SCOPED_INTENTS = new Set([
   INTENTS.UPGRADES,
   INTENTS.GEAR_ASSESSMENT,
   INTENTS.CHARACTER_ROAST,
+  INTENTS.CHARACTER_DKP_SPENT,
+  INTENTS.QUARM_ELIGIBILITY,
+  INTENTS.CHARACTER_STATS,
 ])
+
+/** @param {string} text already normalized lowercase */
+export const CHARACTER_DKP_SPENT_PATTERNS = [
+  /how much dkp .{0,40}\bspent\b/,
+  /\bdkp (has been |was |been )?spent\b/,
+  /\btotal dkp spent\b/,
+  /\bspent on\b/,
+  /\bhow much .{0,20}\bspent on\b/,
+  /\bdkp spent (on|for)\b/,
+]
+
+/** @param {string} text already normalized lowercase */
+export const QUARM_ELIGIBILITY_PATTERNS = [
+  /\bquarm\s+eligib/,
+  /\beligib\w*\s+(for\s+)?quarm\b/,
+  /\braid[- ]?ready\b/,
+  /\braid\s+viable\b/,
+  /\bviable\s+geared\b/,
+  /\bclass\s+coverage\b/,
+  /\bclass\s+ranking\b/,
+  /\b(green|display)\s+(raid\s+)?(toon|status|pill)\b/,
+  /\bis\s+\w[\w'-]*\s+(quarm\s+)?(eligib\w*|viable|raid[- ]?ready)\b/,
+  /\bis\s+(this\s+)?(toon|character|alt)\s+(quarm\s+)?(eligib\w*|raid[- ]?ready|viable)\b/,
+]
+
+/** @param {string} text already normalized lowercase */
+export const CHARACTER_STATS_PATTERNS = [
+  /\bwhat (are|is) .{0,40}\bstats?\b/,
+  /\bshow .{0,40}\bstats?\b/,
+  /\bstats? (for|of)\b/,
+  /\b(hp|mana|ac|str|sta)\b.{0,20}\b(for|of)\b/,
+  /\bexact (stats?|attributes?)\b/,
+  /\b[\w'-]+'?s?\s+stats?\b/,
+]
+
+/** @param {string} text */
+export function isCharacterDkpSpentQuestion(text) {
+  const t = normalizeMessage(text)
+  return CHARACTER_DKP_SPENT_PATTERNS.some((p) => p.test(t))
+}
+
+/** @param {string} text */
+export function isQuarmEligibilityQuestion(text) {
+  const t = normalizeMessage(text)
+  return QUARM_ELIGIBILITY_PATTERNS.some((p) => p.test(t))
+}
+
+/** @param {string} text */
+export function isCharacterStatsQuestion(text) {
+  const t = normalizeMessage(text)
+  return CHARACTER_STATS_PATTERNS.some((p) => p.test(t))
+}
 
 /** @param {string} text */
 export function normalizeMessage(text) {
@@ -74,6 +135,10 @@ const RULES = [
     intent: INTENTS.WHO_IS,
     patterns: [/^who(?:'s| is)\b(?!\s+(got|won|received|go|gott|looted)\b)/, /^whose (?:account|alt|toon)\b/],
   },
+  // Character spend totals — before FULL_GEAR_COST ("total dkp…") and ITEM_PRICE ("how much").
+  { intent: INTENTS.CHARACTER_DKP_SPENT, patterns: CHARACTER_DKP_SPENT_PATTERNS },
+  { intent: INTENTS.QUARM_ELIGIBILITY, patterns: QUARM_ELIGIBILITY_PATTERNS },
+  { intent: INTENTS.CHARACTER_STATS, patterns: CHARACTER_STATS_PATTERNS },
   { intent: INTENTS.FULL_GEAR_COST, patterns: [/fully? (upgrade|gear|equip)/, /how much.*(everything|all|total|complete)/, /total.*(dkp|cost|upgrade)/, /gear(ing)? budget/, /finish(ing)? (my )?gear/, /fully gear/] },
   { intent: INTENTS.WORST_PURCHASE, patterns: [/worst (purchase|buy|bid|loot)/, /biggest mistake/, /most (expensive|questionable)/, /regret/] },
   { intent: INTENTS.WHY_BROKE, patterns: [/why am i broke/, /why.*(broke|poor|empty|no dkp)/, /where did (my|the) dkp go/, /what happened to my dkp/] },
@@ -239,6 +304,93 @@ export function extractWhoIsCharacterName(raw) {
   if (!rest || rest.length < 2) return null
   if (/\b(got|won|received|drop|loot|raid)\b/i.test(rest)) return null
   return rest
+}
+
+const STOP_SUBJECT = new Set([
+  'my',
+  'the',
+  'a',
+  'an',
+  'this',
+  'that',
+  'his',
+  'her',
+  'their',
+  'our',
+  'your',
+  'me',
+  'i',
+  'it',
+  'toon',
+  'character',
+  'alt',
+  'main',
+  'dkp',
+  'raid',
+  'quarm',
+  'stats',
+  'stat',
+  'gear',
+  'eligible',
+  'viability',
+  'viable',
+  'coverage',
+  'class',
+])
+
+/**
+ * Best-effort subject character name for spend / viability / stats asks (guild-wide).
+ * Prefers roster match when provided; otherwise extracts from phrasing.
+ * @param {string} raw
+ * @param {{ characters?: Array<{ name?: string }>, intent?: string|null }} [opts]
+ * @returns {string|null}
+ */
+export function extractSubjectCharacterName(raw, opts = {}) {
+  const text = normalizeMessage(raw)
+  if (!text) return null
+
+  const rosterHit = matchCharacterMention(text, opts.characters || [])
+  if (rosterHit?.name && !rosterHit.ambiguous) return rosterHit.name
+
+  const original = String(raw || '').trim()
+  const tryCapture = (re) => {
+    const m = original.match(re) || text.match(re)
+    if (!m?.[1]) return null
+    let name = String(m[1]).replace(/[?!.]+$/g, '').replace(/'s$/i, '').trim()
+    if (!name || name.length < 2) return null
+    if (STOP_SUBJECT.has(name.toLowerCase())) return null
+    if (/\s/.test(name) && !opts.characters?.some((c) => normalizeMessage(c.name) === normalizeMessage(name))) {
+      // Multi-word only when it matches a known roster name
+      return null
+    }
+    return name
+  }
+
+  const intent = opts.intent || null
+  if (!intent || intent === INTENTS.CHARACTER_DKP_SPENT) {
+    const spent =
+      tryCapture(/\bspent\s+on\s+([A-Za-z][\w'-]{1,32})\b/i) ||
+      tryCapture(/\bspent\s+for\s+([A-Za-z][\w'-]{1,32})\b/i) ||
+      tryCapture(/\bdkp\s+(?:has\s+been\s+|was\s+|been\s+)?spent\s+on\s+([A-Za-z][\w'-]{1,32})\b/i)
+    if (spent) return spent
+  }
+  if (!intent || intent === INTENTS.QUARM_ELIGIBILITY) {
+    const elig =
+      tryCapture(/\bis\s+([A-Za-z][\w'-]{1,32})\s+(?:quarm\s+)?(?:eligible|viable|raid[- ]?ready)\b/i) ||
+      tryCapture(/\b([A-Za-z][\w'-]{1,32})\s+quarm\s+eligib/i) ||
+      tryCapture(/\b([A-Za-z][\w'-]{1,32})\s+raid[- ]?ready\b/i) ||
+      tryCapture(/\b([A-Za-z][\w'-]{1,32})\s+(?:raid\s+)?viable\b/i) ||
+      tryCapture(/\bclass\s+ranking\s+(?:%|percent|percentage)?\s+(?:for|of)\s+([A-Za-z][\w'-]{1,32})\b/i)
+    if (elig) return elig
+  }
+  if (!intent || intent === INTENTS.CHARACTER_STATS) {
+    const stats =
+      tryCapture(/\b(?:what\s+are|what\s+is|show)\s+([A-Za-z][\w'-]{1,32})(?:'s)?\s+stats?\b/i) ||
+      tryCapture(/\bstats?\s+(?:for|of)\s+([A-Za-z][\w'-]{1,32})\b/i) ||
+      tryCapture(/\b([A-Za-z][\w'-]{1,32})(?:'s)?\s+stats?\b/i)
+    if (stats) return stats
+  }
+  return null
 }
 
 function extractQuotedOrTrailingItem(text) {

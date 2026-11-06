@@ -9,12 +9,24 @@ import {
   computeCharacterUpgrades,
   evaluateItemFitForAccount,
   formatMageloLoadError,
+  findMageloCharacter,
 } from '../upgrades.js'
 import { assessCharacterGear } from '../gearAssessment.js'
 import { scopedPurchaseFacts, pickSpendPurchase } from '../facts.js'
 import { FULL_GEAR_COST_REFUSAL, INITIAL_GREETING, NO_ACCOUNT_HINT } from '../templates.js'
 import { lookupItemSource } from '../../itemSourceLookup.js'
 import { renderDiscovery } from '../discovery/render.js'
+import { spentFromAccountFacts } from '../characterSpendLookup.js'
+import {
+  buildMaxRawScoreByClass,
+  classNameToAbbrev,
+  highlightThresholdForClass,
+  isHighlightedGearPct,
+  isViableGearPct,
+  normalizedGearPct,
+  TANK_CLASS_ABBREVS,
+  viabilityThresholdForClass,
+} from '../../classCoverage.js'
 
 /**
  * @typedef {{
@@ -110,6 +122,12 @@ export function dispatchHandler(args) {
       return handleLootDiscovery(args)
     case INTENTS.WHO_IS:
       return handleWhoIs(args)
+    case INTENTS.CHARACTER_DKP_SPENT:
+      return handleCharacterDkpSpent(args)
+    case INTENTS.QUARM_ELIGIBILITY:
+      return handleQuarmEligibility(args)
+    case INTENTS.CHARACTER_STATS:
+      return handleCharacterStats(args)
     case INTENTS.UNKNOWN:
     default:
       return handleUnknown(args)
@@ -166,6 +184,411 @@ function handleCapabilities() {
  * Prefetched who-is lookup from RoastBot send path.
  * @param {object} args
  */
+/**
+ * Prefetched character DKP spent (get_character_dkp_spent) or account-loot fallback.
+ * @param {object} args
+ */
+function handleCharacterDkpSpent(args) {
+  const character = args.selectedCharacter
+  const pref = args.characterSpendResult
+  const name =
+    pref?.characterName ||
+    character?.name ||
+    null
+
+  if (!name) {
+    const chars = args.facts.characters || []
+    if (chars.length > 1) {
+      return clarificationCharacter(INTENTS.CHARACTER_DKP_SPENT, chars, args.ambiguousClass)
+    }
+    if (chars.length === 1) {
+      return handleCharacterDkpSpent({ ...args, selectedCharacter: chars[0] })
+    }
+    return {
+      intent: INTENTS.CHARACTER_DKP_SPENT,
+      category: 'general',
+      factText:
+        'Ask how much DKP has been spent on a character name (for example "how much DKP has been spent on Tandiyen"). I need an actual toon — inventing a spend total would be fraud.',
+      requiredClaims: ['need_character'],
+      placeholders: {},
+      referenced: emptyReferenced(),
+      reasonCode: 'need_character',
+      allowFlavor: true,
+      templateId: 'NEED_CHAR',
+    }
+  }
+
+  let total = null
+  if (pref && pref.status === 'ok' && pref.totalSpent != null && Number.isFinite(Number(pref.totalSpent))) {
+    total = Number(pref.totalSpent)
+  } else if (pref && pref.status === 'error') {
+    const fallback = spentFromAccountFacts(args.facts, character || { name })
+    if (fallback != null && (args.facts?.accountId || fallback > 0)) {
+      total = fallback
+    } else {
+      return {
+        intent: INTENTS.CHARACTER_DKP_SPENT,
+        category: 'general',
+        factText: `I could not load the character spend ledger for ${name} (${pref.error || 'lookup failed'}). No spend total was invented.`,
+        requiredClaims: ['character_spent_unavailable'],
+        placeholders: { toon: name },
+        referenced: withRefs([name], []),
+        reasonCode: 'character_spent_unavailable',
+        allowFlavor: false,
+        templateId: 'GEAR_MISSING',
+      }
+    }
+  } else {
+    const fallback = spentFromAccountFacts(args.facts, character || { name })
+    total = fallback != null ? fallback : 0
+  }
+
+  const formatted = formatDkp(total)
+  return {
+    intent: INTENTS.CHARACTER_DKP_SPENT,
+    category: 'general',
+    factText: `Recorded DKP spent on ${name}: ${formatted} DKP. That is character-attributed loot spend (assignment when set), not the account balance.`,
+    requiredClaims: ['character_dkp_spent'],
+    placeholders: { toon: name, cost: formatted },
+    referenced: withRefs([name], []),
+    links: buildLinks({ characterName: name }),
+    reasonCode: 'character_dkp_spent',
+    allowFlavor: true,
+    templateId: 'CHARACTER_DKP_SPENT',
+  }
+}
+
+/**
+ * Magelo class ranking % + raid-ready / green-display cutoffs (officer Raider Activity rules).
+ * Accepts "quarm eligible", "raid ready", class coverage, etc. — answers quantitatively.
+ * @param {object} args
+ */
+function handleQuarmEligibility(args) {
+  const character = args.selectedCharacter
+  if (!character?.name) {
+    const chars = args.facts.characters || []
+    if (chars.length > 1) {
+      return clarificationCharacter(INTENTS.QUARM_ELIGIBILITY, chars, args.ambiguousClass)
+    }
+    if (chars.length === 1) {
+      return handleQuarmEligibility({ ...args, selectedCharacter: chars[0] })
+    }
+    return {
+      intent: INTENTS.QUARM_ELIGIBILITY,
+      category: 'general',
+      factText:
+        'Ask for a toon\'s Magelo class ranking % / raid-ready status (for example "is Iaminae raid ready?" or "is Tandiyen Quarm eligible?"). Name the toon — I will not invent percentages.',
+      requiredClaims: ['need_character'],
+      placeholders: {},
+      referenced: emptyReferenced(),
+      reasonCode: 'need_character',
+      allowFlavor: true,
+      templateId: 'NEED_CHAR',
+    }
+  }
+
+  if (!args.upgradeContext?.rankings) {
+    const loadErr = formatMageloLoadError(
+      args.upgradeContext?.rankingsError
+        ? { ok: false, ...args.upgradeContext.rankingsError }
+        : null,
+    )
+    const detail = loadErr || 'Magelo rankings data is not loaded'
+    return {
+      intent: INTENTS.QUARM_ELIGIBILITY,
+      category: 'general',
+      factText: `I cannot report Magelo class ranking % for ${character.name} because ${detail}. No percentages were invented.`,
+      requiredClaims: ['magelo_unavailable'],
+      placeholders: { toon: character.name },
+      referenced: withRefs([character.name], []),
+      reasonCode: loadErr ? 'magelo_fetch_failed' : 'missing_magelo_export',
+      allowFlavor: false,
+      templateId: 'GEAR_MISSING',
+    }
+  }
+
+  const rankings = args.upgradeContext.rankings
+  const magelo = findMageloCharacter(rankings, character.name)
+  if (!magelo) {
+    return {
+      intent: INTENTS.QUARM_ELIGIBILITY,
+      category: 'general',
+      factText: `${character.name} is not in the current Magelo rankings export, so there is no class ranking % to report. I refuse to invent gear percentages.`,
+      requiredClaims: ['quarm_not_in_rankings'],
+      placeholders: { toon: character.name },
+      referenced: withRefs([character.name], []),
+      reasonCode: 'quarm_not_in_rankings',
+      allowFlavor: false,
+      templateId: 'GEAR_MISSING',
+    }
+  }
+
+  const list = rankings.characters || []
+  const maxByClass = buildMaxRawScoreByClass(list)
+  const abbrev = classNameToAbbrev(magelo.class || character.class_name)
+  const pct = normalizedGearPct(magelo, maxByClass)
+  const viabilityCut = viabilityThresholdForClass(abbrev)
+  const greenCut = highlightThresholdForClass(abbrev)
+  const viable = isViableGearPct(pct, abbrev)
+  const green = isHighlightedGearPct(pct, abbrev)
+  const isTank = TANK_CLASS_ABBREVS.has(String(abbrev || '').toUpperCase())
+  const pctLabel = pct != null && Number.isFinite(pct) ? `${pct}%` : 'unknown %'
+  const classLabel = abbrev || magelo.class || character.class_name || 'unknown class'
+  const tankNote = isTank
+    ? 'Tanks (WAR/PAL/SHD) use higher cutoffs than other classes'
+    : 'Non-tanks use the general cutoffs (tanks WAR/PAL/SHD are higher)'
+  const raidReadyLabel = viable ? 'meets raid-ready' : 'below raid-ready'
+  const greenLabel = green ? 'meets green display' : 'below green display'
+  const sheetBits = formatRaidReadySheetBits(magelo, { includeAc: isTank })
+
+  const factText = [
+    `${character.name} Magelo class ranking: ${pctLabel} (${classLabel}).`,
+    `Raid-ready cutoff: >${viabilityCut}%. Green display cutoff: >${greenCut}%.`,
+    `${tankNote}.`,
+    `Status: ${raidReadyLabel}; ${greenLabel}.`,
+    sheetBits ? `${sheetBits}.` : null,
+    'Same numbers as the officer Raider Activity class-coverage pills.',
+  ]
+    .filter(Boolean)
+    .join(' ')
+
+  const claims = [
+    'class_ranking_pct',
+    'raid_ready_cutoff',
+    'green_display_cutoff',
+    viable ? 'quarm_eligible' : 'quarm_not_eligible',
+  ]
+  if (sheetBits) claims.push('raid_ready_sheet')
+
+  return {
+    intent: INTENTS.QUARM_ELIGIBILITY,
+    category: 'general',
+    factText,
+    requiredClaims: claims,
+    placeholders: {
+      toon: character.name,
+      upgrade: pctLabel,
+    },
+    referenced: withRefs([character.name], []),
+    links: buildLinks({ characterName: character.name }),
+    reasonCode: viable ? 'quarm_eligible' : 'quarm_not_eligible',
+    allowFlavor: true,
+    templateId: 'QUARM_ELIGIBILITY',
+  }
+}
+
+const RESIST_LABELS = {
+  MR: 'magic resist',
+  FR: 'fire resist',
+  CR: 'cold resist',
+  DR: 'disease resist',
+  PR: 'poison resist',
+}
+
+/** Only call out a lowest save when average saves are meaningfully high. */
+const LOWEST_SAVE_AVG_FLOOR = 150
+
+/**
+ * Stylistic Magelo sheet extras for raid-ready answers: HP, avg/lowest save; AC for tanks.
+ * Lowest-save roast only when average save is at least 150.
+ * @param {object} magelo
+ * @param {{ includeAc?: boolean }} [opts]
+ * @returns {string|null}
+ */
+function formatRaidReadySheetBits(magelo, opts = {}) {
+  if (!magelo || typeof magelo !== 'object') return null
+  const stats = magelo.stats && typeof magelo.stats === 'object' ? magelo.stats : {}
+  const scores = magelo.scores && typeof magelo.scores === 'object' ? magelo.scores : {}
+  const parts = []
+
+  const hp = Number(stats.hp ?? scores.hp)
+  if (Number.isFinite(hp)) parts.push(`${Math.round(hp)} HP`)
+
+  const resistSrc =
+    magelo.individual_resists && typeof magelo.individual_resists === 'object'
+      ? magelo.individual_resists
+      : stats.resists && typeof stats.resists === 'object'
+        ? stats.resists
+        : null
+  const resistKeys = ['MR', 'FR', 'CR', 'DR', 'PR']
+  if (resistSrc) {
+    const pairs = resistKeys
+      .map((k) => ({ key: k, value: Number(resistSrc[k]) }))
+      .filter((p) => Number.isFinite(p.value))
+    if (pairs.length) {
+      const avg = pairs.reduce((sum, p) => sum + p.value, 0) / pairs.length
+      const avgRounded = Math.round(avg)
+      let lowest = pairs[0]
+      for (const p of pairs) {
+        if (p.value < lowest.value) lowest = p
+      }
+      if (avg >= LOWEST_SAVE_AVG_FLOOR && lowest.value < avg) {
+        const resistName = RESIST_LABELS[lowest.key] || lowest.key
+        parts.push(
+          `they forgot to work on ${resistName} at ${Math.round(lowest.value)} despite an average save of ${avgRounded}`,
+        )
+      } else {
+        parts.push(`average save ${avgRounded}`)
+      }
+    }
+  } else {
+    const total = Number(stats.resists ?? scores.resists)
+    if (Number.isFinite(total) && total > 0) {
+      parts.push(`average save ${Math.round(total / 5)}`)
+    }
+  }
+
+  if (opts.includeAc) {
+    const ac = Number(stats.ac ?? scores.ac)
+    if (Number.isFinite(ac)) parts.push(`${Math.round(ac)} AC`)
+  }
+
+  return parts.length ? parts.join('. ') : null
+}
+
+/**
+ * Exact Magelo sheet stats from class_rankings.json.
+ * @param {object} args
+ */
+function handleCharacterStats(args) {
+  const character = args.selectedCharacter
+  if (!character?.name) {
+    const chars = args.facts.characters || []
+    if (chars.length > 1) {
+      return clarificationCharacter(INTENTS.CHARACTER_STATS, chars, args.ambiguousClass)
+    }
+    if (chars.length === 1) {
+      return handleCharacterStats({ ...args, selectedCharacter: chars[0] })
+    }
+    return {
+      intent: INTENTS.CHARACTER_STATS,
+      category: 'general',
+      factText:
+        'Ask for a character\'s Magelo stats by name (for example "what are Iaminae\'s stats"). I will not invent attributes.',
+      requiredClaims: ['need_character'],
+      placeholders: {},
+      referenced: emptyReferenced(),
+      reasonCode: 'need_character',
+      allowFlavor: true,
+      templateId: 'NEED_CHAR',
+    }
+  }
+
+  if (!args.upgradeContext?.rankings) {
+    const loadErr = formatMageloLoadError(
+      args.upgradeContext?.rankingsError
+        ? { ok: false, ...args.upgradeContext.rankingsError }
+        : null,
+    )
+    const detail = loadErr || 'Magelo rankings data is not loaded'
+    return {
+      intent: INTENTS.CHARACTER_STATS,
+      category: 'general',
+      factText: `I cannot show Magelo stats for ${character.name} because ${detail}. No stats were invented.`,
+      requiredClaims: ['magelo_unavailable'],
+      placeholders: { toon: character.name },
+      referenced: withRefs([character.name], []),
+      reasonCode: loadErr ? 'magelo_fetch_failed' : 'missing_magelo_export',
+      allowFlavor: false,
+      templateId: 'GEAR_MISSING',
+    }
+  }
+
+  const magelo = findMageloCharacter(args.upgradeContext.rankings, character.name)
+  if (!magelo) {
+    return {
+      intent: INTENTS.CHARACTER_STATS,
+      category: 'general',
+      factText: `${character.name} is not in the current Magelo rankings export. I refuse to invent sheet stats.`,
+      requiredClaims: ['stats_not_in_rankings'],
+      placeholders: { toon: character.name },
+      referenced: withRefs([character.name], []),
+      reasonCode: 'stats_not_in_rankings',
+      allowFlavor: false,
+      templateId: 'GEAR_MISSING',
+    }
+  }
+
+  const stats = magelo.stats && typeof magelo.stats === 'object' ? magelo.stats : null
+  if (!stats) {
+    return {
+      intent: INTENTS.CHARACTER_STATS,
+      category: 'general',
+      factText: `${character.name} is in Magelo rankings, but no stats object is present on that export row. No attributes were invented.`,
+      requiredClaims: ['stats_missing'],
+      placeholders: { toon: character.name },
+      referenced: withRefs([character.name], []),
+      reasonCode: 'stats_missing',
+      allowFlavor: false,
+      templateId: 'GEAR_MISSING',
+    }
+  }
+
+  const factText = formatMageloStatsFact(character.name, magelo, stats)
+  return {
+    intent: INTENTS.CHARACTER_STATS,
+    category: 'general',
+    factText,
+    requiredClaims: ['character_stats'],
+    placeholders: { toon: character.name },
+    referenced: withRefs([character.name], []),
+    links: buildLinks({ characterName: character.name }),
+    reasonCode: 'character_stats',
+    allowFlavor: false,
+    templateId: 'CHARACTER_STATS',
+  }
+}
+
+/**
+ * @param {string} name
+ * @param {object} magelo
+ * @param {object} stats
+ */
+function formatMageloStatsFact(name, magelo, stats) {
+  const pick = (key, ...alts) => {
+    for (const k of [key, ...alts]) {
+      if (stats[k] != null && String(stats[k]).trim() !== '') return String(stats[k])
+    }
+    return null
+  }
+  const parts = [`${name} Magelo sheet stats (${magelo.class || 'unknown class'}):`]
+  const combat = [
+    ['HP', pick('hp')],
+    ['Mana', pick('mana')],
+    ['AC', pick('ac')],
+    ['ATK', pick('atk_item', 'atk')],
+    ['Haste', pick('haste')],
+    ['FT', pick('mana_regen_item', 'ft')],
+  ]
+    .filter(([, v]) => v != null)
+    .map(([label, v]) => `${label} ${v}`)
+  if (combat.length) parts.push(combat.join(' · '))
+
+  const attrs = ['STR', 'STA', 'AGI', 'DEX', 'WIS', 'INT', 'CHA']
+    .map((k) => {
+      const v = pick(k)
+      return v != null ? `${k} ${v}` : null
+    })
+    .filter(Boolean)
+  if (attrs.length) parts.push(attrs.join(' · '))
+
+  const resistsSrc =
+    (magelo.individual_resists && typeof magelo.individual_resists === 'object'
+      ? magelo.individual_resists
+      : null) ||
+    (stats.resists && typeof stats.resists === 'object' ? stats.resists : null)
+  if (resistsSrc) {
+    const resistBits = ['MR', 'FR', 'CR', 'DR', 'PR']
+      .map((k) => (resistsSrc[k] != null ? `${k} ${resistsSrc[k]}` : null))
+      .filter(Boolean)
+    if (resistBits.length) parts.push(`Resists: ${resistBits.join(' · ')}`)
+  } else if (pick('resists')) {
+    parts.push(`Resists: ${pick('resists')}`)
+  }
+
+  return parts.join(' ')
+}
+
 function handleWhoIs(args) {
   const lookup = args.whoIsResult
   const askedName = args.whoIsName || lookup?.characterName || null

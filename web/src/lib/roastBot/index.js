@@ -11,8 +11,18 @@ export {
   ITEM_FIT_PATTERNS,
   isItemFitQuestion,
   extractWhoIsCharacterName,
+  isCharacterDkpSpentQuestion,
+  isQuarmEligibilityQuestion,
+  isCharacterStatsQuestion,
+  extractSubjectCharacterName,
 } from './intents.js'
 export { looksLikeWhoIs, extractWhoIsName, lookupWhoIs, resolveWhoIsFromMaps } from './whoIs.js'
+export {
+  looksLikeCharacterDkpSpent,
+  extractSpendCharacterName,
+  lookupCharacterDkpSpent,
+  spentFromAccountFacts,
+} from './characterSpendLookup.js'
 export {
   TEMPLATES,
   TEMPLATE_BY_ID,

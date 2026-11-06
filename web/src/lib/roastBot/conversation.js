@@ -3,7 +3,16 @@
  * Clarifications store pendingIntent and resume on the next turn.
  */
 
-import { classifyIntent, INTENTS, matchCharacterMention, CHARACTER_SCOPED_INTENTS } from './intents.js'
+import {
+  classifyIntent,
+  INTENTS,
+  matchCharacterMention,
+  CHARACTER_SCOPED_INTENTS,
+  isCharacterDkpSpentQuestion,
+  isQuarmEligibilityQuestion,
+  isCharacterStatsQuestion,
+  extractSubjectCharacterName,
+} from './intents.js'
 import { renderAnswer, greetingMessage } from './responseBuilder.js'
 import { matchItemName, suggestionChips, formatDkp } from './formatting.js'
 import { dispatchHandler } from './handlers/index.js'
@@ -203,6 +212,7 @@ function clearPending(state) {
  *   discoveryRecognition?: object|null,
  *   whoIsResult?: object|null,
  *   whoIsName?: string|null,
+ *   characterSpendResult?: object|null,
  *   rng?: () => number,
  * }} args
  */
@@ -216,6 +226,7 @@ export function handleMessage({
   discoveryRecognition = null,
   whoIsResult = null,
   whoIsName = null,
+  characterSpendResult = null,
   rng = Math.random,
 }) {
   state.turnCount = (state.turnCount || 0) + 1
@@ -358,7 +369,13 @@ export function handleMessage({
   // Follow-up remapping when not resuming pending
   if (intent === INTENTS.FOLLOWUP && !state.pendingIntent) {
     const t = String(text || '').toLowerCase()
-    if (/how much|price|cost|sold/.test(t) && (state.lastItemName || state.lastUpgradeCandidateId)) {
+    if (isCharacterDkpSpentQuestion(t)) {
+      intent = INTENTS.CHARACTER_DKP_SPENT
+    } else if (isQuarmEligibilityQuestion(t)) {
+      intent = INTENTS.QUARM_ELIGIBILITY
+    } else if (isCharacterStatsQuestion(t)) {
+      intent = INTENTS.CHARACTER_STATS
+    } else if (/how much|price|cost|sold/.test(t) && (state.lastItemName || state.lastUpgradeCandidateId)) {
       intent = INTENTS.ITEM_PRICE
     } else if (/where|drop|source|zone|mob/.test(t) && state.lastItemName) {
       intent = INTENTS.ITEM_SOURCE
@@ -400,14 +417,37 @@ export function handleMessage({
   }
 
   // Who-is resolves guild-wide names; do not treat the ask as linked-roster selection.
+  const guildWideSubjectIntents = new Set([
+    INTENTS.CHARACTER_DKP_SPENT,
+    INTENTS.QUARM_ELIGIBILITY,
+    INTENTS.CHARACTER_STATS,
+  ])
   let charSel =
     intent === INTENTS.WHO_IS ? null : selectCharacter(facts, classified.matchedCharacter, state)
   if (charSel?.ambiguous) {
     ambiguousClass = charSel
     charSel = null
   }
+  // Spend / viability / stats can name any guild toon, not only linked roster.
+  if (!charSel && guildWideSubjectIntents.has(intent)) {
+    const subjectName =
+      characterSpendResult?.characterName ||
+      extractSubjectCharacterName(text, { characters: facts.characters || [], intent })
+    if (subjectName) {
+      const fromRoster = (facts.characters || []).find(
+        (c) => String(c.name || '').toLowerCase() === String(subjectName).toLowerCase(),
+      )
+      charSel = fromRoster || {
+        name: subjectName,
+        char_id: characterSpendResult?.charId || null,
+        class_name: null,
+      }
+    }
+  }
   if (charSel?.char_id) {
     state.selectedCharacterId = charSel.char_id
+    state.lastSubject = charSel.name
+  } else if (charSel?.name && guildWideSubjectIntents.has(intent)) {
     state.lastSubject = charSel.name
   }
 
@@ -482,6 +522,7 @@ export function handleMessage({
     discoveryRecognition,
     whoIsResult,
     whoIsName: resolvedWhoIsName,
+    characterSpendResult,
     slotIds: intent === INTENTS.UPGRADES ? upgradeSlotIds : null,
     slotLabel: intent === INTENTS.UPGRADES ? upgradeSlotLabel : null,
   })

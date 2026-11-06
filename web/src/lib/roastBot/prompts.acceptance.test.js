@@ -132,6 +132,163 @@ describe('roastBot prompt smoke — every intent', () => {
     assert.ok(out.response.cards?.length > 0)
   })
 
+  it('CHARACTER_DKP_SPENT for named character', () => {
+    const out = turn(createConversationState(), 'how much dkp has been spent on Iaminae', {
+      characterSpendResult: {
+        status: 'ok',
+        characterName: 'Iaminae',
+        charId: 'e1',
+        totalSpent: 220,
+      },
+    })
+    assert.equal(out.intent, INTENTS.CHARACTER_DKP_SPENT)
+    assert.ok(out.answer.requiredClaims.includes('character_dkp_spent'))
+    assert.match(out.response.text, /220/)
+    assert.match(out.response.text, /Iaminae/)
+    assert.doesNotMatch(out.response.text, /upgrades? for|Magelo rankings data is not loaded/i)
+  })
+
+  it('CHARACTER_DKP_SPENT after UPGRADES does not remount upgrades', () => {
+    const state = createConversationState()
+    state.lastIntent = INTENTS.UPGRADES
+    const out = turn(state, 'how much dkp has been spent on tandiyen', {
+      characterSpendResult: {
+        status: 'ok',
+        characterName: 'Tandiyen',
+        charId: 't1',
+        totalSpent: 1500,
+      },
+    })
+    assert.equal(out.intent, INTENTS.CHARACTER_DKP_SPENT)
+    assert.match(out.response.text, /1500/)
+    assert.doesNotMatch(out.response.text, /cannot suggest upgrades/i)
+  })
+
+  it('QUARM_ELIGIBILITY reports quantitative class ranking and cutoffs', () => {
+    const out = turn(createConversationState(), 'Is Iaminae Quarm eligible?', {
+      upgradeContext: defaultUpgradeContext({
+        rankings: {
+          ...rankingsFixture,
+          characters: rankingsFixture.characters.map((c) =>
+            c.name === 'Iaminae'
+              ? {
+                  ...c,
+                  overall_score: 900,
+                  stats: { hp: 4200, ac: 500, resists: 175 },
+                  individual_resists: { MR: 40, FR: 35, CR: 30, DR: 25, PR: 45 },
+                }
+              : c,
+          ),
+        },
+      }),
+    })
+    assert.equal(out.intent, INTENTS.QUARM_ELIGIBILITY)
+    assert.ok(out.answer.requiredClaims.includes('class_ranking_pct'), out.response.text)
+    assert.ok(out.answer.requiredClaims.includes('raid_ready_cutoff'), out.response.text)
+    assert.ok(out.answer.requiredClaims.includes('green_display_cutoff'), out.response.text)
+    assert.ok(out.answer.requiredClaims.includes('raid_ready_sheet'), out.response.text)
+    assert.match(out.response.text, /Iaminae/)
+    assert.match(out.response.text, /class ranking:\s*90%/i)
+    assert.match(out.response.text, /Raid-ready cutoff:\s*>75%/i)
+    assert.match(out.response.text, /Green display cutoff:\s*>85%/i)
+    assert.match(out.response.text, /4200 HP/)
+    assert.match(out.response.text, /average save 35/)
+    assert.doesNotMatch(out.response.text, /forgot to work on|lowest save/i)
+    assert.doesNotMatch(out.response.text, /\b500 AC\b|\bAC 500\b/)
+  })
+
+  it('raid ready phrasing uses the same quantitative answer', () => {
+    const out = turn(createConversationState(), 'is Iaminae raid ready?', {
+      upgradeContext: defaultUpgradeContext({
+        rankings: {
+          ...rankingsFixture,
+          characters: rankingsFixture.characters.map((c) =>
+            c.name === 'Iaminae' ? { ...c, overall_score: 900 } : c,
+          ),
+        },
+      }),
+    })
+    assert.equal(out.intent, INTENTS.QUARM_ELIGIBILITY)
+    assert.match(out.response.text, /class ranking:\s*90%/i)
+  })
+
+  it('tank raid-ready answer includes AC and stylistic low-save roast when avg >= 150', () => {
+    const out = turn(createConversationState(), 'is Zender raid ready?', {
+      upgradeContext: defaultUpgradeContext({
+        rankings: {
+          ...rankingsFixture,
+          characters: [
+            ...rankingsFixture.characters,
+            {
+              name: 'Zender',
+              class: 'Warrior',
+              overall_score: 900,
+              stats: { hp: 8000, ac: 3100 },
+              // avg 201; PR is the forgotten low save
+              individual_resists: { MR: 220, FR: 210, CR: 205, DR: 203, PR: 127 },
+            },
+            {
+              name: 'TopWar',
+              class: 'Warrior',
+              overall_score: 1000,
+              stats: { hp: 9000, ac: 3500 },
+            },
+          ],
+          classWeights: {
+            ...rankingsFixture.classWeights,
+            Warrior: { ac_pct: 1, hp_pct: 0, mana_pct: 0, resists_pct: 0 },
+          },
+        },
+      }),
+    })
+    assert.equal(out.intent, INTENTS.QUARM_ELIGIBILITY)
+    assert.match(out.response.text, /8000 HP/)
+    assert.match(
+      out.response.text,
+      /forgot to work on poison resist at 127 despite an average save of 193/i,
+    )
+    assert.match(out.response.text, /3100 AC/)
+    assert.match(out.response.text, /Raid-ready cutoff:\s*>85%/i)
+    assert.match(out.response.text, /Green display cutoff:\s*>92%/i)
+  })
+
+  it('CHARACTER_STATS formats Magelo sheet stats', () => {
+    const out = turn(createConversationState(), "what are Iaminae's stats", {
+      upgradeContext: defaultUpgradeContext({
+        rankings: {
+          ...rankingsFixture,
+          characters: rankingsFixture.characters.map((c) =>
+            c.name === 'Iaminae'
+              ? {
+                  ...c,
+                  stats: {
+                    hp: 4200,
+                    mana: 3100,
+                    ac: 880,
+                    atk_item: '100 / 250',
+                    haste: '36%',
+                    STR: 75,
+                    STA: 80,
+                    AGI: 70,
+                    DEX: 85,
+                    WIS: 60,
+                    INT: 140,
+                    CHA: 120,
+                  },
+                  individual_resists: { MR: 40, FR: 35, CR: 30, DR: 25, PR: 20 },
+                }
+              : c,
+          ),
+        },
+      }),
+    })
+    assert.equal(out.intent, INTENTS.CHARACTER_STATS)
+    assert.ok(out.answer.requiredClaims.includes('character_stats'))
+    assert.match(out.response.text, /4200/)
+    assert.match(out.response.text, /INT 140/)
+    assert.match(out.response.text, /MR 40/)
+  })
+
   it('AFFORDABILITY named item', () => {
     const out = turn(createConversationState(), 'Can I afford Beguiler Circlet?')
     assert.equal(out.intent, INTENTS.AFFORDABILITY)

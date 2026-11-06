@@ -123,10 +123,10 @@ export const GAME_ACCOUNTS_LINK = {
 export const CAPABILITIES_EXAMPLE_CHIPS = [
   'Roast my DKP spending',
   'Why am I broke?',
-  'What is my DKP balance?',
+  'How much DKP has been spent on Iaminae?',
   'What should I buy?',
+  'Is Iaminae raid ready?',
   'What dropped off Quarm?',
-  'Who got the last plate bp?',
 ]
 
 /**
@@ -134,8 +134,8 @@ export const CAPABILITIES_EXAMPLE_CHIPS = [
  */
 export const CAPABILITIES_FACT_TEXT = [
   'Ask about your DKP sins, guild loot, or who owns a toon. Examples:',
-  'Roast / DKP — Roast my DKP spending · Why am I broke? · What is my DKP balance?',
-  'Gear — What should I buy? · Is this a well geared enchanter?',
+  'Roast / DKP — Roast my DKP spending · Why am I broke? · What is my DKP balance? · How much DKP has been spent on Iaminae?',
+  'Gear — What should I buy? · Is this a well geared enchanter? · Is Iaminae raid ready? · What are Iaminae\'s stats?',
   'Loot intel — What dropped off Quarm? · Who got the last plate bp? · Who is Tandiyen?',
   'I will not invent numbers or accuse individual characters of skipping raids.',
 ].join('\n')

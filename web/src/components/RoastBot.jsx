@@ -31,6 +31,16 @@ import {
 } from '../lib/roastBot/index.js'
 import { recognizeDiscovery, runDiscovery } from '../lib/roastBot/discovery/index.js'
 import { extractWhoIsName, looksLikeWhoIs, lookupWhoIs } from '../lib/roastBot/whoIs.js'
+import {
+  extractSpendCharacterName,
+  looksLikeCharacterDkpSpent,
+  lookupCharacterDkpSpent,
+} from '../lib/roastBot/characterSpendLookup.js'
+import {
+  isCharacterDkpSpentQuestion,
+  isQuarmEligibilityQuestion,
+  isCharacterStatsQuestion,
+} from '../lib/roastBot/intents.js'
 import { ensureItemStatsLoaded } from '../lib/itemStats'
 import './RoastBot.css'
 
@@ -48,11 +58,16 @@ function needsMageloContext(text, pendingIntent, lastIntent = null) {
   if (
     pendingIntent === 'gear_assessment' ||
     pendingIntent === 'upgrades' ||
-    pendingIntent === 'item_fit'
+    pendingIntent === 'item_fit' ||
+    pendingIntent === 'quarm_eligibility' ||
+    pendingIntent === 'character_stats'
   ) {
     return true
   }
   if (isUpgradeSlotFollowUp(text, { lastIntent, pendingIntent })) {
+    return true
+  }
+  if (isQuarmEligibilityQuestion(lower) || isCharacterStatsQuestion(lower)) {
     return true
   }
   return /upgrade|what should i buy|recommend|improve|gear|geared|well.?geared|gear check|buy for|could use|who needs|which of my toons|is this an upgrade/.test(
@@ -288,6 +303,7 @@ export default function RoastBot({ profile, session, factsOverride = null, openO
         let discoveryRecognition = null
         let whoIsResult = null
         let whoIsName = null
+        let characterSpendResult = null
         const skipDiscoveryForUpgradeSlot = isUpgradeSlotFollowUp(text, convState)
         if (!factsOverride) {
           if (looksLikeWhoIs(text)) {
@@ -303,6 +319,26 @@ export default function RoastBot({ profile, session, factsOverride = null, openO
                   accountName: null,
                   lastRaidDate: null,
                   charId: null,
+                }
+              }
+            }
+          } else if (
+            isCharacterDkpSpentQuestion(text) ||
+            looksLikeCharacterDkpSpent(text)
+          ) {
+            const spendName = extractSpendCharacterName(text, {
+              characters: facts.characters || [],
+            })
+            if (spendName) {
+              try {
+                characterSpendResult = await lookupCharacterDkpSpent(supabase, spendName)
+              } catch {
+                characterSpendResult = {
+                  status: 'error',
+                  characterName: spendName,
+                  charId: null,
+                  totalSpent: null,
+                  error: 'lookup_failed',
                 }
               }
             }
@@ -351,6 +387,7 @@ export default function RoastBot({ profile, session, factsOverride = null, openO
           discoveryRecognition,
           whoIsResult,
           whoIsName,
+          characterSpendResult,
         })
         setConvState(result.state)
         setMessages((m) => [...m, { role: 'bot', ...result.response }])

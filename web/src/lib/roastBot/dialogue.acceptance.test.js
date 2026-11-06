@@ -600,6 +600,47 @@ describe('loot discovery dialogue regression', () => {
     assert.match(response.text, /2026-02-14/)
   })
 
+  it('spent on character after who-is returns spend total not upgrades', () => {
+    const facts = fixtureFacts()
+    const state = createConversationState()
+    state.lastIntent = INTENTS.WHO_IS
+    const { response, intent, answer } = handleMessage({
+      text: 'how much dkp has been spent on tandiyen',
+      facts,
+      state,
+      characterSpendResult: {
+        status: 'ok',
+        characterName: 'Tandiyen',
+        charId: '7',
+        totalSpent: 1840,
+      },
+      rng: () => 0,
+    })
+    assert.equal(intent, INTENTS.CHARACTER_DKP_SPENT)
+    assert.ok(answer.requiredClaims.includes('character_dkp_spent'))
+    assert.match(response.text, /1840/)
+    assert.match(response.text, /Tandiyen/)
+    assert.doesNotMatch(response.text, /cannot suggest upgrades|Magelo rankings data is not loaded/i)
+  })
+
+  it('quarm eligibility not in rankings is honest', () => {
+    const facts = fixtureFacts()
+    const { response, intent, answer } = handleMessage({
+      text: 'Is Tandiyen Quarm eligible?',
+      facts,
+      state: createConversationState(),
+      upgradeContext: {
+        rankings: rankingsFixture,
+        itemStats: itemStatsFixture,
+        raidItemIds: new Set(),
+      },
+      rng: () => 0,
+    })
+    assert.equal(intent, INTENTS.QUARM_ELIGIBILITY)
+    assert.ok(answer.requiredClaims.includes('quarm_not_in_rankings'))
+    assert.match(response.text, /not in the current Magelo rankings/i)
+  })
+
   it('what about shoulder after buy stays UPGRADES and returns slot cards/chips', () => {
     resetUpgradeCaches()
     const itemStats = {

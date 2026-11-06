@@ -94,6 +94,8 @@ export function renderAnswer({ answer, state, facts, rng = Math.random }) {
       answer.templateId === 'NO_ACCOUNT' || answer.templateId === 'NEED_CHAR' ||
       answer.templateId === 'NEED_ITEM' || answer.templateId === 'UNKNOWN' ||
       answer.templateId === 'GEAR_ASSESSMENT' || answer.templateId === 'GEAR_MISSING' ||
+      answer.templateId === 'CHARACTER_DKP_SPENT' || answer.templateId === 'QUARM_ELIGIBILITY' ||
+      answer.templateId === 'CHARACTER_STATS' ||
       answer.reasonCode === 'why_broke' || answer.reasonCode === 'gear_assessment' ||
       answer.reasonCode === 'dkp_explain' || answer.reasonCode === 'capabilities' ||
       answer.reasonCode === 'no_gearing_total' || answer.reasonCode === 'need_character' ||
@@ -102,6 +104,10 @@ export function renderAnswer({ answer, state, facts, rng = Math.random }) {
       answer.reasonCode === 'magelo_fetch_failed' ||
       answer.reasonCode === 'upgrades_unavailable' || answer.reasonCode === 'character_not_in_magelo' ||
       answer.reasonCode === 'missing_magelo_export' || answer.reasonCode === 'missing_gear_score' ||
+      answer.reasonCode === 'character_dkp_spent' || answer.reasonCode === 'character_spent_unavailable' ||
+      answer.reasonCode === 'quarm_eligible' || answer.reasonCode === 'quarm_not_eligible' ||
+      answer.reasonCode === 'quarm_not_in_rankings' || answer.reasonCode === 'character_stats' ||
+      answer.reasonCode === 'stats_not_in_rankings' || answer.reasonCode === 'stats_missing' ||
       answer.reasonCode === 'loot_discovery' || answer.templateId === 'LOOT_DISCOVERY') {
     // Data/error paths: flavor only when allowFlavor is explicit and reason is not a hard error.
     let text = answer.factText

@@ -126,7 +126,7 @@ export function defaultUpgradeContext(overrides = {}) {
  * One dialogue turn with deterministic rng.
  * @param {object} state
  * @param {string} text
- * @param {{ facts?: object, upgradeContext?: object|null, discoveryAnswer?: object|null, discoveryResult?: object|null, discoveryRecognition?: object|null, whoIsResult?: object|null, whoIsName?: string|null }} [opts]
+ * @param {{ facts?: object, upgradeContext?: object|null, discoveryAnswer?: object|null, discoveryResult?: object|null, discoveryRecognition?: object|null, whoIsResult?: object|null, whoIsName?: string|null, characterSpendResult?: object|null }} [opts]
  */
 export function turn(state, text, opts = {}) {
   const facts = opts.facts ?? fixtureFacts()
@@ -140,6 +140,7 @@ export function turn(state, text, opts = {}) {
     discoveryRecognition: opts.discoveryRecognition ?? null,
     whoIsResult: opts.whoIsResult ?? null,
     whoIsName: opts.whoIsName ?? null,
+    characterSpendResult: opts.characterSpendResult ?? null,
     rng: () => 0,
   })
   return out
