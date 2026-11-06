@@ -284,15 +284,20 @@ export function handleMessage({
     isCharacterSwapFollowUp(text, state)
   const upgradesContext =
     state.lastIntent === INTENTS.UPGRADES ||
+    state.lastIntent === INTENTS.GEAR_ASSESSMENT ||
     state.pendingIntent === INTENTS.UPGRADES ||
+    state.pendingIntent === INTENTS.GEAR_ASSESSMENT ||
     classified.intent === INTENTS.UPGRADES
   const upgradesSlotHit =
     !whoIsHit &&
     !itemFitHit &&
     Boolean(upgradeSlotHint) &&
     (state.lastIntent === INTENTS.UPGRADES ||
+      state.lastIntent === INTENTS.GEAR_ASSESSMENT ||
       state.pendingIntent === INTENTS.UPGRADES ||
-      (classified.intent === INTENTS.FOLLOWUP && state.lastIntent === INTENTS.UPGRADES) ||
+      state.pendingIntent === INTENTS.GEAR_ASSESSMENT ||
+      (classified.intent === INTENTS.FOLLOWUP &&
+        (state.lastIntent === INTENTS.UPGRADES || state.lastIntent === INTENTS.GEAR_ASSESSMENT)) ||
       (classified.intent === INTENTS.UPGRADES && Boolean(upgradeSlotHint)))
   const recognitionOk =
     !whoIsHit &&
@@ -644,7 +649,10 @@ export function handleMessage({
     state.lastPurchase = answer.purchase
     state.lastReferencedPurchaseId = answer.purchase.purchaseId || null
   }
-  if (intent === INTENTS.UPGRADES && Array.isArray(answer.upgradeSlots)) {
+  if (
+    (intent === INTENTS.UPGRADES || intent === INTENTS.GEAR_ASSESSMENT) &&
+    Array.isArray(answer.upgradeSlots)
+  ) {
     state.lastUpgradeSlots = answer.upgradeSlots
   }
   if (answer.referenced?.items?.length) {
@@ -788,13 +796,17 @@ function suggestionState(facts, state) {
   }
 }
 
+/** Intents that may continue into slot-scoped Magelo upgrades ("what about his feet?"). */
+const SLOT_FOLLOWUP_INTENTS = new Set([INTENTS.UPGRADES, INTENTS.GEAR_ASSESSMENT])
+
 /**
- * True when the utterance is a slot-scoped upgrade follow-up after an upgrades answer.
+ * True when the utterance is a slot-scoped upgrade follow-up after upgrades or gear assessment.
  * Used by the UI to load Magelo context and skip loot discovery recognition.
  */
 export function isUpgradeSlotFollowUp(text, state = {}) {
   if (!text) return false
-  if (state.lastIntent !== INTENTS.UPGRADES && state.pendingIntent !== INTENTS.UPGRADES) {
+  const prior = state.lastIntent || state.pendingIntent
+  if (!SLOT_FOLLOWUP_INTENTS.has(prior) && !SLOT_FOLLOWUP_INTENTS.has(state.pendingIntent)) {
     return false
   }
   return Boolean(extractUpgradeSlotHint(text))

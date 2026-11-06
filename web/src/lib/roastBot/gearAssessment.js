@@ -87,6 +87,8 @@ export function assessCharacterGear({ character, rankings, itemStats = null, rai
 
   /** @type {object[]} */
   let upgradeSuggestions = []
+  /** @type {object[]} */
+  let upgradeSlots = []
   let upgradeReason = null
   if (itemStats && rankings) {
     const up = computeCharacterUpgrades({
@@ -98,8 +100,10 @@ export function assessCharacterGear({ character, rankings, itemStats = null, rai
     })
     if (up.ok) {
       upgradeSuggestions = up.suggestions
+      upgradeSlots = up.upgradeSlots || []
     } else {
       upgradeReason = up.reason
+      upgradeSlots = up.upgradeSlots || []
     }
   } else {
     upgradeReason = 'upgrade_data_not_loaded'
@@ -124,6 +128,7 @@ export function assessCharacterGear({ character, rankings, itemStats = null, rai
     classMax,
     classAbbrev: abbrev,
     upgradeSuggestions,
+    upgradeSlots,
     upgradeReason,
     claims,
     referenced: {

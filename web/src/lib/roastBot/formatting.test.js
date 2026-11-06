@@ -115,4 +115,15 @@ describe('suggestionChips upgrade slots', () => {
     assert.equal(wrist?.canonical, 'WRIST')
     assert.deepEqual(wrist?.slotIds, [9, 10])
   })
+
+  it('surfaces slot chips after gear_assessment as well as upgrades', () => {
+    const chips = suggestionChips({
+      hasAccount: true,
+      lastIntent: 'gear_assessment',
+      lastUpgradeSlots: [
+        { slotId: 19, slotLabel: 'Feet', chipLabel: 'Feet', bestDelta: 0.02, count: 1 },
+      ],
+    })
+    assert.equal(chips[0], 'What about Feet?')
+  })
 })

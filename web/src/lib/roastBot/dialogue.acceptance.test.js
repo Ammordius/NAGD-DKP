@@ -929,6 +929,106 @@ describe('loot discovery dialogue regression', () => {
     assert.doesNotMatch(second.response.text, /psychic services/i)
   })
 
+  it('gear assessment → what about his feet returns feet upgrades not boot item ambiguity', () => {
+    resetUpgradeCaches()
+    const itemStats = {
+      ...itemStatsFixture,
+      120: {
+        name: 'Old Boots',
+        slot: 'FEET',
+        classes: 'SHD',
+        ac: 5,
+        mods: [],
+        resists: [],
+      },
+      720: {
+        name: 'Improved Shadow Boots',
+        slot: 'FEET',
+        classes: 'SHD',
+        ac: 40,
+        mods: [],
+        resists: [],
+      },
+      721: {
+        name: 'Mithril Boots',
+        slot: 'FEET',
+        classes: 'WAR',
+        ac: 30,
+        mods: [],
+        resists: [],
+      },
+    }
+    const rankings = {
+      ...rankingsFixture,
+      characters: [
+        ...rankingsFixture.characters,
+        {
+          name: 'Tandiyen',
+          class: 'Shadow Knight',
+          overall_score: 886,
+          inventory: [
+            { slot_id: 2, item_id: 100, item_name: 'Old Circlet' },
+            { slot_id: 19, item_id: 120, item_name: 'Old Boots' },
+          ],
+        },
+      ],
+      classWeights: {
+        ...rankingsFixture.classWeights,
+        'Shadow Knight': { ac_pct: 1, hp_pct: 1, mana_pct: 0, resists_pct: 0 },
+      },
+    }
+    const upgradeContext = {
+      rankings,
+      itemStats,
+      raidItemIds: new Set([100, 501, 120, 720, 721]),
+    }
+    const facts = fixtureFacts({
+      characters: [
+        { char_id: 'e1', name: 'Iaminae', class_name: 'Enchanter' },
+        { char_id: 't1', name: 'Tandiyen', class_name: 'Shadow Knight' },
+      ],
+      itemCatalog: [
+        { name: 'Mithril Boots', itemId: 721 },
+        { name: 'Yttrium Studded Leather Boots', itemId: 722 },
+        { name: 'Iron Silk Sandals', itemId: 723 },
+        { name: 'Improved Shadow Boots', itemId: 720 },
+      ],
+    })
+
+    let state = createConversationState()
+    const first = handleMessage({
+      text: 'Is Tandiyen geared?',
+      facts,
+      state,
+      upgradeContext,
+      rng: () => 0,
+    })
+    assert.equal(first.intent, INTENTS.GEAR_ASSESSMENT)
+    assert.equal(first.state.lastSubject, 'Tandiyen')
+    assert.ok(first.state.lastUpgradeSlots?.length > 0)
+    state = first.state
+
+    const second = handleMessage({
+      text: 'what about his feet?',
+      facts,
+      state,
+      upgradeContext,
+      discoveryRecognition: {
+        status: 'ambiguous',
+        reason: 'Ambiguous item match for "feet". Candidates: Mithril Boots, Yttrium Studded Leather Boots.',
+      },
+      rng: () => 0,
+    })
+    assert.equal(second.intent, INTENTS.UPGRADES)
+    assert.doesNotMatch(second.response.text, /Ambiguous item match|Which item\?/i)
+    assert.ok(second.response.cards?.length >= 1, second.response.text)
+    assert.ok(
+      second.response.cards.every((c) => /feet|boot/i.test(`${c.slot || ''} ${c.itemName || ''}`)),
+      JSON.stringify(second.response.cards),
+    )
+    assert.match(second.response.text, /Tandiyen|feet|boot/i)
+  })
+
   it('andiyen typo then upgrade for him resolves Tandiyen upgrades not Shim items', () => {
     const facts = fixtureFacts({
       characters: [

@@ -242,9 +242,9 @@ export function suggestionChips(state = {}) {
     if (other?.name) chips.push(`Is this a well geared ${other.class_name || other.name}?`)
   }
 
-  // After an upgrades answer, surface slots that still have verified upgrades.
+  // After upgrades or gear assessment, surface slots that still have verified upgrades.
   if (
-    state.lastIntent === 'upgrades' &&
+    (state.lastIntent === 'upgrades' || state.lastIntent === 'gear_assessment') &&
     Array.isArray(state.lastUpgradeSlots) &&
     state.lastUpgradeSlots.length
   ) {

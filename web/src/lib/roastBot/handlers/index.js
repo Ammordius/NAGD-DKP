@@ -942,6 +942,8 @@ function handleGearAssessment(args) {
     },
     referenced: assessment.referenced,
     cards,
+    // Enable "what about feet?" slot chips / follow-ups after gear assessment.
+    upgradeSlots: assessment.upgradeSlots || [],
     reasonCode: 'gear_assessment',
     allowFlavor: false,
     templateId: 'GEAR_ASSESSMENT',
