@@ -698,4 +698,93 @@ describe('loot discovery dialogue regression', () => {
     assert.match(response.text, /RaidDad/)
     assert.match(response.text, /2026-02-14/)
   })
+
+  it('what about shoulder after buy stays UPGRADES and returns slot cards/chips', () => {
+    resetUpgradeCaches()
+    const itemStats = {
+      ...itemStatsFixture,
+      110: {
+        name: 'Old Shoulders',
+        slot: 'SHOULDERS',
+        classes: 'ENC',
+        ac: 5,
+        mods: [],
+        resists: [],
+      },
+      610: {
+        name: 'Silk Lined Shoulderpads',
+        slot: 'SHOULDERS',
+        classes: 'ENC',
+        ac: 30,
+        mods: [],
+        resists: [],
+      },
+      611: {
+        name: 'Second Shoulder Pad',
+        slot: 'SHOULDERS',
+        classes: 'ENC',
+        ac: 22,
+        mods: [],
+        resists: [],
+      },
+    }
+    const rankings = {
+      ...rankingsFixture,
+      characters: [
+        {
+          name: 'Iaminae',
+          class: 'Enchanter',
+          overall_score: 800,
+          inventory: [
+            { slot_id: 2, item_id: 100, item_name: 'Old Circlet' },
+            { slot_id: 6, item_id: 110, item_name: 'Old Shoulders' },
+          ],
+        },
+        rankingsFixture.characters[1],
+        rankingsFixture.characters[2],
+      ],
+    }
+    const upgradeContext = {
+      rankings,
+      itemStats,
+      raidItemIds: new Set([100, 501, 110, 610, 611]),
+    }
+    const facts = fixtureFacts()
+
+    let state = createConversationState()
+    const first = handleMessage({
+      text: 'What should I buy for Iaminae?',
+      facts,
+      state,
+      upgradeContext,
+      rng: () => 0,
+    })
+    assert.equal(first.intent, INTENTS.UPGRADES)
+    assert.ok(first.state.lastUpgradeSlots?.length > 0)
+    assert.ok(
+      first.suggestions.some((s) => /what about shoulder/i.test(s)),
+      `expected shoulder chip, got ${JSON.stringify(first.suggestions)}`,
+    )
+    state = first.state
+
+    const second = handleMessage({
+      text: 'what about shoulder?',
+      facts,
+      state,
+      upgradeContext,
+      discoveryRecognition: {
+        status: 'recognized',
+        query: { slot: 'SHOULDERS', intent: 'last_award', raw: 'what about shoulder?' },
+      },
+      rng: () => 0,
+    })
+    assert.equal(second.intent, INTENTS.UPGRADES)
+    assert.ok(second.response.cards?.length >= 1, second.response.text)
+    assert.ok(
+      second.response.cards.every((c) => /shoulder/i.test(c.slot || '')),
+      JSON.stringify(second.response.cards),
+    )
+    assert.match(second.response.text, /shoulder/i)
+    assert.ok(second.answer.requiredClaims.includes('upgrade_candidates'))
+  })
 })

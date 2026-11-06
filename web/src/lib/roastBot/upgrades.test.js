@@ -12,6 +12,8 @@ import {
   validateClassRankingsSchema,
   formatMageloLoadError,
   DEFAULT_CLASS_RANKINGS_URL,
+  extractUpgradeSlotHint,
+  slotIdsFromCanonical,
 } from './upgrades.js'
 import { CLASS_TO_ABBREV, computeUpgradesForCharacter } from '../mageloUpgradeEngine.js'
 import { handleMessage, createConversationState } from './conversation.js'
@@ -580,5 +582,110 @@ describe('roastBot upgrades', () => {
       }),
       true,
     )
+  })
+
+  it('extractUpgradeSlotHint resolves shoulder and for-slot phrasing', () => {
+    const shoulder = extractUpgradeSlotHint('what about shoulder?')
+    assert.equal(shoulder?.canonical, 'SHOULDERS')
+    assert.deepEqual(shoulder?.slotIds, [6])
+    assert.equal(shoulder?.chipLabel, 'Shoulder')
+
+    const bare = extractUpgradeSlotHint('Shoulders')
+    assert.deepEqual(bare?.slotIds, [6])
+
+    const forSlot = extractUpgradeSlotHint('What should I buy for shoulders?')
+    assert.deepEqual(forSlot?.slotIds, [6])
+
+    assert.equal(extractUpgradeSlotHint('What should I buy for Iaminae?'), null)
+    assert.deepEqual(slotIdsFromCanonical('FINGER'), [15, 16])
+  })
+
+  it('slot filter returns up to 5 upgrades and lists upgradeSlots', () => {
+    resetUpgradeCaches()
+    const itemStats = {
+      100: { name: 'Old Shoulders', slot: 'SHOULDERS', classes: 'WAR', ac: 5, mods: [], resists: [] },
+      101: { name: 'Old Chest', slot: 'CHEST', classes: 'WAR', ac: 10, mods: [], resists: [] },
+      201: { name: 'Shoulder A', slot: 'SHOULDERS', classes: 'WAR', ac: 20, mods: [], resists: [] },
+      202: { name: 'Shoulder B', slot: 'SHOULDERS', classes: 'WAR', ac: 30, mods: [], resists: [] },
+      203: { name: 'Shoulder C', slot: 'SHOULDERS', classes: 'WAR', ac: 40, mods: [], resists: [] },
+      204: { name: 'Shoulder D', slot: 'SHOULDERS', classes: 'WAR', ac: 50, mods: [], resists: [] },
+      205: { name: 'Shoulder E', slot: 'SHOULDERS', classes: 'WAR', ac: 60, mods: [], resists: [] },
+      206: { name: 'Shoulder F', slot: 'SHOULDERS', classes: 'WAR', ac: 70, mods: [], resists: [] },
+      301: { name: 'New Chest', slot: 'CHEST', classes: 'WAR', ac: 80, mods: [], resists: [] },
+    }
+    const rankings = {
+      classWeights: { Warrior: { ...AC_WEIGHTS } },
+      focusCandidates: {},
+      characters: [
+        {
+          name: 'War',
+          class: 'Warrior',
+          inventory: [
+            { slot_id: 6, item_id: 100, item_name: 'Old Shoulders' },
+            { slot_id: 17, item_id: 101, item_name: 'Old Chest' },
+          ],
+        },
+      ],
+    }
+    const filtered = computeCharacterUpgrades({
+      character: { char_id: 'w1', name: 'War', class_name: 'Warrior' },
+      rankings,
+      itemStats,
+      raidItemIds: new Set(Object.keys(itemStats).map(Number)),
+      limit: 5,
+      slotIds: [6],
+    })
+    assert.equal(filtered.ok, true, `expected ok, got ${filtered.reason}`)
+    assert.ok(filtered.suggestions.length <= 5)
+    assert.equal(filtered.suggestions.length, 5)
+    assert.ok(filtered.suggestions.every((s) => s.slotId === 6))
+    assert.equal(filtered.suggestions[0].itemId, 206)
+    assert.ok(filtered.upgradeSlots.some((s) => s.slotId === 6))
+    assert.ok(filtered.upgradeSlots.some((s) => s.slotId === 17))
+
+    const emptySlot = computeCharacterUpgrades({
+      character: { char_id: 'w1', name: 'War', class_name: 'Warrior' },
+      rankings,
+      itemStats,
+      raidItemIds: new Set(Object.keys(itemStats).map(Number)),
+      limit: 5,
+      slotIds: [2],
+    })
+    assert.equal(emptySlot.ok, false)
+    assert.equal(emptySlot.reason, 'no_upgrades_for_slot')
+    assert.ok(emptySlot.upgradeSlots.some((s) => s.slotId === 6))
+  })
+
+  it('slot filter dedupes the same ring across Finger 1 and Finger 2', () => {
+    resetUpgradeCaches()
+    const itemStats = {
+      80001: { name: 'Old Ring', slot: 'FINGER', classes: 'WAR', ac: 5, mods: [], resists: [] },
+      90001: { name: 'Better Ring', slot: 'FINGER', classes: 'WAR', ac: 40, mods: [], resists: [] },
+    }
+    const rankings = {
+      classWeights: { Warrior: { ...AC_WEIGHTS } },
+      focusCandidates: {},
+      characters: [
+        {
+          name: 'War',
+          class: 'Warrior',
+          inventory: [
+            { slot_id: 15, item_id: 80001, item_name: 'Old Ring' },
+            { slot_id: 16, item_id: 80001, item_name: 'Old Ring' },
+          ],
+        },
+      ],
+    }
+    const result = computeCharacterUpgrades({
+      character: { char_id: 'w1', name: 'War', class_name: 'Warrior' },
+      rankings,
+      itemStats,
+      raidItemIds: new Set([80001, 90001]),
+      limit: 5,
+      slotIds: [15, 16],
+    })
+    assert.equal(result.ok, true, `expected ok, got ${result.reason}`)
+    const better = result.suggestions.filter((s) => s.itemId === 90001)
+    assert.equal(better.length, 1)
   })
 })

@@ -47,6 +47,7 @@ export {
   createConversationState,
   resetIfIdentityChanged,
   selectCharacterId,
+  isUpgradeSlotFollowUp,
 } from './conversation.js'
 export { greetingMessage, buildResponse, renderAnswer } from './responseBuilder.js'
 export { suggestionChips, matchItemName, formatDkp, formatUpgradeDelta, buildLinks } from './formatting.js'
@@ -69,6 +70,10 @@ export {
   extractInventory,
   resetUpgradeCaches,
   collectRaidLootItemIds,
+  CANONICAL_SLOT_TO_IDS,
+  slotIdsFromCanonical,
+  chipLabelForSlot,
+  extractUpgradeSlotHint,
 } from './upgrades.js'
 export { assessCharacterGear } from './gearAssessment.js'
 export { dispatchHandler } from './handlers/index.js'

@@ -24,6 +24,7 @@ import {
   resetIfIdentityChanged,
   createConversationState,
   selectCharacterId,
+  isUpgradeSlotFollowUp,
   loadClassRankings,
   collectRaidLootItemIds,
   resetUpgradeCaches,
@@ -42,13 +43,16 @@ async function fetchSaleCosts() {
   }
 }
 
-function needsMageloContext(text, pendingIntent) {
+function needsMageloContext(text, pendingIntent, lastIntent = null) {
   const lower = String(text || '').toLowerCase()
   if (
     pendingIntent === 'gear_assessment' ||
     pendingIntent === 'upgrades' ||
     pendingIntent === 'item_fit'
   ) {
+    return true
+  }
+  if (isUpgradeSlotFollowUp(text, { lastIntent, pendingIntent })) {
     return true
   }
   return /upgrade|what should i buy|recommend|improve|gear|geared|well.?geared|gear check|buy for|could use|who needs|which of my toons|is this an upgrade/.test(
@@ -275,7 +279,7 @@ export default function RoastBot({ profile, session, factsOverride = null, openO
       setInput('')
       try {
         let ctx = upgradeContext
-        if (needsMageloContext(text, convState.pendingIntent)) {
+        if (needsMageloContext(text, convState.pendingIntent, convState.lastIntent)) {
           ctx = await ensureUpgradeContext()
         }
 
@@ -284,6 +288,7 @@ export default function RoastBot({ profile, session, factsOverride = null, openO
         let discoveryRecognition = null
         let whoIsResult = null
         let whoIsName = null
+        const skipDiscoveryForUpgradeSlot = isUpgradeSlotFollowUp(text, convState)
         if (!factsOverride) {
           if (looksLikeWhoIs(text)) {
             whoIsName = extractWhoIsName(text)
@@ -301,7 +306,7 @@ export default function RoastBot({ profile, session, factsOverride = null, openO
                 }
               }
             }
-          } else {
+          } else if (!skipDiscoveryForUpgradeSlot) {
             const prev = convState.lastDiscovery?.query || null
             const prevPrimary = convState.lastDiscovery?.primary || null
             discoveryRecognition = recognizeDiscovery(text, { prev, prevPrimary })

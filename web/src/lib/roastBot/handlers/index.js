@@ -730,25 +730,34 @@ function handleUpgrades(args) {
     }
   }
 
+  const slotIds = Array.isArray(args.slotIds) && args.slotIds.length ? args.slotIds : null
+  const slotLabel = args.slotLabel || null
   const result = computeCharacterUpgrades({
     character,
     rankings: args.upgradeContext.rankings,
     itemStats: args.upgradeContext.itemStats || {},
     raidItemIds: args.upgradeContext.raidItemIds || new Set(),
-    limit: 3,
+    limit: 5,
+    slotIds,
   })
 
   if (!result.ok) {
+    const reason = result.reason || 'unavailable'
+    const slotScoped = reason === 'no_upgrades_for_slot' && slotLabel
+    const factText = slotScoped
+      ? `No verified upgrades for ${character.name} in ${slotLabel}: no positive candidates in that slot. I will not invent improvement numbers.`
+      : `No verified upgrades for ${character.name}: ${String(reason).replace(/_/g, ' ')}. I will not invent improvement numbers.`
     return {
       intent: INTENTS.UPGRADES,
       category: 'unknown',
-      factText: `No verified upgrades for ${character.name}: ${String(result.reason || 'unavailable').replace(/_/g, ' ')}. I will not invent improvement numbers.`,
+      factText,
       requiredClaims: ['upgrades_unavailable'],
-      placeholders: { toon: character.name },
+      placeholders: { toon: character.name, slot: slotLabel },
       referenced: withRefs([character.name], []),
       reasonCode: 'upgrades_unavailable',
       allowFlavor: false,
-      detailReason: result.reason || null,
+      detailReason: reason,
+      upgradeSlots: result.upgradeSlots || [],
     }
   }
 
@@ -769,23 +778,28 @@ function handleUpgrades(args) {
     zone: u.zone,
     to: `/items/${encodeURIComponent(u.itemName)}`,
   }))
+  const scopeLabel = slotLabel || top?.slot || null
+  const factText = scopeLabel && slotIds
+    ? `For ${character.name} ${scopeLabel}, top verified candidates: ${upgrades.map((u) => `${u.itemName} (${u.upgrade})`).join('; ')}.`
+    : `For ${character.name}, top verified candidates: ${upgrades.map((u) => `${u.itemName} (${u.upgrade})`).join('; ')}.`
 
   return {
     intent: INTENTS.UPGRADES,
     category: strength,
-    factText: `For ${character.name}, top verified candidates: ${upgrades.map((u) => `${u.itemName} (${u.upgrade})`).join('; ')}.`,
+    factText,
     requiredClaims: ['upgrade_candidates'],
     placeholders: {
       toon: character.name,
       item: top?.itemName || null,
       upgrade: top?.upgrade || null,
-      slot: top?.slot || null,
+      slot: scopeLabel,
     },
     referenced: withRefs([character.name], upgrades.map((u) => u.itemName)),
     cards,
     reasonCode: strength,
     allowFlavor: true,
     upgrades,
+    upgradeSlots: result.upgradeSlots || [],
   }
 }
 

@@ -194,6 +194,32 @@ export function suggestionChips(state = {}) {
     const other = state.characters.find((c) => c.char_id !== state.selectedCharacterId)
     if (other?.name) chips.push(`Is this a well geared ${other.class_name || other.name}?`)
   }
+
+  // After an upgrades answer, surface slots that still have verified upgrades.
+  if (
+    state.lastIntent === 'upgrades' &&
+    Array.isArray(state.lastUpgradeSlots) &&
+    state.lastUpgradeSlots.length
+  ) {
+    const seen = new Set()
+    const slotChips = []
+    const ordered = [...state.lastUpgradeSlots].sort(
+      (a, b) => (b.bestDelta || 0) - (a.bestDelta || 0),
+    )
+    for (const slot of ordered) {
+      const label = slot.chipLabel || slot.slotLabel
+      if (!label) continue
+      const key = String(label).toLowerCase()
+      if (seen.has(key)) continue
+      seen.add(key)
+      slotChips.push(`What about ${label}?`)
+      if (slotChips.length >= 4) break
+    }
+    if (slotChips.length) {
+      return [...slotChips, ...chips].slice(0, 6)
+    }
+  }
+
   return chips.slice(0, 6)
 }
 

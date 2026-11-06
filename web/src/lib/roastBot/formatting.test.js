@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
-import { formatUpgradeDelta, buildLinks } from './formatting.js'
+import { formatUpgradeDelta, buildLinks, suggestionChips } from './formatting.js'
 
 describe('buildLinks', () => {
   it('builds raid links to /raids/:id without inventing ids', () => {
@@ -35,5 +35,21 @@ describe('formatUpgradeDelta', () => {
 
   it('preserves sign for negative deltas', () => {
     assert.equal(formatUpgradeDelta(-0.04, 'Arms'), '-0.04 score Arms')
+  })
+})
+
+describe('suggestionChips upgrade slots', () => {
+  it('prepends What about Slot chips from lastUpgradeSlots after upgrades', () => {
+    const chips = suggestionChips({
+      hasAccount: true,
+      lastIntent: 'upgrades',
+      lastUpgradeSlots: [
+        { slotId: 6, slotLabel: 'Shoulder', chipLabel: 'Shoulder', bestDelta: 0.05, count: 2 },
+        { slotId: 2, slotLabel: 'Head', chipLabel: 'Head', bestDelta: 0.02, count: 1 },
+      ],
+    })
+    assert.equal(chips[0], 'What about Shoulder?')
+    assert.ok(chips.includes('What about Head?'))
+    assert.ok(chips.length <= 6)
   })
 })

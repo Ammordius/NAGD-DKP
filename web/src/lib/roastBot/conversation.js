@@ -8,7 +8,7 @@ import { renderAnswer, greetingMessage } from './responseBuilder.js'
 import { matchItemName, suggestionChips, formatDkp } from './formatting.js'
 import { dispatchHandler } from './handlers/index.js'
 import { lookupItemSource, catalogEntriesFromKnownSources } from '../itemSourceLookup.js'
-import { resolveItemIdFromStats } from './upgrades.js'
+import { resolveItemIdFromStats, extractUpgradeSlotHint } from './upgrades.js'
 import { resolveSlotAlias } from './discovery/aliases.js'
 /**
  * @returns {object}
@@ -27,6 +27,7 @@ export function createConversationState() {
     lastPurchase: null,
     lastReferencedPurchaseId: null,
     lastUpgradeCandidateId: null,
+    lastUpgradeSlots: [],
     lastDiscovery: null,
     recentTemplateIds: [],
     turnCount: 0,
@@ -231,25 +232,58 @@ export function handleMessage({
   // Discovery only when recognition succeeded or an answer was prefetched — never via bare gate/lastIntent.
   // Who-is identity questions win over discovery (e.g. never treat "who is Foo" as loot).
   // Item-fit (which toons could use this) also wins so prior Quarm/slot context cannot re-hijack.
+  // Upgrade slot follow-ups ("what about shoulder") after UPGRADES also beat discovery.
   const whoIsHit = Boolean(whoIsResult) || classified.intent === INTENTS.WHO_IS
   const itemFitHit = !whoIsHit && classified.intent === INTENTS.ITEM_FIT
+  const upgradeSlotHint = extractUpgradeSlotHint(text)
+  const upgradesContext =
+    state.lastIntent === INTENTS.UPGRADES ||
+    state.pendingIntent === INTENTS.UPGRADES ||
+    classified.intent === INTENTS.UPGRADES
+  const upgradesSlotHit =
+    !whoIsHit &&
+    !itemFitHit &&
+    Boolean(upgradeSlotHint) &&
+    (state.lastIntent === INTENTS.UPGRADES ||
+      state.pendingIntent === INTENTS.UPGRADES ||
+      (classified.intent === INTENTS.FOLLOWUP && state.lastIntent === INTENTS.UPGRADES) ||
+      (classified.intent === INTENTS.UPGRADES && Boolean(upgradeSlotHint)))
   const recognitionOk =
     !whoIsHit &&
     !itemFitHit &&
+    !upgradesSlotHit &&
     (discoveryRecognition?.status === 'recognized' ||
       discoveryRecognition?.status === 'ambiguous' ||
       discoveryRecognition?.status === 'unsupported')
   const discoveryHit =
-    !whoIsHit && !itemFitHit && Boolean(discoveryResult || discoveryAnswer || recognitionOk)
+    !whoIsHit &&
+    !itemFitHit &&
+    !upgradesSlotHit &&
+    Boolean(discoveryResult || discoveryAnswer || recognitionOk)
   let intent = whoIsHit
     ? INTENTS.WHO_IS
     : itemFitHit
       ? INTENTS.ITEM_FIT
-      : discoveryHit
-        ? INTENTS.LOOT_DISCOVERY
-        : classified.intent
+      : upgradesSlotHit
+        ? INTENTS.UPGRADES
+        : discoveryHit
+          ? INTENTS.LOOT_DISCOVERY
+          : classified.intent
   let ambiguousClass = null
   const resolvedWhoIsName = whoIsName || classified.whoIsName || null
+  // Slot filter for upgrades: follow-up after buy path, or inline slot on an upgrades ask.
+  let upgradeSlotIds = null
+  let upgradeSlotLabel = null
+  if (
+    upgradeSlotHint &&
+    (intent === INTENTS.UPGRADES ||
+      upgradesSlotHit ||
+      (upgradesContext && intent === INTENTS.FOLLOWUP))
+  ) {
+    upgradeSlotIds = upgradeSlotHint.slotIds
+    upgradeSlotLabel = upgradeSlotHint.chipLabel
+    intent = INTENTS.UPGRADES
+  }
 
   // Resume pending clarification
   if (state.pendingIntent && state.pendingSlots?.includes('character')) {
@@ -343,7 +377,13 @@ export function handleMessage({
     itemResolved = resolveItem(facts, classified.matchedItemHint, state, stickyItem, upgradeContext)
   }
 
-  if (itemResolved?.ambiguous && !discoveryHit && intent !== INTENTS.WHO_IS) {
+  // Slot-scoped upgrades are not item lookups — do not treat "shoulder" as an ambiguous item name.
+  if (
+    itemResolved?.ambiguous &&
+    !discoveryHit &&
+    intent !== INTENTS.WHO_IS &&
+    !(intent === INTENTS.UPGRADES && upgradeSlotIds?.length)
+  ) {
     const response = {
       text: `Which item? Candidates: ${itemResolved.candidates.map((c) => c.name).slice(0, 5).join(', ')}.`,
       templateId: 'AMBIGUOUS_ITEM',
@@ -393,6 +433,8 @@ export function handleMessage({
     discoveryRecognition,
     whoIsResult,
     whoIsName: resolvedWhoIsName,
+    slotIds: intent === INTENTS.UPGRADES ? upgradeSlotIds : null,
+    slotLabel: intent === INTENTS.UPGRADES ? upgradeSlotLabel : null,
   })
 
   if (answer.clarification?.slot === 'character') {
@@ -410,6 +452,9 @@ export function handleMessage({
   if (answer.purchase) {
     state.lastPurchase = answer.purchase
     state.lastReferencedPurchaseId = answer.purchase.purchaseId || null
+  }
+  if (intent === INTENTS.UPGRADES && Array.isArray(answer.upgradeSlots)) {
+    state.lastUpgradeSlots = answer.upgradeSlots
   }
   if (answer.referenced?.items?.length) {
     state.lastItemName = answer.referenced.items[0]
@@ -513,15 +558,28 @@ function normalizeLoose(text) {
 }
 
 function suggestionState(facts, state) {
-  const chips = {
+  return {
     hasAccount: Boolean(facts.accountId),
     selectedCharacterId: state.selectedCharacterId,
     lastItemName: state.lastItemName,
     characters: facts.characters || [],
     pendingSlots: state.pendingSlots || [],
     pendingIntent: state.pendingIntent,
+    lastIntent: state.lastIntent,
+    lastUpgradeSlots: state.lastUpgradeSlots || [],
   }
-  return chips
+}
+
+/**
+ * True when the utterance is a slot-scoped upgrade follow-up after an upgrades answer.
+ * Used by the UI to load Magelo context and skip loot discovery recognition.
+ */
+export function isUpgradeSlotFollowUp(text, state = {}) {
+  if (!text) return false
+  if (state.lastIntent !== INTENTS.UPGRADES && state.pendingIntent !== INTENTS.UPGRADES) {
+    return false
+  }
+  return Boolean(extractUpgradeSlotHint(text))
 }
 
 export function startConversation(facts) {

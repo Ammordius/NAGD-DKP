@@ -15,6 +15,153 @@ import { ensureItemStatsLoaded } from '../itemStats.js'
 import { getDkpMobLoot, getRaidItemSources } from '../staticData.js'
 import { classifyUpgradeDelta } from './events.js'
 import { formatUpgradeDelta } from './formatting.js'
+import { SLOT_ALIASES, normAliasKey } from './discovery/aliases.js'
+
+/**
+ * Exact slot-alias match only (no substring scan). Avoids treating
+ * "Earthen Bracer of Fortitude" as a WRIST upgrade follow-up.
+ * @param {string} text
+ * @returns {string|null}
+ */
+function resolveExactSlotAlias(text) {
+  const key = normAliasKey(text)
+  if (!key) return null
+  return SLOT_ALIASES[key] || null
+}
+
+/**
+ * Discovery canonical slot strings → Magelo inventory slot ids (1–22).
+ * Paired slots (ear/wrist/finger) map to both inventory positions.
+ */
+export const CANONICAL_SLOT_TO_IDS = {
+  EAR: [1, 4],
+  HEAD: [2],
+  FACE: [3],
+  NECK: [5],
+  SHOULDER: [6],
+  SHOULDERS: [6],
+  ARMS: [7],
+  BACK: [8],
+  WRIST: [9, 10],
+  RANGE: [11],
+  HANDS: [12],
+  PRIMARY: [13],
+  MAIN: [13],
+  SECONDARY: [14],
+  OFF: [14],
+  FINGER: [15, 16],
+  FINGERS: [15, 16],
+  CHEST: [17],
+  LEGS: [18],
+  FEET: [19],
+  WAIST: [20],
+  POWER: [21],
+  AMMO: [22],
+}
+
+/**
+ * @param {string|null|undefined} canonical
+ * @returns {number[]|null}
+ */
+export function slotIdsFromCanonical(canonical) {
+  if (!canonical) return null
+  const ids = CANONICAL_SLOT_TO_IDS[String(canonical).toUpperCase()]
+  return ids?.length ? [...ids] : null
+}
+
+/**
+ * Chip / dialogue label for a Magelo slot id (collapse paired slots).
+ * @param {number} slotId
+ * @param {string} [slotLabel]
+ */
+export function chipLabelForSlot(slotId, slotLabel) {
+  if (slotId === 15 || slotId === 16) return 'Ring'
+  if (slotId === 9 || slotId === 10) return 'Wrist'
+  if (slotId === 1 || slotId === 4) return 'Ear'
+  return slotLabel || SLOT_NAMES_FOR_UI[slotId] || `Slot ${slotId}`
+}
+
+/**
+ * Extract an equipment-slot hint for upgrade follow-ups ("what about shoulder", bare "shoulder").
+ * @param {string} text
+ * @returns {{ canonical: string, slotIds: number[], chipLabel: string }|null}
+ */
+export function extractUpgradeSlotHint(text) {
+  const raw = String(text || '').trim()
+  if (!raw) return null
+
+  const tryResolve = (hint) => {
+    const cleaned = String(hint || '')
+      .replace(/[?.!]+$/g, '')
+      .trim()
+    if (!cleaned) return null
+    const canonical = resolveExactSlotAlias(cleaned)
+    if (!canonical) return null
+    const slotIds = slotIdsFromCanonical(canonical)
+    if (!slotIds?.length) return null
+    return {
+      canonical,
+      slotIds,
+      chipLabel: chipLabelForSlot(slotIds[0], SLOT_NAMES_FOR_UI[slotIds[0]]),
+    }
+  }
+
+  // Bare slot reply: "shoulder", "shoulders?"
+  const direct = tryResolve(raw)
+  if (direct) return direct
+
+  // Dialogue chips / follow-ups: "what about shoulder?"
+  const about = raw.match(/\b(?:what about|how about)\s+(.+?)(?:\?|$)/i)
+  if (about) {
+    const fromAbout = tryResolve(about[1])
+    if (fromAbout) return fromAbout
+  }
+
+  // Inline on buy path: "what should I buy for shoulders" or "… for Iaminae shoulders"
+  const forSlot = raw.match(/\bfor\s+(.+?)(?:\?|$)/i)
+  if (forSlot) {
+    const forHint = String(forSlot[1] || '')
+      .replace(/[?.!]+$/g, '')
+      .trim()
+    const tokens = forHint.split(/\s+/).filter(Boolean)
+    // Prefer a trailing exact slot token (character name + slot)
+    if (tokens.length >= 1) {
+      const fromTrailing = tryResolve(tokens[tokens.length - 1])
+      if (fromTrailing) return fromTrailing
+    }
+    const fromFor = tryResolve(forHint)
+    if (fromFor) return fromFor
+  }
+
+  return null
+}
+
+/**
+ * @param {Array<{ slotId: number, slot: string, delta: number }>} flat
+ * @returns {Array<{ slotId: number, slotLabel: string, chipLabel: string, bestDelta: number, count: number }>}
+ */
+function buildUpgradeSlots(flat) {
+  /** @type {Map<number, { slotId: number, slotLabel: string, chipLabel: string, bestDelta: number, count: number }>} */
+  const byId = new Map()
+  for (const row of flat) {
+    const slotId = row.slotId
+    if (!Number.isFinite(slotId)) continue
+    const prev = byId.get(slotId)
+    if (!prev) {
+      byId.set(slotId, {
+        slotId,
+        slotLabel: row.slot,
+        chipLabel: chipLabelForSlot(slotId, row.slot),
+        bestDelta: row.delta,
+        count: 1,
+      })
+    } else {
+      prev.count += 1
+      if (row.delta > prev.bestDelta) prev.bestDelta = row.delta
+    }
+  }
+  return [...byId.values()].sort((a, b) => b.bestDelta - a.bestDelta)
+}
 
 /** Hosted Magelo export (gh-pages). Override with VITE_CLASS_RANKINGS_URL. */
 export const DEFAULT_CLASS_RANKINGS_URL =
@@ -270,6 +417,7 @@ function logUpgradeDebug(debug) {
  *   itemStats?: Record<string, object>,
  *   raidItemIds?: Set<number>,
  *   limit?: number,
+ *   slotIds?: number[]|null,
  * }} args
  */
 export function computeCharacterUpgrades({
@@ -278,46 +426,56 @@ export function computeCharacterUpgrades({
   itemStats,
   raidItemIds,
   limit = 3,
+  slotIds: filterSlotIds = null,
 }) {
   if (!character?.name) {
-    return { ok: false, reason: 'missing_character', suggestions: [] }
+    return { ok: false, reason: 'missing_character', suggestions: [], upgradeSlots: [] }
   }
   const magelo = findMageloCharacter(rankings, character.name)
   if (!magelo) {
-    return { ok: false, reason: 'missing_magelo', suggestions: [] }
+    return { ok: false, reason: 'missing_magelo', suggestions: [], upgradeSlots: [] }
   }
   const inventory = extractInventory(magelo)
   if (!inventory.length) {
-    return { ok: false, reason: 'missing_inventory', suggestions: [] }
+    return { ok: false, reason: 'missing_inventory', suggestions: [], upgradeSlots: [] }
   }
   const className = magelo.class || magelo.class_name || character.class_name
   if (!className) {
-    return { ok: false, reason: 'missing_class', suggestions: [] }
+    return { ok: false, reason: 'missing_class', suggestions: [], upgradeSlots: [] }
   }
   const filtered = raidItemIds?.size
     ? filterItemStatsForRaidLoot(itemStats, raidItemIds)
     : itemStats || {}
   if (!filtered || Object.keys(filtered).length === 0) {
-    return { ok: false, reason: 'missing_item_stats', suggestions: [] }
+    return { ok: false, reason: 'missing_item_stats', suggestions: [], upgradeSlots: [] }
   }
   const ctx = buildUpgradeContext(rankings || {}, filtered)
   if (!ctx.classWeights || Object.keys(ctx.classWeights).length === 0) {
-    return { ok: false, reason: 'missing_weights', suggestions: [] }
+    return { ok: false, reason: 'missing_weights', suggestions: [], upgradeSlots: [] }
   }
 
+  const filterSet =
+    Array.isArray(filterSlotIds) && filterSlotIds.length
+      ? new Set(filterSlotIds.filter((id) => Number.isFinite(id)))
+      : null
+  const maxPerSlot = filterSet ? 5 : 3
+  const resultLimit = filterSet ? Math.min(limit ?? 5, 5) : limit
+
   const char = { class: className, inventory }
-  const result = computeUpgradesForCharacter(char, 3, false, ctx)
+  const result = computeUpgradesForCharacter(char, maxPerSlot, false, ctx)
   if (result.error) {
-    return { ok: false, reason: result.error, suggestions: [] }
+    return { ok: false, reason: result.error, suggestions: [], upgradeSlots: [] }
   }
 
   const classAbbrev = CLASS_TO_ABBREV[className] || ''
-  const slotIds = (result.bySlot || []).map((s) => s.slotId).filter((id) => Number.isFinite(id))
-  const matchCount = countSlotClassMatches(filtered, slotIds, classAbbrev)
+  const allSlotIds = (result.bySlot || []).map((s) => s.slotId).filter((id) => Number.isFinite(id))
+  const matchCount = countSlotClassMatches(filtered, allSlotIds, classAbbrev)
   const raidFilteredCount = Object.keys(filtered).length
 
   /** @type {Array<object>} */
-  const flat = []
+  const flatAll = []
+  /** @type {Array<object>} */
+  const flatFiltered = []
   let upgradeRowCount = 0
   let missingEquippedStats = false
   for (const slotEntry of result.bySlot || []) {
@@ -329,10 +487,11 @@ export function computeCharacterUpgrades({
     // Engine contract: bySlot[].upgrades (not .candidates — that property is never returned)
     const rows = slotEntry.upgrades || []
     upgradeRowCount += rows.length
+    const inFilter = !filterSet || filterSet.has(slotId)
     for (const cand of rows) {
       const strength = classifyUpgradeDelta(cand.delta)
       if (strength === 'none') continue
-      flat.push({
+      const row = {
         itemId: cand.itemId,
         itemName: cand.itemName,
         slotId,
@@ -342,11 +501,29 @@ export function computeCharacterUpgrades({
         upgrade: formatUpgradeDelta(cand.delta, slotLabel),
         characterId: character.char_id,
         characterName: character.name,
-      })
+      }
+      flatAll.push(row)
+      if (inFilter) flatFiltered.push(row)
     }
   }
-  flat.sort((a, b) => b.delta - a.delta)
-  const suggestions = flat.slice(0, limit)
+  flatAll.sort((a, b) => b.delta - a.delta)
+  flatFiltered.sort((a, b) => b.delta - a.delta)
+
+  /** Dedupe by itemId when filtering paired slots (rings/wrists/ears). */
+  let ranked = flatFiltered
+  if (filterSet) {
+    const seen = new Set()
+    ranked = []
+    for (const row of flatFiltered) {
+      const key = row.itemId != null ? String(row.itemId) : `${row.itemName}:${row.slotId}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      ranked.push(row)
+    }
+  }
+
+  const suggestions = ranked.slice(0, resultLimit)
+  const upgradeSlots = buildUpgradeSlots(flatAll)
   const debug = buildUpgradeDebug({
     raidFilteredCount,
     matchCount,
@@ -357,12 +534,14 @@ export function computeCharacterUpgrades({
 
   if (!suggestions.length) {
     let reason = 'no_positive_upgrades'
-    if (matchCount === 0) reason = 'empty_candidate_set'
+    if (filterSet) reason = 'no_upgrades_for_slot'
+    else if (matchCount === 0) reason = 'empty_candidate_set'
     else if (missingEquippedStats || result.anyMissing) reason = 'missing_equipped_item_stats'
     return {
       ok: false,
       reason,
       suggestions: [],
+      upgradeSlots,
       anyMissing: result.anyMissing,
       debug,
     }
@@ -371,6 +550,7 @@ export function computeCharacterUpgrades({
     ok: true,
     reason: null,
     suggestions,
+    upgradeSlots,
     anyMissing: result.anyMissing,
     debug,
   }
@@ -571,7 +751,8 @@ export function evaluateItemFitForAccount({
  * Async entry: load Magelo + item stats as needed, cache by account/char.
  */
 export async function getUpgradesForCharacter(character, options = {}) {
-  const cacheKey = `${options.accountId || ''}:${character?.char_id || character?.name || ''}:${options.cacheToken || ''}`
+  const slotKey = Array.isArray(options.slotIds) ? options.slotIds.slice().sort().join(',') : ''
+  const cacheKey = `${options.accountId || ''}:${character?.char_id || character?.name || ''}:${options.cacheToken || ''}:${slotKey}:${options.limit ?? 3}`
   if (upgradeCache.has(cacheKey)) return upgradeCache.get(cacheKey)
 
   const [rankingsLoaded, itemStatsObj, raidItemIds] = await Promise.all([
@@ -596,6 +777,7 @@ export async function getUpgradesForCharacter(character, options = {}) {
       ok: false,
       reason: rankingsLoaded?.error || 'magelo_fetch_failed',
       suggestions: [],
+      upgradeSlots: [],
     }
   }
 
@@ -605,6 +787,7 @@ export async function getUpgradesForCharacter(character, options = {}) {
     itemStats: itemStatsObj,
     raidItemIds,
     limit: options.limit ?? 3,
+    slotIds: options.slotIds || null,
   })
   // Cache successful upgrade computations only; allow retry after missing Magelo
   if (result.ok) upgradeCache.set(cacheKey, result)
