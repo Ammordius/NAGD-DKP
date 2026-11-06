@@ -103,7 +103,7 @@ export function renderAnswer({ answer, state, facts, rng = Math.random }) {
       answer.reasonCode === 'upgrades_unavailable' || answer.reasonCode === 'character_not_in_magelo' ||
       answer.reasonCode === 'missing_magelo_export' || answer.reasonCode === 'missing_gear_score' ||
       answer.reasonCode === 'loot_discovery' || answer.templateId === 'LOOT_DISCOVERY') {
-    // Data/error paths: never append unrelated generic insults (allowFlavor must be explicit)
+    // Data/error paths: flavor only when allowFlavor is explicit and reason is not a hard error.
     let text = answer.factText
     const noFlavorCodes = new Set([
       'need_character',
@@ -114,7 +114,6 @@ export function renderAnswer({ answer, state, facts, rng = Math.random }) {
       'character_not_in_magelo',
       'missing_magelo_export',
       'missing_gear_score',
-      'loot_discovery',
     ])
     if (answer.allowFlavor && !noFlavorCodes.has(answer.reasonCode)) {
       const flavor = pickFlavorSentence(state.recentTemplateIds, state.turnCount, rng)

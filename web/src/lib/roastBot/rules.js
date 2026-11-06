@@ -80,6 +80,10 @@ export function isEligible(eligibility, ctx) {
       return true
     case 'followup_item':
       return Boolean(ctx.followupItem)
+    case 'who_is':
+    case 'who_is_no_date':
+      // Handler selects category; fillTemplate enforces required placeholders.
+      return true
     case 'unknown':
       return true
     default:
@@ -118,6 +122,8 @@ export function categoriesForIntent(intent, ctx = {}) {
       return ['item_source', 'item_sale', 'item_unmatched', 'general']
     case INTENTS.ATTENDANCE:
       return ['attendance_return', 'attendance_sparse', 'attendance_frequent', 'general']
+    case INTENTS.WHO_IS:
+      return ['who_is', 'who_is_no_date', 'general']
     case INTENTS.DEFENSE:
       return ['defense', 'general']
     case INTENTS.FOLLOWUP:
@@ -210,5 +216,6 @@ export function buildPlaceholderValues(ctx) {
         ? facts.returnGapDays
         : facts.daysSince,
     lastRaid: facts.lastAccountRaid?.raidName || null,
+    lastRaidDate: ctx.placeholders?.lastRaidDate || null,
   }
 }

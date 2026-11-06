@@ -166,11 +166,11 @@ export const TEMPLATES = [
   { id: 'J03', category: 'defense', requiredFacts: [], eligibility: 'defense', text: 'You can explain the purchase all you like. The transaction remains committed.' },
   { id: 'J04', category: 'defense', requiredFacts: [], eligibility: 'defense', text: "I'm not saying your decision was wrong. I'm saying the available evidence is struggling to defend it." },
   { id: 'J05', category: 'defense', requiredFacts: [], eligibility: 'defense', text: 'Every questionable bid has a compelling backstory, usually narrated by the person who placed it.' },
-  { id: 'J06', category: 'followup_item', requiredFacts: ['item'], eligibility: 'followup_item', text: 'Still discussing {item}? This purchase has received more analysis than most guild strategies.' },
-  { id: 'J07', category: 'followup_item', requiredFacts: ['item'], eligibility: 'followup_item', text: "Back to {item}, are we? I'm beginning to understand how you ended up buying it." },
-  { id: 'J08', category: 'followup_item', requiredFacts: ['item'], eligibility: 'followup_item', text: 'You seem unusually invested in {item}. I hope the equipment returns that affection.' },
-  { id: 'J09', category: 'followup_item', requiredFacts: ['item'], eligibility: 'followup_item', text: 'Yes, I remember {item}. Unlike your apparent spending discipline, my conversation state works.' },
-  { id: 'J10', category: 'followup_item', requiredFacts: ['item'], eligibility: 'followup_item', text: 'Another question about {item}. At this point it should probably pay rent.' },
+  { id: 'J06', category: 'who_is', requiredFacts: ['toon', 'account', 'lastRaidDate'], eligibility: 'who_is', text: '{toon} belongs to account {account}, last recorded raid date {lastRaidDate}. Mystery solved — dignity optional.' },
+  { id: 'J07', category: 'who_is', requiredFacts: ['toon', 'account', 'lastRaidDate'], eligibility: 'who_is', text: "So {toon} is on {account}, last raid date {lastRaidDate}. You're welcome for this thrilling episode of Guild Forensics." },
+  { id: 'J08', category: 'who_is', requiredFacts: ['toon', 'account', 'lastRaidDate'], eligibility: 'who_is', text: '{toon} maps to account {account}, last recorded raid {lastRaidDate}. I do the paperwork so you can continue gossiping inefficiently.' },
+  { id: 'J09', category: 'who_is_no_date', requiredFacts: ['toon', 'account'], eligibility: 'who_is_no_date', text: '{toon} is on account {account}, with no last raid date on file. An identity without a schedule — peak EverQuest energy.' },
+  { id: 'J10', category: 'who_is_no_date', requiredFacts: ['toon', 'account'], eligibility: 'who_is_no_date', text: "I've linked {toon} to account {account}. No last raid date in the summaries — the calendar remains as empty as your excuses." },
   { id: 'J11', category: 'unknown', requiredFacts: [], eligibility: 'unknown', text: 'I have no idea what you\'re asking, which is a refreshing change from knowing exactly how bad the answer will be.' },
   { id: 'J12', category: 'unknown', requiredFacts: [], eligibility: 'unknown', text: 'Try asking about loot, upgrades, DKP, or your terrible decisions. I specialize in the last one.' },
   { id: 'J13', category: 'unknown', requiredFacts: [], eligibility: 'unknown', text: 'That question is outside my expertise. Unfortunately, so is your apparent strategy.' },
@@ -209,6 +209,7 @@ export const KNOWN_PLACEHOLDERS = [
   'raidCount',
   'daysSince',
   'lastRaid',
+  'lastRaidDate',
 ]
 
 /**

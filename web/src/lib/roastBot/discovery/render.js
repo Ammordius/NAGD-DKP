@@ -110,15 +110,15 @@ export function renderDiscovery(result) {
   return {
     intent: INTENTS.LOOT_DISCOVERY,
     category: 'general',
-    factText: factText.trim() || 'No recorded awards matched that query.',
+    factText: factText.trim() || 'No recorded awards matched that query. I refuse to invent loot just to entertain you.',
     requiredClaims: ['loot_discovery'],
     placeholders: {},
     referenced,
     links,
     table,
     reasonCode: 'loot_discovery',
-    // Enable roast flavor when we had to correct their spelling
-    allowFlavor: Boolean(correction?.from && correction?.to),
+    // Verified facts first; optional Inquisitor flavor after (responseBuilder).
+    allowFlavor: true,
     templateId: 'LOOT_DISCOVERY',
     itemCorrection: correction || null,
   }
@@ -139,8 +139,8 @@ function renderRaidLoot(result, referenced) {
   if (!raid?.raidId) {
     return {
       factText: result.query?.phase
-        ? `No raid with identifiable ${result.query.phase} awards was found (join of item_sources labels to recorded loot).`
-        : `No qualifying raid was found${result.query?.zone ? ` for ${result.query.zone}` : ''}.`,
+        ? `No raid with identifiable ${result.query.phase} awards was found (join of item_sources labels to recorded loot). I won't fabricate a loot table to soothe your curiosity.`
+        : `No qualifying raid was found${result.query?.zone ? ` for ${result.query.zone}` : ''}. The ledger remains stubbornly empty — inventing one would be beneath even me.`,
       links: [],
       table: null,
     }
@@ -163,7 +163,7 @@ function renderRaidLoot(result, referenced) {
 
   if (!awards.length) {
     return {
-      factText: `${header}\nNo recorded loot awards for this qualifying set (empty awards ≠ missing raid).`,
+      factText: `${header}\nNo recorded loot awards for this qualifying set (empty awards ≠ missing raid). A quiet auction night — somehow you still found a way to ask about it.`,
       links: raidLinks,
       table: null,
     }
@@ -173,8 +173,8 @@ function renderRaidLoot(result, referenced) {
   const total = result.totalCount ?? awards.length
   const trunc =
     result.truncated || awards.length > MAX_LINES
-      ? `\nShowing ${Math.min(awards.length, MAX_LINES)} of ${total} recorded loot awards.`
-      : `\n${total} recorded loot award${total === 1 ? '' : 's'}.`
+      ? `\nShowing ${Math.min(awards.length, MAX_LINES)} of ${total} recorded loot awards. Try not to bid on nostalgia.`
+      : `\n${total} recorded loot award${total === 1 ? '' : 's'}. Try not to bid on nostalgia.`
 
   return {
     factText: withAssignmentNote(`${header}${trunc}`, awards),
@@ -206,7 +206,7 @@ function renderLastAward(result, referenced) {
 
   if (!awards.length) {
     return {
-      factText: `No recorded awards found for ${item}.`,
+      factText: `No recorded awards found for ${item}. The database declines to humor your nostalgia.`,
       links: itemLinks,
       table: null,
     }
@@ -220,7 +220,7 @@ function renderLastAward(result, referenced) {
   if (most.raidName || most.raidId) {
     factText += ` (${most.raidName || most.raidId})`
   }
-  factText += '.'
+  factText += '. Congrats to whoever won the privilege of explaining that bid.'
 
   // Optional short history after the singular answer — not the primary framing.
   const prior = awards.slice(1, 4)
@@ -253,14 +253,17 @@ function renderRecipients(result, referenced) {
     const char = result.query.character
     if (!awards.length) {
       return {
-        factText: `No recorded award of ${item} to ${char} was found. This is absence from DKP award records, not proof they never saw the item in-game.`,
+        factText: `No recorded award of ${item} to ${char} was found. Absence from DKP records is not proof they never saw it in-game — just that the ledger refuses to gossip further.`,
         links: itemLinks,
         table: null,
       }
     }
     const rows = awards.slice(0, 5).map((a) => formatAwardRow(a, referenced))
     return {
-      factText: withAssignmentNote(`Yes — ${char} has recorded award(s) of ${item}:`, awards),
+      factText: withAssignmentNote(
+        `Yes — ${char} has recorded award(s) of ${item}. The paperwork does not lie, even when the bidding might have:`,
+        awards,
+      ),
       links: [],
       table: { columns: AWARD_COLUMNS, rows },
     }
@@ -278,7 +281,7 @@ function renderRecipients(result, referenced) {
 
   if (!awards.length) {
     return {
-      factText: `No recorded awards found for ${item}.`,
+      factText: `No recorded awards found for ${item}. Nobody in the ledger claimed it — or at least nobody I'm willing to invent.`,
       links: itemLinks,
       table: null,
     }
@@ -291,9 +294,9 @@ function renderRecipients(result, referenced) {
   const others = awards.slice(0, 8)
   const rows = others.map((a) => formatRecipientRow(a, referenced))
 
-  let factText = `Who got ${item}?\nMost recent recorded recipient: ${recipient} on ${
-    truncateDateIso(most.dateIso)
-  }`
+  let factText = `Who got ${item}? The ledger says ${recipient} most recently (${truncateDateIso(
+    most.dateIso,
+  )}). Try not to make it weird.`
   if (rows.length) {
     factText += `\nRecorded recipients:`
   }
@@ -363,8 +366,8 @@ function renderCount(result, referenced) {
   const n = result.totalCount
   const factText =
     n == null
-      ? `Could not count recorded awards for ${item}.`
-      : `${item} has ${n} recorded award${n === 1 ? '' : 's'} in DKP loot history.`
+      ? `Could not count recorded awards for ${item}. Even I refuse to invent a tally.`
+      : `${item} has ${n} recorded award${n === 1 ? '' : 's'} in DKP loot history. Quantity is not the same as wisdom.`
   const recent = (result.awards || []).slice(0, 3)
   if (!recent.length) {
     return { factText, links: dedupeLinks(links), table: null }
@@ -389,15 +392,15 @@ function renderCharacterAwards(result, referenced) {
   const window = result.query?.timeRange?.label ? ` ${result.query.timeRange.label}` : ''
   if (!awards.length) {
     return {
-      factText: `No recorded awards for ${char}${window}.`,
+      factText: `No recorded awards for ${char}${window}. A spotless shopping record — or a character who never won the auction argument.`,
       links: charLinks,
       table: null,
     }
   }
   const rows = awards.slice(0, MAX_LINES).map((a) => formatAwardRow(a, referenced))
   const trunc = result.truncated
-    ? `\nShowing ${Math.min(awards.length, MAX_LINES)} recorded awards (truncated).`
-    : `\n${awards.length} recorded award${awards.length === 1 ? '' : 's'}.`
+    ? `\nShowing ${Math.min(awards.length, MAX_LINES)} recorded awards (truncated). The full history would only deepen the judgment.`
+    : `\n${awards.length} recorded award${awards.length === 1 ? '' : 's'}. Exhibit A for the prosecution.`
   return {
     factText: withAssignmentNote(`Recorded awards for ${char}${window}:${trunc}`, awards),
     links: [],
@@ -414,7 +417,7 @@ function renderCatalog(result, referenced) {
   const items = result.catalogItems || []
   if (!items.length) {
     return {
-      factText: `No authoritative catalog drops listed for ${boss}. (This is "what can drop," not a historical kill.)`,
+      factText: `No authoritative catalog drops listed for ${boss}. (This is "what can drop," not a historical kill.) Inventing loot tables is a hard no.`,
       links: [],
       table: null,
     }
@@ -425,7 +428,7 @@ function renderCatalog(result, referenced) {
     return { item: item || { type: 'text', label: it.name } }
   })
   return {
-    factText: `Catalog drops for ${boss} (item_sources / classification; not a historical kill list):`,
+    factText: `Catalog drops for ${boss} (item_sources / classification; not a historical kill list). Dream responsibly:`,
     links: [],
     table: { columns: CATALOG_COLUMNS, rows },
   }

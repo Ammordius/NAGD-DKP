@@ -102,6 +102,8 @@ export function dispatchHandler(args) {
       return handleGreeting(args)
     case INTENTS.LOOT_DISCOVERY:
       return handleLootDiscovery(args)
+    case INTENTS.WHO_IS:
+      return handleWhoIs(args)
     case INTENTS.UNKNOWN:
     default:
       return handleUnknown(args)
@@ -141,7 +143,7 @@ function handleDkpExplain() {
 
 function handleCapabilities() {
   const factText =
-    'I can roast your spending, check your balance, diagnose why you look broke, review purchases, assess Magelo gear when the public export has your toon, suggest upgrades when inventory data exists, look up historical item prices and drop sources, answer guild loot discovery questions (last raid loot by zone/phase, who got an item, award counts, character award windows), and comment on account-level raid participation. I will not invent numbers or accuse individual characters of skipping raids.'
+    'I can roast your spending, check your balance, diagnose why you look broke, review purchases, assess Magelo gear when the public export has your toon, suggest upgrades when inventory data exists, look up historical item prices and drop sources, answer guild loot discovery questions (last raid loot by zone/phase, who got an item, award counts, character award windows), identify which account a character belongs to (with that account\'s last recorded raid date), and comment on account-level raid participation. I will not invent numbers or accuse individual characters of skipping raids.'
   return {
     intent: INTENTS.CAPABILITIES,
     category: 'general',
@@ -152,6 +154,97 @@ function handleCapabilities() {
     reasonCode: 'capabilities',
     allowFlavor: true,
     templateId: 'CAPABILITIES',
+  }
+}
+
+/**
+ * Prefetched who-is lookup from RoastBot send path.
+ * @param {object} args
+ */
+function handleWhoIs(args) {
+  const lookup = args.whoIsResult
+  const askedName = args.whoIsName || lookup?.characterName || null
+
+  if (!lookup && !askedName) {
+    return {
+      intent: INTENTS.WHO_IS,
+      category: 'general',
+      factText:
+        'Ask "who is CharacterName" if you want their account and last raid date. I need an actual character name — psychic services cost extra DKP.',
+      requiredClaims: ['need_character'],
+      placeholders: {},
+      referenced: emptyReferenced(),
+      reasonCode: 'need_character',
+      allowFlavor: true,
+      templateId: 'NEED_CHAR',
+    }
+  }
+
+  if (!lookup || lookup.status === 'no_name') {
+    return {
+      intent: INTENTS.WHO_IS,
+      category: 'general',
+      factText:
+        'Ask "who is CharacterName" if you want their account and last raid date. I need an actual character name — psychic services cost extra DKP.',
+      requiredClaims: ['need_character'],
+      placeholders: {},
+      referenced: emptyReferenced(),
+      reasonCode: 'need_character',
+      allowFlavor: true,
+      templateId: 'NEED_CHAR',
+    }
+  }
+
+  if (lookup.status === 'not_found') {
+    const name = lookup.characterName || askedName || 'that character'
+    return {
+      intent: INTENTS.WHO_IS,
+      category: 'general',
+      factText: `I don't have a guild character match for ${name}. Inventing an account would be irresponsible, even by auction standards.`,
+      requiredClaims: ['who_is_not_found'],
+      placeholders: { toon: name },
+      referenced: withRefs([name], []),
+      reasonCode: 'who_is_not_found',
+      allowFlavor: true,
+    }
+  }
+
+  if (lookup.status === 'unlinked') {
+    const name = lookup.characterName || askedName
+    return {
+      intent: INTENTS.WHO_IS,
+      category: 'general',
+      factText: `${name} exists in the character roster, but I have no account link for them. No invented owner, no invented raid date.`,
+      requiredClaims: ['who_is_unlinked'],
+      placeholders: { toon: name },
+      referenced: withRefs([name], []),
+      reasonCode: 'who_is_unlinked',
+      allowFlavor: true,
+    }
+  }
+
+  const toon = lookup.characterName || askedName
+  const account = lookup.accountName
+  const lastRaidDate = lookup.lastRaidDate || null
+  const dateClause = lastRaidDate
+    ? ` Their account's last recorded raid date is ${lastRaidDate} (account-level activity, not a claim about this specific toon skipping raids).`
+    : ` Their account has no recorded last raid date in the summary tables.`
+
+  return {
+    intent: INTENTS.WHO_IS,
+    category: lastRaidDate ? 'who_is' : 'who_is_no_date',
+    factText: `${toon} is on account ${account}.${dateClause}`,
+    requiredClaims: lastRaidDate
+      ? ['who_is_account', 'who_is_last_raid']
+      : ['who_is_account'],
+    placeholders: {
+      toon,
+      account,
+      lastRaidDate: lastRaidDate || null,
+    },
+    referenced: withRefs([toon], []),
+    reasonCode: lastRaidDate ? 'who_is' : 'who_is_no_date',
+    allowFlavor: true,
   }
 }
 

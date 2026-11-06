@@ -125,6 +125,8 @@ function clearPending(state) {
  *   discoveryResult?: object|null,
  *   discoveryAnswer?: object|null,
  *   discoveryRecognition?: object|null,
+ *   whoIsResult?: object|null,
+ *   whoIsName?: string|null,
  *   rng?: () => number,
  * }} args
  */
@@ -136,6 +138,8 @@ export function handleMessage({
   discoveryResult = null,
   discoveryAnswer = null,
   discoveryRecognition = null,
+  whoIsResult = null,
+  whoIsName = null,
   rng = Math.random,
 }) {
   state.turnCount = (state.turnCount || 0) + 1
@@ -150,13 +154,17 @@ export function handleMessage({
   })
 
   // Discovery only when recognition succeeded or an answer was prefetched — never via bare gate/lastIntent.
+  // Who-is identity questions win over discovery (e.g. never treat "who is Foo" as loot).
+  const whoIsHit = Boolean(whoIsResult) || classified.intent === INTENTS.WHO_IS
   const recognitionOk =
-    discoveryRecognition?.status === 'recognized' ||
-    discoveryRecognition?.status === 'ambiguous' ||
-    discoveryRecognition?.status === 'unsupported'
-  const discoveryHit = Boolean(discoveryResult || discoveryAnswer || recognitionOk)
-  let intent = discoveryHit ? INTENTS.LOOT_DISCOVERY : classified.intent
+    !whoIsHit &&
+    (discoveryRecognition?.status === 'recognized' ||
+      discoveryRecognition?.status === 'ambiguous' ||
+      discoveryRecognition?.status === 'unsupported')
+  const discoveryHit = !whoIsHit && Boolean(discoveryResult || discoveryAnswer || recognitionOk)
+  let intent = whoIsHit ? INTENTS.WHO_IS : discoveryHit ? INTENTS.LOOT_DISCOVERY : classified.intent
   let ambiguousClass = null
+  const resolvedWhoIsName = whoIsName || classified.whoIsName || null
 
   // Resume pending clarification
   if (state.pendingIntent && state.pendingSlots?.includes('character')) {
@@ -223,7 +231,9 @@ export function handleMessage({
     // keep WHY_BROKE if why-broke patterns matched first; otherwise fine
   }
 
-  let charSel = selectCharacter(facts, classified.matchedCharacter, state)
+  // Who-is resolves guild-wide names; do not treat the ask as linked-roster selection.
+  let charSel =
+    intent === INTENTS.WHO_IS ? null : selectCharacter(facts, classified.matchedCharacter, state)
   if (charSel?.ambiguous) {
     ambiguousClass = charSel
     charSel = null
@@ -234,9 +244,12 @@ export function handleMessage({
   }
 
   const stickyItem = [INTENTS.ITEM_PRICE, INTENTS.ITEM_SOURCE, INTENTS.AFFORDABILITY, INTENTS.FOLLOWUP].includes(intent)
-  const itemResolved = resolveItem(facts, classified.matchedItemHint, state, stickyItem, upgradeContext)
+  const itemResolved =
+    intent === INTENTS.WHO_IS
+      ? null
+      : resolveItem(facts, classified.matchedItemHint, state, stickyItem, upgradeContext)
 
-  if (itemResolved?.ambiguous && !discoveryHit) {
+  if (itemResolved?.ambiguous && !discoveryHit && intent !== INTENTS.WHO_IS) {
     const response = {
       text: `Which item? Candidates: ${itemResolved.candidates.map((c) => c.name).slice(0, 5).join(', ')}.`,
       templateId: 'AMBIGUOUS_ITEM',
@@ -274,6 +287,8 @@ export function handleMessage({
     discoveryResult,
     discoveryAnswer,
     discoveryRecognition,
+    whoIsResult,
+    whoIsName: resolvedWhoIsName,
   })
 
   if (answer.clarification?.slot === 'character') {

@@ -510,6 +510,8 @@ describe('roastBot open-gate contract', () => {
     assert.match(src, /needsMageloContext/)
     assert.match(src, /recognizeDiscovery/)
     assert.match(src, /runDiscovery/)
+    assert.match(src, /looksLikeWhoIs/)
+    assert.match(src, /lookupWhoIs/)
   })
 })
 
@@ -524,6 +526,7 @@ describe('loot discovery dialogue regression', () => {
     })
     assert.equal(caps.intent, INTENTS.CAPABILITIES)
     assert.match(caps.response.text, /discovery|who got|zone|phase/i)
+    assert.match(caps.response.text, /account|who is|identity|character belongs/i)
 
     const broke = handleMessage({
       text: 'Why am I broke?',
@@ -559,7 +562,7 @@ describe('loot discovery dialogue regression', () => {
         ],
       },
       reasonCode: 'loot_discovery',
-      allowFlavor: false,
+      allowFlavor: true,
       templateId: 'LOOT_DISCOVERY',
     }
     const { response, intent } = handleMessage({
@@ -572,5 +575,28 @@ describe('loot discovery dialogue regression', () => {
     assert.equal(intent, INTENTS.LOOT_DISCOVERY)
     assert.match(response.text, /Plane of Fire|recorded loot/i)
     assert.equal(response.table?.rows?.[0]?.raid?.to, '/raids/r1')
+  })
+
+  it('who is X uses prefetched identity and does not fall through to discovery', () => {
+    const facts = fixtureFacts()
+    const { response, intent } = handleMessage({
+      text: 'who is Tandiyen',
+      facts,
+      state: createConversationState(),
+      whoIsName: 'Tandiyen',
+      whoIsResult: {
+        status: 'ok',
+        characterName: 'Tandiyen',
+        accountId: 'a1',
+        accountName: 'RaidDad',
+        lastRaidDate: '2026-02-14',
+        charId: '7',
+      },
+      rng: () => 0,
+    })
+    assert.equal(intent, INTENTS.WHO_IS)
+    assert.match(response.text, /Tandiyen/)
+    assert.match(response.text, /RaidDad/)
+    assert.match(response.text, /2026-02-14/)
   })
 })

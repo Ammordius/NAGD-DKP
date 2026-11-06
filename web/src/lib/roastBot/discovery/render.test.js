@@ -252,4 +252,30 @@ describe('discovery render', () => {
     assert.match(answer.factText, /Assuming you meant Timeless Breastplate Mold/)
     assert.equal(answer.allowFlavor, true)
   })
+
+  it('successful discovery answers enable roast flavor', () => {
+    const answer = renderDiscovery({
+      ok: true,
+      family: 'item_last',
+      query: { family: 'item_last', itemQuery: 'Whip', raw: 'last whip' },
+      awards: [
+        {
+          itemName: 'Whip',
+          characterName: 'Tandiyen',
+          assignedCharacterName: 'Tandiyen',
+          dateIso: '2026-03-01',
+          raidId: 'r1',
+          raidName: 'Fire',
+          cost: 40,
+        },
+      ],
+      gaps: [],
+      notes: [],
+    })
+    assert.equal(answer.allowFlavor, true)
+    assert.match(answer.factText, /Whip/)
+    assert.match(answer.factText, /Tandiyen/)
+    // Inquisitor personality in the fact line itself
+    assert.match(answer.factText, /Congrats|privilege|bid/i)
+  })
 })

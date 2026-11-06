@@ -27,6 +27,7 @@ export const INTENTS = {
   FOLLOWUP: 'followup',
   FULL_GEAR_COST: 'full_gear_cost',
   LOOT_DISCOVERY: 'loot_discovery',
+  WHO_IS: 'who_is',
   UNKNOWN: 'unknown',
 }
 
@@ -50,6 +51,11 @@ const RULES = [
   { intent: INTENTS.GREETING, patterns: [/^hi\b/, /^hello\b/, /^hey\b/, /^yo\b/, /good (morning|afternoon|evening)/, /^greetings\b/] },
   { intent: INTENTS.DKP_EXPLAIN, patterns: [/how does dkp work/, /what is dkp/, /explain dkp/, /dkp (system|rules|work)/] },
   { intent: INTENTS.CAPABILITIES, patterns: [/what can you do/, /what do you (know|do)/, /help me$/, /^help\b/, /your (job|purpose)/] },
+  // Identity lookup — before item_search; must not match "who got" (loot discovery).
+  {
+    intent: INTENTS.WHO_IS,
+    patterns: [/^who(?:'s| is)\b(?!\s+(got|won|received|go|gott|looted)\b)/, /^whose (?:account|alt|toon)\b/],
+  },
   { intent: INTENTS.FULL_GEAR_COST, patterns: [/fully? (upgrade|gear|equip)/, /how much.*(everything|all|total|complete)/, /total.*(dkp|cost|upgrade)/, /gear(ing)? budget/, /finish(ing)? (my )?gear/, /fully gear/] },
   { intent: INTENTS.WORST_PURCHASE, patterns: [/worst (purchase|buy|bid|loot)/, /biggest mistake/, /most (expensive|questionable)/, /regret/] },
   { intent: INTENTS.WHY_BROKE, patterns: [/why am i broke/, /why.*(broke|poor|empty|no dkp)/, /where did (my|the) dkp go/, /what happened to my dkp/] },
@@ -81,6 +87,7 @@ export function classifyIntent(raw, ctx = {}) {
 
   const matchedCharacter = matchCharacterMention(text, ctx.characters || [])
   const matchedItemHint = extractQuotedOrTrailingItem(text)
+  const whoIsName = extractWhoIsCharacterName(raw)
 
   // Bare character/class name while awaiting clarification is not an intent by itself.
   if (ctx.pendingIntent && isLikelyClarificationReply(text, matchedCharacter)) {
@@ -90,7 +97,13 @@ export function classifyIntent(raw, ctx = {}) {
   for (const rule of RULES) {
     for (const pattern of rule.patterns) {
       if (pattern.test(text)) {
-        return { intent: rule.intent, confidence: 0.9, matchedCharacter, matchedItemHint }
+        return {
+          intent: rule.intent,
+          confidence: 0.9,
+          matchedCharacter,
+          matchedItemHint,
+          ...(rule.intent === INTENTS.WHO_IS ? { whoIsName } : {}),
+        }
       }
     }
   }
@@ -184,6 +197,29 @@ export function matchCharacterMention(text, characters) {
 }
 
 const PRONOUN_ITEMS = new Set(['it', 'that', 'this', 'them', 'one', 'those', 'these'])
+
+const WHO_IS_PREFIX = /^(?:who(?:'s| is)|whose (?:account|alt|toon)(?: is)?)\s+/i
+
+/**
+ * Character name from a who-is question (raw casing preserved when possible).
+ * @param {string} raw
+ * @returns {string|null}
+ */
+export function extractWhoIsCharacterName(raw) {
+  const original = String(raw || '').trim()
+  if (!original) return null
+  const text = normalizeMessage(original)
+  if (/\bwho (got|won|received|go|gott|looted)\b/.test(text)) return null
+  if (!/^(?:who(?:'s| is)\b|whose (?:account|alt|toon)\b)/.test(text)) return null
+  let rest = original.replace(WHO_IS_PREFIX, '').trim()
+  rest = rest.replace(/^is\s+/i, '').trim()
+  rest = rest.replace(/[?!.]+$/, '').trim()
+  rest = rest.replace(/\s+'s\s*$/i, '').trim()
+  rest = rest.replace(/\b(account|alt|toon|character)\s*$/i, '').trim()
+  if (!rest || rest.length < 2) return null
+  if (/\b(got|won|received|drop|loot|raid)\b/i.test(rest)) return null
+  return rest
+}
 
 function extractQuotedOrTrailingItem(text) {
   const quoted = text.match(/["']([^"']{2,80})["']/)

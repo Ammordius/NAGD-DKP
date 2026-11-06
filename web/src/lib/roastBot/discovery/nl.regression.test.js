@@ -347,7 +347,7 @@ describe('discovery dialogue false-recognition guard', () => {
         ],
       },
       reasonCode: 'loot_discovery',
-      allowFlavor: false,
+      allowFlavor: true,
       templateId: 'LOOT_DISCOVERY',
     }
     const out = handleMessage({

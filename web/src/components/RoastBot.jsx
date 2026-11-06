@@ -29,6 +29,7 @@ import {
   resetUpgradeCaches,
 } from '../lib/roastBot/index.js'
 import { recognizeDiscovery, runDiscovery } from '../lib/roastBot/discovery/index.js'
+import { extractWhoIsName, looksLikeWhoIs, lookupWhoIs } from '../lib/roastBot/whoIs.js'
 import { ensureItemStatsLoaded } from '../lib/itemStats'
 import './RoastBot.css'
 
@@ -273,37 +274,57 @@ export default function RoastBot({ profile, session, factsOverride = null, openO
         let discoveryResult = null
         let discoveryAnswer = null
         let discoveryRecognition = null
+        let whoIsResult = null
+        let whoIsName = null
         if (!factsOverride) {
-          const prev = convState.lastDiscovery?.query || null
-          const prevPrimary = convState.lastDiscovery?.primary || null
-          discoveryRecognition = recognizeDiscovery(text, { prev, prevPrimary })
-          if (
-            discoveryRecognition.status === 'recognized' ||
-            discoveryRecognition.status === 'ambiguous' ||
-            discoveryRecognition.status === 'unsupported'
-          ) {
-            let itemStats = ctx?.itemStats || {}
-            if (needsDiscoveryItemStats(text) || needsDiscoveryItemStats(prev?.raw || '')) {
-              await ensureItemStatsLoaded()
-              itemStats = await fetch('/item_stats.json')
-                .then((r) => (r.ok ? r.json() : {}))
-                .catch(() => ({}))
-            }
-            const run = await runDiscovery(supabase, text, {
-              knownItemSources: facts.knownItemSources,
-              itemCatalog: facts.itemCatalog,
-              itemStats,
-              prev,
-              prevPrimary,
-              recognition: discoveryRecognition,
-            })
-            if (run) {
-              discoveryResult = run.result
-              discoveryAnswer = run.answer
-              discoveryRecognition = run.recognition || discoveryRecognition
+          if (looksLikeWhoIs(text)) {
+            whoIsName = extractWhoIsName(text)
+            if (whoIsName) {
+              try {
+                whoIsResult = await lookupWhoIs(supabase, whoIsName)
+              } catch {
+                whoIsResult = {
+                  status: 'not_found',
+                  characterName: whoIsName,
+                  accountId: null,
+                  accountName: null,
+                  lastRaidDate: null,
+                  charId: null,
+                }
+              }
             }
           } else {
-            discoveryRecognition = null
+            const prev = convState.lastDiscovery?.query || null
+            const prevPrimary = convState.lastDiscovery?.primary || null
+            discoveryRecognition = recognizeDiscovery(text, { prev, prevPrimary })
+            if (
+              discoveryRecognition.status === 'recognized' ||
+              discoveryRecognition.status === 'ambiguous' ||
+              discoveryRecognition.status === 'unsupported'
+            ) {
+              let itemStats = ctx?.itemStats || {}
+              if (needsDiscoveryItemStats(text) || needsDiscoveryItemStats(prev?.raw || '')) {
+                await ensureItemStatsLoaded()
+                itemStats = await fetch('/item_stats.json')
+                  .then((r) => (r.ok ? r.json() : {}))
+                  .catch(() => ({}))
+              }
+              const run = await runDiscovery(supabase, text, {
+                knownItemSources: facts.knownItemSources,
+                itemCatalog: facts.itemCatalog,
+                itemStats,
+                prev,
+                prevPrimary,
+                recognition: discoveryRecognition,
+              })
+              if (run) {
+                discoveryResult = run.result
+                discoveryAnswer = run.answer
+                discoveryRecognition = run.recognition || discoveryRecognition
+              }
+            } else {
+              discoveryRecognition = null
+            }
           }
         }
 
@@ -315,6 +336,8 @@ export default function RoastBot({ profile, session, factsOverride = null, openO
           discoveryResult,
           discoveryAnswer,
           discoveryRecognition,
+          whoIsResult,
+          whoIsName,
         })
         setConvState(result.state)
         setMessages((m) => [...m, { role: 'bot', ...result.response }])

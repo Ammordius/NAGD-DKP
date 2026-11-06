@@ -2,7 +2,15 @@
  * Public API for the DKP Inquisitor (rule-based roast bot).
  */
 
-export { INTENTS, classifyIntent, normalizeMessage, matchCharacterMention, CHARACTER_SCOPED_INTENTS } from './intents.js'
+export {
+  INTENTS,
+  classifyIntent,
+  normalizeMessage,
+  matchCharacterMention,
+  CHARACTER_SCOPED_INTENTS,
+  extractWhoIsCharacterName,
+} from './intents.js'
+export { looksLikeWhoIs, extractWhoIsName, lookupWhoIs, resolveWhoIsFromMaps } from './whoIs.js'
 export {
   TEMPLATES,
   TEMPLATE_BY_ID,
