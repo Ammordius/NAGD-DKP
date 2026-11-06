@@ -109,6 +109,37 @@ export function matchItemName(hint, catalog) {
   return null
 }
 
+/** Footer link to claim / browse game accounts. */
+export const GAME_ACCOUNTS_LINK = {
+  type: 'nav',
+  label: 'Game Accounts',
+  to: '/accounts',
+}
+
+/**
+ * Example questions shown after "What can you ask?" (capabilities).
+ * Keep in sync with CAPABILITIES_FACT_TEXT themes.
+ */
+export const CAPABILITIES_EXAMPLE_CHIPS = [
+  'Roast my DKP spending',
+  'Why am I broke?',
+  'What is my DKP balance?',
+  'What should I buy?',
+  'What dropped off Quarm?',
+  'Who got the last plate bp?',
+]
+
+/**
+ * Authored capabilities copy — themed examples, not a dense paragraph.
+ */
+export const CAPABILITIES_FACT_TEXT = [
+  'Ask about your DKP sins, guild loot, or who owns a toon. Examples:',
+  'Roast / DKP — Roast my DKP spending · Why am I broke? · What is my DKP balance?',
+  'Gear — What should I buy? · Is this a well geared enchanter?',
+  'Loot intel — What dropped off Quarm? · Who got the last plate bp? · Who is Tandiyen?',
+  'I will not invent numbers or accuse individual characters of skipping raids.',
+].join('\n')
+
 /**
  * Build link payload for UI (React renders Link — never HTML strings).
  * @param {{
@@ -117,6 +148,8 @@ export function matchItemName(hint, catalog) {
  *   characterName?: string,
  *   raidId?: string|number,
  *   raidName?: string,
+ *   accountId?: string|number,
+ *   accountName?: string,
  * }} refs
  */
 export function buildLinks(refs = {}) {
@@ -145,6 +178,15 @@ export function buildLinks(refs = {}) {
       raidId: id,
     })
   }
+  if (refs.accountId != null && String(refs.accountId).trim() !== '') {
+    const id = String(refs.accountId).trim()
+    links.push({
+      type: 'account',
+      label: refs.accountName || `Account ${id}`,
+      to: `/accounts/${encodeURIComponent(id)}`,
+      accountId: id,
+    })
+  }
   return links
 }
 
@@ -157,12 +199,14 @@ export function buildLinks(refs = {}) {
  *   characters?: object[],
  *   pendingSlots?: string[],
  *   pendingIntent?: string|null,
+ *   lastIntent?: string|null,
+ *   lastUpgradeSlots?: object[],
  * }} state
  */
 export function suggestionChips(state = {}) {
   if (state.pendingSlots?.includes('character')) {
     const names = (state.characters || []).map((c) => c.name).filter(Boolean).slice(0, 4)
-    return names.length ? names : ['What can you do?']
+    return names.length ? names : ['What can you ask?']
   }
   if (state.pendingSlots?.includes('item') && state.lastItemName) {
     return [`How much for ${state.lastItemName}?`, `Where does ${state.lastItemName} drop?`]
@@ -172,19 +216,22 @@ export function suggestionChips(state = {}) {
     return [
       'Roast me anyway',
       'How does DKP work?',
-      'What can you do?',
+      'What can you ask?',
     ]
   }
 
+  // After capabilities / help, surface the themed example questions.
+  if (state.lastIntent === 'capabilities') {
+    return CAPABILITIES_EXAMPLE_CHIPS.slice(0, 6)
+  }
+
   const chips = [
-    'How does DKP work?',
+    'What can you ask?',
     'Roast my DKP spending',
     'What should I buy?',
+    'What dropped off Quarm?',
     'What was my worst purchase?',
-    'Roast my characters',
     "Why am I broke?",
-    "How's my raiding?",
-    'What can you do?',
   ]
   if (state.lastItemName) {
     chips.unshift(`How much for ${state.lastItemName}?`)

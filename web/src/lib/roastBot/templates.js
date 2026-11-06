@@ -181,7 +181,7 @@ export const TEMPLATES = [
 export const TEMPLATE_BY_ID = Object.fromEntries(TEMPLATES.map((t) => [t.id, t]))
 
 export const INITIAL_GREETING =
-  "Welcome to the DKP Inquisitor. I've reviewed your loot history, and I'm disappointed already."
+  "Welcome to the DKP Inquisitor. I've reviewed your loot history, and I'm disappointed already. Ask below, or tap “What can you ask?”"
 
 export const NO_ACCOUNT_HINT =
   'Personalized insults require a claimed game account. Link one on Game Accounts, then return for a properly tailored disappointment.'

@@ -38,10 +38,11 @@ describe('roastBot prompt smoke — every intent', () => {
   })
 
   it('CAPABILITIES', () => {
-    const out = turn(createConversationState(), 'What can you do?')
+    const out = turn(createConversationState(), 'What can you ask?')
     assert.equal(out.intent, INTENTS.CAPABILITIES)
     assert.ok(out.answer.requiredClaims.includes('capabilities'))
-    assert.match(out.response.text, /balance|upgrade|roast|discovery|who is/i)
+    assert.match(out.response.text, /balance|roast|loot intel|who is|who got/i)
+    assert.ok(out.suggestions.some((s) => /what dropped off quarm/i.test(s)))
   })
 
   it('WHO_IS (prefetched)', () => {

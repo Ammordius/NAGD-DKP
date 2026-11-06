@@ -68,7 +68,7 @@ export function normalizeMessage(text) {
 const RULES = [
   { intent: INTENTS.GREETING, patterns: [/^hi\b/, /^hello\b/, /^hey\b/, /^yo\b/, /good (morning|afternoon|evening)/, /^greetings\b/] },
   { intent: INTENTS.DKP_EXPLAIN, patterns: [/how does dkp work/, /what is dkp/, /explain dkp/, /dkp (system|rules|work)/] },
-  { intent: INTENTS.CAPABILITIES, patterns: [/what can you do/, /what do you (know|do)/, /help me$/, /^help\b/, /your (job|purpose)/] },
+  { intent: INTENTS.CAPABILITIES, patterns: [/what can you (do|ask)/, /what do you (know|do)/, /help me$/, /^help\b/, /your (job|purpose)/] },
   // Identity lookup — before item_search; must not match "who got" (loot discovery).
   {
     intent: INTENTS.WHO_IS,

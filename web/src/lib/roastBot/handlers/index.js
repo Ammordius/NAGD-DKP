@@ -4,7 +4,7 @@
 
 import { INTENTS } from '../intents.js'
 import { deriveEvents, classifyBalance, spendingConcentration } from '../events.js'
-import { formatDkp } from '../formatting.js'
+import { formatDkp, CAPABILITIES_FACT_TEXT, GAME_ACCOUNTS_LINK, buildLinks } from '../formatting.js'
 import {
   computeCharacterUpgrades,
   evaluateItemFitForAccount,
@@ -12,7 +12,7 @@ import {
 } from '../upgrades.js'
 import { assessCharacterGear } from '../gearAssessment.js'
 import { scopedPurchaseFacts, pickSpendPurchase } from '../facts.js'
-import { FULL_GEAR_COST_REFUSAL, NO_ACCOUNT_HINT } from '../templates.js'
+import { FULL_GEAR_COST_REFUSAL, INITIAL_GREETING, NO_ACCOUNT_HINT } from '../templates.js'
 import { lookupItemSource } from '../../itemSourceLookup.js'
 import { renderDiscovery } from '../discovery/render.js'
 
@@ -125,6 +125,7 @@ function requireAccount(args, intent) {
     requiredClaims: ['no_account'],
     placeholders: {},
     referenced: emptyReferenced(),
+    links: [GAME_ACCOUNTS_LINK],
     reasonCode: 'no_claimed_account',
     allowFlavor: true,
     templateId: 'NO_ACCOUNT',
@@ -148,12 +149,10 @@ function handleDkpExplain() {
 }
 
 function handleCapabilities() {
-  const factText =
-    'I can roast your spending, check your balance, diagnose why you look broke, review purchases, assess Magelo gear when the public export has your toon, suggest upgrades when inventory data exists, look up historical item prices and drop sources, answer guild loot discovery questions (last raid loot by zone/phase, who got an item, award counts, character award windows), identify which account a character belongs to (with that account\'s last recorded raid date), and comment on account-level raid participation. I will not invent numbers or accuse individual characters of skipping raids.'
   return {
     intent: INTENTS.CAPABILITIES,
     category: 'general',
-    factText,
+    factText: CAPABILITIES_FACT_TEXT,
     requiredClaims: ['capabilities'],
     placeholders: {},
     referenced: emptyReferenced(),
@@ -231,10 +230,16 @@ function handleWhoIs(args) {
 
   const toon = lookup.characterName || askedName
   const account = lookup.accountName
+  const accountId = lookup.accountId || null
   const lastRaidDate = lookup.lastRaidDate || null
   const dateClause = lastRaidDate
     ? ` Their account's last recorded raid date is ${lastRaidDate} (account-level activity, not a claim about this specific toon skipping raids).`
     : ` Their account has no recorded last raid date in the summary tables.`
+
+  const referenced = withRefs([toon], [])
+  if (accountId) {
+    referenced.accounts = [{ id: String(accountId), name: account || String(accountId) }]
+  }
 
   return {
     intent: INTENTS.WHO_IS,
@@ -248,7 +253,13 @@ function handleWhoIs(args) {
       account,
       lastRaidDate: lastRaidDate || null,
     },
-    referenced: withRefs([toon], []),
+    referenced,
+    links: [
+      ...buildLinks({ characterName: toon }),
+      ...(accountId
+        ? buildLinks({ accountId, accountName: account || String(accountId) })
+        : []),
+    ],
     reasonCode: lastRaidDate ? 'who_is' : 'who_is_no_date',
     allowFlavor: true,
   }
@@ -306,15 +317,15 @@ function handleFullGearCost() {
 }
 
 function handleGreeting(args) {
+  const hasAccount = Boolean(args.facts?.accountId)
   return {
     intent: INTENTS.GREETING,
     category: 'greeting',
-    factText: args.facts?.accountId
-      ? "Welcome to the DKP Inquisitor. I've reviewed your loot history, and I'm disappointed already."
-      : `Welcome to the DKP Inquisitor. I've reviewed your loot history, and I'm disappointed already. ${NO_ACCOUNT_HINT}`,
+    factText: hasAccount ? INITIAL_GREETING : `${INITIAL_GREETING} ${NO_ACCOUNT_HINT}`,
     requiredClaims: ['greeting'],
     placeholders: {},
     referenced: emptyReferenced(),
+    links: hasAccount ? [] : [GAME_ACCOUNTS_LINK],
     reasonCode: 'greeting',
     allowFlavor: false,
     templateId: 'GREETING',

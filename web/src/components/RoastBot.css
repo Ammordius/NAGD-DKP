@@ -65,6 +65,37 @@
   color: #a1a1aa;
 }
 
+.roast-bot-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-shrink: 0;
+}
+
+.roast-bot-restart {
+  background: transparent;
+  border: 1px solid var(--dkp-border, #3f3f46);
+  border-radius: 6px;
+  color: #a1a1aa;
+  cursor: pointer;
+  font-size: 0.7rem;
+  line-height: 1.2;
+  padding: 0.3rem 0.45rem;
+  white-space: nowrap;
+}
+
+.roast-bot-restart:hover,
+.roast-bot-restart:focus-visible {
+  color: #f4f4f5;
+  border-color: #71717a;
+  outline: none;
+}
+
+.roast-bot-restart:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .roast-bot-close {
   background: transparent;
   border: none;

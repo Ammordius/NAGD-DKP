@@ -92,6 +92,9 @@ describe('handleWhoIs answers', () => {
     assert.match(answer.factText, /2026-03-01/)
     assert.ok(answer.requiredClaims.includes('who_is_account'))
     assert.ok(answer.requiredClaims.includes('who_is_last_raid'))
+    assert.ok(answer.links?.some((l) => l.type === 'account' && l.to === '/accounts/a1'))
+    assert.ok(answer.links?.some((l) => l.type === 'character' && l.to === '/characters/Tandiyen'))
+    assert.deepEqual(answer.referenced.accounts, [{ id: 'a1', name: 'BobAccount' }])
   })
 
   it('does not invent account when not found', () => {

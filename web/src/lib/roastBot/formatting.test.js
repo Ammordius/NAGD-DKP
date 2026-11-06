@@ -1,6 +1,11 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
-import { formatUpgradeDelta, buildLinks, suggestionChips } from './formatting.js'
+import {
+  formatUpgradeDelta,
+  buildLinks,
+  suggestionChips,
+  CAPABILITIES_EXAMPLE_CHIPS,
+} from './formatting.js'
 
 describe('buildLinks', () => {
   it('builds raid links to /raids/:id without inventing ids', () => {
@@ -9,6 +14,14 @@ describe('buildLinks', () => {
     assert.equal(links[0].type, 'raid')
     assert.equal(links[0].to, '/raids/1585398')
     assert.equal(links[0].label, 'Fire Minis')
+  })
+
+  it('builds account links to /accounts/:id', () => {
+    const links = buildLinks({ accountId: 'a1', accountName: 'BobAccount' })
+    assert.equal(links.length, 1)
+    assert.equal(links[0].type, 'account')
+    assert.equal(links[0].to, '/accounts/a1')
+    assert.equal(links[0].label, 'BobAccount')
   })
 })
 
@@ -35,6 +48,27 @@ describe('formatUpgradeDelta', () => {
 
   it('preserves sign for negative deltas', () => {
     assert.equal(formatUpgradeDelta(-0.04, 'Arms'), '-0.04 score Arms')
+  })
+})
+
+describe('suggestionChips base menu', () => {
+  it('pins What can you ask? and includes a discovery teacher chip', () => {
+    const chips = suggestionChips({ hasAccount: true })
+    assert.equal(chips[0], 'What can you ask?')
+    assert.ok(chips.includes('What dropped off Quarm?'))
+    assert.ok(chips.includes('Roast my DKP spending'))
+    assert.equal(chips.length, 6)
+  })
+
+  it('surfaces capabilities example chips after help', () => {
+    const chips = suggestionChips({ hasAccount: true, lastIntent: 'capabilities' })
+    assert.deepEqual(chips, CAPABILITIES_EXAMPLE_CHIPS.slice(0, 6))
+  })
+
+  it('no-account menu uses What can you ask?', () => {
+    const chips = suggestionChips({ hasAccount: false })
+    assert.ok(chips.includes('What can you ask?'))
+    assert.ok(chips.includes('Roast me anyway'))
   })
 })
 

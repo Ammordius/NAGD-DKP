@@ -23,4 +23,10 @@ describe('App RoastBot wiring', () => {
     assert.match(roastSource, /DKP Inquisitor/)
     assert.doesNotMatch(roastSource, /sarcasmLevel|personalitySettings|roastPreferences/)
   })
+
+  it('RoastBot header includes New judgment restart control', () => {
+    assert.match(roastSource, /data-testid="roast-bot-restart"/)
+    assert.match(roastSource, /New judgment/)
+    assert.match(roastSource, /startConversation\(facts\)/)
+  })
 })

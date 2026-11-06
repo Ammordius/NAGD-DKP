@@ -388,14 +388,39 @@ export default function RoastBot({ profile, session, factsOverride = null, openO
               <h2>{BOT_NAME}</h2>
               <p className="roast-bot-tagline">{BOT_TAGLINE}</p>
             </div>
-            <button
-              type="button"
-              className="roast-bot-close"
-              aria-label="Close chat"
-              onClick={() => setOpen(false)}
-            >
-              ×
-            </button>
+            <div className="roast-bot-header-actions">
+              <button
+                type="button"
+                className="roast-bot-restart"
+                data-testid="roast-bot-restart"
+                aria-label="New judgment"
+                disabled={busy || factsLoading}
+                onClick={() => {
+                  const { response, state, suggestions: chips } = startConversation(facts)
+                  startedRef.current = true
+                  setConvState({
+                    ...state,
+                    authUserId: userId,
+                    accountId,
+                    selectedCharacterId: convState.selectedCharacterId || null,
+                  })
+                  setMessages([{ role: 'bot', ...response }])
+                  setSuggestions(chips)
+                  setInput('')
+                  setUpgradeContext(null)
+                }}
+              >
+                New judgment
+              </button>
+              <button
+                type="button"
+                className="roast-bot-close"
+                aria-label="Close chat"
+                onClick={() => setOpen(false)}
+              >
+                ×
+              </button>
+            </div>
           </div>
 
           {(facts.characters || []).length > 1 ? (

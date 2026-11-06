@@ -4,7 +4,7 @@
 
 import { fillTemplate, TEMPLATES } from './templates.js'
 import { isEligible } from './rules.js'
-import { buildLinks } from './formatting.js'
+import { buildLinks, GAME_ACCOUNTS_LINK } from './formatting.js'
 import { INITIAL_GREETING, NO_ACCOUNT_HINT } from './templates.js'
 
 /**
@@ -188,7 +188,9 @@ export function renderAnswer({ answer, state, facts, rng = Math.random }) {
     text,
     templateId,
     reasonCode: answer.reasonCode,
-    links: buildLinksFromReferenced(answer.referenced),
+    links: answer.links?.length
+      ? answer.links
+      : buildLinksFromReferenced(answer.referenced),
     cards: answer.cards || [],
     table: answer.table || null,
     requiredClaims: answer.requiredClaims || [],
@@ -234,6 +236,11 @@ function buildLinksFromReferenced(referenced) {
   for (const raid of referenced?.raids || []) {
     if (raid?.id != null) links.push(...buildLinks({ raidId: raid.id, raidName: raid.name }))
   }
+  for (const account of referenced?.accounts || []) {
+    if (account?.id != null) {
+      links.push(...buildLinks({ accountId: account.id, accountName: account.name }))
+    }
+  }
   return links
 }
 
@@ -276,7 +283,7 @@ export function greetingMessage(hasAccount) {
       text: `${INITIAL_GREETING} ${NO_ACCOUNT_HINT}`,
       templateId: 'GREETING',
       reasonCode: 'greeting_no_account',
-      links: [],
+      links: [GAME_ACCOUNTS_LINK],
       cards: [],
       table: null,
       requiredClaims: ['greeting'],

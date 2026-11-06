@@ -518,14 +518,15 @@ describe('loot discovery dialogue regression', () => {
   it('capabilities mentions discovery without breaking roast why-broke', () => {
     const facts = fixtureFacts()
     const caps = handleMessage({
-      text: 'What can you do?',
+      text: 'What can you ask?',
       facts,
       state: createConversationState(),
       rng: () => 0,
     })
     assert.equal(caps.intent, INTENTS.CAPABILITIES)
-    assert.match(caps.response.text, /discovery|who got|zone|phase/i)
-    assert.match(caps.response.text, /account|who is|identity|character belongs/i)
+    assert.match(caps.response.text, /loot intel|who got|what dropped/i)
+    assert.match(caps.response.text, /who is|owns a toon/i)
+    assert.ok(caps.suggestions.some((s) => /what dropped off quarm/i.test(s)))
 
     const broke = handleMessage({
       text: 'Why am I broke?',
