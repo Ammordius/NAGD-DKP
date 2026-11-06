@@ -225,6 +225,105 @@ describe('roastBot dialogue acceptance', () => {
     assert.ok(missing.answer.requiredClaims.includes('magelo_unavailable'))
   })
 
+  it('which of my toons could use this ring after sticky Quarm ring uses Magelo fit', () => {
+    const BAND = 'Band of the Eternal'
+    const facts = fixtureFacts({
+      itemCatalog: [
+        { name: 'Beguiler Circlet', itemId: 501 },
+        { name: 'Smooth Onyx Torque', itemId: 99 },
+        { name: BAND, itemId: 90003 },
+      ],
+      knownItemSources: {
+        'beguiler circlet': { zone: 'Plane of Time', mob: 'Quarm' },
+        'smooth onyx torque': { zone: 'Plane of Time', mob: 'Quarm' },
+        'band of the eternal': {
+          zone: 'Plane of Time',
+          mob: 'Quarm',
+          displayName: BAND,
+          itemId: 90003,
+        },
+      },
+    })
+    const itemStats = {
+      ...itemStatsFixture,
+      80001: {
+        name: 'Old Ring',
+        slot: 'FINGER',
+        classes: 'ENC WAR',
+        ac: 5,
+        mods: [],
+        resists: [],
+      },
+      90003: {
+        name: BAND,
+        slot: 'FINGER',
+        classes: 'ENC',
+        ac: 40,
+        mods: [],
+        resists: [],
+      },
+    }
+    const rankings = {
+      classWeights: {
+        Enchanter: { ac_pct: 1, hp_pct: 0, mana_pct: 0, resists_pct: 0 },
+        Warrior: { ac_pct: 1, hp_pct: 0, mana_pct: 0, resists_pct: 0 },
+        Cleric: { ac_pct: 1, hp_pct: 0, mana_pct: 0, resists_pct: 0 },
+      },
+      focusCandidates: {},
+      characters: [
+        {
+          name: 'Iaminae',
+          class: 'Enchanter',
+          inventory: [{ slot_id: 15, item_id: 80001, item_name: 'Old Ring' }],
+        },
+        {
+          name: 'Charmalt',
+          class: 'Enchanter',
+          inventory: [{ slot_id: 15, item_id: 80001, item_name: 'Old Ring' }],
+        },
+        {
+          name: 'Zender',
+          class: 'Warrior',
+          inventory: [{ slot_id: 15, item_id: 80001, item_name: 'Old Ring' }],
+        },
+        {
+          name: 'Zenderheals',
+          class: 'Cleric',
+          inventory: [{ slot_id: 15, item_id: 80001, item_name: 'Old Ring' }],
+        },
+      ],
+    }
+    const state = createConversationState()
+    state.lastIntent = INTENTS.LOOT_DISCOVERY
+    state.lastItemName = BAND
+    state.lastItemId = '90003'
+    state.lastDiscovery = {
+      query: { boss: 'Quarm', slot: 'FINGER', intent: 'last_award', raw: 'when did quarm last drop a ring' },
+      primary: { itemName: BAND, itemId: '90003', characterName: 'Helen' },
+      recognition: { status: 'recognized' },
+    }
+
+    const out = handleMessage({
+      text: 'which of my toons could use this ring',
+      facts,
+      state,
+      upgradeContext: {
+        rankings,
+        itemStats,
+        raidItemIds: new Set([100, 501, 80001, 90003]),
+      },
+      rng: () => 0,
+    })
+    assert.equal(out.intent, INTENTS.ITEM_FIT)
+    assert.ok(out.answer.requiredClaims.includes('item_fit_upgrades'), out.response.text)
+    assert.match(out.response.text, /Band of the Eternal/i)
+    assert.match(out.response.text, /Iaminae|Charmalt/i)
+    assert.match(out.response.text, /Zender/i)
+    assert.match(out.response.text, /wrong class|Not for/i)
+    assert.ok(out.response.cards?.length > 0)
+    assert.equal(out.response.cards[0].itemName, BAND)
+  })
+
   it('after recommending Earthen Bracer of Fortitude, where it drops returns Quarm / Plane of Time', () => {
     const EARTHEN = 'Earthen Bracer of Fortitude'
     const facts = fixtureFacts({

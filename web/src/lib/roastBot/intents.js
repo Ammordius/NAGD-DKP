@@ -17,6 +17,8 @@ export const INTENTS = {
   ITEM_PRICE: 'item_price',
   ITEM_SOURCE: 'item_source',
   UPGRADES: 'upgrades',
+  /** Item → roster: which linked toons can use / upgrade with a given item. */
+  ITEM_FIT: 'item_fit',
   GEAR_ASSESSMENT: 'gear_assessment',
   AFFORDABILITY: 'affordability',
   ATTENDANCE: 'attendance',
@@ -29,6 +31,22 @@ export const INTENTS = {
   LOOT_DISCOVERY: 'loot_discovery',
   WHO_IS: 'who_is',
   UNKNOWN: 'unknown',
+}
+
+/** Phrases that ask which account toons benefit from a sticky/named item (not loot history). */
+export const ITEM_FIT_PATTERNS = [
+  /which of my (toons|characters|alts) could use/,
+  /which (toon|character|alt).{0,40}(could use|needs)/,
+  /who (?:of my .{0,40} )?(needs|could use) (this|that|it)/,
+  /\bwho needs (this|that|it)\b/,
+  /is (this|that|it) an? upgrade/,
+  /could (any of )?my (toons|characters|alts) use/,
+]
+
+/** @param {string} text already normalized lowercase */
+export function isItemFitQuestion(text) {
+  const t = String(text || '').toLowerCase()
+  return ITEM_FIT_PATTERNS.some((p) => p.test(t))
 }
 
 /** Intents that need a specific character when the account has multiple. */
@@ -62,6 +80,8 @@ const RULES = [
   { intent: INTENTS.BALANCE, patterns: [/\bbalance\b/, /how (much|many) dkp (do i|have|left)/, /dkp (do i|left|have)/, /am i broke/, /what('?s| is) my dkp/] },
   { intent: INTENTS.GEAR_ASSESSMENT, patterns: [/well[- ]?geared/, /how (is|are|good is) .{0,40}gear/, /is .{0,40}geared/, /gear(ed)? (status|score|rating|assessment|check)/, /how('?s| is) my .{0,30}(gear|toon|character)/, /gear check/] },
   { intent: INTENTS.ATTENDANCE, patterns: [/how('?s| is) my raid/, /\braiding\b/, /attendance/, /show(ing)? up/, /been away/, /inactive/, /how often.*(raid|attend)/] },
+  // Before UPGRADES/CHARACTERS so "is this an upgrade" / "which of my toons could use" do not steal those lanes.
+  { intent: INTENTS.ITEM_FIT, patterns: ITEM_FIT_PATTERNS },
   { intent: INTENTS.UPGRADES, patterns: [/what should i (buy|bid|get)/, /\bupgrades?\b/, /what.*(buy|get) for/, /recommend/, /suggest.*(item|loot|gear)/, /improve (my|the)/, /what.*(need|missing)/] },
   { intent: INTENTS.AFFORDABILITY, patterns: [/can i afford/, /affordable/, /within (my )?budget/, /enough dkp for/] },
   { intent: INTENTS.ITEM_PRICE, patterns: [/how much (is|was|does|did)/, /how much for /, /what.*(cost|price|sell)/, /last sold/, /sale price/, /\bprice\b/] },

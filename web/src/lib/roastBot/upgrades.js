@@ -6,6 +6,7 @@
 import {
   CLASS_TO_ABBREV,
   computeUpgradesForCharacter,
+  evaluateItemUpgradeForCharacter,
   itemMatchesSlot,
   itemUsableByClass,
   SLOT_NAMES_FOR_UI,
@@ -372,6 +373,197 @@ export function computeCharacterUpgrades({
     suggestions,
     anyMissing: result.anyMissing,
     debug,
+  }
+}
+
+/**
+ * Resolve a numeric item id from sticky id and/or display name via itemStats.
+ * @param {Record<string, object>|null|undefined} itemStats
+ * @param {string|number|null|undefined} itemId
+ * @param {string|null|undefined} itemName
+ * @returns {number|null}
+ */
+export function resolveItemIdFromStats(itemStats, itemId, itemName) {
+  if (itemId != null && itemId !== '') {
+    const n = Number(itemId)
+    if (Number.isFinite(n) && !Number.isNaN(n)) {
+      if (!itemStats || itemStats[String(n)] || itemStats[n]) return n
+    }
+  }
+  const want = String(itemName || '')
+    .trim()
+    .toLowerCase()
+  if (!want || !itemStats) return null
+  for (const [idStr, stats] of Object.entries(itemStats)) {
+    if (String(stats?.name || '').trim().toLowerCase() === want) {
+      const n = Number(idStr)
+      return Number.isFinite(n) ? n : null
+    }
+  }
+  return null
+}
+
+/**
+ * Score one candidate item across all linked account characters (item → roster).
+ *
+ * @param {{
+ *   characters: Array<{ char_id?: string, name?: string, class_name?: string }>,
+ *   itemId?: string|number|null,
+ *   itemName?: string|null,
+ *   rankings?: object|null,
+ *   itemStats?: Record<string, object>,
+ *   raidItemIds?: Set<number>,
+ * }} args
+ */
+export function evaluateItemFitForAccount({
+  characters,
+  itemId = null,
+  itemName = null,
+  rankings = null,
+  itemStats = null,
+  raidItemIds = null,
+}) {
+  const list = Array.isArray(characters) ? characters.filter((c) => c?.name) : []
+  if (!list.length) {
+    return { ok: false, reason: 'no_characters', itemId: null, itemName: itemName || null, fits: [] }
+  }
+  if (!rankings) {
+    return { ok: false, reason: 'magelo_unavailable', itemId: null, itemName: itemName || null, fits: [] }
+  }
+  const filtered = raidItemIds?.size
+    ? filterItemStatsForRaidLoot(itemStats, raidItemIds)
+    : itemStats || {}
+  // Prefer full stats for id resolution (raid filter may drop the candidate itself when not in raid set).
+  const resolvedId = resolveItemIdFromStats(itemStats || filtered, itemId, itemName)
+  if (resolvedId == null) {
+    return {
+      ok: false,
+      reason: 'item_unresolved',
+      itemId: null,
+      itemName: itemName || null,
+      fits: [],
+    }
+  }
+  const candidateStats = (itemStats || {})[String(resolvedId)] || (itemStats || {})[resolvedId] || filtered[String(resolvedId)]
+  const resolvedName = candidateStats?.name || itemName || `Item ${resolvedId}`
+  if (!filtered || Object.keys(filtered).length === 0) {
+    return { ok: false, reason: 'missing_item_stats', itemId: resolvedId, itemName: resolvedName, fits: [] }
+  }
+  // Ensure candidate is present in scoring map even if raid filter omitted it.
+  const scoringStats = { ...filtered }
+  if (!scoringStats[String(resolvedId)] && candidateStats) {
+    scoringStats[String(resolvedId)] = candidateStats
+  }
+  const ctx = buildUpgradeContext(rankings, scoringStats)
+  if (!ctx.classWeights || Object.keys(ctx.classWeights).length === 0) {
+    return { ok: false, reason: 'missing_weights', itemId: resolvedId, itemName: resolvedName, fits: [] }
+  }
+
+  /** @type {Array<object>} */
+  const fits = []
+  for (const character of list) {
+    const magelo = findMageloCharacter(rankings, character.name)
+    if (!magelo) {
+      fits.push({
+        characterId: character.char_id || null,
+        characterName: character.name,
+        eligible: false,
+        isUpgrade: false,
+        reason: 'missing_magelo',
+        scoreDelta: null,
+        slotName: null,
+        upgrade: null,
+        currentItemName: null,
+        candidateName: resolvedName,
+      })
+      continue
+    }
+    const inventory = extractInventory(magelo)
+    if (!inventory.length) {
+      fits.push({
+        characterId: character.char_id || null,
+        characterName: character.name,
+        eligible: false,
+        isUpgrade: false,
+        reason: 'missing_inventory',
+        scoreDelta: null,
+        slotName: null,
+        upgrade: null,
+        currentItemName: null,
+        candidateName: resolvedName,
+      })
+      continue
+    }
+    const className = magelo.class || magelo.class_name || character.class_name
+    if (!className) {
+      fits.push({
+        characterId: character.char_id || null,
+        characterName: character.name,
+        eligible: false,
+        isUpgrade: false,
+        reason: 'missing_class',
+        scoreDelta: null,
+        slotName: null,
+        upgrade: null,
+        currentItemName: null,
+        candidateName: resolvedName,
+      })
+      continue
+    }
+    const evalResult = evaluateItemUpgradeForCharacter(
+      { class: className, inventory },
+      resolvedId,
+      ctx,
+    )
+    if (!evalResult.eligible) {
+      fits.push({
+        characterId: character.char_id || null,
+        characterName: character.name,
+        eligible: false,
+        isUpgrade: false,
+        reason: evalResult.reason || 'ineligible',
+        scoreDelta: null,
+        slotName: null,
+        upgrade: null,
+        currentItemName: null,
+        candidateName: resolvedName,
+      })
+      continue
+    }
+    const delta = Number(evalResult.scoreDelta)
+    const slotLabel = evalResult.slotName || null
+    fits.push({
+      characterId: character.char_id || null,
+      characterName: character.name,
+      eligible: true,
+      isUpgrade: Boolean(evalResult.isUpgrade),
+      reason: evalResult.isUpgrade ? 'upgrade' : 'not_upgrade',
+      scoreDelta: Number.isFinite(delta) ? delta : 0,
+      slotId: evalResult.slotId ?? null,
+      slotName: slotLabel,
+      upgrade: formatUpgradeDelta(delta, slotLabel || undefined),
+      currentItemName: evalResult.currentItemName || null,
+      candidateName: evalResult.candidateName || resolvedName,
+    })
+  }
+
+  fits.sort((a, b) => {
+    const rank = (row) => {
+      if (row.isUpgrade) return 0
+      if (row.eligible) return 1
+      return 2
+    }
+    const dr = rank(a) - rank(b)
+    if (dr !== 0) return dr
+    return (Number(b.scoreDelta) || 0) - (Number(a.scoreDelta) || 0)
+  })
+
+  return {
+    ok: true,
+    reason: null,
+    itemId: resolvedId,
+    itemName: resolvedName,
+    fits,
   }
 }
 

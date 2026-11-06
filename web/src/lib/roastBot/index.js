@@ -8,6 +8,8 @@ export {
   normalizeMessage,
   matchCharacterMention,
   CHARACTER_SCOPED_INTENTS,
+  ITEM_FIT_PATTERNS,
+  isItemFitQuestion,
   extractWhoIsCharacterName,
 } from './intents.js'
 export { looksLikeWhoIs, extractWhoIsName, lookupWhoIs, resolveWhoIsFromMaps } from './whoIs.js'
@@ -60,6 +62,8 @@ export {
   validateClassRankingsSchema,
   formatMageloLoadError,
   computeCharacterUpgrades,
+  evaluateItemFitForAccount,
+  resolveItemIdFromStats,
   getUpgradesForCharacter,
   findMageloCharacter,
   extractInventory,

@@ -112,6 +112,8 @@ export function categoriesForIntent(intent, ctx = {}) {
       return ['spend_concentration', 'two_chars', 'multi_char', 'general']
     case INTENTS.UPGRADES:
       return ['upgrade_strong', 'upgrade_modest', 'upgrade_any', 'general']
+    case INTENTS.ITEM_FIT:
+      return ['upgrade_any', 'general', 'unknown']
     case INTENTS.AFFORDABILITY:
       return ['afford_yes', 'afford_no', 'afford_unknown', 'general']
     case INTENTS.ITEM_PRICE:

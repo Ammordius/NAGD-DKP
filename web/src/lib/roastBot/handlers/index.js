@@ -5,7 +5,11 @@
 import { INTENTS } from '../intents.js'
 import { deriveEvents, classifyBalance, spendingConcentration } from '../events.js'
 import { formatDkp } from '../formatting.js'
-import { computeCharacterUpgrades, formatMageloLoadError } from '../upgrades.js'
+import {
+  computeCharacterUpgrades,
+  evaluateItemFitForAccount,
+  formatMageloLoadError,
+} from '../upgrades.js'
 import { assessCharacterGear } from '../gearAssessment.js'
 import { scopedPurchaseFacts, pickSpendPurchase } from '../facts.js'
 import { FULL_GEAR_COST_REFUSAL, NO_ACCOUNT_HINT } from '../templates.js'
@@ -74,6 +78,8 @@ export function dispatchHandler(args) {
       return handleGearAssessment(args)
     case INTENTS.UPGRADES:
       return handleUpgrades(args)
+    case INTENTS.ITEM_FIT:
+      return handleItemFit(args)
     case INTENTS.WORST_PURCHASE:
       return handleWorstPurchase(args)
     case INTENTS.SPENDING_ROAST:
@@ -512,6 +518,172 @@ function handleGearAssessment(args) {
     reasonCode: 'gear_assessment',
     allowFlavor: true,
     templateId: 'GEAR_ASSESSMENT',
+  }
+}
+
+function reasonLabel(reason) {
+  const map = {
+    class_mismatch: 'wrong class',
+    missing_magelo: 'no Magelo profile',
+    missing_inventory: 'no Magelo inventory',
+    missing_class: 'missing class',
+    no_matching_slot: 'no matching slot',
+    no_item_stats: 'missing item stats',
+    bad_item_id: 'bad item id',
+    not_upgrade: 'not an upgrade vs equipped',
+    ineligible: 'ineligible',
+  }
+  return map[reason] || String(reason || 'unavailable').replace(/_/g, ' ')
+}
+
+/**
+ * Item → roster: which linked toons could use / upgrade with a sticky or named item.
+ */
+function handleItemFit(args) {
+  const blocked = requireAccount(args, INTENTS.ITEM_FIT)
+  if (blocked) return blocked
+
+  const characters = args.facts.characters || []
+  if (!characters.length) {
+    return {
+      intent: INTENTS.ITEM_FIT,
+      category: 'unknown',
+      factText: 'No linked characters available. No item-fit analysis was performed.',
+      requiredClaims: ['no_character'],
+      placeholders: {},
+      referenced: emptyReferenced(),
+      reasonCode: 'no_character',
+      allowFlavor: true,
+    }
+  }
+
+  const itemName = args.itemName || null
+  const itemId = args.itemId ?? null
+  if (!itemName && (itemId == null || itemId === '')) {
+    return {
+      intent: INTENTS.ITEM_FIT,
+      category: 'unknown',
+      factText:
+        'Which item? Name it, or ask after a loot answer that mentions a specific piece (for example a Quarm ring award).',
+      requiredClaims: ['need_item'],
+      placeholders: {},
+      referenced: emptyReferenced(),
+      reasonCode: 'need_item',
+      allowFlavor: false,
+      clarification: { slot: 'item', message: 'Which item?', pendingIntent: INTENTS.ITEM_FIT },
+      needsItem: true,
+    }
+  }
+
+  if (args.itemUnmatched) {
+    return {
+      intent: INTENTS.ITEM_FIT,
+      category: 'unknown',
+      factText: `I do not recognize "${itemName}" as a known item. Name a raid loot piece I can score.`,
+      requiredClaims: ['item_unmatched'],
+      placeholders: { item: itemName },
+      referenced: withRefs([], [itemName].filter(Boolean)),
+      reasonCode: 'item_unmatched',
+      allowFlavor: false,
+    }
+  }
+
+  if (!args.upgradeContext?.rankings) {
+    const loadErr = formatMageloLoadError(
+      args.upgradeContext?.rankingsError
+        ? { ok: false, ...args.upgradeContext.rankingsError }
+        : null,
+    )
+    const detail = loadErr || 'Magelo rankings data is not loaded'
+    return {
+      intent: INTENTS.ITEM_FIT,
+      category: 'unknown',
+      factText: `I cannot score ${itemName || 'that item'} across your toons because ${detail}. No fit numbers were invented.`,
+      requiredClaims: ['magelo_unavailable'],
+      placeholders: { item: itemName },
+      referenced: withRefs([], [itemName].filter(Boolean)),
+      reasonCode: loadErr ? 'magelo_fetch_failed' : 'magelo_unavailable',
+      allowFlavor: false,
+    }
+  }
+
+  const result = evaluateItemFitForAccount({
+    characters,
+    itemId,
+    itemName,
+    rankings: args.upgradeContext.rankings,
+    itemStats: args.upgradeContext.itemStats || {},
+    raidItemIds: args.upgradeContext.raidItemIds || new Set(),
+  })
+
+  if (!result.ok) {
+    const reason = result.reason || 'unavailable'
+    let factText = `I could not score ${itemName || 'that item'} across your toons (${reasonLabel(reason)}).`
+    if (reason === 'item_unresolved') {
+      factText = `I could not resolve "${itemName || 'that item'}" to Magelo item stats. Name a known raid loot piece.`
+    }
+    return {
+      intent: INTENTS.ITEM_FIT,
+      category: 'unknown',
+      factText,
+      requiredClaims: ['item_fit_unavailable'],
+      placeholders: { item: itemName },
+      referenced: withRefs([], [itemName].filter(Boolean)),
+      reasonCode: reason,
+      allowFlavor: false,
+      itemFit: result,
+    }
+  }
+
+  const upgrades = result.fits.filter((f) => f.isUpgrade)
+  const notUpgrades = result.fits.filter((f) => f.eligible && !f.isUpgrade)
+  const ineligible = result.fits.filter((f) => !f.eligible)
+  const resolvedName = result.itemName || itemName
+
+  const upgradeBits = upgrades.map((f) => `${f.characterName} (${f.upgrade})`)
+  const skipBits = [
+    ...notUpgrades.map((f) => `${f.characterName} (${reasonLabel('not_upgrade')})`),
+    ...ineligible.map((f) => `${f.characterName} (${reasonLabel(f.reason)})`),
+  ]
+
+  let factText
+  if (upgrades.length) {
+    factText = `${resolvedName} is an upgrade for ${upgradeBits.join('; ')}.`
+    if (skipBits.length) factText += ` Not for: ${skipBits.join('; ')}.`
+  } else {
+    factText = `${resolvedName} is not a Magelo upgrade for any of your linked toons.`
+    if (skipBits.length) factText += ` Checked: ${skipBits.join('; ')}.`
+  }
+
+  const cards = upgrades.slice(0, 5).map((f) => ({
+    type: 'upgrade',
+    itemName: resolvedName,
+    itemId: result.itemId,
+    slot: f.slotName,
+    upgrade: f.upgrade,
+    characterName: f.characterName,
+    to: `/items/${encodeURIComponent(resolvedName)}`,
+  }))
+
+  return {
+    intent: INTENTS.ITEM_FIT,
+    category: upgrades.length ? 'upgrade_any' : 'unknown',
+    factText,
+    requiredClaims: upgrades.length ? ['item_fit_upgrades'] : ['item_fit_none'],
+    placeholders: {
+      item: resolvedName,
+      toon: upgrades[0]?.characterName || null,
+      upgrade: upgrades[0]?.upgrade || null,
+      slot: upgrades[0]?.slotName || null,
+    },
+    referenced: withRefs(
+      upgrades.map((f) => f.characterName),
+      [resolvedName],
+    ),
+    cards,
+    reasonCode: upgrades.length ? 'item_fit_upgrades' : 'item_fit_none',
+    allowFlavor: true,
+    itemFit: result,
   }
 }
 

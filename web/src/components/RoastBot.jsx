@@ -44,8 +44,16 @@ async function fetchSaleCosts() {
 
 function needsMageloContext(text, pendingIntent) {
   const lower = String(text || '').toLowerCase()
-  if (pendingIntent === 'gear_assessment' || pendingIntent === 'upgrades') return true
-  return /upgrade|what should i buy|recommend|improve|gear|geared|well.?geared|gear check|buy for/.test(lower)
+  if (
+    pendingIntent === 'gear_assessment' ||
+    pendingIntent === 'upgrades' ||
+    pendingIntent === 'item_fit'
+  ) {
+    return true
+  }
+  return /upgrade|what should i buy|recommend|improve|gear|geared|well.?geared|gear check|buy for|could use|who needs|which of my toons|is this an upgrade/.test(
+    lower,
+  )
 }
 
 function needsDiscoveryItemStats(text) {

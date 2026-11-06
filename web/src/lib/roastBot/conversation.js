@@ -8,6 +8,8 @@ import { renderAnswer, greetingMessage } from './responseBuilder.js'
 import { matchItemName, suggestionChips, formatDkp } from './formatting.js'
 import { dispatchHandler } from './handlers/index.js'
 import { lookupItemSource, catalogEntriesFromKnownSources } from '../itemSourceLookup.js'
+import { resolveItemIdFromStats } from './upgrades.js'
+import { resolveSlotAlias } from './discovery/aliases.js'
 /**
  * @returns {object}
  */
@@ -88,6 +90,79 @@ function resolveItem(facts, hint, state, useSticky, upgradeContext = null) {
   return { name: match.name, itemId: match.itemId ?? match.id ?? null }
 }
 
+const PRONOUN_TOKEN = /^(this|that|it|them|the)$/i
+
+/**
+ * Extract an explicit item hint from item-fit phrasing ("could use X" / "needs X").
+ * Slot-only remnants like "this ring" return null so sticky/discovery primary can win.
+ * @param {string} text
+ * @returns {string|null}
+ */
+function extractItemFitHint(text) {
+  const raw = String(text || '').trim()
+  if (!raw) return null
+  const m =
+    raw.match(/\b(?:could use|needs|use)\s+(.+?)(?:\?|$)/i) ||
+    raw.match(/\bis (?:this|that|it) an? upgrade(?: for)?\s+(.+?)(?:\?|$)/i)
+  if (!m) return null
+  let hint = m[1].replace(/[?.!]+$/g, '').trim()
+  hint = hint.replace(/^(this|that|it|the)\s+/i, '').trim()
+  if (!hint || PRONOUN_TOKEN.test(hint)) return null
+  // Slot-only ("ring", "finger") is not an item name — use sticky / lastDiscovery.
+  if (resolveSlotAlias(hint)) return null
+  return hint
+}
+
+/**
+ * Resolve the candidate item for ITEM_FIT (named, sticky, or discovery primary).
+ * @returns {{ name: string, itemId: string|number|null }|null}
+ */
+function resolveItemFitCandidate(facts, text, state, classified, upgradeContext) {
+  const explicitHint = classified.matchedItemHint || extractItemFitHint(text)
+  if (explicitHint) {
+    const resolved = resolveItem(facts, explicitHint, state, false, upgradeContext)
+    if (resolved?.name && !resolved.unmatched && !resolved.ambiguous) {
+      return { name: resolved.name, itemId: resolved.itemId ?? null }
+    }
+    if (resolved?.ambiguous) return { ambiguous: true, candidates: resolved.candidates, hint: explicitHint }
+    if (resolved?.unmatched) return { unmatched: true, hint: explicitHint }
+  }
+
+  if (state.lastItemName || state.lastItemId) {
+    return { name: state.lastItemName || null, itemId: state.lastItemId ?? null }
+  }
+
+  const t = normalizeLoose(text)
+  const hasPronoun = /\b(this|that|it)\b/.test(t)
+  const slotFromText = resolveSlotAlias(t) || null
+  const primaryName = state.lastDiscovery?.primary?.itemName || null
+  if (primaryName && (hasPronoun || slotFromText)) {
+    const prevSlot = state.lastDiscovery?.query?.slot || null
+    if (!slotFromText || !prevSlot || String(slotFromText) === String(prevSlot)) {
+      return { name: primaryName, itemId: state.lastDiscovery?.primary?.itemId ?? null }
+    }
+  }
+
+  return null
+}
+
+function resolveStickyItemId(name, itemId, facts, upgradeContext) {
+  if (itemId != null && itemId !== '') return String(itemId)
+  if (!name) return null
+  const fromStats = resolveItemIdFromStats(upgradeContext?.itemStats || null, null, name)
+  if (fromStats != null) return String(fromStats)
+  const catalog = [
+    ...(facts.itemCatalog || []),
+    ...catalogEntriesFromKnownSources(facts.knownItemSources),
+  ]
+  const match = matchItemName(name, catalog)
+  if (match && !match.ambiguous) {
+    const id = match.itemId ?? match.id
+    if (id != null) return String(id)
+  }
+  return null
+}
+
 function lookupPrice(facts, itemName) {
   if (!itemName) return null
   const entry = facts.recentItemPrices?.[String(itemName).toLowerCase()]
@@ -155,14 +230,24 @@ export function handleMessage({
 
   // Discovery only when recognition succeeded or an answer was prefetched — never via bare gate/lastIntent.
   // Who-is identity questions win over discovery (e.g. never treat "who is Foo" as loot).
+  // Item-fit (which toons could use this) also wins so prior Quarm/slot context cannot re-hijack.
   const whoIsHit = Boolean(whoIsResult) || classified.intent === INTENTS.WHO_IS
+  const itemFitHit = !whoIsHit && classified.intent === INTENTS.ITEM_FIT
   const recognitionOk =
     !whoIsHit &&
+    !itemFitHit &&
     (discoveryRecognition?.status === 'recognized' ||
       discoveryRecognition?.status === 'ambiguous' ||
       discoveryRecognition?.status === 'unsupported')
-  const discoveryHit = !whoIsHit && Boolean(discoveryResult || discoveryAnswer || recognitionOk)
-  let intent = whoIsHit ? INTENTS.WHO_IS : discoveryHit ? INTENTS.LOOT_DISCOVERY : classified.intent
+  const discoveryHit =
+    !whoIsHit && !itemFitHit && Boolean(discoveryResult || discoveryAnswer || recognitionOk)
+  let intent = whoIsHit
+    ? INTENTS.WHO_IS
+    : itemFitHit
+      ? INTENTS.ITEM_FIT
+      : discoveryHit
+        ? INTENTS.LOOT_DISCOVERY
+        : classified.intent
   let ambiguousClass = null
   const resolvedWhoIsName = whoIsName || classified.whoIsName || null
 
@@ -243,11 +328,20 @@ export function handleMessage({
     state.lastSubject = charSel.name
   }
 
-  const stickyItem = [INTENTS.ITEM_PRICE, INTENTS.ITEM_SOURCE, INTENTS.AFFORDABILITY, INTENTS.FOLLOWUP].includes(intent)
-  const itemResolved =
-    intent === INTENTS.WHO_IS
-      ? null
-      : resolveItem(facts, classified.matchedItemHint, state, stickyItem, upgradeContext)
+  const stickyItem = [
+    INTENTS.ITEM_PRICE,
+    INTENTS.ITEM_SOURCE,
+    INTENTS.AFFORDABILITY,
+    INTENTS.FOLLOWUP,
+    INTENTS.ITEM_FIT,
+  ].includes(intent)
+
+  let itemResolved = null
+  if (intent === INTENTS.ITEM_FIT) {
+    itemResolved = resolveItemFitCandidate(facts, text, state, classified, upgradeContext)
+  } else if (intent !== INTENTS.WHO_IS) {
+    itemResolved = resolveItem(facts, classified.matchedItemHint, state, stickyItem, upgradeContext)
+  }
 
   if (itemResolved?.ambiguous && !discoveryHit && intent !== INTENTS.WHO_IS) {
     const response = {
@@ -270,6 +364,15 @@ export function handleMessage({
   let itemUnmatched = Boolean(itemResolved?.unmatched)
   if (itemResolved?.unmatched) itemName = itemResolved.hint
   if (!itemName && stickyItem && state.lastItemName) itemName = state.lastItemName
+  let itemId =
+    itemResolved?.itemId != null && itemResolved.itemId !== ''
+      ? itemResolved.itemId
+      : stickyItem
+        ? state.lastItemId
+        : null
+  if (intent === INTENTS.ITEM_FIT && itemName && (itemId == null || itemId === '')) {
+    itemId = resolveStickyItemId(itemName, null, facts, upgradeContext)
+  }
 
   const lastSale = itemName && !itemUnmatched ? lookupPrice(facts, itemName) : null
   const itemSource = itemName && !itemUnmatched ? lookupItemSource(facts.knownItemSources, itemName) : null
@@ -280,6 +383,7 @@ export function handleMessage({
     selectedCharacter: charSel,
     ambiguousClass,
     itemName,
+    itemId,
     itemUnmatched,
     lastSale: lastSale != null ? Number(formatDkp(lastSale)) || lastSale : null,
     itemSource,
@@ -310,15 +414,29 @@ export function handleMessage({
   if (answer.referenced?.items?.length) {
     state.lastItemName = answer.referenced.items[0]
     state.lastItem = { name: answer.referenced.items[0] }
-    const id = answer.cards?.[0]?.itemId ?? answer.upgrades?.[0]?.itemId
+    const id =
+      answer.cards?.[0]?.itemId ??
+      answer.upgrades?.[0]?.itemId ??
+      answer.itemFit?.itemId ??
+      null
     if (id != null) {
       state.lastItemId = String(id)
       state.lastUpgradeCandidateId = String(id)
+    } else {
+      const resolvedId = resolveStickyItemId(answer.referenced.items[0], null, facts, upgradeContext)
+      if (resolvedId != null) state.lastItemId = resolvedId
     }
-  } else if (itemName && !itemUnmatched && [INTENTS.ITEM_PRICE, INTENTS.ITEM_SOURCE, INTENTS.AFFORDABILITY, INTENTS.ITEM_SEARCH].includes(intent)) {
+  } else if (
+    itemName &&
+    !itemUnmatched &&
+    [INTENTS.ITEM_PRICE, INTENTS.ITEM_SOURCE, INTENTS.AFFORDABILITY, INTENTS.ITEM_SEARCH, INTENTS.ITEM_FIT].includes(
+      intent,
+    )
+  ) {
     state.lastItemName = itemName
     state.lastItem = { name: itemName }
-    if (itemResolved?.itemId != null) state.lastItemId = String(itemResolved.itemId)
+    const resolvedId = resolveStickyItemId(itemName, itemResolved?.itemId ?? itemId, facts, upgradeContext)
+    if (resolvedId != null) state.lastItemId = resolvedId
   }
 
   // Unrelated unknown follow-up: do not keep stale links (renderAnswer already uses answer.referenced only)
@@ -346,11 +464,21 @@ export function handleMessage({
     const awards = discoveryResult?.awards || []
     const primaryAward = awards[0] || null
     const q = discoveryResult.query
+    const primaryItemName = primaryAward?.itemName || null
+    const primaryItemId = primaryItemName
+      ? resolveStickyItemId(
+          primaryItemName,
+          primaryAward?.itemId ?? primaryAward?.item_id ?? null,
+          facts,
+          upgradeContext,
+        )
+      : null
     state.lastDiscovery = {
       query: q,
       primary: primaryAward
         ? {
-            itemName: primaryAward.itemName || null,
+            itemName: primaryItemName,
+            itemId: primaryItemId,
             characterName: primaryAward.characterName || primaryAward.assignedCharacterName || null,
             raidId: primaryAward.raidId || null,
             dateIso: primaryAward.dateIso || null,
@@ -358,6 +486,7 @@ export function handleMessage({
         : discoveryResult?.raid
           ? {
               itemName: null,
+              itemId: null,
               characterName: null,
               raidId: discoveryResult.raid.raidId,
               dateIso: discoveryResult.raid.dateIso || null,

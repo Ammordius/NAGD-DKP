@@ -299,6 +299,18 @@ describe('discovery follow-up merge', () => {
     assert.equal(r.query.character, 'Tandiyen')
     assert.equal(r.query.family, 'character_awards')
   })
+
+  it('which of my toons could use this ring after Quarm is not_discovery', () => {
+    const prev = tryParseDiscovery('when did quarm last drop a ring')
+    assert.ok(prev)
+    assert.equal(prev.boss, 'Quarm')
+    assert.equal(prev.slot, 'FINGER')
+    const r = recognizeDiscovery('which of my toons could use this ring', {
+      prev,
+      prevPrimary: { itemName: 'Band of the Eternal', characterName: 'Helen' },
+    })
+    assert.equal(r.status, 'not_discovery')
+  })
 })
 
 describe('discovery dialogue false-recognition guard', () => {
@@ -315,12 +327,84 @@ describe('discovery dialogue false-recognition guard', () => {
     assert.notEqual(out.intent, INTENTS.LOOT_DISCOVERY)
   })
 
+  it('item-fit follow-up after Quarm rings routes to ITEM_FIT not loot discovery', () => {
+    const state = createConversationState()
+    state.lastIntent = INTENTS.LOOT_DISCOVERY
+    state.lastItemName = 'Band of the Eternal'
+    state.lastItemId = '90003'
+    state.lastDiscovery = {
+      query: { boss: 'Quarm', slot: 'FINGER', intent: 'last_award', raw: 'when did quarm last drop a ring' },
+      primary: { itemName: 'Band of the Eternal', itemId: '90003', characterName: 'Helen' },
+      recognition: { status: 'recognized' },
+    }
+    const out = handleMessage({
+      text: 'which of my toons could use this ring',
+      facts: {
+        accountId: 'a1',
+        characters: [
+          { char_id: 'e1', name: 'Iaminae', class_name: 'Enchanter' },
+          { char_id: 'w1', name: 'Zender', class_name: 'Warrior' },
+        ],
+        knownItemSources: known,
+        itemCatalog: [{ name: 'Band of the Eternal', itemId: 90003 }],
+      },
+      state,
+      // Discovery must not win even if a stale recognition were passed.
+      discoveryRecognition: null,
+      upgradeContext: {
+        rankings: {
+          classWeights: {
+            Enchanter: { ac_pct: 1, hp_pct: 0, mana_pct: 0, resists_pct: 0 },
+            Warrior: { ac_pct: 1, hp_pct: 0, mana_pct: 0, resists_pct: 0 },
+          },
+          focusCandidates: {},
+          characters: [
+            {
+              name: 'Iaminae',
+              class: 'Enchanter',
+              inventory: [{ slot_id: 15, item_id: 80001, item_name: 'Old Ring' }],
+            },
+            {
+              name: 'Zender',
+              class: 'Warrior',
+              inventory: [{ slot_id: 15, item_id: 80001, item_name: 'Old Ring' }],
+            },
+          ],
+        },
+        itemStats: {
+          80001: {
+            name: 'Old Ring',
+            slot: 'FINGER',
+            classes: 'ENC WAR',
+            ac: 5,
+            mods: [],
+            resists: [],
+          },
+          90003: {
+            name: 'Band of the Eternal',
+            slot: 'FINGER',
+            classes: 'ENC',
+            ac: 40,
+            mods: [],
+            resists: [],
+          },
+        },
+        raidItemIds: new Set([80001, 90003]),
+      },
+      rng: () => 0,
+    })
+    assert.equal(out.intent, INTENTS.ITEM_FIT)
+    assert.ok(out.answer.requiredClaims.includes('item_fit_upgrades'))
+    assert.match(out.response.text, /Band of the Eternal/i)
+    assert.match(out.response.text, /Iaminae/i)
+    assert.doesNotMatch(out.response.text, /finger awards for Quarm/i)
+  })
+
   it('prefetched quarm ring answer routes to loot discovery', () => {
     const answer = {
       intent: INTENTS.LOOT_DISCOVERY,
       category: 'general',
-      factText:
-        'Last recorded finger awards for Quarm (most recent 2026-02-25):\nThese are recorded DKP awards joined via item_sources labels, not independently proven in-game drop events.',
+      factText: 'Last recorded finger awards for Quarm (most recent 2026-02-25):',
       requiredClaims: ['loot_discovery'],
       placeholders: {},
       referenced: { characters: ['Helen'], items: ['Band of the Eternal'], raids: [] },
@@ -347,7 +431,7 @@ describe('discovery dialogue false-recognition guard', () => {
         ],
       },
       reasonCode: 'loot_discovery',
-      allowFlavor: true,
+      allowFlavor: false,
       templateId: 'LOOT_DISCOVERY',
     }
     const out = handleMessage({

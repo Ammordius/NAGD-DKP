@@ -163,6 +163,20 @@ export function tryParseDiscovery(raw, opts = {}) {
 function isPersonalRoast(text) {
   if (/\b(roast|my buys|my spending|why am i broke|what should i buy)\b/.test(text)) return true
   if (/\bwhat did i (buy|spend|get)\b/.test(text)) return true
+  // Item→roster fit questions must not merge onto prior loot discovery (e.g. Quarm rings).
+  if (isItemFitUtterance(text)) return true
+  return false
+}
+
+/** Keep in sync with intents.ITEM_FIT_PATTERNS (discovery must not import conversation cycle). */
+function isItemFitUtterance(text) {
+  const t = String(text || '').toLowerCase()
+  if (/which of my (toons|characters|alts) could use/.test(t)) return true
+  if (/which (toon|character|alt).{0,40}(could use|needs)/.test(t)) return true
+  if (/who (?:of my .{0,40} )?(needs|could use) (this|that|it)/.test(t)) return true
+  if (/\bwho needs (this|that|it)\b/.test(t)) return true
+  if (/is (this|that|it) an? upgrade/.test(t)) return true
+  if (/could (any of )?my (toons|characters|alts) use/.test(t)) return true
   return false
 }
 

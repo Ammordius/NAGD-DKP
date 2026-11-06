@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import {
   computeCharacterUpgrades,
   countSlotClassMatches,
+  evaluateItemFitForAccount,
   findMageloCharacter,
   extractInventory,
   filterItemStatsForRaidLoot,
@@ -99,6 +100,67 @@ describe('roastBot upgrades', () => {
     assert.equal(result.ok, false)
     assert.equal(result.reason, 'missing_magelo')
     assert.deepEqual(result.suggestions, [])
+  })
+
+  it('evaluateItemFitForAccount scores a ring across toons and flags class mismatch', () => {
+    resetUpgradeCaches()
+    const itemStats = {
+      80001: {
+        name: 'Old Ring',
+        slot: 'FINGER',
+        classes: 'ENC WAR',
+        ac: 5,
+        mods: [],
+        resists: [],
+      },
+      90003: {
+        name: 'Band of the Eternal',
+        slot: 'FINGER',
+        classes: 'ENC',
+        ac: 40,
+        mods: [],
+        resists: [],
+      },
+    }
+    const rankings = {
+      classWeights: {
+        Enchanter: { ...AC_WEIGHTS },
+        Warrior: { ...AC_WEIGHTS },
+      },
+      focusCandidates: {},
+      characters: [
+        {
+          name: 'Iaminae',
+          class: 'Enchanter',
+          inventory: [{ slot_id: 15, item_id: 80001, item_name: 'Old Ring' }],
+        },
+        {
+          name: 'Zender',
+          class: 'Warrior',
+          inventory: [{ slot_id: 15, item_id: 80001, item_name: 'Old Ring' }],
+        },
+      ],
+    }
+    const result = evaluateItemFitForAccount({
+      characters: [
+        { char_id: 'e1', name: 'Iaminae', class_name: 'Enchanter' },
+        { char_id: 'w1', name: 'Zender', class_name: 'Warrior' },
+      ],
+      itemName: 'Band of the Eternal',
+      rankings,
+      itemStats,
+      raidItemIds: new Set([80001, 90003]),
+    })
+    assert.equal(result.ok, true, result.reason)
+    assert.equal(result.itemName, 'Band of the Eternal')
+    assert.equal(result.itemId, 90003)
+    const enc = result.fits.find((f) => f.characterName === 'Iaminae')
+    const war = result.fits.find((f) => f.characterName === 'Zender')
+    assert.ok(enc?.isUpgrade)
+    assert.ok(enc.scoreDelta > 0)
+    assert.equal(war?.eligible, false)
+    assert.equal(war?.reason, 'class_mismatch')
+    assert.equal(result.fits[0].characterName, 'Iaminae')
   })
 
   it('engine returns bySlot.upgrades (not candidates); reading candidates would discard recommendations', () => {
