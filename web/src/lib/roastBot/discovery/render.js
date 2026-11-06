@@ -3,6 +3,7 @@
  * Award lists use a structured `table` (React Link cells); not markdown URLs.
  */
 
+import { formatAccountCharacter } from '../../formatAccountCharacter.js'
 import { buildLinks, formatDkp } from '../formatting.js'
 import { INTENTS } from '../intents.js'
 
@@ -107,6 +108,7 @@ export function renderDiscovery(result) {
     factText = `${factText}\n\nNote: ${unique.join(' ')}`.trim()
   }
 
+  const hasTable = Boolean(table?.rows?.length)
   return {
     intent: INTENTS.LOOT_DISCOVERY,
     category: 'general',
@@ -117,8 +119,8 @@ export function renderDiscovery(result) {
     links,
     table,
     reasonCode: 'loot_discovery',
-    // Verified facts first; optional Inquisitor flavor after (responseBuilder).
-    allowFlavor: true,
+    // Table answers are data-first; skip appended roast flavor.
+    allowFlavor: !hasTable,
     templateId: 'LOOT_DISCOVERY',
     itemCorrection: correction || null,
   }
@@ -177,7 +179,7 @@ function renderRaidLoot(result, referenced) {
       : `\n${total} recorded loot award${total === 1 ? '' : 's'}. Try not to bid on nostalgia.`
 
   return {
-    factText: withAssignmentNote(`${header}${trunc}`, awards),
+    factText: withAssignmentNote(`${header}${trunc}`, awards, true),
     links: [],
     table: { columns: AWARD_COLUMNS, rows },
   }
@@ -229,11 +231,9 @@ function renderLastAward(result, referenced) {
   if (prior.length) {
     factText += `\nEarlier recorded awards:`
   }
-  factText +=
-    '\nThese are recorded DKP awards/recipients, not independently proven in-game drop events.'
 
   return {
-    factText: withAssignmentNote(factText, awards),
+    factText: withAssignmentNote(factText, awards, true),
     links: itemLinks,
     table: { columns: RECIPIENT_COLUMNS, rows },
   }
@@ -263,6 +263,7 @@ function renderRecipients(result, referenced) {
       factText: withAssignmentNote(
         `Yes — ${char} has recorded award(s) of ${item}. The paperwork does not lie, even when the bidding might have:`,
         awards,
+        true,
       ),
       links: [],
       table: { columns: AWARD_COLUMNS, rows },
@@ -300,11 +301,9 @@ function renderRecipients(result, referenced) {
   if (rows.length) {
     factText += `\nRecorded recipients:`
   }
-  factText +=
-    '\nThese are recorded DKP awards/recipients, not independently proven in-game drop events.'
 
   return {
-    factText: withAssignmentNote(factText, awards),
+    factText: withAssignmentNote(factText, awards, true),
     links: itemLinks,
     table: { columns: RECIPIENT_COLUMNS, rows },
   }
@@ -347,9 +346,9 @@ function renderCatalogWindowAwards(result, referenced) {
 
   const rows = awards.slice(0, MAX_LINES).map((a) => formatAwardRow(a, referenced))
   const most = awards[0]
-  const factText = `${header} (most recent ${truncateDateIso(most.dateIso)}):\nThese are recorded DKP awards joined via item_sources labels, not independently proven in-game drop events.`
+  const factText = `${header} (most recent ${truncateDateIso(most.dateIso)}):`
   return {
-    factText: withAssignmentNote(factText, awards),
+    factText: withAssignmentNote(factText, awards, true),
     links: [],
     table: { columns: AWARD_COLUMNS, rows },
   }
@@ -374,7 +373,7 @@ function renderCount(result, referenced) {
   }
   const rows = recent.map((a) => formatRecipientRow(a, referenced))
   return {
-    factText: withAssignmentNote(`${factText}\nMost recent:`, recent),
+    factText: withAssignmentNote(`${factText}\nMost recent:`, recent, true),
     links: [],
     table: { columns: RECIPIENT_COLUMNS, rows },
   }
@@ -402,7 +401,7 @@ function renderCharacterAwards(result, referenced) {
     ? `\nShowing ${Math.min(awards.length, MAX_LINES)} recorded awards (truncated). The full history would only deepen the judgment.`
     : `\n${awards.length} recorded award${awards.length === 1 ? '' : 's'}. Exhibit A for the prosecution.`
   return {
-    factText: withAssignmentNote(`Recorded awards for ${char}${window}:${trunc}`, awards),
+    factText: withAssignmentNote(`Recorded awards for ${char}${window}:${trunc}`, awards, true),
     links: [],
     table: { columns: AWARD_COLUMNS, rows },
   }
@@ -435,7 +434,7 @@ function renderCatalog(result, referenced) {
 }
 
 /**
- * Prefer assigned toon; annotate DKP buyer when it differs.
+ * Prefer Account (Character) via formatAccountCharacter; Unassigned when no assignee.
  * @param {import('./types.js').LedgerAward} a
  * @returns {{ name: string|null, label: string, linkName: string|null, buyer: string|null }}
  */
@@ -445,10 +444,9 @@ function toonDisplay(a) {
   if (!toon) {
     return { name: null, label: 'Unassigned', linkName: null, buyer }
   }
-  const buyerDiffers = Boolean(buyer && toon.toLowerCase() !== buyer.toLowerCase())
   return {
     name: toon,
-    label: buyerDiffers ? `${toon} (buyer ${buyer})` : toon,
+    label: formatAccountCharacter(buyer || toon, toon),
     linkName: toon,
     buyer,
   }
@@ -457,8 +455,10 @@ function toonDisplay(a) {
 /**
  * @param {string} factText
  * @param {import('./types.js').LedgerAward[]} awards
+ * @param {boolean} [hasTable] - Table already shows Unassigned; skip Magelo footnote.
  */
-function withAssignmentNote(factText, awards) {
+function withAssignmentNote(factText, awards, hasTable = false) {
+  if (hasTable) return factText
   const hasUnassigned = (awards || []).some((a) => !String(a?.assignedCharacterName || '').trim())
   if (!hasUnassigned) return factText
   if (String(factText || '').includes(UNASSIGNED_NOTE)) return factText

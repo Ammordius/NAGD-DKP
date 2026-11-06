@@ -73,7 +73,7 @@ describe('discovery render', () => {
     assert.equal(answer.links?.[0]?.to, `/items/${encodeURIComponent('Cloak of Wishes')}`)
   })
 
-  it('buyer ≠ assignee annotates buyer on Toon label', () => {
+  it('buyer ≠ assignee uses Account (Character) Toon label', () => {
     const answer = renderDiscovery({
       ok: true,
       family: 'item_recipients',
@@ -91,15 +91,16 @@ describe('discovery render', () => {
         },
       ],
     })
-    assert.match(answer.factText, /Raud \(buyer Fayze\)/)
+    assert.match(answer.factText, /Fayze \(Raud\)/)
     const row = answer.table?.rows?.[0]
-    assert.equal(row?.toon?.label, 'Raud (buyer Fayze)')
+    assert.equal(row?.toon?.label, 'Fayze (Raud)')
     assert.equal(row?.toon?.to, `/characters/${encodeURIComponent('Raud')}`)
     assert.equal(row?.class, 'Monk')
     assert.doesNotMatch(answer.factText, /Unassigned means no confirmed toon/)
+    assert.equal(answer.allowFlavor, false)
   })
 
-  it('unassigned toon shows Unassigned, blank class, and disclaimer', () => {
+  it('unassigned toon shows Unassigned and blank class without Magelo footnote on tables', () => {
     const answer = renderDiscovery({
       ok: true,
       family: 'raid_loot',
@@ -119,11 +120,12 @@ describe('discovery render', () => {
       ],
       totalCount: 1,
     })
-    assert.match(answer.factText, /Unassigned means no confirmed toon/)
+    assert.doesNotMatch(answer.factText, /Unassigned means no confirmed toon/)
     const row = answer.table?.rows?.[0]
     assert.equal(row?.toon?.label, 'Unassigned')
     assert.equal(row?.toon?.type, 'text')
     assert.equal(row?.class, '—')
+    assert.equal(answer.allowFlavor, false)
   })
 
   it('boss+slot catalog window awards use item/toon/class/date/raid table', () => {
@@ -150,8 +152,9 @@ describe('discovery render', () => {
       ],
     })
     assert.match(answer.factText, /Last recorded finger awards for Quarm/i)
-    assert.match(answer.factText, /item_sources/i)
+    assert.doesNotMatch(answer.factText, /item_sources/i)
     assert.doesNotMatch(answer.factText, /Band of the Eternal →/)
+    assert.equal(answer.allowFlavor, false)
     const row = answer.table?.rows?.[0]
     assert.ok(row)
     assert.equal(row.item?.label, 'Band of the Eternal')
@@ -253,7 +256,7 @@ describe('discovery render', () => {
     assert.equal(answer.allowFlavor, true)
   })
 
-  it('successful discovery answers enable roast flavor', () => {
+  it('successful table answers disable roast flavor', () => {
     const answer = renderDiscovery({
       ok: true,
       family: 'item_last',
@@ -272,10 +275,23 @@ describe('discovery render', () => {
       gaps: [],
       notes: [],
     })
-    assert.equal(answer.allowFlavor, true)
+    assert.equal(answer.allowFlavor, false)
     assert.match(answer.factText, /Whip/)
     assert.match(answer.factText, /Tandiyen/)
     // Inquisitor personality in the fact line itself
     assert.match(answer.factText, /Congrats|privilege|bid/i)
+  })
+
+  it('empty discovery answers still allow roast flavor', () => {
+    const answer = renderDiscovery({
+      ok: true,
+      family: 'item_last',
+      query: { family: 'item_last', itemQuery: 'Whip', raw: 'last whip' },
+      awards: [],
+      gaps: [],
+      notes: [],
+    })
+    assert.equal(answer.allowFlavor, true)
+    assert.equal(answer.table, null)
   })
 })
