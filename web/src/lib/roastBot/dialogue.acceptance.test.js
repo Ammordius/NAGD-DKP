@@ -546,13 +546,15 @@ describe('loot discovery dialogue regression', () => {
       referenced: { characters: ['Tandiyen'], items: ['Whip'], raids: [{ id: 'r1', name: 'Fire' }] },
       links: [],
       table: {
-        columns: ['Item', 'Character', 'Date', 'Raid'],
+        columns: ['Item', 'Toon', 'Class', 'Date', 'Raid', 'DKP'],
         rows: [
           {
             item: { type: 'item', label: 'Whip', to: '/items/Whip' },
-            character: { type: 'character', label: 'Tandiyen', to: '/characters/Tandiyen' },
+            toon: { type: 'character', label: 'Tandiyen', to: '/characters/Tandiyen' },
+            class: 'Wizard',
             date: '2026-03-01',
             raid: { type: 'raid', label: 'Fire', to: '/raids/r1' },
+            dkp: '40',
           },
         ],
       },

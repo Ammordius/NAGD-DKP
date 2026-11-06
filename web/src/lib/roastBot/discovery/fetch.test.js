@@ -251,6 +251,40 @@ describe('discovery fetch', () => {
     )
   })
 
+  it('attaches class_name for assigned toons', async () => {
+    const callLog = []
+    const client = createDiscoveryMockClient({ callLog })
+    const prepared = prepareDiscovery('Who got Cloak of Wishes?', { knownItemSources: known })
+    const result = await executeDiscovery(client, prepared.plan, {
+      knownItemSources: known,
+      resolved: prepared.resolved,
+      skipCache: true,
+    })
+    assert.ok(result.awards?.length)
+    assert.ok(callLog.some((c) => c.op === 'from' && c.table === 'characters'))
+    const frank = result.awards.find((a) => a.assignedCharacterName === 'Frank')
+    assert.ok(frank)
+    assert.equal(frank.className, 'Rogue')
+    assert.equal(frank.assignedCharId, 'c8')
+  })
+
+  it('attaches assignee class when buyer differs', async () => {
+    const client = createDiscoveryMockClient()
+    const prepared = prepareDiscovery('Who got Wristband of Icy Vengeance?', {
+      knownItemSources: known,
+    })
+    assert.ok(prepared?.plan)
+    const result = await executeDiscovery(client, prepared.plan, {
+      knownItemSources: known,
+      resolved: prepared.resolved,
+      skipCache: true,
+    })
+    const row = result.awards?.[0]
+    assert.equal(row?.characterName, 'Fayze')
+    assert.equal(row?.assignedCharacterName, 'Raud')
+    assert.equal(row?.className, 'Monk')
+  })
+
   it('does not cache failed discovery results', async () => {
     const { fingerprintQuery } = await import('./cacheKey.js')
     const client = {

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { renderDiscovery } from './render.js'
 
 describe('discovery render', () => {
-  it('raid loot includes table rows with raid/item/character links', () => {
+  it('raid loot includes table rows with raid/item/toon links', () => {
     const answer = renderDiscovery({
       ok: true,
       family: 'raid_loot',
@@ -16,6 +16,8 @@ describe('discovery render', () => {
           dateIso: '2026-03-01',
           itemName: 'Blazing Whip of Trillia',
           characterName: 'Tandiyen',
+          assignedCharacterName: 'Tandiyen',
+          className: 'Wizard',
         },
       ],
       totalCount: 1,
@@ -24,11 +26,14 @@ describe('discovery render', () => {
     })
     assert.match(answer.factText, /Plane of Fire/)
     assert.match(answer.factText, /1 recorded loot award/)
+    assert.doesNotMatch(answer.factText, /Unassigned means no confirmed toon/)
     assert.ok(answer.table?.rows?.length === 1)
-    assert.deepEqual(answer.table.columns, ['Item', 'Character', 'Date', 'Raid', 'DKP'])
+    assert.deepEqual(answer.table.columns, ['Item', 'Toon', 'Class', 'Date', 'Raid', 'DKP'])
     const row = answer.table.rows[0]
     assert.equal(row.item?.to, `/items/${encodeURIComponent('Blazing Whip of Trillia')}`)
-    assert.equal(row.character?.to, `/characters/${encodeURIComponent('Tandiyen')}`)
+    assert.equal(row.toon?.to, `/characters/${encodeURIComponent('Tandiyen')}`)
+    assert.equal(row.toon?.label, 'Tandiyen')
+    assert.equal(row.class, 'Wizard')
     assert.equal(row.raid?.to, '/raids/r-fire-new')
     assert.equal(row.date, '2026-03-01')
     assert.equal(row.dkp, '—')
@@ -47,6 +52,8 @@ describe('discovery render', () => {
           dateIso: '2026-02-10T21:00:00-04:00',
           itemName: 'Cloak of Wishes',
           characterName: 'Frank',
+          assignedCharacterName: 'Frank',
+          className: 'Rogue',
           cost: 41,
         },
       ],
@@ -57,15 +64,69 @@ describe('discovery render', () => {
     assert.match(answer.factText, /2026-02-10/)
     assert.doesNotMatch(answer.factText, /21:00:00/)
     assert.ok(answer.table?.rows?.length === 1)
-    assert.deepEqual(answer.table.columns, ['Character', 'Date', 'DKP'])
-    assert.equal(answer.table.rows[0].character?.to, `/characters/${encodeURIComponent('Frank')}`)
+    assert.deepEqual(answer.table.columns, ['Toon', 'Class', 'Date', 'DKP'])
+    assert.equal(answer.table.rows[0].toon?.to, `/characters/${encodeURIComponent('Frank')}`)
+    assert.equal(answer.table.rows[0].class, 'Rogue')
     assert.equal(answer.table.rows[0].date?.to, '/raids/r1')
     assert.equal(answer.table.rows[0].date?.label, '2026-02-10')
     assert.equal(answer.table.rows[0].dkp, '41')
     assert.equal(answer.links?.[0]?.to, `/items/${encodeURIComponent('Cloak of Wishes')}`)
   })
 
-  it('boss+slot catalog window awards use item/character/date/raid table', () => {
+  it('buyer ≠ assignee annotates buyer on Toon label', () => {
+    const answer = renderDiscovery({
+      ok: true,
+      family: 'item_recipients',
+      query: { family: 'item_recipients', itemQuery: 'Wristband of Icy Vengeance', raw: 'x' },
+      awards: [
+        {
+          raidId: 'r-quarm',
+          raidName: 'Time Day 2',
+          dateIso: '2025-06-12',
+          itemName: 'Wristband of Icy Vengeance',
+          characterName: 'Fayze',
+          assignedCharacterName: 'Raud',
+          className: 'Monk',
+          cost: 34,
+        },
+      ],
+    })
+    assert.match(answer.factText, /Raud \(buyer Fayze\)/)
+    const row = answer.table?.rows?.[0]
+    assert.equal(row?.toon?.label, 'Raud (buyer Fayze)')
+    assert.equal(row?.toon?.to, `/characters/${encodeURIComponent('Raud')}`)
+    assert.equal(row?.class, 'Monk')
+    assert.doesNotMatch(answer.factText, /Unassigned means no confirmed toon/)
+  })
+
+  it('unassigned toon shows Unassigned, blank class, and disclaimer', () => {
+    const answer = renderDiscovery({
+      ok: true,
+      family: 'raid_loot',
+      query: { family: 'raid_loot', zone: 'Plane of Fire', raw: 'x' },
+      raid: { raidId: 'r1', raidName: 'Fire', dateIso: '2026-03-01' },
+      awards: [
+        {
+          raidId: 'r1',
+          raidName: 'Fire',
+          dateIso: '2026-03-01',
+          itemName: 'Blazing Whip of Trillia',
+          characterName: 'OrphanBuyer',
+          assignedCharacterName: null,
+          className: null,
+          cost: 5,
+        },
+      ],
+      totalCount: 1,
+    })
+    assert.match(answer.factText, /Unassigned means no confirmed toon/)
+    const row = answer.table?.rows?.[0]
+    assert.equal(row?.toon?.label, 'Unassigned')
+    assert.equal(row?.toon?.type, 'text')
+    assert.equal(row?.class, '—')
+  })
+
+  it('boss+slot catalog window awards use item/toon/class/date/raid table', () => {
     const answer = renderDiscovery({
       ok: true,
       family: 'item_last',
@@ -83,6 +144,8 @@ describe('discovery render', () => {
           dateIso: '2026-02-25',
           itemName: 'Band of the Eternal',
           characterName: 'Helen',
+          assignedCharacterName: 'Helen',
+          className: 'Enchanter',
         },
       ],
     })
@@ -93,8 +156,9 @@ describe('discovery render', () => {
     assert.ok(row)
     assert.equal(row.item?.label, 'Band of the Eternal')
     assert.equal(row.item?.to, `/items/${encodeURIComponent('Band of the Eternal')}`)
-    assert.equal(row.character?.label, 'Helen')
-    assert.equal(row.character?.to, `/characters/${encodeURIComponent('Helen')}`)
+    assert.equal(row.toon?.label, 'Helen')
+    assert.equal(row.toon?.to, `/characters/${encodeURIComponent('Helen')}`)
+    assert.equal(row.class, 'Enchanter')
     assert.equal(row.raid?.to, '/raids/r-quarm')
     assert.equal(row.date, '2026-02-25')
     assert.equal(answer.links?.length || 0, 0)
@@ -129,6 +193,8 @@ describe('discovery render', () => {
           raidId: 'r-time-mixed',
           itemName: 'Cloak of Wishes',
           characterName: 'Alice',
+          assignedCharacterName: 'Alice',
+          className: 'Enchanter',
           dateIso: '2026-02-20',
         },
       ],

@@ -8,9 +8,11 @@ import { INTENTS } from '../intents.js'
 
 const MAX_LINES = 40
 
-const AWARD_COLUMNS = ['Item', 'Character', 'Date', 'Raid', 'DKP']
-const RECIPIENT_COLUMNS = ['Character', 'Date', 'DKP']
+const AWARD_COLUMNS = ['Item', 'Toon', 'Class', 'Date', 'Raid', 'DKP']
+const RECIPIENT_COLUMNS = ['Toon', 'Class', 'Date', 'DKP']
 const CATALOG_COLUMNS = ['Item']
+const UNASSIGNED_NOTE =
+  'Toon assignment is Magelo/manual best-effort; Unassigned means no confirmed toon.'
 
 /**
  * @param {import('./types.js').DiscoveryResult} result
@@ -175,7 +177,7 @@ function renderRaidLoot(result, referenced) {
       : `\n${total} recorded loot award${total === 1 ? '' : 's'}.`
 
   return {
-    factText: `${header}${trunc}`,
+    factText: withAssignmentNote(`${header}${trunc}`, awards),
     links: [],
     table: { columns: AWARD_COLUMNS, rows },
   }
@@ -211,8 +213,7 @@ function renderLastAward(result, referenced) {
   }
 
   const most = awards[0]
-  const recipient = most.characterName || most.assignedCharacterName || 'unknown'
-  if (most.characterName) referenced.characters.push(most.characterName)
+  const recipient = toonDisplay(most).label
   if (most.raidId) referenced.raids.push({ id: most.raidId, name: most.raidName || most.raidId })
 
   let factText = `Last recorded award of ${item}: ${recipient} on ${truncateDateIso(most.dateIso)}`
@@ -232,7 +233,7 @@ function renderLastAward(result, referenced) {
     '\nThese are recorded DKP awards/recipients, not independently proven in-game drop events.'
 
   return {
-    factText,
+    factText: withAssignmentNote(factText, awards),
     links: itemLinks,
     table: { columns: RECIPIENT_COLUMNS, rows },
   }
@@ -259,7 +260,7 @@ function renderRecipients(result, referenced) {
     }
     const rows = awards.slice(0, 5).map((a) => formatAwardRow(a, referenced))
     return {
-      factText: `Yes — ${char} has recorded award(s) of ${item}:`,
+      factText: withAssignmentNote(`Yes — ${char} has recorded award(s) of ${item}:`, awards),
       links: [],
       table: { columns: AWARD_COLUMNS, rows },
     }
@@ -284,8 +285,7 @@ function renderRecipients(result, referenced) {
   }
 
   const most = awards[0]
-  const recipient = most.characterName || most.assignedCharacterName || 'unknown'
-  if (most.characterName) referenced.characters.push(most.characterName)
+  const recipient = toonDisplay(most).label
   if (most.raidId) referenced.raids.push({ id: most.raidId, name: most.raidName || most.raidId })
 
   const others = awards.slice(0, 8)
@@ -301,7 +301,7 @@ function renderRecipients(result, referenced) {
     '\nThese are recorded DKP awards/recipients, not independently proven in-game drop events.'
 
   return {
-    factText,
+    factText: withAssignmentNote(factText, awards),
     links: itemLinks,
     table: { columns: RECIPIENT_COLUMNS, rows },
   }
@@ -346,7 +346,7 @@ function renderCatalogWindowAwards(result, referenced) {
   const most = awards[0]
   const factText = `${header} (most recent ${truncateDateIso(most.dateIso)}):\nThese are recorded DKP awards joined via item_sources labels, not independently proven in-game drop events.`
   return {
-    factText,
+    factText: withAssignmentNote(factText, awards),
     links: [],
     table: { columns: AWARD_COLUMNS, rows },
   }
@@ -371,7 +371,7 @@ function renderCount(result, referenced) {
   }
   const rows = recent.map((a) => formatRecipientRow(a, referenced))
   return {
-    factText: `${factText}\nMost recent:`,
+    factText: withAssignmentNote(`${factText}\nMost recent:`, recent),
     links: [],
     table: { columns: RECIPIENT_COLUMNS, rows },
   }
@@ -399,7 +399,7 @@ function renderCharacterAwards(result, referenced) {
     ? `\nShowing ${Math.min(awards.length, MAX_LINES)} recorded awards (truncated).`
     : `\n${awards.length} recorded award${awards.length === 1 ? '' : 's'}.`
   return {
-    factText: `Recorded awards for ${char}${window}:${trunc}`,
+    factText: withAssignmentNote(`Recorded awards for ${char}${window}:${trunc}`, awards),
     links: [],
     table: { columns: AWARD_COLUMNS, rows },
   }
@@ -432,32 +432,70 @@ function renderCatalog(result, referenced) {
 }
 
 /**
+ * Prefer assigned toon; annotate DKP buyer when it differs.
+ * @param {import('./types.js').LedgerAward} a
+ * @returns {{ name: string|null, label: string, linkName: string|null, buyer: string|null }}
+ */
+function toonDisplay(a) {
+  const toon = String(a?.assignedCharacterName || '').trim() || null
+  const buyer = String(a?.characterName || '').trim() || null
+  if (!toon) {
+    return { name: null, label: 'Unassigned', linkName: null, buyer }
+  }
+  const buyerDiffers = Boolean(buyer && toon.toLowerCase() !== buyer.toLowerCase())
+  return {
+    name: toon,
+    label: buyerDiffers ? `${toon} (buyer ${buyer})` : toon,
+    linkName: toon,
+    buyer,
+  }
+}
+
+/**
+ * @param {string} factText
+ * @param {import('./types.js').LedgerAward[]} awards
+ */
+function withAssignmentNote(factText, awards) {
+  const hasUnassigned = (awards || []).some((a) => !String(a?.assignedCharacterName || '').trim())
+  if (!hasUnassigned) return factText
+  if (String(factText || '').includes(UNASSIGNED_NOTE)) return factText
+  return `${factText}\n${UNASSIGNED_NOTE}`
+}
+
+/**
  * @param {import('./types.js').LedgerAward} a
  * @param {object} referenced
  */
 function formatAwardRow(a, referenced) {
-  const who = a.characterName || a.assignedCharacterName || 'unknown'
+  const display = toonDisplay(a)
   const dateLabel = truncateDateIso(a.dateIso)
   referenced.items.push(a.itemName)
-  if (a.characterName) referenced.characters.push(a.characterName)
+  if (display.linkName) referenced.characters.push(display.linkName)
+  if (display.buyer && display.linkName && display.buyer.toLowerCase() !== display.linkName.toLowerCase()) {
+    referenced.characters.push(display.buyer)
+  }
   if (a.raidId) {
     referenced.raids.push({ id: a.raidId, name: a.raidName || a.raidId })
   }
 
   const built = buildLinks({
     itemName: a.itemName,
-    characterName: who !== 'unknown' ? who : undefined,
+    characterName: display.linkName || undefined,
     raidId: a.raidId,
     raidName: a.raidName || a.raidId,
   })
   const item = built.find((l) => l.type === 'item') || { type: 'text', label: a.itemName || 'unknown' }
-  const character =
-    built.find((l) => l.type === 'character') || { type: 'text', label: who }
+  const linked = built.find((l) => l.type === 'character')
+  const toon = linked
+    ? { ...linked, label: display.label }
+    : { type: 'text', label: display.label }
   const raid = built.find((l) => l.type === 'raid') || null
+  const classLabel = String(a.className || '').trim() || '—'
 
   return {
     item,
-    character,
+    toon,
+    class: classLabel,
     date: dateLabel,
     raid,
     dkp: formatDkp(a.cost) ?? '—',
@@ -471,19 +509,28 @@ function formatAwardRow(a, referenced) {
  * @param {object} referenced
  */
 function formatRecipientRow(a, referenced) {
-  const who = a.characterName || a.assignedCharacterName || 'unknown'
+  const display = toonDisplay(a)
   const dateLabel = truncateDateIso(a.dateIso)
-  if (a.characterName) referenced.characters.push(a.characterName)
+  if (display.linkName) referenced.characters.push(display.linkName)
+  if (display.buyer && display.linkName && display.buyer.toLowerCase() !== display.linkName.toLowerCase()) {
+    referenced.characters.push(display.buyer)
+  }
   if (a.raidId) {
     referenced.raids.push({ id: a.raidId, name: a.raidName || a.raidId })
   }
   const built = buildLinks({
-    characterName: who !== 'unknown' ? who : undefined,
+    characterName: display.linkName || undefined,
     raidId: a.raidId,
     raidName: dateLabel,
   })
+  const linked = built.find((l) => l.type === 'character')
+  const toon = linked
+    ? { ...linked, label: display.label }
+    : { type: 'text', label: display.label }
+  const classLabel = String(a.className || '').trim() || '—'
   return {
-    character: built.find((l) => l.type === 'character') || { type: 'text', label: who },
+    toon,
+    class: classLabel,
     date: built.find((l) => l.type === 'raid') || { type: 'text', label: dateLabel },
     dkp: formatDkp(a.cost) ?? '—',
   }

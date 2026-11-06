@@ -252,6 +252,37 @@ export const FIXTURE_LOOT_BY_RAID = {
   ],
 }
 
+/** Characters for assigned-toon class enrichment in discovery fetch tests. */
+export const FIXTURE_CHARACTERS = [
+  { char_id: 'c1', name: 'Tandiyen', class_name: 'Wizard' },
+  { char_id: 'c2', name: 'Ammordius', class_name: 'Magician' },
+  { char_id: 'c3', name: 'Alice', class_name: 'Enchanter' },
+  { char_id: 'c4', name: 'Bob', class_name: 'Cleric' },
+  { char_id: 'c5', name: 'Carol', class_name: 'Warrior' },
+  { char_id: 'c6', name: 'Dave', class_name: 'Paladin' },
+  { char_id: 'c7', name: 'Eve', class_name: 'Ranger' },
+  { char_id: 'c8', name: 'Frank', class_name: 'Rogue' },
+  { char_id: 'c10', name: 'Gina', class_name: 'Bard' },
+  { char_id: 'c11', name: 'Helen', class_name: 'Enchanter' },
+  { char_id: 'c12', name: 'Older', class_name: 'Wizard' },
+  { char_id: 'c20', name: 'PlateWinner', class_name: 'Warrior' },
+  { char_id: 'c21', name: 'SilkWinner', class_name: 'Wizard' },
+  { char_id: 'c22', name: 'OldPlate', class_name: 'Paladin' },
+  { char_id: 'c23', name: 'OldSilk', class_name: 'Enchanter' },
+  { char_id: 'c-raud', name: 'Raud', class_name: 'Monk' },
+]
+
+/** Default Magelo-style self-assignment when a fixture row omits assignment cols. */
+function withDefaultAssignment(row) {
+  const assignedCharId = row.assigned_char_id ?? row.char_id ?? null
+  const assignedCharacterName = row.assigned_character_name ?? row.character_name ?? null
+  return {
+    ...row,
+    assigned_char_id: assignedCharId,
+    assigned_character_name: assignedCharacterName,
+  }
+}
+
 /** Flattened history rows with dates. */
 export function fixtureHistoryRows() {
   const raidsById = Object.fromEntries(FIXTURE_RAIDS.map((r) => [r.raid_id, r]))
@@ -260,56 +291,70 @@ export function fixtureHistoryRows() {
   for (const [raidId, loot] of Object.entries(FIXTURE_LOOT_BY_RAID)) {
     const raid = raidsById[raidId]
     for (const row of loot) {
-      rows.push({
-        ...row,
-        raid_name: raid?.raid_name,
-        date_iso: raid?.date_iso,
-        date: raid?.date_iso,
-        assigned_char_id: null,
-        assigned_character_name: null,
-      })
+      rows.push(
+        withDefaultAssignment({
+          ...row,
+          raid_name: raid?.raid_name,
+          date_iso: raid?.date_iso,
+          date: raid?.date_iso,
+        }),
+      )
     }
   }
   // Duplicate award for date-ordering / multi-recipient tests
-  rows.push({
-    id: 8,
-    raid_id: 'r-fire-old',
-    item_name: 'Cloak of Wishes',
-    character_name: 'Ammordius',
-    char_id: 'c2',
-    cost: '5',
-    raid_name: 'PoF Full',
-    date_iso: '2026-01-15',
-    date: '2026-01-15',
-    assigned_char_id: null,
-    assigned_character_name: null,
-  })
-  rows.push({
-    id: 9,
-    raid_id: 'r-time-p3',
-    item_name: 'Cloak of Wishes',
-    character_name: 'Frank',
-    char_id: 'c8',
-    cost: '8',
-    raid_name: 'Time P3',
-    date_iso: '2026-02-10',
-    date: '2026-02-10',
-    assigned_char_id: null,
-    assigned_character_name: null,
-  })
+  rows.push(
+    withDefaultAssignment({
+      id: 8,
+      raid_id: 'r-fire-old',
+      item_name: 'Cloak of Wishes',
+      character_name: 'Ammordius',
+      char_id: 'c2',
+      cost: '5',
+      raid_name: 'PoF Full',
+      date_iso: '2026-01-15',
+      date: '2026-01-15',
+    }),
+  )
+  rows.push(
+    withDefaultAssignment({
+      id: 9,
+      raid_id: 'r-time-p3',
+      item_name: 'Cloak of Wishes',
+      character_name: 'Frank',
+      char_id: 'c8',
+      cost: '8',
+      raid_name: 'Time P3',
+      date_iso: '2026-02-10',
+      date: '2026-02-10',
+    }),
+  )
   // Older Quarm ring award (distant history) — last drop should prefer r-quarm Helen
+  rows.push(
+    withDefaultAssignment({
+      id: 12,
+      raid_id: 'r-time-mixed',
+      item_name: 'Band of the Eternal',
+      character_name: 'Older',
+      char_id: 'c12',
+      cost: '70',
+      raid_name: 'Time P1-P3 + Gods',
+      date_iso: '2026-01-01',
+      date: '2026-01-01',
+    }),
+  )
+  // Buyer ≠ assignee (class enrichment / render annotation)
   rows.push({
-    id: 12,
-    raid_id: 'r-time-mixed',
-    item_name: 'Band of the Eternal',
-    character_name: 'Older',
-    char_id: 'c12',
-    cost: '70',
-    raid_name: 'Time P1-P3 + Gods',
-    date_iso: '2026-01-01',
-    date: '2026-01-01',
-    assigned_char_id: null,
-    assigned_character_name: null,
+    id: 13,
+    raid_id: 'r-quarm',
+    item_name: 'Wristband of Icy Vengeance',
+    character_name: 'Fayze',
+    char_id: 'c-fayze',
+    cost: '34',
+    raid_name: 'Quarm Kill',
+    date_iso: '2025-06-12',
+    date: '2025-06-12',
+    assigned_char_id: 'c-raud',
+    assigned_character_name: 'Raud',
   })
   return rows
 }

@@ -6,6 +6,7 @@ import {
   FIXTURE_RAIDS,
   FIXTURE_CLASSIFICATIONS,
   FIXTURE_LOOT_BY_RAID,
+  FIXTURE_CHARACTERS,
   fixtureHistoryRows,
 } from './fixtures.js'
 
@@ -107,10 +108,27 @@ export function createDiscoveryMockClient(opts = {}) {
         let rows = []
         for (const f of state.filters) {
           if (f.type === 'eq' && f.col === 'raid_id') {
-            rows = [...(FIXTURE_LOOT_BY_RAID[f.val] || [])]
+            rows = (FIXTURE_LOOT_BY_RAID[f.val] || []).map((r) => ({
+              ...r,
+              assigned_char_id: r.assigned_char_id ?? r.char_id ?? null,
+              assigned_character_name: r.assigned_character_name ?? r.character_name ?? null,
+            }))
           }
         }
         if (state.limitN != null) rows = rows.slice(0, state.limitN)
+        return { data: rows, error: null }
+      }
+      if (name === 'characters') {
+        let rows = [...FIXTURE_CHARACTERS]
+        for (const f of state.filters) {
+          if (f.type === 'in' && f.col === 'char_id') {
+            const set = new Set((f.val || []).map((v) => String(v)))
+            rows = rows.filter((r) => set.has(String(r.char_id)))
+          }
+          if (f.type === 'eq' && f.col === 'char_id') {
+            rows = rows.filter((r) => String(r.char_id) === String(f.val))
+          }
+        }
         return { data: rows, error: null }
       }
       if (name === 'raid_loot_history') {

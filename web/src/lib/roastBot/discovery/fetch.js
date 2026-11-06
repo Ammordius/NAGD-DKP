@@ -255,6 +255,10 @@ export async function executeDiscovery(client, plan, opts = {}) {
         continue
       }
     }
+
+    if (result.awards?.length) {
+      result.awards = await attachAwardClasses(client, result.awards)
+    }
   } catch (err) {
     result.ok = false
     result.error = err?.message || String(err)
@@ -289,6 +293,9 @@ function enrichAward(row, raid, known) {
   const itemName = row.item_name || row.itemName || ''
   const auth = authoritativeItemSource(known, itemName)
   const phaseMob = auth?.mob && isPhaseMob(auth.mob) ? auth.mob : null
+  const assignedCharId = row.assigned_char_id != null ? String(row.assigned_char_id).trim() || null : null
+  const assignedCharacterName =
+    row.assigned_character_name != null ? String(row.assigned_character_name).trim() || null : null
   return {
     id: row.id ?? null,
     raidId: String(row.raid_id || raid?.raidId || ''),
@@ -297,12 +304,56 @@ function enrichAward(row, raid, known) {
     itemName,
     characterName: row.character_name || null,
     charId: row.char_id || null,
-    assignedCharacterName: row.assigned_character_name || null,
+    assignedCharId,
+    assignedCharacterName,
+    className: null,
     cost: row.cost ?? null,
     phaseMob,
     bossMob: auth && !auth.ambiguousBoss ? auth.mob || null : null,
     bossQualified: Boolean(auth && !auth.ambiguousBoss && auth.mob),
   }
+}
+
+/**
+ * Batch-load class_name for assigned toons only (not DKP buyers).
+ * @param {import('@supabase/supabase-js').SupabaseClient} client
+ * @param {import('./types.js').LedgerAward[]} awards
+ * @returns {Promise<import('./types.js').LedgerAward[]>}
+ */
+export async function attachAwardClasses(client, awards) {
+  if (!awards?.length) return awards || []
+  const ids = [
+    ...new Set(
+      awards
+        .map((a) => (a.assignedCharId != null ? String(a.assignedCharId).trim() : ''))
+        .filter(Boolean),
+    ),
+  ]
+  if (!ids.length) return awards
+
+  /** @type {Map<string, string|null>} */
+  const classById = new Map()
+  const chunkSize = 200
+  for (let i = 0; i < ids.length; i += chunkSize) {
+    const slice = ids.slice(i, i + chunkSize)
+    const { data, error } = await client
+      .from('characters')
+      .select('char_id, class_name')
+      .in('char_id', slice)
+    if (error) throw error
+    for (const row of data || []) {
+      const id = row?.char_id != null ? String(row.char_id).trim() : ''
+      if (!id) continue
+      const cn = row?.class_name != null ? String(row.class_name).trim() || null : null
+      classById.set(id, cn)
+    }
+  }
+
+  return awards.map((a) => {
+    const id = a.assignedCharId != null ? String(a.assignedCharId).trim() : ''
+    if (!id || !classById.has(id)) return a
+    return { ...a, className: classById.get(id) || null }
+  })
 }
 
 /**

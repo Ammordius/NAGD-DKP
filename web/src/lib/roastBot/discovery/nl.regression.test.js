@@ -173,7 +173,8 @@ describe('discovery Quarm ring end-to-end', () => {
     const row = run.answer.table?.rows?.[0]
     assert.ok(row, 'expected award table row')
     assert.equal(row.item?.label, 'Band of the Eternal')
-    assert.equal(row.character?.label, 'Helen')
+    assert.equal(row.toon?.label, 'Helen')
+    assert.equal(row.class, 'Enchanter')
     assert.equal(row.date, '2026-02-25')
     assert.ok(row.item?.to?.includes('Band'))
     assert.equal(row.dkp, '75')
@@ -325,7 +326,7 @@ describe('discovery dialogue false-recognition guard', () => {
       referenced: { characters: ['Helen'], items: ['Band of the Eternal'], raids: [] },
       links: [],
       table: {
-        columns: ['Item', 'Character', 'Date', 'Raid'],
+        columns: ['Item', 'Toon', 'Class', 'Date', 'Raid', 'DKP'],
         rows: [
           {
             item: {
@@ -333,13 +334,15 @@ describe('discovery dialogue false-recognition guard', () => {
               label: 'Band of the Eternal',
               to: `/items/${encodeURIComponent('Band of the Eternal')}`,
             },
-            character: {
+            toon: {
               type: 'character',
               label: 'Helen',
               to: `/characters/${encodeURIComponent('Helen')}`,
             },
+            class: 'Enchanter',
             date: '2026-02-25',
             raid: null,
+            dkp: '75',
           },
         ],
       },
@@ -358,7 +361,7 @@ describe('discovery dialogue false-recognition guard', () => {
     assert.equal(out.intent, INTENTS.LOOT_DISCOVERY)
     assert.match(out.response.text, /finger awards for Quarm/i)
     assert.equal(out.response.table?.rows?.[0]?.item?.label, 'Band of the Eternal')
-    assert.equal(out.response.table?.rows?.[0]?.character?.label, 'Helen')
+    assert.equal(out.response.table?.rows?.[0]?.toon?.label, 'Helen')
     assert.doesNotMatch(out.response.text, /award history was not loaded/i)
   })
 })
