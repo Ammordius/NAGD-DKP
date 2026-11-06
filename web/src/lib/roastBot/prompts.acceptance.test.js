@@ -191,7 +191,8 @@ describe('roastBot prompt smoke — every intent', () => {
     assert.match(out.response.text, /90%/)
     assert.match(out.response.text, /Raid-ready >75%/i)
     assert.match(out.response.text, /green >85%/i)
-    assert.match(out.response.text, /buttons|fight|coverage|ambition/i)
+    assert.match(out.response.text, /nuke you forgot to cast/i)
+    assert.doesNotMatch(out.response.text, /won't heal/i)
     assert.match(out.response.text, /4200 HP/)
     assert.match(out.response.text, /average save 35/)
     assert.doesNotMatch(out.response.text, /forgot to work on|lowest save/i)
@@ -212,7 +213,7 @@ describe('roastBot prompt smoke — every intent', () => {
     })
     assert.equal(out.intent, INTENTS.QUARM_ELIGIBILITY)
     assert.match(out.response.text, /90%/)
-    assert.match(out.response.text, /raid-ready|buttons|fight/i)
+    assert.match(out.response.text, /raid-ready|nuke|cast/i)
   })
 
   it('tank raid-ready answer includes AC and stylistic low-save roast when avg >= 150', () => {
@@ -253,6 +254,8 @@ describe('roastBot prompt smoke — every intent', () => {
     assert.match(out.response.text, /3100 AC/)
     assert.match(out.response.text, /Raid-ready >85%/i)
     assert.match(out.response.text, /green >92%/i)
+    assert.match(out.response.text, /which mob you're tanking/i)
+    assert.doesNotMatch(out.response.text, /won't heal/i)
   })
 
   it('CHARACTER_STATS formats Magelo sheet stats with roast opener', () => {

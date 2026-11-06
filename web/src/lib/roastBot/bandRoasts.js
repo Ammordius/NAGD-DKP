@@ -37,6 +37,30 @@ export function characterSpendRoast(total, name, formatDkp) {
   return `Recorded 0 DKP spent on ${name}. Either restraint or an empty auction history — charming either way.`
 }
 
+/** @type {Record<'tank'|'priest'|'caster'|'melee', { green: string, viable: string, under: string }>} */
+const RAID_READY_PUNCHLINES = {
+  tank: {
+    green: "The ranking won't hold aggro when you face the wrong way.",
+    viable: "Clear the bar, then try remembering which mob you're tanking.",
+    under: 'Ambition is free; a real AC stack is not.',
+  },
+  priest: {
+    green: "The ranking won't heal the raid through skipped buttons.",
+    viable: 'Clear the bar, then try remembering who needs the heal.',
+    under: 'Ambition is free; mana and coverage are not.',
+  },
+  caster: {
+    green: "The ranking won't land the nuke you forgot to cast.",
+    viable: 'Clear the bar, then try remembering the nuke order.',
+    under: 'Ambition is free; focus and coverage are not.',
+  },
+  melee: {
+    green: "The ranking won't press your rotation for you.",
+    viable: 'Clear the bar, then try remembering the fight.',
+    under: 'Ambition is free; coverage is not.',
+  },
+}
+
 /**
  * @param {{
  *   name: string,
@@ -47,6 +71,7 @@ export function characterSpendRoast(total, name, formatDkp) {
  *   viabilityCut: number|null|undefined,
  *   greenCut: number|null|undefined,
  *   sheetBits?: string|null,
+ *   role?: 'tank'|'priest'|'caster'|'melee'|null,
  * }} args
  */
 export function raidReadyRoast({
@@ -58,18 +83,25 @@ export function raidReadyRoast({
   viabilityCut,
   greenCut,
   sheetBits = null,
+  role = 'melee',
 }) {
   const cutBits =
     viabilityCut != null && greenCut != null
       ? ` Raid-ready >${viabilityCut}%; green >${greenCut}%.`
       : ''
+  const lines = RAID_READY_PUNCHLINES[role] || RAID_READY_PUNCHLINES.melee
+  let punch
+  if (viable && green) punch = lines.green
+  else if (viable) punch = lines.viable
+  else punch = lines.under
+
   let status
   if (viable && green) {
-    status = `${name} is ${pctLabel} (${classLabel}) — raid-ready and green.${cutBits} The ranking won't heal you through skipped buttons.`
+    status = `${name} is ${pctLabel} (${classLabel}) — raid-ready and green.${cutBits} ${punch}`
   } else if (viable) {
-    status = `${name} is ${pctLabel} (${classLabel}) — raid-ready, not green.${cutBits} Clear the bar, then try remembering the fight.`
+    status = `${name} is ${pctLabel} (${classLabel}) — raid-ready, not green.${cutBits} ${punch}`
   } else {
-    status = `${name} is ${pctLabel} (${classLabel}) — below raid-ready.${cutBits} Ambition is free; coverage is not.`
+    status = `${name} is ${pctLabel} (${classLabel}) — below raid-ready.${cutBits} ${punch}`
   }
   if (sheetBits) return `${status}\n${sheetBits}.`
   return status

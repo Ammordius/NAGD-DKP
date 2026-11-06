@@ -29,6 +29,7 @@ import {
   isHighlightedGearPct,
   isViableGearPct,
   normalizedGearPct,
+  roleForClassAbbrev,
   TANK_CLASS_ABBREVS,
   viabilityThresholdForClass,
 } from '../../classCoverage.js'
@@ -337,6 +338,7 @@ function handleQuarmEligibility(args) {
   const viable = isViableGearPct(pct, abbrev)
   const green = isHighlightedGearPct(pct, abbrev)
   const isTank = TANK_CLASS_ABBREVS.has(String(abbrev || '').toUpperCase())
+  const role = roleForClassAbbrev(abbrev)
   const pctLabel = pct != null && Number.isFinite(pct) ? `${pct}%` : 'unknown %'
   const classLabel = abbrev || magelo.class || character.class_name || 'unknown class'
   const sheetBits = formatRaidReadySheetBits(magelo, { includeAc: isTank })
@@ -350,6 +352,7 @@ function handleQuarmEligibility(args) {
     viabilityCut,
     greenCut,
     sheetBits,
+    role,
   })
 
   const claims = [

@@ -32,12 +32,31 @@ describe('bandRoasts', () => {
       viabilityCut: 75,
       greenCut: 85,
       sheetBits: '4200 HP. average save 35',
+      role: 'caster',
     })
     assert.match(text, /90%/)
     assert.match(text, /Raid-ready >75%/)
-    assert.match(text, /buttons|ranking/i)
+    assert.match(text, /nuke you forgot to cast/i)
+    assert.doesNotMatch(text, /won't heal/i)
     assert.match(text, /4200 HP/)
     assert.doesNotMatch(text, /officer Raider Activity/)
+  })
+
+  it('green tank punchline is aggro-flavored, not heal', () => {
+    const text = raidReadyRoast({
+      name: 'Badammo',
+      pctLabel: '94.8%',
+      classLabel: 'WAR',
+      viable: true,
+      green: true,
+      viabilityCut: 85,
+      greenCut: 92,
+      role: 'tank',
+    })
+    assert.match(text, /Raid-ready >85%/)
+    assert.match(text, /green >92%/)
+    assert.match(text, /hold aggro/i)
+    assert.doesNotMatch(text, /won't heal/i)
   })
 
   it('stats opener is roast-first with newline body', () => {

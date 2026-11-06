@@ -8,6 +8,25 @@ import { CLASS_TO_ABBREV } from './mageloUpgradeEngine.js'
 
 export const TANK_CLASS_ABBREVS = new Set(['PAL', 'WAR', 'SHD'])
 
+const PRIEST_CLASS_ABBREVS = new Set(['CLR', 'DRU', 'SHM'])
+const CASTER_CLASS_ABBREVS = new Set(['NEC', 'WIZ', 'MAG', 'ENC'])
+const MELEE_CLASS_ABBREVS = new Set(['RNG', 'MNK', 'BRD', 'ROG', 'BST'])
+
+/**
+ * Raid role for roast punchlines / loot partition (tank / priest / caster / melee).
+ * Unknown abbrev falls back to melee (generic buttons/fight voice).
+ * @param {string|null|undefined} abbrev
+ * @returns {'tank'|'priest'|'caster'|'melee'}
+ */
+export function roleForClassAbbrev(abbrev) {
+  const a = (abbrev || '').trim().toUpperCase()
+  if (TANK_CLASS_ABBREVS.has(a)) return 'tank'
+  if (PRIEST_CLASS_ABBREVS.has(a)) return 'priest'
+  if (CASTER_CLASS_ABBREVS.has(a)) return 'caster'
+  if (MELEE_CLASS_ABBREVS.has(a)) return 'melee'
+  return 'melee'
+}
+
 export const CLASS_ORDER = [
   'WAR',
   'CLR',

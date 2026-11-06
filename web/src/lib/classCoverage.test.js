@@ -16,6 +16,7 @@ import {
   buildAccountCoverage,
   coverageToUpsertRows,
   classNameToAbbrev,
+  roleForClassAbbrev,
 } from './classCoverage.js'
 
 describe('viabilityThresholdForClass', () => {
@@ -27,6 +28,23 @@ describe('viabilityThresholdForClass', () => {
   it('uses 75 for non-tanks', () => {
     assert.equal(viabilityThresholdForClass('CLR'), 75)
     assert.equal(viabilityThresholdForClass('ROG'), 75)
+  })
+})
+
+describe('roleForClassAbbrev', () => {
+  it('maps tanks, priests, casters, and melee', () => {
+    assert.equal(roleForClassAbbrev('WAR'), 'tank')
+    assert.equal(roleForClassAbbrev('PAL'), 'tank')
+    assert.equal(roleForClassAbbrev('CLR'), 'priest')
+    assert.equal(roleForClassAbbrev('DRU'), 'priest')
+    assert.equal(roleForClassAbbrev('ENC'), 'caster')
+    assert.equal(roleForClassAbbrev('WIZ'), 'caster')
+    assert.equal(roleForClassAbbrev('ROG'), 'melee')
+    assert.equal(roleForClassAbbrev('BST'), 'melee')
+  })
+  it('falls back to melee for unknown abbrevs', () => {
+    assert.equal(roleForClassAbbrev(''), 'melee')
+    assert.equal(roleForClassAbbrev('XYZ'), 'melee')
   })
 })
 
