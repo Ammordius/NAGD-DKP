@@ -18,6 +18,8 @@ export {
   extractCharacterSwapFollowUp,
   CHARACTER_SWAP_REPEATABLE_INTENTS,
   isRepeatableCharacterSwapIntent,
+  isCharacterPronoun,
+  messageUsesCharacterPronoun,
 } from './intents.js'
 export { looksLikeWhoIs, extractWhoIsName, lookupWhoIs, resolveWhoIsFromMaps } from './whoIs.js'
 export {

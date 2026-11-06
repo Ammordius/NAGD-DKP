@@ -4,14 +4,19 @@
  */
 
 import { accountRaidDates } from '../siteAdminCharacters.js'
-import { extractWhoIsCharacterName } from './intents.js'
+import { extractWhoIsCharacterName, normalizeMessage } from './intents.js'
 
 /**
  * True when the message is a who-is identity question (not "who got").
+ * Pronoun subjects ("who is he") still count so sticky lastSubject can resolve them.
  * @param {string} raw
  */
 export function looksLikeWhoIs(raw) {
-  return Boolean(extractWhoIsCharacterName(raw))
+  if (extractWhoIsCharacterName(raw)) return true
+  const text = normalizeMessage(raw)
+  if (!text) return false
+  if (/\bwho (got|won|received|go|gott|looted)\b/.test(text)) return false
+  return /^(?:who(?:'s| is)\b|whose (?:account|alt|toon)\b)/.test(text)
 }
 
 /** @param {string} raw */

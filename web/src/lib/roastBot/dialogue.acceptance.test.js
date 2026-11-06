@@ -799,6 +799,155 @@ describe('loot discovery dialogue regression', () => {
     assert.doesNotMatch(second.response.text, /could not build a safe query/i)
   })
 
+  it('who-is Badammo → is he raid ready resolves Badammo, not literal he', () => {
+    const facts = fixtureFacts()
+    let state = createConversationState()
+    const first = handleMessage({
+      text: 'who is Badammo',
+      facts,
+      state,
+      whoIsName: 'Badammo',
+      whoIsResult: {
+        status: 'ok',
+        characterName: 'Badammo',
+        accountId: 'a2',
+        accountName: 'Ammordius',
+        lastRaidDate: '2026-11-02',
+        charId: '9',
+      },
+      rng: () => 0,
+    })
+    assert.equal(first.intent, INTENTS.WHO_IS)
+    assert.equal(first.state.lastSubject, 'Badammo')
+    state = first.state
+
+    const second = handleMessage({
+      text: 'is he raid ready?',
+      facts,
+      state,
+      upgradeContext: {
+        rankings: rankingsFixture,
+        itemStats: itemStatsFixture,
+        raidItemIds: new Set([100, 501]),
+      },
+      rng: () => 0,
+    })
+    assert.equal(second.intent, INTENTS.QUARM_ELIGIBILITY)
+    assert.match(second.response.text, /Badammo/i)
+    assert.doesNotMatch(second.response.text, /\bhe is not in the current Magelo/i)
+    assert.ok(second.response.referenced.characters.includes('Badammo'))
+  })
+
+  it('who-is Badammo → bare he remaps to prior raid-ready with Badammo', () => {
+    const facts = fixtureFacts()
+    let state = createConversationState()
+    const first = handleMessage({
+      text: 'who is Badammo',
+      facts,
+      state,
+      whoIsName: 'Badammo',
+      whoIsResult: {
+        status: 'ok',
+        characterName: 'Badammo',
+        accountId: 'a2',
+        accountName: 'Ammordius',
+        lastRaidDate: '2026-11-02',
+        charId: '9',
+      },
+      rng: () => 0,
+    })
+    state = first.state
+    const ready = handleMessage({
+      text: 'is he raid ready?',
+      facts,
+      state,
+      upgradeContext: {
+        rankings: rankingsFixture,
+        itemStats: itemStatsFixture,
+        raidItemIds: new Set([100, 501]),
+      },
+      rng: () => 0,
+    })
+    state = ready.state
+    assert.equal(state.lastIntent, INTENTS.QUARM_ELIGIBILITY)
+    assert.equal(state.lastSubject, 'Badammo')
+
+    const bare = handleMessage({
+      text: 'he',
+      facts,
+      state,
+      upgradeContext: {
+        rankings: rankingsFixture,
+        itemStats: itemStatsFixture,
+        raidItemIds: new Set([100, 501]),
+      },
+      rng: () => 0,
+    })
+    assert.equal(bare.intent, INTENTS.QUARM_ELIGIBILITY)
+    assert.match(bare.response.text, /Badammo/i)
+    assert.doesNotMatch(bare.response.text, /\bhe is not in the current Magelo/i)
+  })
+
+  it('who is he after WHO_IS Badammo reuses Badammo', () => {
+    const facts = fixtureFacts()
+    let state = createConversationState()
+    const first = handleMessage({
+      text: 'who is Badammo',
+      facts,
+      state,
+      whoIsName: 'Badammo',
+      whoIsResult: {
+        status: 'ok',
+        characterName: 'Badammo',
+        accountId: 'a2',
+        accountName: 'Ammordius',
+        lastRaidDate: '2026-11-02',
+        charId: '9',
+      },
+      rng: () => 0,
+    })
+    state = first.state
+
+    const second = handleMessage({
+      text: 'who is he',
+      facts,
+      state,
+      whoIsName: 'Badammo',
+      whoIsResult: {
+        status: 'ok',
+        characterName: 'Badammo',
+        accountId: 'a2',
+        accountName: 'Ammordius',
+        lastRaidDate: '2026-11-02',
+        charId: '9',
+      },
+      rng: () => 0,
+    })
+    assert.equal(second.intent, INTENTS.WHO_IS)
+    assert.match(second.response.text, /Badammo/)
+    assert.match(second.response.text, /Ammordius/)
+    assert.doesNotMatch(second.response.text, /psychic services/i)
+  })
+
+  it('is he raid ready with no sticky subject asks for a character name', () => {
+    const facts = fixtureFacts()
+    const { response, intent, answer } = handleMessage({
+      text: 'is he raid ready?',
+      facts,
+      state: createConversationState(),
+      upgradeContext: {
+        rankings: rankingsFixture,
+        itemStats: itemStatsFixture,
+        raidItemIds: new Set([100, 501]),
+      },
+      rng: () => 0,
+    })
+    assert.equal(intent, INTENTS.QUARM_ELIGIBILITY)
+    assert.ok(answer.requiredClaims.includes('need_character'))
+    assert.match(response.text, /which character|name the toon|need a name|Ask for a toon/i)
+    assert.doesNotMatch(response.text, /\bhe is not in the current Magelo/i)
+  })
+
   it('unsupported discovery on character swap does not stick lastIntent to loot', () => {
     const facts = fixtureFacts()
     const state = createConversationState()

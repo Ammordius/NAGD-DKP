@@ -13,6 +13,8 @@ import {
   extractSubjectCharacterName,
   extractCharacterSwapFollowUp,
   isRepeatableCharacterSwapIntent,
+  isCharacterPronoun,
+  messageUsesCharacterPronoun,
 } from './intents.js'
 import { renderAnswer, greetingMessage } from './responseBuilder.js'
 import { matchItemName, suggestionChips, formatDkp } from './formatting.js'
@@ -54,6 +56,27 @@ export function resetIfIdentityChanged(state, { userId, accountId }) {
     return next
   }
   return state
+}
+
+/**
+ * Sticky character subject, never a pronoun token.
+ * @param {object} state
+ * @returns {string|null}
+ */
+function stickySubjectName(state) {
+  const name = state?.lastSubject ? String(state.lastSubject).trim() : ''
+  if (!name || isCharacterPronoun(name)) return null
+  return name
+}
+
+/**
+ * @param {string|null|undefined} name
+ * @returns {string|null}
+ */
+function safeSubjectName(name) {
+  const n = name ? String(name).trim() : ''
+  if (!n || isCharacterPronoun(n)) return null
+  return n
 }
 
 function rememberTemplate(state, templateId) {
@@ -238,6 +261,7 @@ export function handleMessage({
     lastItemId: state.lastItemId,
     lastItemName: state.lastItemName,
     lastUpgradeCandidateId: state.lastUpgradeCandidateId,
+    lastSubject: stickySubjectName(state),
     characters: facts.characters || [],
     pendingIntent: state.pendingIntent,
   })
@@ -295,7 +319,7 @@ export function handleMessage({
             ? INTENTS.LOOT_DISCOVERY
             : classified.intent
   let ambiguousClass = null
-  const resolvedWhoIsName =
+  let resolvedWhoIsName =
     whoIsName ||
     classified.whoIsName ||
     (intent === INTENTS.WHO_IS || (characterSwapHit && priorLastIntent === INTENTS.WHO_IS)
@@ -407,6 +431,12 @@ export function handleMessage({
     } else if (characterSwapName && isRepeatableCharacterSwapIntent(state.lastIntent)) {
       // Guild-wide / unlinked name after a repeatable character intent
       intent = state.lastIntent
+    } else if (classified.bareCharacterPronoun && stickySubjectName(state)) {
+      // "he" / "she" → rematch prior character-scoped / who-is intent with sticky subject
+      intent =
+        state.lastIntent && state.lastIntent !== INTENTS.LOOT_DISCOVERY
+          ? state.lastIntent
+          : INTENTS.UNKNOWN
     } else if (classified.bareCharacterName && classified.matchedCharacter) {
       // Selecting a character without a pending op — acknowledge selection, ask what to do
       state.selectedCharacterId = classified.matchedCharacter.char_id
@@ -438,6 +468,17 @@ export function handleMessage({
     // keep WHY_BROKE if why-broke patterns matched first; otherwise fine
   }
 
+  // After FOLLOWUP remapping: pronoun who-is / bare "he" can reuse sticky subject.
+  if (
+    intent === INTENTS.WHO_IS &&
+    !safeSubjectName(resolvedWhoIsName) &&
+    stickySubjectName(state) &&
+    (messageUsesCharacterPronoun(text) || classified.bareCharacterPronoun)
+  ) {
+    resolvedWhoIsName = stickySubjectName(state)
+  }
+  resolvedWhoIsName = safeSubjectName(resolvedWhoIsName)
+
   // Who-is resolves guild-wide names; do not treat the ask as linked-roster selection.
   const guildWideSubjectIntents = new Set([
     INTENTS.CHARACTER_DKP_SPENT,
@@ -460,10 +501,22 @@ export function handleMessage({
   }
   // Spend / viability / stats can name any guild toon, not only linked roster.
   if (!charSel && guildWideSubjectIntents.has(intent)) {
-    const subjectName =
+    let subjectName =
       characterSpendResult?.characterName ||
       characterSwapName ||
       extractSubjectCharacterName(text, { characters: facts.characters || [], intent })
+    subjectName = safeSubjectName(subjectName)
+    if (!subjectName) {
+      const sticky = stickySubjectName(state)
+      if (
+        sticky &&
+        (messageUsesCharacterPronoun(text) ||
+          classified.bareCharacterPronoun ||
+          !matchCharacterMention(text, facts.characters || []))
+      ) {
+        subjectName = sticky
+      }
+    }
     if (subjectName) {
       const fromRoster = (facts.characters || []).find(
         (c) => String(c.name || '').toLowerCase() === String(subjectName).toLowerCase(),
@@ -477,9 +530,11 @@ export function handleMessage({
   }
   if (charSel?.char_id) {
     state.selectedCharacterId = charSel.char_id
-    state.lastSubject = charSel.name
+    const subject = safeSubjectName(charSel.name)
+    if (subject) state.lastSubject = subject
   } else if (charSel?.name && guildWideSubjectIntents.has(intent)) {
-    state.lastSubject = charSel.name
+    const subject = safeSubjectName(charSel.name)
+    if (subject) state.lastSubject = subject
   }
 
   const stickyItem = [
@@ -625,7 +680,27 @@ export function handleMessage({
     text: response.text,
     referenced: response.referenced,
   }
-  state.lastSubject = charSel?.name || state.lastSubject
+  // Persist WHO_IS subject for pronoun coreference (guild-wide; roster sync only when linked).
+  if (
+    intent === INTENTS.WHO_IS &&
+    whoIsResult &&
+    (whoIsResult.status === 'ok' || whoIsResult.status === 'unlinked')
+  ) {
+    const whoSubject = safeSubjectName(whoIsResult.characterName || resolvedWhoIsName)
+    if (whoSubject) {
+      state.lastSubject = whoSubject
+      const charId = whoIsResult.charId != null ? String(whoIsResult.charId) : null
+      if (
+        charId &&
+        (facts.characters || []).some((c) => String(c.char_id) === charId)
+      ) {
+        state.selectedCharacterId = charId
+      }
+    }
+  } else {
+    const fromChar = safeSubjectName(charSel?.name)
+    if (fromChar) state.lastSubject = fromChar
+  }
   // Only persist successful, executable discovery context — never from unsupported/failed turns,
   // and never retain a prior primary when the current result has neither awards nor a raid.
   if (

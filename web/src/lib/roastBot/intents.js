@@ -179,6 +179,7 @@ export function classifyIntent(raw, ctx = {}) {
   const matchedCharacter = matchCharacterMention(text, ctx.characters || [])
   const matchedItemHint = extractQuotedOrTrailingItem(text)
   const whoIsName = extractWhoIsCharacterName(raw)
+  const bareCharacterPronoun = Boolean(ctx.lastSubject) && isCharacterPronoun(text)
 
   // Bare character/class name while awaiting clarification is not an intent by itself.
   if (ctx.pendingIntent && isLikelyClarificationReply(text, matchedCharacter)) {
@@ -196,6 +197,17 @@ export function classifyIntent(raw, ctx = {}) {
           ...(rule.intent === INTENTS.WHO_IS ? { whoIsName } : {}),
         }
       }
+    }
+  }
+
+  // Bare pronoun with sticky subject → rematch prior intent (before sticky-item short-text hijack).
+  if (bareCharacterPronoun) {
+    return {
+      intent: INTENTS.FOLLOWUP,
+      confidence: 0.85,
+      matchedCharacter,
+      matchedItemHint,
+      bareCharacterPronoun: true,
     }
   }
 
@@ -289,10 +301,36 @@ export function matchCharacterMention(text, characters) {
 
 const PRONOUN_ITEMS = new Set(['it', 'that', 'this', 'them', 'one', 'those', 'these'])
 
+/** Subject/object pronouns that corefer to the sticky character subject (not literal names). */
+const CHARACTER_PRONOUNS = new Set(['he', 'she', 'him', 'his', 'her', 'they', 'them', 'their'])
+
+/**
+ * True when the token is a character pronoun (he/she/him/…).
+ * @param {string|null|undefined} token
+ */
+export function isCharacterPronoun(token) {
+  const t = String(token || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[?!.]+$/g, '')
+  return CHARACTER_PRONOUNS.has(t)
+}
+
+/**
+ * True when the message uses a character pronoun as a word.
+ * @param {string|null|undefined} raw
+ */
+export function messageUsesCharacterPronoun(raw) {
+  const text = normalizeMessage(raw)
+  if (!text) return false
+  return /\b(he|she|him|his|her|they|them|their)\b/.test(text)
+}
+
 const WHO_IS_PREFIX = /^(?:who(?:'s| is)|whose (?:account|alt|toon)(?: is)?)\s+/i
 
 /**
  * Character name from a who-is question (raw casing preserved when possible).
+ * Pronoun-only subjects return null (resolve via sticky lastSubject).
  * @param {string} raw
  * @returns {string|null}
  */
@@ -308,6 +346,7 @@ export function extractWhoIsCharacterName(raw) {
   rest = rest.replace(/\s+'s\s*$/i, '').trim()
   rest = rest.replace(/\b(account|alt|toon|character)\s*$/i, '').trim()
   if (!rest || rest.length < 2) return null
+  if (isCharacterPronoun(rest)) return null
   if (/\b(got|won|received|drop|loot|raid)\b/i.test(rest)) return null
   return rest
 }
@@ -319,8 +358,13 @@ const STOP_SUBJECT = new Set([
   'an',
   'this',
   'that',
+  'he',
+  'she',
+  'him',
   'his',
   'her',
+  'they',
+  'them',
   'their',
   'our',
   'your',

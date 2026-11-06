@@ -31,6 +31,7 @@ import {
   collectRaidLootItemIds,
   resetUpgradeCaches,
   INTENTS,
+  isCharacterPronoun,
 } from '../lib/roastBot/index.js'
 import { recognizeDiscovery, runDiscovery } from '../lib/roastBot/discovery/index.js'
 import { extractWhoIsName, looksLikeWhoIs, lookupWhoIs } from '../lib/roastBot/whoIs.js'
@@ -348,8 +349,27 @@ export default function RoastBot({ profile, session, factsOverride = null, openO
         const characterSwap = isCharacterSwapFollowUp(text, convState)
         const swapName = characterSwap ? extractCharacterSwapFollowUp(text) : null
         if (!factsOverride) {
-          if (looksLikeWhoIs(text) || (characterSwap && convState.lastIntent === INTENTS.WHO_IS)) {
-            whoIsName = looksLikeWhoIs(text) ? extractWhoIsName(text) : swapName
+          const stickySubject =
+            convState.lastSubject && !isCharacterPronoun(convState.lastSubject)
+              ? convState.lastSubject
+              : null
+          const barePronounFollowUp =
+            Boolean(stickySubject) &&
+            isCharacterPronoun(String(text || '').trim()) &&
+            convState.lastIntent === INTENTS.WHO_IS
+          if (
+            looksLikeWhoIs(text) ||
+            (characterSwap && convState.lastIntent === INTENTS.WHO_IS) ||
+            barePronounFollowUp
+          ) {
+            whoIsName = looksLikeWhoIs(text)
+              ? extractWhoIsName(text)
+              : characterSwap
+                ? swapName
+                : null
+            if (!whoIsName && stickySubject && (looksLikeWhoIs(text) || barePronounFollowUp)) {
+              whoIsName = stickySubject
+            }
             if (whoIsName) {
               try {
                 whoIsResult = await lookupWhoIs(supabase, whoIsName)

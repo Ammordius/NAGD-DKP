@@ -12,9 +12,13 @@ import {
   isCharacterStatsQuestion,
   extractSubjectCharacterName,
   extractCharacterSwapFollowUp,
+  extractWhoIsCharacterName,
   isRepeatableCharacterSwapIntent,
+  isCharacterPronoun,
+  messageUsesCharacterPronoun,
 } from './intents.js'
 import { isCharacterSwapFollowUp } from './conversation.js'
+import { looksLikeWhoIs } from './whoIs.js'
 
 const chars = [
   { char_id: 'e1', name: 'Iaminae', class_name: 'Enchanter' },
@@ -71,6 +75,36 @@ describe('character spend / eligibility / stats intents', () => {
     assert.equal(extractCharacterSwapFollowUp('how about Charmalt'), 'Charmalt')
     assert.equal(extractCharacterSwapFollowUp('what about shoulder?'), null)
     assert.equal(extractCharacterSwapFollowUp('what about plate arms?'), null)
+    assert.equal(extractCharacterSwapFollowUp('what about he?'), null)
+  })
+
+  it('rejects pronouns as subject / who-is names', () => {
+    assert.equal(isCharacterPronoun('he'), true)
+    assert.equal(isCharacterPronoun('she?'), true)
+    assert.equal(messageUsesCharacterPronoun('is he raid ready?'), true)
+    assert.equal(
+      extractSubjectCharacterName('is he raid ready?', { intent: INTENTS.QUARM_ELIGIBILITY }),
+      null,
+    )
+    assert.equal(extractWhoIsCharacterName('who is he'), null)
+    assert.equal(extractWhoIsCharacterName('who is she?'), null)
+    assert.equal(looksLikeWhoIs('who is he'), true)
+    assert.equal(looksLikeWhoIs('who is Badammo'), true)
+  })
+
+  it('bare pronoun with sticky subject classifies as FOLLOWUP', () => {
+    const out = classifyIntent('he', {
+      characters: chars,
+      lastSubject: 'Badammo',
+      lastIntent: INTENTS.QUARM_ELIGIBILITY,
+    })
+    assert.equal(out.intent, INTENTS.FOLLOWUP)
+    assert.equal(out.bareCharacterPronoun, true)
+  })
+
+  it('bare pronoun without sticky subject is UNKNOWN', () => {
+    const out = classifyIntent('he', { characters: chars })
+    assert.equal(out.intent, INTENTS.UNKNOWN)
   })
 
   it('isCharacterSwapFollowUp only after repeatable character intents', () => {
