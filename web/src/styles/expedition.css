@@ -4,16 +4,21 @@
   --exp-panel: var(--dkp-card-bg, #18181b);
   --exp-border: var(--dkp-border, #3f3f46);
   --exp-accent: var(--dkp-accent, #7c3aed);
+  --exp-accent-secondary: var(--dkp-accent-secondary, #fbbf24);
   --exp-text: #e4e4e7;
   --exp-muted: #a1a1aa;
   --exp-danger: #f87171;
   --exp-heal: #4ade80;
   --exp-hp: #22c55e;
   --exp-hp-bg: #27272a;
+  --exp-intent: color-mix(in srgb, var(--exp-accent-secondary) 70%, #fbbf24);
+  --exp-target: var(--exp-accent);
+  --exp-surface: color-mix(in srgb, var(--exp-panel) 70%, #09090b);
   max-width: 960px;
   margin: 0 auto;
   padding: 1rem 1rem 2.5rem;
   color: var(--exp-text);
+  overflow-x: hidden;
 }
 
 .expedition h1 {
@@ -55,19 +60,58 @@
 
 .expedition .exp-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
   gap: 0.75rem;
+}
+
+.expedition .exp-battle {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.expedition .exp-battle-hud {
+  padding: 0.55rem 0.85rem;
+  margin-bottom: 0.65rem;
+}
+
+.expedition .exp-panel-label {
+  display: block;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--exp-muted);
+  margin-bottom: 0.55rem;
+}
+
+.expedition .exp-battlefield {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+@media (min-width: 768px) {
+  .expedition .exp-battlefield {
+    display: grid;
+    grid-template-columns: 1.15fr 1fr;
+    gap: 0.75rem;
+    align-items: start;
+  }
+
+  .expedition .exp-battlefield > .exp-panel {
+    margin-bottom: 0.75rem;
+  }
 }
 
 .expedition .exp-char-card {
   text-align: left;
-  background: #09090b;
+  background: var(--exp-surface);
   border: 2px solid var(--exp-border);
   border-radius: 8px;
   padding: 0.75rem;
   cursor: pointer;
   color: inherit;
-  transition: border-color 0.15s ease, transform 0.15s ease;
+  transition: border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
 }
 
 .expedition .exp-char-card:hover,
@@ -78,12 +122,32 @@
 
 .expedition .exp-char-card.is-selected {
   border-color: var(--exp-accent);
-  box-shadow: 0 0 0 1px var(--exp-accent);
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--exp-accent) 45%, transparent),
+    inset 0 0 0 1px color-mix(in srgb, var(--exp-accent) 25%, transparent);
+  background:
+    linear-gradient(
+      145deg,
+      color-mix(in srgb, var(--exp-accent) 10%, var(--exp-surface)),
+      var(--exp-surface)
+    );
 }
 
 .expedition .exp-char-card:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+}
+
+.expedition .exp-char-card-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  min-width: 0;
+}
+
+.expedition .exp-char-card-meta {
+  min-width: 0;
+  flex: 1;
 }
 
 .expedition .exp-class-badge {
@@ -106,6 +170,7 @@
 .expedition .exp-char-card .meta {
   font-size: 0.8rem;
   color: var(--exp-muted);
+  display: block;
 }
 
 .expedition .exp-party-preview {
@@ -120,7 +185,21 @@
   border-radius: 999px;
   padding: 0.25rem 0.65rem;
   font-size: 0.85rem;
-  background: #09090b;
+  background: var(--exp-surface);
+}
+
+.expedition .exp-party-chip.is-block {
+  display: block;
+  max-width: 100%;
+  border-radius: 8px;
+  padding: 0.55rem 0.7rem;
+}
+
+.expedition .exp-party-chip-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.25rem;
 }
 
 .expedition .exp-comp {
@@ -129,21 +208,360 @@
   margin: 0.5rem 0 1rem;
 }
 
-.expedition .exp-enemy {
-  text-align: center;
+.expedition .exp-enemy-grid.is-single {
+  grid-template-columns: minmax(160px, 280px);
+  justify-content: center;
 }
 
-.expedition .exp-enemy-portrait {
-  width: 64px;
-  height: 64px;
-  margin: 0 auto 0.5rem;
+.expedition .exp-enemy {
+  appearance: none;
+  font: inherit;
+  color: inherit;
+  text-align: center;
+  background: var(--exp-surface);
+  border: 2px solid var(--exp-border);
+  border-radius: 8px;
+  padding: 0.65rem 0.5rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.expedition button.exp-enemy {
+  cursor: pointer;
+}
+
+.expedition .exp-enemy.is-targetable:hover,
+.expedition .exp-enemy.is-targetable:focus-visible {
+  border-color: color-mix(in srgb, var(--exp-target) 65%, var(--exp-border));
+  outline: none;
+}
+
+.expedition .exp-enemy.is-targeted {
+  border-color: var(--exp-target);
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--exp-target) 45%, transparent),
+    inset 0 0 0 1px color-mix(in srgb, var(--exp-target) 35%, transparent);
+}
+
+.expedition .exp-enemy.is-casting {
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--exp-intent) 14%, var(--exp-surface)),
+      var(--exp-surface)
+    );
+}
+
+.expedition .exp-enemy.is-interruptible {
+  border-style: dashed;
+}
+
+.expedition .exp-enemy.is-down {
+  opacity: 0.4;
+  filter: grayscale(0.85);
+}
+
+.expedition .exp-enemy.is-flash-dmg {
+  animation: exp-flash-dmg 0.35s ease;
+}
+
+.expedition .exp-enemy.is-flash-heal {
+  animation: exp-flash-heal 0.35s ease;
+}
+
+.expedition .exp-enemy-name {
+  font-size: 0.9rem;
+  line-height: 1.2;
+  word-break: break-word;
+}
+
+/* Shared pixel portrait frame (party + enemy) */
+.expedition .exp-portrait {
+  position: relative;
+  margin: 0 auto 0.45rem;
   border-radius: 8px;
   border: 2px solid var(--exp-border);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.75rem;
-  background: linear-gradient(145deg, #27272a, #09090b);
+  background:
+    linear-gradient(
+      145deg,
+      color-mix(in srgb, var(--exp-accent) 12%, var(--exp-panel)),
+      var(--exp-panel)
+    );
+  overflow: hidden;
+  flex-shrink: 0;
+  box-sizing: border-box;
+}
+
+.expedition .exp-enemy-portrait {
+  width: 96px;
+  height: 96px;
+  font-size: 2rem;
+}
+
+.expedition .exp-enemy-portrait.is-boss {
+  width: 128px;
+  height: 128px;
+  border-width: 3px;
+  border-color: color-mix(in srgb, var(--exp-accent) 55%, var(--exp-border));
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--exp-accent-secondary, var(--exp-accent)) 25%, transparent),
+    0 4px 14px color-mix(in srgb, var(--exp-accent) 20%, transparent);
+}
+
+.expedition .exp-class-portrait {
+  width: 64px;
+  height: 64px;
+  margin: 0;
+  font-size: 1.5rem;
+}
+
+.expedition .exp-class-portrait.is-compact {
+  width: 48px;
+  height: 48px;
+  font-size: 1.15rem;
+}
+
+.expedition .exp-enemy-sprite,
+.expedition .exp-class-sprite {
+  display: block;
+  object-fit: contain;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  -ms-interpolation-mode: nearest-neighbor;
+  user-select: none;
+  pointer-events: none;
+}
+
+.expedition .exp-enemy-sprite {
+  width: 96px;
+  height: 96px;
+}
+
+.expedition .exp-enemy-portrait.is-boss .exp-enemy-sprite {
+  width: 128px;
+  height: 128px;
+}
+
+.expedition .exp-class-sprite {
+  width: 64px;
+  height: 64px;
+}
+
+.expedition .exp-class-portrait.is-compact .exp-class-sprite {
+  width: 48px;
+  height: 48px;
+}
+
+.expedition .exp-enemy-fallback,
+.expedition .exp-class-fallback {
+  line-height: 1;
+}
+
+.expedition .exp-ko-label {
+  position: absolute;
+  left: 50%;
+  bottom: 4px;
+  transform: translateX(-50%);
+  font-size: 0.55rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 0.08rem 0.3rem;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--exp-danger) 85%, #000);
+  color: #fff;
+  border: 1px solid color-mix(in srgb, var(--exp-danger) 50%, transparent);
+  z-index: 2;
+}
+
+.expedition .exp-portrait-markers {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.expedition .exp-marker {
+  font-size: 0.62rem;
+  line-height: 1;
+  font-weight: 800;
+  text-shadow: 0 0 2px var(--exp-panel);
+}
+
+.expedition .exp-marker.is-stun,
+.expedition .exp-marker.is-mez {
+  color: var(--exp-intent);
+}
+
+.expedition .exp-marker.is-shield {
+  color: var(--exp-accent);
+}
+
+.expedition .exp-marker.is-haste {
+  color: var(--exp-accent-secondary, var(--exp-accent));
+}
+
+.expedition .exp-marker.is-slow {
+  color: var(--exp-muted);
+}
+
+.expedition .exp-marker.is-warn {
+  color: var(--exp-danger);
+}
+
+.expedition .exp-marker.is-regen {
+  color: var(--exp-heal);
+}
+
+.expedition .exp-marker.is-sick {
+  color: color-mix(in srgb, #7cba3d 70%, var(--exp-danger));
+}
+
+.expedition .exp-portrait.has-sick {
+  border-color: color-mix(in srgb, #7cba3d 55%, var(--exp-border));
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, #7cba3d 25%, transparent);
+}
+
+.expedition .exp-portrait.has-shield {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--exp-accent) 40%, transparent);
+}
+
+.expedition .exp-portrait.has-stun::after,
+.expedition .exp-portrait.has-mez::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: color-mix(in srgb, var(--exp-intent) 12%, transparent);
+  pointer-events: none;
+}
+
+.expedition .exp-portrait.has-warn {
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--exp-danger) 55%, var(--exp-border));
+}
+
+.expedition .exp-portrait.has-regen {
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--exp-heal) 35%, transparent);
+}
+
+.expedition .exp-portrait.has-haste {
+  border-color: color-mix(in srgb, var(--exp-accent-secondary, var(--exp-accent)) 50%, var(--exp-border));
+}
+
+.expedition .exp-portrait.has-slow {
+  opacity: 0.92;
+  filter: saturate(0.85);
+}
+
+.expedition .exp-portrait.is-casting {
+  animation: exp-cast-pulse 1.4s ease-in-out infinite;
+}
+
+.expedition .exp-portrait.is-down .exp-enemy-sprite,
+.expedition .exp-portrait.is-down .exp-class-sprite {
+  filter: grayscale(1) brightness(0.65);
+}
+
+@keyframes exp-cast-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--exp-intent) 35%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--exp-intent) 55%, transparent);
+  }
+}
+
+.expedition .exp-cast-badge {
+  display: inline-block;
+  margin-top: 0.35rem;
+  padding: 0.12rem 0.45rem;
+  border-radius: 4px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #fff;
+  background: color-mix(in srgb, var(--exp-danger) 75%, var(--exp-accent));
+  border: 1px solid color-mix(in srgb, var(--exp-danger) 50%, transparent);
+}
+
+@media (max-width: 639px) {
+  .expedition .exp-enemy-portrait,
+  .expedition .exp-enemy-sprite {
+    width: 72px;
+    height: 72px;
+  }
+
+  /* Integer 0.5× scale of the 128px Quarm sprite — keeps pixels crisp */
+  .expedition .exp-enemy-portrait.is-boss,
+  .expedition .exp-enemy-portrait.is-boss .exp-enemy-sprite {
+    width: 64px;
+    height: 64px;
+  }
+
+  .expedition .exp-class-portrait,
+  .expedition .exp-class-sprite {
+    width: 48px;
+    height: 48px;
+  }
+
+  .expedition .exp-grid {
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 0.5rem;
+  }
+}
+
+@media (max-width: 374px) {
+  .expedition {
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
+  }
+
+  .expedition .exp-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .expedition .exp-panel {
+    padding: 0.65rem;
+  }
+
+  .expedition .exp-class-portrait,
+  .expedition .exp-class-sprite {
+    width: 40px;
+    height: 40px;
+  }
+
+  .expedition .exp-char-card-head,
+  .expedition .exp-combatant-head {
+    gap: 0.4rem;
+  }
+
+  .expedition .exp-enemy {
+    padding: 0.45rem 0.4rem;
+  }
+
+  .expedition .exp-enemy-portrait,
+  .expedition .exp-enemy-sprite {
+    width: 64px;
+    height: 64px;
+  }
+
+  .expedition .exp-ability-grid {
+    grid-template-columns: 1fr 1fr;
+  }
 }
 
 .expedition .exp-hp {
@@ -165,38 +583,201 @@
   background: var(--exp-danger);
 }
 
+.expedition .exp-hp-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--exp-text);
+  margin-top: 0.2rem;
+}
+
 .expedition .exp-intent {
-  margin-top: 0.5rem;
-  font-size: 0.9rem;
-  color: #fbbf24;
+  margin-top: 0.35rem;
+  margin-bottom: 0;
+  font-size: 0.8rem;
+  color: var(--exp-intent);
+  line-height: 1.25;
+}
+
+.expedition .exp-intent-label {
+  display: inline-block;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--exp-muted);
+  margin-right: 0.2rem;
+}
+
+.expedition .exp-status-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  justify-content: center;
+  margin-top: 0.4rem;
+}
+
+.expedition .exp-combatant .exp-status-chips {
+  justify-content: flex-start;
+}
+
+.expedition .exp-status-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  font-size: 0.62rem;
+  font-weight: 600;
+  line-height: 1.2;
+  padding: 0.12rem 0.35rem;
+  border-radius: 3px;
+  border: 1px solid var(--exp-border);
+  color: var(--exp-muted);
+  background: color-mix(in srgb, var(--exp-panel) 80%, transparent);
+}
+
+.expedition .exp-status-marker {
+  font-size: 0.58rem;
+  line-height: 1;
+}
+
+.expedition .exp-status-rem {
+  opacity: 0.85;
+  font-variant-numeric: tabular-nums;
+}
+
+.expedition .exp-status-chip.is-buff,
+.expedition .exp-status-chip.is-hot,
+.expedition .exp-status-chip.is-defense {
+  color: var(--exp-heal);
+  border-color: color-mix(in srgb, var(--exp-heal) 40%, var(--exp-border));
+}
+
+.expedition .exp-status-chip.is-debuff,
+.expedition .exp-status-chip.is-dot,
+.expedition .exp-status-chip.is-control {
+  color: var(--exp-danger);
+  border-color: color-mix(in srgb, var(--exp-danger) 40%, var(--exp-border));
+}
+
+.expedition .exp-status-chip.is-threat {
+  color: var(--exp-intent);
+  border-color: color-mix(in srgb, var(--exp-intent) 40%, var(--exp-border));
 }
 
 .expedition .exp-combatant {
-  border: 1px solid var(--exp-border);
+  appearance: none;
+  border: 2px solid var(--exp-border);
   border-radius: 8px;
-  padding: 0.65rem;
-  background: #09090b;
+  padding: 0.55rem 0.6rem;
+  background: var(--exp-surface);
   color: inherit;
   text-align: left;
   cursor: pointer;
   width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.expedition .exp-combatant-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  min-width: 0;
+  margin-bottom: 0.35rem;
+}
+
+.expedition .exp-combatant-meta {
+  min-width: 0;
+  flex: 1;
+}
+
+.expedition .exp-combatant .name {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.expedition .exp-combatant:hover,
+.expedition .exp-combatant:focus-visible {
+  border-color: color-mix(in srgb, var(--exp-accent) 55%, var(--exp-border));
+  outline: none;
 }
 
 .expedition .exp-combatant.is-selected {
   border-color: var(--exp-accent);
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--exp-accent) 40%, transparent),
+    inset 0 0 0 1px color-mix(in srgb, var(--exp-accent) 20%, transparent);
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--exp-accent) 10%, var(--exp-surface)),
+      var(--exp-surface)
+    );
+}
+
+.expedition .exp-combatant.is-targeted {
+  border-color: var(--exp-heal);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--exp-heal) 40%, transparent);
+}
+
+.expedition .exp-combatant.is-targetable:not(.is-selected) {
+  border-style: dashed;
 }
 
 .expedition .exp-combatant.is-down {
-  opacity: 0.45;
-  filter: grayscale(0.8);
+  opacity: 0.55;
 }
 
-.expedition .exp-combatant.is-flash-dmg {
+.expedition .exp-combatant.is-casting {
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--exp-intent) 12%, var(--exp-surface)),
+      var(--exp-surface)
+    );
+}
+
+.expedition .exp-combatant.is-auto-queue .exp-queue {
+  border-left: 2px solid var(--exp-border);
+  padding-left: 0.35rem;
+}
+
+.expedition .exp-combatant.is-flash-dmg,
+.expedition .exp-enemy.is-flash-dmg {
   animation: exp-flash-dmg 0.35s ease;
 }
 
-.expedition .exp-combatant.is-flash-heal {
+.expedition .exp-combatant.is-flash-heal,
+.expedition .exp-enemy.is-flash-heal {
   animation: exp-flash-heal 0.35s ease;
+}
+
+.expedition .exp-queue {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-top: 0.35rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--exp-text);
+  line-height: 1.2;
+}
+
+.expedition .exp-queue.is-auto {
+  color: var(--exp-muted);
+  font-weight: 500;
+}
+
+.expedition .exp-queue-tag {
+  display: inline-block;
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 0.08rem 0.3rem;
+  border-radius: 3px;
+  border: 1px solid var(--exp-border);
+  color: var(--exp-muted);
 }
 
 @keyframes exp-flash-dmg {
@@ -212,8 +793,13 @@
 @media (prefers-reduced-motion: reduce) {
   .expedition .exp-hp > span,
   .expedition .exp-char-card,
+  .expedition .exp-enemy,
+  .expedition .exp-combatant,
   .expedition .exp-combatant.is-flash-dmg,
-  .expedition .exp-combatant.is-flash-heal {
+  .expedition .exp-combatant.is-flash-heal,
+  .expedition .exp-enemy.is-flash-dmg,
+  .expedition .exp-enemy.is-flash-heal,
+  .expedition .exp-portrait.is-casting {
     transition: none;
     animation: none;
   }
@@ -223,6 +809,28 @@
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
+}
+
+.expedition .exp-planner-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.expedition .exp-planner-heading {
+  font-size: 0.95rem;
+}
+
+.expedition .exp-planner-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.expedition .exp-planner-chip {
+  min-height: 2.25rem;
+  padding: 0.35rem 0.65rem;
+  font-size: 0.8rem;
 }
 
 .expedition .exp-action-row {
@@ -238,13 +846,20 @@
   font-size: 0.9rem;
 }
 
+.expedition .exp-ability-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 0.45rem;
+}
+
 .expedition .exp-btn {
   appearance: none;
   border: 1px solid var(--exp-border);
-  background: #27272a;
+  background: color-mix(in srgb, var(--exp-panel) 55%, #27272a);
   color: var(--exp-text);
   border-radius: 6px;
-  padding: 0.4rem 0.7rem;
+  padding: 0.45rem 0.7rem;
+  min-height: 2.5rem;
   cursor: pointer;
   font: inherit;
   font-size: 0.85rem;
@@ -259,6 +874,11 @@
 .expedition .exp-btn.is-active {
   background: color-mix(in srgb, var(--exp-accent) 35%, #27272a);
   border-color: var(--exp-accent);
+}
+
+.expedition .exp-planner-chip.is-active {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--exp-accent) 40%, transparent);
+  font-weight: 700;
 }
 
 .expedition .exp-btn.is-primary {
@@ -277,13 +897,113 @@
   cursor: not-allowed;
 }
 
+.expedition .exp-ability {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.15rem;
+  text-align: left;
+  min-height: 2.75rem;
+  padding: 0.5rem 0.65rem;
+}
+
+.expedition .exp-ability-name {
+  font-weight: 600;
+  font-size: 0.85rem;
+  line-height: 1.2;
+}
+
+.expedition .exp-ability-meta {
+  font-size: 0.65rem;
+  color: var(--exp-muted);
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+}
+
+.expedition .exp-ability.is-active .exp-ability-meta {
+  color: color-mix(in srgb, var(--exp-text) 70%, var(--exp-muted));
+}
+
+.expedition .exp-target-label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+  color: var(--exp-muted);
+}
+
+.expedition .exp-target-label select {
+  min-height: 2.25rem;
+  min-width: 8rem;
+  max-width: 100%;
+  padding: 0.3rem 0.45rem;
+  border-radius: 6px;
+  border: 1px solid var(--exp-border);
+  background: #09090b;
+  color: var(--exp-text);
+  font: inherit;
+}
+
+.expedition .exp-command-row {
+  margin-top: 0.15rem;
+}
+
+.expedition .exp-resolve-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.35rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--exp-border);
+  position: sticky;
+  bottom: 0;
+  background: linear-gradient(180deg, transparent, var(--exp-panel) 18%);
+  padding-bottom: 0.15rem;
+  z-index: 2;
+}
+
+.expedition .exp-resolve-hint {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--exp-muted);
+}
+
+.expedition .exp-resolve-btn {
+  width: 100%;
+  min-height: 2.85rem;
+  font-size: 1rem;
+  letter-spacing: 0.02em;
+}
+
+.expedition .exp-resolve-btn.is-ready:not(:disabled) {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--exp-accent) 45%, transparent);
+}
+
 .expedition .exp-log {
-  max-height: 140px;
+  max-height: 160px;
   overflow: auto;
   font-size: 0.8rem;
   color: var(--exp-muted);
   font-family: ui-monospace, Consolas, monospace;
-  line-height: 1.4;
+  line-height: 1.45;
+  padding: 0.35rem 0.15rem;
+  border-top: 1px solid color-mix(in srgb, var(--exp-border) 50%, transparent);
+  margin-top: 0.35rem;
+}
+
+.expedition .exp-log-line.is-header {
+  color: var(--exp-text);
+  font-weight: 700;
+  margin-top: 0.35rem;
+  border-top: 1px solid color-mix(in srgb, var(--exp-border) 70%, transparent);
+  padding-top: 0.25rem;
+}
+
+.expedition .exp-log-line.is-header:first-child {
+  margin-top: 0;
+  border-top: none;
+  padding-top: 0;
 }
 
 .expedition .exp-boon-grid {

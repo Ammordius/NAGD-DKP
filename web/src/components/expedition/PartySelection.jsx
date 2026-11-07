@@ -12,6 +12,7 @@ import {
   partyLimitationLine,
   lookupProfile,
 } from '../../lib/expedition/combatProfile.js'
+import ClassPortrait from './ClassPortrait.jsx'
 
 /**
  * @param {{
@@ -72,20 +73,25 @@ export default function PartySelection({
               disabled={disabled}
               onClick={() => onToggle(c.char_id)}
             >
-              <span className="exp-class-badge" style={{ color: def.color }}>
-                <span aria-hidden="true">{def.symbol}</span> {def.abbrev}
-              </span>
-              <span className="name">{c.name}</span>
-              <span className="meta">
-                {def.name}
-                {c.level != null ? ` · L${c.level}` : ''}
-                {c.fictional ? ' · fictional' : ''}
-              </span>
-              <span className="meta">{def.roleLabel}</span>
-              <span className="meta">
-                {idn.equipmentKnown ? `Gear snapshot ${idn.snapshotDate || 'known'}` : 'Class/level profile only'}
-              </span>
-              <span className="meta">HP {idn.base.maxHp} · ATK {idn.base.atk}</span>
+              <div className="exp-char-card-head">
+                <ClassPortrait unitClass={c.class_name} size={64} />
+                <div className="exp-char-card-meta">
+                  <span className="exp-class-badge" style={{ color: def.color }}>
+                    <span aria-hidden="true">{def.symbol}</span> {def.abbrev}
+                  </span>
+                  <span className="name">{c.name}</span>
+                  <span className="meta">
+                    {def.name}
+                    {c.level != null ? ` · L${c.level}` : ''}
+                    {c.fictional ? ' · fictional' : ''}
+                  </span>
+                  <span className="meta">{def.roleLabel}</span>
+                  <span className="meta">
+                    {idn.equipmentKnown ? `Gear snapshot ${idn.snapshotDate || 'known'}` : 'Class/level profile only'}
+                  </span>
+                  <span className="meta">HP {idn.base.maxHp} · ATK {idn.base.atk}</span>
+                </div>
+              </div>
             </button>
           )
         })}
@@ -99,10 +105,13 @@ export default function PartySelection({
             const passive = getPassive(c.class_name)
             const abs = getClassAbilities(c.class_name)
             return (
-              <div key={c.char_id} className="exp-party-chip" style={{ display: 'block', maxWidth: '100%' }}>
-                <div>
-                  {c.name} ({getClassDef(c.class_name).abbrev}
-                  {c.fictional && selectedIds.length < 3 ? ', volunteer' : ''})
+              <div key={c.char_id} className="exp-party-chip is-block">
+                <div className="exp-party-chip-head">
+                  <ClassPortrait unitClass={c.class_name} size={48} className="is-compact" />
+                  <div>
+                    {c.name} ({getClassDef(c.class_name).abbrev}
+                    {c.fictional && selectedIds.length < 3 ? ', volunteer' : ''})
+                  </div>
                 </div>
                 <div className="exp-status">
                   {idn.equipmentKnown ? 'Magelo-derived stats' : 'Class/level fallback'} · {idn.traits.join(', ') || 'no traits'}
