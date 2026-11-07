@@ -174,8 +174,10 @@ export function applyEffect(ctx, effect, meta = {}) {
 
     case 'healOverTime': {
       for (const target of resolveTargets(effect, ctx)) {
+        const basePower = effect.power || effect.pctMax || 0.08
+        const potency = 1 + (ctx.source?.hotPotency || 0)
         applyStatusToUnit(target, 'hot', {
-          power: effect.power || effect.pctMax || 0.08,
+          power: typeof basePower === 'number' && basePower < 1 ? basePower * potency : basePower,
           duration: effect.duration || 3,
           sourceId: ctx.source?.id,
         })

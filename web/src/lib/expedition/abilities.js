@@ -440,7 +440,7 @@ const clericAbilities = [
     cost: 12,
     cooldown: 0,
     tags: ['heal', 'fast'],
-    effects: [fx.heal('target', { power: 1.0 })],
+    effects: [fx.heal('target', { power: 1.55 })],
     description: 'Instant small heal.',
   }),
   make(CLERIC, 'Group Heal', {
@@ -450,7 +450,7 @@ const clericAbilities = [
     cost: 35,
     cooldown: 2,
     tags: ['heal', 'aoe'],
-    effects: [fx.heal('all_allies', { power: 0.9 })],
+    effects: [fx.heal('all_allies', { power: 1.15 })],
     description: 'Heal the entire party.',
   }),
   make(CLERIC, 'Divine Barrier', {

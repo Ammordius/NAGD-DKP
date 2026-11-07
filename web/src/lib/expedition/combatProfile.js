@@ -102,8 +102,14 @@ export function buildCombatIdentity(character, mageloProfile = null) {
   if (traits.includes('haste_equipment')) atk += 2
   if (traits.includes('mana_gear')) maxMana += 10
 
-  const armorMitigation = clamp((stats?.armor || 0) / 100, 0, 0.2)
+  // Tanks convert armor more efficiently; cloth/leather gear caps lower so Magelo AC
+  // ceilings do not give wizards plate-equivalent mitigation.
+  const armorCap = def.role === 'tank' ? 0.22 : def.role === 'hybrid' ? 0.16 : 0.12
+  const armorMitigation = clamp((stats?.armor || 0) / 120, 0, armorCap)
   const passive = getPassive(def.name)
+  // Pure damage cloth is fragile; all-DPS parties need a tank/healer on high difficulties.
+  const fragileCloth = new Set(['Wizard', 'Magician', 'Enchanter', 'Necromancer'])
+  const damageTakenMult = fragileCloth.has(def.name) ? 1.18 : def.role === 'healer' ? 1.05 : 1
 
   return {
     base: {
@@ -118,10 +124,15 @@ export function buildCombatIdentity(character, mageloProfile = null) {
     },
     derived: {
       armorMitigation,
+      damageTakenMult,
       healMult: traits.includes('focus_healing') ? 0.08 : 0,
       critBonus: traits.includes('haste_equipment') ? 0.03 : 0,
       petPower: passive?.modifiers?.petPower || 0,
-      healEfficiency: passive?.modifiers?.healEfficiency || 0,
+      // Passives historically used healPower; heal math consumes healEfficiency.
+      healEfficiency:
+        passive?.modifiers?.healEfficiency || passive?.modifiers?.healPower || 0,
+      healCostMult: passive?.modifiers?.healCostMult || 1,
+      hotPotency: passive?.modifiers?.hotPotency || 0,
       resistances: stats?.resistances || { fire: 0, cold: 0, magic: 0 },
     },
     equipmentKnown,
@@ -164,10 +175,13 @@ export function toCombatantFromIdentity(character, identity, index = 0) {
     statuses: [],
     casting: null,
     armorMitigation: d.armorMitigation,
+    damageTakenMult: d.damageTakenMult || 1,
     healMult: d.healMult,
     critBonus: d.critBonus,
     petPower: d.petPower,
     healEfficiency: d.healEfficiency,
+    healCostMult: d.healCostMult,
+    hotPotency: d.hotPotency,
     resistances: d.resistances,
     equipmentKnown: identity.equipmentKnown,
     traits: identity.traits,

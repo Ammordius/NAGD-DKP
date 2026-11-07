@@ -88,7 +88,7 @@ const CLASS_PASSIVES = Object.freeze({
     name: 'Divine Efficiency',
     classId: 'Cleric',
     description: 'Heals cost 15% less mana, and you regain mana as the party is wounded.',
-    modifiers: { healCostMult: 0.85, healPower: 0.1 },
+    modifiers: { healCostMult: 0.85, healPower: 0.25 },
     hooks: {
       onEncounterStart: [{ type: 'modifyResource', target: 'self', resource: 'mana', pctMax: 0.05 }],
       onRoundEnd: [

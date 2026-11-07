@@ -8,7 +8,7 @@ export const POSITIONS = ['front', 'middle', 'rear']
  * @param {string} role
  */
 export function defaultPosition(className, role) {
-  if (role === 'tank') return 'front'
+  if (role === 'tank' || className === 'Shadow Knight' || className === 'Paladin') return 'front'
   if (role === 'healer' || className === 'Wizard' || className === 'Magician' || className === 'Enchanter') return 'rear'
   if (className === 'Rogue' || className === 'Ranger') return 'middle'
   return 'middle'

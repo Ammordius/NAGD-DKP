@@ -421,6 +421,14 @@ function resolveUnitAction(state, combatant, action) {
   }
 
   cost = applyCostSynergies(ctx, cost)
+  if (
+    ability.tags?.includes('heal') &&
+    typeof combatant.healCostMult === 'number' &&
+    combatant.healCostMult > 0 &&
+    combatant.healCostMult !== 1
+  ) {
+    cost = Math.max(0, Math.round(cost * combatant.healCostMult))
+  }
   if (!canPayResource(combatant, ability.resource, cost)) {
     pushLog(state, `${combatant.name} lacks resources for ${ability.name}.`)
     return
@@ -535,11 +543,21 @@ export function dealEnemyDamage(state, enemy, target, power, opts = {}) {
 
   let dmg = enemy.atk * (power || 1)
   if (hasStatus(enemy, 'slow')) dmg *= 0.65
-  if (opts.aoe && hasStatus(realTarget, 'brace')) dmg *= 0.7
+  if (opts.aoe) {
+    dmg *= state.difficultyMods?.enemyAoeMult || 1
+    if (hasStatus(realTarget, 'brace')) dmg *= 0.7
+  }
   if (hasStatus(realTarget, 'regroup_penalty')) { /* noop */ }
+  // Formation: rear is safer only while a living frontliner holds the line.
+  // No-tank parties (all rear/middle) take heavy exposed-backline punishment.
+  const hasFrontliner = livingParty(state).some((p) => p.position === 'front')
+  if (realTarget.position === 'rear') dmg *= hasFrontliner ? 0.85 : 1.7
+  else if (realTarget.position === 'front') dmg *= 1.05
+  else if (realTarget.position === 'middle') dmg *= hasFrontliner ? 0.98 : 1.45
   const defMult = state.runBuffs?.defMult || 0
   if (defMult > 0) dmg *= Math.max(0.2, 1 - defMult)
   dmg *= 1 - (realTarget.armorMitigation || 0)
+  dmg *= realTarget.damageTakenMult || 1
   const dr = realTarget.statuses?.find((s) => s.id === 'damage_reduction')
   if (dr) dmg *= 1 - (dr.power || 0.25)
   if (hasStatus(realTarget, 'last_stand')) dmg *= 0.5
