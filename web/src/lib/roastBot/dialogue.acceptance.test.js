@@ -499,8 +499,17 @@ describe('roastBot dialogue acceptance', () => {
         },
       ],
       comparableSalesByItem: {
-        'cheap spike': [90, 95, 100],
-        'serpent of vindication': [2, 2, 3, 2],
+        'cheap spike': [
+          { lootId: 1, cost: 90, date: '2026-09-01' },
+          { lootId: 2, cost: 95, date: '2026-09-10' },
+          { lootId: 3, cost: 100, date: '2026-09-25' },
+        ],
+        'serpent of vindication': [
+          { lootId: 20, cost: 2, date: '2026-08-01' },
+          { lootId: 21, cost: 2, date: '2026-09-01' },
+          { lootId: 22, cost: 3, date: '2026-09-05' },
+          { lootId: 23, cost: 2, date: '2026-09-15' },
+        ],
       },
     })
     assert.equal(facts.biggestPurchase.itemName, 'Cheap Spike')

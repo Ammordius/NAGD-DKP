@@ -8,6 +8,7 @@ import {
   buildAccountAttendanceFacts,
   attendanceRoastEligibility,
 } from './attendance.js'
+import { selectEraPeerCosts } from '../recentItemSaleCosts.js'
 import { isPriceOutlier, THRESHOLDS } from './events.js'
 import { slotName } from './formatting.js'
 
@@ -114,7 +115,7 @@ export function findSlotRepeatPatterns(purchases) {
  *     sources?: Array<{ mob?: string, zone?: string }>,
  *   }>,
  *   itemCatalog?: Array<{ name: string, itemId?: number }>,
- *   comparableSalesByItem?: Record<string, number[]>,
+ *   comparableSalesByItem?: Record<string, Array<{ lootId?: number|string|null, cost?: string|number, date?: string }>>,
  *   gearByCharacter?: Record<string, object>,
  *   upgradesByCharacter?: Record<string, object>,
  *   now?: Date,
@@ -159,10 +160,13 @@ export function buildAccountFacts(input = {}) {
   const priceOutliers = []
   for (const p of withCost) {
     const key = (p.itemName || '').toLowerCase()
-    const comps = comparableSalesByItem[key] || []
-    // Exclude this purchase's own cost when possible
-    const others = comps.filter((c) => c !== p.cost)
-    const { outlier, median } = isPriceOutlier(p.cost, others.length ? others : comps)
+    // Era peers nearest to this purchase date — never current-market last-3 alone.
+    const peers = selectEraPeerCosts(
+      p,
+      comparableSalesByItem[key] || [],
+      THRESHOLDS.PRICE_OUTLIER_MIN_COMPARABLE,
+    )
+    const { outlier, median } = isPriceOutlier(p.cost, peers)
     if (outlier && median != null) {
       priceOutliers.push({ ...p, medianPrice: median })
     }

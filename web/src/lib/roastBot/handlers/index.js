@@ -1291,7 +1291,7 @@ function handleWorstPurchase(args) {
     null
   const medianBit =
     category === 'price_outlier'
-      ? ` Comparable sales median for that same purchase: ${formatDkp(purchase.medianPrice)} DKP.`
+      ? ` Same-era sales median for that same purchase: ${formatDkp(purchase.medianPrice)} DKP.`
       : ''
   return {
     intent: INTENTS.WORST_PURCHASE,

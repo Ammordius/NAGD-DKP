@@ -6,7 +6,10 @@ import { accountDetailSwrKey } from '../lib/accountDetailMissingScope'
 import { useDkpData } from '../lib/dkpLeaderboard'
 import { supabase } from '../lib/supabase'
 import { fetchAllRpcByRange } from '../lib/fetchAllRpcByRange'
-import { buildItemLast3FromSaleRows } from '../lib/recentItemSaleCosts'
+import {
+  buildDatedSalesByItem,
+  buildItemLast3FromSaleRows,
+} from '../lib/recentItemSaleCosts'
 import { getItemSources, getDkpMobLoot, getRaidItemSources } from '../lib/staticData'
 import {
   buildKnownItemSources,
@@ -50,10 +53,14 @@ import './RoastBot.css'
 
 async function fetchSaleCosts() {
   try {
-    const rows = await fetchAllRpcByRange(supabase, 'recent_item_sale_costs', { p_limit: 3 })
-    return buildItemLast3FromSaleRows(rows || [])
+    // Deeper history for era-relative outliers; last-3 map still used for afford / last-sale.
+    const rows = await fetchAllRpcByRange(supabase, 'recent_item_sale_costs', { p_limit: 50 })
+    return {
+      recentItemPrices: buildItemLast3FromSaleRows(rows || []),
+      comparableSalesByItem: buildDatedSalesByItem(rows || []),
+    }
   } catch {
-    return {}
+    return { recentItemPrices: {}, comparableSalesByItem: {} }
   }
 }
 
@@ -199,12 +206,6 @@ export default function RoastBot({ profile, session, factsOverride = null, openO
       itemCatalog.push(entry)
     }
 
-    /** @type {Record<string, number[]>} */
-    const comparableSalesByItem = {}
-    for (const [key, entry] of Object.entries(saleCosts || {})) {
-      comparableSalesByItem[key] = (entry.values || []).map(Number).filter((n) => Number.isFinite(n))
-    }
-
     return buildAccountFacts({
       accountId,
       accountName: detail?.account?.display_name || null,
@@ -217,10 +218,10 @@ export default function RoastBot({ profile, session, factsOverride = null, openO
       attendanceRows,
       raidsById,
       guildRaidCountInWindow: null,
-      recentItemPrices: saleCosts || {},
+      recentItemPrices: saleCosts?.recentItemPrices || {},
       knownItemSources,
       itemCatalog,
-      comparableSalesByItem,
+      comparableSalesByItem: saleCosts?.comparableSalesByItem || {},
     })
   }, [
     factsOverride,

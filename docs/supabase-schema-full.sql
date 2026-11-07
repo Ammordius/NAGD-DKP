@@ -2770,12 +2770,12 @@ AS $$
     ) resolved
     WHERE btrim(coalesce(rl.item_name, '')) <> ''
   ) ranked
-  WHERE ranked.rn <= GREATEST(1, LEAST(COALESCE(p_limit, 3), 10))
+  WHERE ranked.rn <= GREATEST(1, LEAST(COALESCE(p_limit, 3), 50))
   ORDER BY ranked.item_name ASC, ranked.sale_date DESC, ranked.loot_id DESC;
 $$;
 
 COMMENT ON FUNCTION public.recent_item_sale_costs(integer) IS
-  'Newest sales per item name. Resolves date_iso then date (same as the prior Raid Items client); ISO dates rank by calendar, non-ISO as newest, then loot id. Result order is deterministic for PostgREST range pagination.';
+  'Newest sales per item name (p_limit capped at 50). Resolves date_iso then date (same as the prior Raid Items client); ISO dates rank by calendar, non-ISO as newest, then loot id. Result order is deterministic for PostgREST range pagination. Raid Items / MobLoot use p_limit 3; roast-bot era outliers use a deeper history.';
 
 REVOKE ALL ON FUNCTION public.recent_item_sale_costs(integer) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.recent_item_sale_costs(integer) TO authenticated;

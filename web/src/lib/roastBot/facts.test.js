@@ -101,7 +101,11 @@ describe('roastBot facts and purchases', () => {
         },
       ],
       comparableSalesByItem: {
-        'beguiler circlet': [100, 110, 120],
+        'beguiler circlet': [
+          { lootId: 101, cost: 100, date: '2026-09-01' },
+          { lootId: 102, cost: 110, date: '2026-09-10' },
+          { lootId: 103, cost: 120, date: '2026-09-20' },
+        ],
       },
     })
     const account = scopedPurchaseFacts(facts, null)
@@ -117,6 +121,71 @@ describe('roastBot facts and purchases', () => {
     assert.equal(picked.category, 'price_outlier')
     assert.equal(picked.purchase.itemName, 'Beguiler Circlet')
     assert.ok(picked.purchase.medianPrice != null)
+  })
+
+  it('does not flag an era-fair purchase against later deflated market prices', () => {
+    // Edge of Eternity style: 19 amid 18/24/24/10 in early 2024; current sales ~4.
+    const facts = buildAccountFacts({
+      accountId: 'a1',
+      characters: [{ char_id: 'a1', name: 'Ammordius' }],
+      lootRows: [
+        {
+          id: 9001,
+          item_name: 'Edge of Eternity',
+          cost: 19,
+          assigned_char_id: 'a1',
+          assigned_character_name: 'Ammordius',
+          char_id: 'a1',
+          character_name: 'Ammordius',
+          sale_date: '2024-01-23',
+        },
+      ],
+      comparableSalesByItem: {
+        'edge of eternity': [
+          { lootId: 1, cost: 18, date: '2023-11-21' },
+          { lootId: 9001, cost: 19, date: '2024-01-23' },
+          { lootId: 2, cost: 24, date: '2024-03-19' },
+          { lootId: 3, cost: 24, date: '2024-03-19' },
+          { lootId: 4, cost: 10, date: '2024-05-14' },
+          { lootId: 5, cost: 4, date: '2026-08-01' },
+          { lootId: 6, cost: 4, date: '2026-09-01' },
+          { lootId: 7, cost: 5, date: '2026-10-01' },
+        ],
+      },
+    })
+    assert.equal(facts.priceOutliers.length, 0)
+    const picked = pickSpendPurchase(scopedPurchaseFacts(facts, null))
+    assert.notEqual(picked.category, 'price_outlier')
+  })
+
+  it('still flags a true same-era overpay', () => {
+    const facts = buildAccountFacts({
+      accountId: 'a1',
+      characters: [{ char_id: 'e1', name: 'Iaminae' }],
+      lootRows: [
+        {
+          id: 50,
+          item_name: 'Overpay Spike',
+          cost: 40,
+          assigned_char_id: 'e1',
+          assigned_character_name: 'Iaminae',
+          char_id: 'e1',
+          character_name: 'Iaminae',
+          sale_date: '2024-06-15',
+        },
+      ],
+      comparableSalesByItem: {
+        'overpay spike': [
+          { lootId: 1, cost: 10, date: '2024-05-01' },
+          { lootId: 2, cost: 9, date: '2024-06-01' },
+          { lootId: 3, cost: 11, date: '2024-07-01' },
+          { lootId: 4, cost: 4, date: '2026-10-01' },
+        ],
+      },
+    })
+    assert.equal(facts.priceOutliers.length, 1)
+    assert.equal(facts.priceOutliers[0].itemName, 'Overpay Spike')
+    assert.equal(facts.priceOutliers[0].medianPrice, 10)
   })
 
   it('does not invent prices when sale history is missing', () => {

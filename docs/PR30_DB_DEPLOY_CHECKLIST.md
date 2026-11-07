@@ -12,7 +12,7 @@ Ordered steps for a **future** hosted deploy. Checklist only — do not execute 
 
 1. Record a PITR timestamp / named backup (safety net only; prefer reverse SQL for rollback — see below).
 2. Apply the delta for these objects from `docs/supabase-schema-full.sql` (or full schema on a fresh restore target):
-   - `recent_item_sale_costs(integer)` — resolved `date_iso` then `date` ranking; deterministic `ORDER BY`
+   - `recent_item_sale_costs(integer)` — resolved `date_iso` then `date` ranking; deterministic `ORDER BY`; `p_limit` hard-capped at 50 (was 10) for roast-bot era outliers
    - `account_character_spent()` — case-sensitive name fallback matching prior Accounts JS; deterministic `ORDER BY`
    - `log_officer_audit(...)`
    - `siteadmin_claim_cooldowns()`

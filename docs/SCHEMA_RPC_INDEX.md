@@ -27,7 +27,7 @@ Where each public function the app or scripts call is defined, and what calls it
 | **claim_account** | AccountDetail.jsx. Existing unclaimed account only. Caller must not already have an account. |
 | **log_officer_audit** | officerAudit.js. Sets actor from `auth.uid()`. Direct insert into `officer_audit_log` is revoked. |
 | **siteadmin_claim_cooldowns** | OfficerClaimCooldowns.jsx. Site admin only. Includes email. |
-| **recent_item_sale_costs** | MobLoot.jsx. Last three sales per item. |
+| **recent_item_sale_costs** | MobLoot.jsx (`p_limit` 3) and RoastBot.jsx (`p_limit` 50, capped in SQL). Newest sales per item; roast-bot uses deeper dated history for era-relative price outliers. |
 | **account_character_spent** | Accounts.jsx. Buyer-account spent, same key as the accounts list. |
 | **create_account** | Officer.jsx |
 | **create_my_account** | Defined in the canonical file. Not called by the current app. |

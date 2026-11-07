@@ -1,8 +1,10 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import {
+  buildDatedSalesByItem,
   buildItemLast3FromFullLoot,
   buildItemLast3FromSaleRows,
+  selectEraPeerCosts,
 } from './recentItemSaleCosts.js'
 import { fetchAllRpcByRange } from './fetchAllRpcByRange.js'
 
@@ -69,5 +71,64 @@ describe('buildItemLast3FromSaleRows', () => {
     assert.ok(fromRpc['zzz-cross-page'])
     assert.deepEqual(fromRpc['zzz-cross-page'].values, ['99'])
     assert.equal(fromRpc['item-0000'].avg, fromFull['item-0000'].avg)
+  })
+})
+
+describe('buildDatedSalesByItem', () => {
+  it('keeps loot id, cost, and date for every sale row', () => {
+    const map = buildDatedSalesByItem([
+      { item_name: 'Edge of Eternity', loot_id: 1, cost: '18', sale_date: '2023-11-21' },
+      { item_name: 'Edge of Eternity', loot_id: 2, cost: 19, sale_date: '2024-01-23' },
+      { item_name: 'Other Blade', loot_id: 9, cost: 4, sale_date: '2026-01-01' },
+    ])
+    assert.equal(map['edge of eternity'].length, 2)
+    assert.deepEqual(map['edge of eternity'][0], {
+      lootId: 1,
+      cost: '18',
+      date: '2023-11-21',
+    })
+    assert.equal(map['other blade'].length, 1)
+  })
+})
+
+describe('selectEraPeerCosts', () => {
+  const sales = [
+    { lootId: 1, cost: 18, date: '2023-11-21' },
+    { lootId: 9001, cost: 19, date: '2024-01-23' },
+    { lootId: 2, cost: 24, date: '2024-03-19' },
+    { lootId: 3, cost: 24, date: '2024-03-19' },
+    { lootId: 4, cost: 10, date: '2024-05-14' },
+    { lootId: 5, cost: 4, date: '2026-08-01' },
+    { lootId: 6, cost: 4, date: '2026-09-01' },
+    { lootId: 7, cost: 5, date: '2026-10-01' },
+  ]
+
+  it('picks nearest sales by date and excludes the purchase by loot id', () => {
+    const peers = selectEraPeerCosts(
+      { purchaseId: '9001', saleDate: '2024-01-23' },
+      sales,
+      3,
+    )
+    // Nearest excluding self: two 24s (~56d after) then 18 (~63d before)
+    assert.deepEqual(peers, [24, 24, 18])
+  })
+
+  it('returns fewer than three when history is thin (no current-market pad)', () => {
+    const peers = selectEraPeerCosts(
+      { purchaseId: '1', saleDate: '2024-01-01' },
+      [
+        { lootId: 1, cost: 50, date: '2024-01-01' },
+        { lootId: 2, cost: 40, date: '2024-02-01' },
+      ],
+      3,
+    )
+    assert.deepEqual(peers, [40])
+  })
+
+  it('returns empty when the purchase has no parseable sale date', () => {
+    assert.deepEqual(
+      selectEraPeerCosts({ purchaseId: '1', saleDate: 'sometime' }, sales, 3),
+      [],
+    )
   })
 })
