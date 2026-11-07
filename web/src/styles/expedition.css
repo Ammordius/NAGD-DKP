@@ -1063,6 +1063,19 @@
   margin-bottom: 1.25rem;
 }
 
+.expedition .exp-appearance {
+  margin: 0.75rem auto 1rem;
+  max-width: 36rem;
+}
+
+.expedition .exp-appearance-label {
+  display: block;
+  font-size: 0.8rem;
+  color: var(--exp-muted);
+  margin-bottom: 0.4rem;
+  letter-spacing: 0.02em;
+}
+
 .expedition .exp-status {
   font-size: 0.75rem;
   color: var(--exp-muted);

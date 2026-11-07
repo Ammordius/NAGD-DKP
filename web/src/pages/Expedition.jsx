@@ -19,6 +19,12 @@ import {
   normalizeExpeditionSave,
   applyRunToSave,
 } from '../lib/expedition/persistence'
+import {
+  APPEARANCE_LABELS,
+  APPEARANCE_MODES,
+  APPEARANCE_PAGE_STATE_KEY,
+  normalizeAppearanceMode,
+} from '../lib/expedition/appearance'
 import PartySelection from '../components/expedition/PartySelection'
 import BattleScreen from '../components/expedition/BattleScreen'
 import RewardsScreen from '../components/expedition/RewardsScreen'
@@ -43,6 +49,11 @@ export default function Expedition({ profile, userId }) {
 
   const saveKey = `/games/expedition:save:${accountId || 'unclaimed'}`
   const [save, setSave] = usePersistedState(saveKey, emptyExpeditionSave(), normalizeExpeditionSave)
+  const [appearanceMode, setAppearanceMode] = usePersistedState(
+    APPEARANCE_PAGE_STATE_KEY,
+    'classic',
+    normalizeAppearanceMode,
+  )
 
   const assembleParty = useCallback(async () => {
     setRosterMeta((m) => ({ ...m, loading: true, error: null }))
@@ -168,6 +179,22 @@ export default function Expedition({ profile, userId }) {
       <div className="exp-landing-hero">
         <h1>Quarm&apos;s Questionable Expedition</h1>
         <p className="exp-tagline">Three characters. Terrible leadership. One questionable expedition.</p>
+        <div className="exp-appearance" role="group" aria-label="Party Appearance">
+          <span className="exp-appearance-label">Party Appearance</span>
+          <div className="exp-action-row" style={{ justifyContent: 'center' }}>
+            {APPEARANCE_MODES.map((mode) => (
+              <button
+                key={mode}
+                type="button"
+                className={`exp-btn${appearanceMode === mode ? ' is-active' : ''}`}
+                aria-pressed={appearanceMode === mode}
+                onClick={() => setAppearanceMode(mode)}
+              >
+                {APPEARANCE_LABELS[mode]}
+              </button>
+            ))}
+          </div>
+        </div>
         {screen === 'landing' ? (
           <>
             <p style={{ maxWidth: '36rem', margin: '0 auto 1.25rem', color: 'var(--exp-muted)' }}>
@@ -217,6 +244,7 @@ export default function Expedition({ profile, userId }) {
             notice={rosterMeta.notice}
             fictionalRoster={rosterMeta.fictional}
             profiles={profiles}
+            appearanceMode={appearanceMode}
           />
         )
       ) : null}
@@ -233,6 +261,7 @@ export default function Expedition({ profile, userId }) {
       {screen === 'run' && run && run.phase !== 'rewards' ? (
         <BattleScreen
           state={run}
+          appearanceMode={appearanceMode}
           onCommit={handleCommit}
           onBoon={(id) => wrapSelect(selectBoon, id)}
           onEvent={(id) => wrapSelect(selectEventChoice, id)}

@@ -109,7 +109,15 @@ function StatusChips({ statuses, emptyLabel = null }) {
  *   onConsumable: (take: boolean) => void,
  * }} props
  */
-export default function BattleScreen({ state, onCommit, onBoon, onEvent, onRoute, onConsumable }) {
+export default function BattleScreen({
+  state,
+  appearanceMode = 'classic',
+  onCommit,
+  onBoon,
+  onEvent,
+  onRoute,
+  onConsumable,
+}) {
   const living = state.party.filter((p) => p.alive)
   const [draft, setDraft] = useState(() => buildDefaultDraft(state))
   const [activeId, setActiveId] = useState(living[0]?.id || null)
@@ -415,6 +423,7 @@ export default function BattleScreen({ state, onCommit, onBoon, onEvent, onRoute
                       size={64}
                       flags={portraitFlags}
                       showKoLabel
+                      appearanceMode={appearanceMode}
                     />
                     <div className="exp-combatant-meta">
                       <span className="exp-class-badge" style={{ color: def.color }}>

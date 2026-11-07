@@ -41,6 +41,29 @@ const CLASS_SPRITE_BY_NAME = {
   Beastlord: '/expedition/assets/classes/beastlord.png',
 }
 
+/**
+ * Cosmetic gnome variants of the same 15 classes.
+ * Omitted keys fall back to CLASS_SPRITE_BY_NAME in resolveClassSprite.
+ * @type {Record<string, string>}
+ */
+const GNOME_CLASS_SPRITE_BY_NAME = {
+  Warrior: '/expedition/assets/classes/gnomes/warrior.png',
+  Paladin: '/expedition/assets/classes/gnomes/paladin.png',
+  'Shadow Knight': '/expedition/assets/classes/gnomes/shadow-knight.png',
+  Cleric: '/expedition/assets/classes/gnomes/cleric.png',
+  Druid: '/expedition/assets/classes/gnomes/druid.png',
+  Shaman: '/expedition/assets/classes/gnomes/shaman.png',
+  Enchanter: '/expedition/assets/classes/gnomes/enchanter.png',
+  Bard: '/expedition/assets/classes/gnomes/bard.png',
+  Wizard: '/expedition/assets/classes/gnomes/wizard.png',
+  Magician: '/expedition/assets/classes/gnomes/magician.png',
+  Necromancer: '/expedition/assets/classes/gnomes/necromancer.png',
+  Ranger: '/expedition/assets/classes/gnomes/ranger.png',
+  Rogue: '/expedition/assets/classes/gnomes/rogue.png',
+  Monk: '/expedition/assets/classes/gnomes/monk.png',
+  Beastlord: '/expedition/assets/classes/gnomes/beastlord.png',
+}
+
 /** Lowercase name → canonical CLASS_SPRITE_BY_NAME key */
 const CLASS_SPRITE_LOOKUP = Object.fromEntries(
   Object.keys(CLASS_SPRITE_BY_NAME).map((name) => [name.toLowerCase(), name]),
@@ -100,15 +123,23 @@ export function normalizeClassSpriteName(className) {
  * Resolve a party class sprite URL.
  * Accepts a class name string or an object with `class_name` / `className`.
  * Unknown classes return null (UI falls back to class badge).
+ * Gnome mode uses matching gnome sprites; missing gnome entries fall back to classic.
  *
  * @param {string|{ class_name?: string, className?: string }|null|undefined} classOrUnit
+ * @param {'classic'|'gnomes'|string|null|undefined} [appearanceMode='classic']
+ * @param {Record<string, string>|null|undefined} [gnomeSpriteByName] - optional map override (tests)
  * @returns {string|null}
  */
-export function resolveClassSprite(classOrUnit) {
+export function resolveClassSprite(classOrUnit, appearanceMode = 'classic', gnomeSpriteByName) {
   const raw = typeof classOrUnit === 'string'
     ? classOrUnit
     : (classOrUnit?.class_name || classOrUnit?.className)
   const key = normalizeClassSpriteName(raw)
   if (!key) return null
+  if (appearanceMode === 'gnomes') {
+    const gnomeMap = gnomeSpriteByName || GNOME_CLASS_SPRITE_BY_NAME
+    const gnomePath = gnomeMap[key]
+    if (gnomePath) return gnomePath
+  }
   return CLASS_SPRITE_BY_NAME[key] || null
 }

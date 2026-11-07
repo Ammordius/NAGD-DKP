@@ -60,6 +60,7 @@ describe('expedition assets', () => {
     }
     for (const [name, path] of Object.entries(expected)) {
       assert.equal(resolveClassSprite(name), path)
+      assert.equal(resolveClassSprite(name, 'classic'), path)
       assert.equal(resolveClassSprite({ class_name: name }), path)
       assert.equal(resolveClassSprite(name.toLowerCase()), path)
       assert.equal(normalizeClassSpriteName(name), name)
@@ -67,9 +68,50 @@ describe('expedition assets', () => {
     assert.equal(Object.keys(expected).length, 15)
   })
 
+  it('maps all 15 classes to gnome sprite paths in gnomes mode', () => {
+    const expected = {
+      Warrior: '/expedition/assets/classes/gnomes/warrior.png',
+      Paladin: '/expedition/assets/classes/gnomes/paladin.png',
+      'Shadow Knight': '/expedition/assets/classes/gnomes/shadow-knight.png',
+      Cleric: '/expedition/assets/classes/gnomes/cleric.png',
+      Druid: '/expedition/assets/classes/gnomes/druid.png',
+      Shaman: '/expedition/assets/classes/gnomes/shaman.png',
+      Enchanter: '/expedition/assets/classes/gnomes/enchanter.png',
+      Bard: '/expedition/assets/classes/gnomes/bard.png',
+      Wizard: '/expedition/assets/classes/gnomes/wizard.png',
+      Magician: '/expedition/assets/classes/gnomes/magician.png',
+      Necromancer: '/expedition/assets/classes/gnomes/necromancer.png',
+      Ranger: '/expedition/assets/classes/gnomes/ranger.png',
+      Rogue: '/expedition/assets/classes/gnomes/rogue.png',
+      Monk: '/expedition/assets/classes/gnomes/monk.png',
+      Beastlord: '/expedition/assets/classes/gnomes/beastlord.png',
+    }
+    for (const [name, path] of Object.entries(expected)) {
+      assert.equal(resolveClassSprite(name, 'gnomes'), path)
+      assert.equal(resolveClassSprite({ class_name: name }, 'gnomes'), path)
+      assert.equal(resolveClassSprite(name.toLowerCase(), 'gnomes'), path)
+    }
+    assert.equal(Object.keys(expected).length, 15)
+  })
+
+  it('falls back to classic sprites when a gnome map entry is missing', () => {
+    const partialGnomeMap = {
+      Warrior: '/expedition/assets/classes/gnomes/warrior.png',
+    }
+    assert.equal(
+      resolveClassSprite('Warrior', 'gnomes', partialGnomeMap),
+      '/expedition/assets/classes/gnomes/warrior.png',
+    )
+    assert.equal(
+      resolveClassSprite('Cleric', 'gnomes', partialGnomeMap),
+      '/expedition/assets/classes/cleric.png',
+    )
+  })
+
   it('returns null for unknown or missing classes', () => {
     assert.equal(resolveClassSprite('Not A Class'), null)
     assert.equal(resolveClassSprite({ class_name: 'Berserker' }), null)
+    assert.equal(resolveClassSprite({ class_name: 'Berserker' }, 'gnomes'), null)
     assert.equal(resolveClassSprite(null), null)
     assert.equal(resolveClassSprite(''), null)
     assert.equal(normalizeClassSpriteName('  '), null)

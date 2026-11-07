@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { getClassDef } from '../../lib/expedition/classDefinitions.js'
 import { resolveClassSprite } from '../../lib/expedition/assets.js'
+import { DEFAULT_APPEARANCE_MODE } from '../../lib/expedition/appearance.js'
 
 /**
  * Pixel class portrait with emoji/abbrev fallback when the sprite is missing or fails.
@@ -11,6 +12,7 @@ import { resolveClassSprite } from '../../lib/expedition/assets.js'
  *   size?: number,
  *   flags?: string[],
  *   showKoLabel?: boolean,
+ *   appearanceMode?: 'classic'|'gnomes'|string,
  * }} props
  */
 export default function ClassPortrait({
@@ -19,13 +21,18 @@ export default function ClassPortrait({
   size = 64,
   flags = [],
   showKoLabel = false,
+  appearanceMode = DEFAULT_APPEARANCE_MODE,
 }) {
-  const src = resolveClassSprite(unitClass)
+  const src = resolveClassSprite(unitClass, appearanceMode)
   const def = getClassDef(unitClass)
   const [failed, setFailed] = useState(false)
   const showSprite = Boolean(src) && !failed
   const flagClass = (flags || []).filter(Boolean).join(' ')
   const isDown = (flags || []).includes('is-down')
+
+  useEffect(() => {
+    setFailed(false)
+  }, [src, appearanceMode])
 
   return (
     <div

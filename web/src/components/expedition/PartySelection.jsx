@@ -23,6 +23,7 @@ import ClassPortrait from './ClassPortrait.jsx'
  *   notice?: string|null,
  *   fictionalRoster?: boolean,
  *   profiles?: Map<string, object>|null,
+ *   appearanceMode?: 'classic'|'gnomes'|string,
  * }} props
  */
 export default function PartySelection({
@@ -33,6 +34,7 @@ export default function PartySelection({
   notice,
   fictionalRoster,
   profiles,
+  appearanceMode = 'classic',
 }) {
   const selected = roster.filter((c) => selectedIds.includes(c.char_id))
   const preview = fillPartyToThree(selected)
@@ -74,7 +76,7 @@ export default function PartySelection({
               onClick={() => onToggle(c.char_id)}
             >
               <div className="exp-char-card-head">
-                <ClassPortrait unitClass={c.class_name} size={64} />
+                <ClassPortrait unitClass={c.class_name} size={64} appearanceMode={appearanceMode} />
                 <div className="exp-char-card-meta">
                   <span className="exp-class-badge" style={{ color: def.color }}>
                     <span aria-hidden="true">{def.symbol}</span> {def.abbrev}
@@ -107,7 +109,7 @@ export default function PartySelection({
             return (
               <div key={c.char_id} className="exp-party-chip is-block">
                 <div className="exp-party-chip-head">
-                  <ClassPortrait unitClass={c.class_name} size={48} className="is-compact" />
+                  <ClassPortrait unitClass={c.class_name} size={48} className="is-compact" appearanceMode={appearanceMode} />
                   <div>
                     {c.name} ({getClassDef(c.class_name).abbrev}
                     {c.fictional && selectedIds.length < 3 ? ', volunteer' : ''})
