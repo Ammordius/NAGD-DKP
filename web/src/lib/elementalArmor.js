@@ -54,3 +54,19 @@ export function getArmorIdForMoldAndClass(moldId, classAbbr) {
   const n = Number(armorId)
   return Number.isNaN(n) ? null : n
 }
+
+/**
+ * Test helper: replace the in-memory mold map (and mark load as done).
+ * @param {Record<string, object>|null|undefined} obj
+ */
+export function seedElementalArmorForTests(obj) {
+  moldById.clear()
+  const data = obj && typeof obj === 'object' ? obj : {}
+  for (const [id, entry] of Object.entries(data)) {
+    if (entry != null && typeof entry === 'object') {
+      moldById.set(Number(id), entry)
+      moldById.set(String(id), entry)
+    }
+  }
+  loadPromise = Promise.resolve(data)
+}

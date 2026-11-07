@@ -26,6 +26,7 @@ The app loads `/elemental_mold_armor.json` at runtime. Ensure `web/public/elemen
 
 - **Raid Items (/mobs):** When the **Class** filter is set, any loot row that is an elemental mold (pattern/mold) resolves to the armor item for that class. The row shows the armor name and stats (from `item_stats.json`), a “(from mold)” badge, and the same DKP column. **Slot filter** works for molds even when stats are missing: mold slot (e.g. head, wrists) is mapped to the filter (HEAD, WRIST). Filtering and gear-score sort use the armor’s stats when available.
 - **Item page (/items/...):** For an item that is an elemental mold, a **“View armor for class”** dropdown appears. Choosing a class shows that class’s armor (name, card, link) and “Crafted from: [mold name]”. DKP history and table stay keyed by the mold name.
+- **RoastBot upgrades:** Raid-loot molds expand to that character’s class armor (same `elemental_mold_armor.json` map). Scoring uses wearable stats; cards show the mold name so last-sale / zone stay on the DKP purchase item (Magelo class_rankings parity).
 
 ## Item stats and gear score
 

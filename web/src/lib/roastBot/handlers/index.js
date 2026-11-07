@@ -914,14 +914,15 @@ function handleGearAssessment(args) {
   const cards = []
   if (assessment.upgradeSuggestions?.length) {
     for (const u of assessment.upgradeSuggestions.slice(0, 3)) {
+      const priceName = u.moldName || u.itemName
       cards.push({
         type: 'upgrade',
         itemName: u.itemName,
         itemId: u.itemId,
         slot: u.slot,
         upgrade: u.upgrade,
-        lastSale: lookupPrice(args.facts, u.itemName),
-        zone: lookupSource(args.facts, u.itemName)?.zone || null,
+        lastSale: lookupPrice(args.facts, priceName),
+        zone: lookupSource(args.facts, priceName)?.zone || null,
         to: `/items/${encodeURIComponent(u.itemName)}`,
       })
     }
@@ -1190,11 +1191,14 @@ function handleUpgrades(args) {
     }
   }
 
-  const upgrades = result.suggestions.map((u) => ({
-    ...u,
-    lastSale: lookupPrice(args.facts, u.itemName),
-    zone: lookupSource(args.facts, u.itemName)?.zone || null,
-  }))
+  const upgrades = result.suggestions.map((u) => {
+    const priceName = u.moldName || u.itemName
+    return {
+      ...u,
+      lastSale: lookupPrice(args.facts, priceName),
+      zone: lookupSource(args.facts, priceName)?.zone || null,
+    }
+  })
   const top = upgrades[0]
   const strength = top?.strength === 'strong' ? 'upgrade_strong' : top?.strength === 'modest' ? 'upgrade_modest' : 'upgrade_any'
   const cards = upgrades.map((u) => ({

@@ -11,6 +11,12 @@ import {
   itemUsableByClass,
   SLOT_NAMES_FOR_UI,
 } from '../mageloUpgradeEngine.js'
+import {
+  ensureElementalArmorLoaded,
+  getArmorIdForMoldAndClass,
+  getMoldInfo,
+  isElementalMold,
+} from '../elementalArmor.js'
 import { ensureItemStatsLoaded } from '../itemStats.js'
 import { getDkpMobLoot, getRaidItemSources } from '../staticData.js'
 import { classifyUpgradeDelta } from './events.js'
@@ -408,6 +414,58 @@ export function filterItemStatsForRaidLoot(allStats, raidIds) {
 }
 
 /**
+ * Raid-filter item stats, then inject class-specific wearable armor for any
+ * elemental molds/patterns in the raid loot set (MobLoot / Magelo parity).
+ *
+ * @param {Record<string, object>|null|undefined} allStats
+ * @param {Set<number>|null|undefined} raidIds
+ * @param {string} classAbbrev - e.g. WAR, ROG
+ * @returns {{ itemStats: Record<string, object>, armorToMold: Map<number, { moldId: number, moldName: string }> }}
+ */
+export function expandRaidLootWithClassArmor(allStats, raidIds, classAbbrev) {
+  /** @type {Record<string, object>} */
+  const itemStats = raidIds?.size
+    ? filterItemStatsForRaidLoot(allStats, raidIds)
+    : { ...(allStats || {}) }
+  /** @type {Map<number, { moldId: number, moldName: string }>} */
+  const armorToMold = new Map()
+  if (!allStats || !classAbbrev) return { itemStats, armorToMold }
+
+  const moldIds = raidIds?.size
+    ? [...raidIds]
+    : Object.keys(allStats).map((id) => Number(id)).filter((n) => Number.isFinite(n))
+
+  for (const moldId of moldIds) {
+    if (!Number.isFinite(moldId)) continue
+    const info = getMoldInfo(moldId)
+    if (!info) continue
+    const armorId = getArmorIdForMoldAndClass(moldId, classAbbrev)
+    if (armorId == null) continue
+    const armorStats = allStats[String(armorId)] || allStats[armorId]
+    if (!armorStats) continue
+    itemStats[String(armorId)] = armorStats
+    const moldName =
+      (typeof info.mold_name === 'string' && info.mold_name.trim()) ||
+      allStats[String(moldId)]?.name ||
+      allStats[moldId]?.name ||
+      `Mold ${moldId}`
+    armorToMold.set(armorId, { moldId: Number(moldId), moldName })
+  }
+  return { itemStats, armorToMold }
+}
+
+/**
+ * @param {Map<number, { moldId: number, moldName: string }>|null|undefined} armorToMold
+ * @param {number|string|null|undefined} itemId
+ */
+function moldMetaForArmor(armorToMold, itemId) {
+  if (!armorToMold?.size || itemId == null) return null
+  const n = Number(itemId)
+  if (!Number.isFinite(n)) return null
+  return armorToMold.get(n) || null
+}
+
+/**
  * Build scoring context from rankings export + item stats.
  * @param {object} rankings
  * @param {Record<string, object>} itemStats
@@ -517,9 +575,12 @@ export function computeCharacterUpgrades({
   if (!className) {
     return { ok: false, reason: 'missing_class', suggestions: [], upgradeSlots: [] }
   }
-  const filtered = raidItemIds?.size
-    ? filterItemStatsForRaidLoot(itemStats, raidItemIds)
-    : itemStats || {}
+  const classAbbrev = CLASS_TO_ABBREV[className] || ''
+  const { itemStats: filtered, armorToMold } = expandRaidLootWithClassArmor(
+    itemStats,
+    raidItemIds,
+    classAbbrev,
+  )
   if (!filtered || Object.keys(filtered).length === 0) {
     return { ok: false, reason: 'missing_item_stats', suggestions: [], upgradeSlots: [] }
   }
@@ -541,7 +602,6 @@ export function computeCharacterUpgrades({
     return { ok: false, reason: result.error, suggestions: [], upgradeSlots: [] }
   }
 
-  const classAbbrev = CLASS_TO_ABBREV[className] || ''
   const allSlotIds = (result.bySlot || []).map((s) => s.slotId).filter((id) => Number.isFinite(id))
   const matchCount = countSlotClassMatches(filtered, allSlotIds, classAbbrev)
   const raidFilteredCount = Object.keys(filtered).length
@@ -565,9 +625,12 @@ export function computeCharacterUpgrades({
     for (const cand of rows) {
       const strength = classifyUpgradeDelta(cand.delta)
       if (strength === 'none') continue
+      const moldMeta = moldMetaForArmor(armorToMold, cand.itemId)
       const row = {
         itemId: cand.itemId,
-        itemName: cand.itemName,
+        itemName: moldMeta?.moldName || cand.itemName,
+        moldId: moldMeta?.moldId ?? null,
+        moldName: moldMeta?.moldName ?? null,
         slotId,
         slot: slotLabel,
         delta: cand.delta,
@@ -681,11 +744,11 @@ export function evaluateItemFitForAccount({
   if (!rankings) {
     return { ok: false, reason: 'magelo_unavailable', itemId: null, itemName: itemName || null, fits: [] }
   }
-  const filtered = raidItemIds?.size
+  const baseFiltered = raidItemIds?.size
     ? filterItemStatsForRaidLoot(itemStats, raidItemIds)
     : itemStats || {}
   // Prefer full stats for id resolution (raid filter may drop the candidate itself when not in raid set).
-  const resolvedId = resolveItemIdFromStats(itemStats || filtered, itemId, itemName)
+  const resolvedId = resolveItemIdFromStats(itemStats || baseFiltered, itemId, itemName)
   if (resolvedId == null) {
     return {
       ok: false,
@@ -695,18 +758,24 @@ export function evaluateItemFitForAccount({
       fits: [],
     }
   }
-  const candidateStats = (itemStats || {})[String(resolvedId)] || (itemStats || {})[resolvedId] || filtered[String(resolvedId)]
-  const resolvedName = candidateStats?.name || itemName || `Item ${resolvedId}`
-  if (!filtered || Object.keys(filtered).length === 0) {
+  const moldInfo = isElementalMold(resolvedId) ? getMoldInfo(resolvedId) : null
+  const candidateStats =
+    (itemStats || {})[String(resolvedId)] || (itemStats || {})[resolvedId] || baseFiltered[String(resolvedId)]
+  const resolvedName =
+    (moldInfo && typeof moldInfo.mold_name === 'string' && moldInfo.mold_name.trim()) ||
+    candidateStats?.name ||
+    itemName ||
+    `Item ${resolvedId}`
+  if (!baseFiltered || Object.keys(baseFiltered).length === 0) {
     return { ok: false, reason: 'missing_item_stats', itemId: resolvedId, itemName: resolvedName, fits: [] }
   }
   // Ensure candidate is present in scoring map even if raid filter omitted it.
-  const scoringStats = { ...filtered }
+  const scoringStats = { ...baseFiltered }
   if (!scoringStats[String(resolvedId)] && candidateStats) {
     scoringStats[String(resolvedId)] = candidateStats
   }
-  const ctx = buildUpgradeContext(rankings, scoringStats)
-  if (!ctx.classWeights || Object.keys(ctx.classWeights).length === 0) {
+  const weightsProbe = buildUpgradeContext(rankings, scoringStats)
+  if (!weightsProbe.classWeights || Object.keys(weightsProbe.classWeights).length === 0) {
     return { ok: false, reason: 'missing_weights', itemId: resolvedId, itemName: resolvedName, fits: [] }
   }
 
@@ -761,9 +830,51 @@ export function evaluateItemFitForAccount({
       })
       continue
     }
+
+    const classAbbrev = CLASS_TO_ABBREV[className] || ''
+    let scoreItemId = resolvedId
+    const charScoringStats = { ...scoringStats }
+    if (moldInfo) {
+      const armorId = getArmorIdForMoldAndClass(resolvedId, classAbbrev)
+      if (armorId == null) {
+        fits.push({
+          characterId: character.char_id || null,
+          characterName: character.name,
+          eligible: false,
+          isUpgrade: false,
+          reason: 'class_mismatch',
+          scoreDelta: null,
+          slotName: null,
+          upgrade: null,
+          currentItemName: null,
+          candidateName: resolvedName,
+        })
+        continue
+      }
+      const armorStats = (itemStats || {})[String(armorId)] || (itemStats || {})[armorId]
+      if (!armorStats) {
+        fits.push({
+          characterId: character.char_id || null,
+          characterName: character.name,
+          eligible: false,
+          isUpgrade: false,
+          reason: 'missing_item_stats',
+          scoreDelta: null,
+          slotName: null,
+          upgrade: null,
+          currentItemName: null,
+          candidateName: resolvedName,
+        })
+        continue
+      }
+      charScoringStats[String(armorId)] = armorStats
+      scoreItemId = armorId
+    }
+
+    const ctx = buildUpgradeContext(rankings, charScoringStats)
     const evalResult = evaluateItemUpgradeForCharacter(
       { class: className, inventory },
-      resolvedId,
+      scoreItemId,
       ctx,
     )
     if (!evalResult.eligible) {
@@ -794,7 +905,7 @@ export function evaluateItemFitForAccount({
       slotName: slotLabel,
       upgrade: formatUpgradeDelta(delta, slotLabel || undefined),
       currentItemName: evalResult.currentItemName || null,
-      candidateName: evalResult.candidateName || resolvedName,
+      candidateName: resolvedName,
     })
   }
 
@@ -841,6 +952,7 @@ export async function getUpgradesForCharacter(character, options = {}) {
           return options.itemStats || fetch('/item_stats.json').then((r) => (r.ok ? r.json() : {})).catch(() => ({}))
         }),
     options.raidItemIds || collectRaidLootItemIds(),
+    ensureElementalArmorLoaded(),
   ])
 
   if (!rankingsLoaded?.ok) {

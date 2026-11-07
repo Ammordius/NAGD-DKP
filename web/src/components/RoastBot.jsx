@@ -49,6 +49,7 @@ import {
   isCharacterStatsQuestion,
 } from '../lib/roastBot/intents.js'
 import { ensureItemStatsLoaded } from '../lib/itemStats'
+import { ensureElementalArmorLoaded } from '../lib/elementalArmor'
 import './RoastBot.css'
 
 async function fetchSaleCosts() {
@@ -314,6 +315,7 @@ export default function RoastBot({ profile, session, factsOverride = null, openO
         fetch('/item_stats.json').then((r) => (r.ok ? r.json() : {})).catch(() => ({})),
       ),
       collectRaidLootItemIds(),
+      ensureElementalArmorLoaded(),
     ])
     const rankings = rankingsResult?.ok ? rankingsResult.rankings : null
     const rankingsError = rankingsResult?.ok

@@ -4,6 +4,7 @@ import {
   computeCharacterUpgrades,
   countSlotClassMatches,
   evaluateItemFitForAccount,
+  expandRaidLootWithClassArmor,
   findMageloCharacter,
   extractInventory,
   filterItemStatsForRaidLoot,
@@ -15,6 +16,7 @@ import {
   extractUpgradeSlotHint,
   slotIdsFromCanonical,
 } from './upgrades.js'
+import { seedElementalArmorForTests } from '../elementalArmor.js'
 import { CLASS_TO_ABBREV, computeUpgradesForCharacter } from '../mageloUpgradeEngine.js'
 import { handleMessage, createConversationState } from './conversation.js'
 import { buildAccountFacts } from './facts.js'
@@ -89,6 +91,192 @@ describe('roastBot upgrades', () => {
       new Set([2]),
     )
     assert.deepEqual(Object.keys(filtered), ['2'])
+  })
+
+  it('expandRaidLootWithClassArmor injects class armor for raid molds', () => {
+    seedElementalArmorForTests({
+      50001: {
+        mold_name: 'Elemental Chest Mold',
+        slot: 'chest',
+        armor_type: 'plate',
+        by_class: { WAR: 60001 },
+      },
+    })
+    const allStats = {
+      50001: { name: 'Elemental Chest Mold', classes: 'ALL', gearScore: 0 },
+      60001: {
+        name: 'Warrior Elemental Breastplate',
+        slot: 'CHEST',
+        classes: 'WAR',
+        ac: 80,
+        mods: [],
+        resists: [],
+      },
+      70001: { name: 'Unrelated', slot: 'FEET', classes: 'WAR', ac: 1, mods: [], resists: [] },
+    }
+    const { itemStats, armorToMold } = expandRaidLootWithClassArmor(
+      allStats,
+      new Set([50001]),
+      'WAR',
+    )
+    assert.ok(itemStats['50001'])
+    assert.ok(itemStats['60001'])
+    assert.equal(itemStats['70001'], undefined)
+    assert.equal(armorToMold.get(60001)?.moldName, 'Elemental Chest Mold')
+    assert.equal(armorToMold.get(60001)?.moldId, 50001)
+  })
+
+  it('computeCharacterUpgrades surfaces mold upgrades with mold display name', () => {
+    resetUpgradeCaches()
+    seedElementalArmorForTests({
+      50001: {
+        mold_name: 'Elemental Chest Mold',
+        slot: 'chest',
+        armor_type: 'plate',
+        by_class: { WAR: 60001 },
+      },
+    })
+    const itemStats = {
+      100: {
+        name: 'Old Chest',
+        slot: 'CHEST',
+        classes: 'WAR',
+        ac: 10,
+        mods: [],
+        resists: [],
+      },
+      50001: {
+        name: 'Elemental Chest Mold',
+        classes: 'ALL',
+        gearScore: 0,
+      },
+      60001: {
+        name: 'Warrior Elemental Breastplate',
+        slot: 'CHEST',
+        classes: 'WAR',
+        ac: 40,
+        mods: [],
+        resists: [],
+      },
+      7869: {
+        name: 'Heavy Yttrium Chestplate',
+        slot: 'CHEST',
+        classes: 'WAR',
+        ac: 11,
+        mods: [],
+        resists: [],
+      },
+    }
+    const rankings = {
+      classWeights: { Warrior: { ...AC_WEIGHTS } },
+      focusCandidates: {},
+      characters: [
+        {
+          name: 'War',
+          class: 'Warrior',
+          inventory: [{ slot_id: 17, item_id: 100, item_name: 'Old Chest' }],
+        },
+      ],
+    }
+    const result = computeCharacterUpgrades({
+      character: { char_id: 'w1', name: 'War', class_name: 'Warrior' },
+      rankings,
+      itemStats,
+      // Include equipped id so baseline is real gear, not 0
+      raidItemIds: new Set([100, 50001, 7869]),
+      limit: 3,
+    })
+    assert.equal(result.ok, true, result.reason)
+    assert.ok(result.suggestions.length >= 1)
+    const moldHit = result.suggestions.find((s) => s.itemId === 60001)
+    assert.ok(moldHit, 'expected class armor from mold in suggestions')
+    assert.equal(moldHit.itemName, 'Elemental Chest Mold')
+    assert.equal(moldHit.moldName, 'Elemental Chest Mold')
+    assert.equal(moldHit.moldId, 50001)
+    assert.equal(moldHit.delta, EXPECTED_AC_DELTA_10_TO_40)
+    // Tiny raid piece still scores; mold armor should outrank it
+    const yttrium = result.suggestions.find((s) => s.itemId === 7869)
+    if (yttrium) assert.ok(moldHit.delta > yttrium.delta)
+  })
+
+  it('evaluateItemFitForAccount expands sticky mold to class armor', () => {
+    resetUpgradeCaches()
+    seedElementalArmorForTests({
+      50001: {
+        mold_name: 'Elemental Chest Mold',
+        slot: 'chest',
+        armor_type: 'plate',
+        by_class: { WAR: 60001, ENC: 60002 },
+      },
+    })
+    const itemStats = {
+      100: {
+        name: 'Old Chest',
+        slot: 'CHEST',
+        classes: 'WAR ENC',
+        ac: 10,
+        mods: [],
+        resists: [],
+      },
+      50001: { name: 'Elemental Chest Mold', classes: 'ALL', gearScore: 0 },
+      60001: {
+        name: 'Warrior Elemental Breastplate',
+        slot: 'CHEST',
+        classes: 'WAR',
+        ac: 40,
+        mods: [],
+        resists: [],
+      },
+      60002: {
+        name: 'Enchanter Elemental Robe',
+        slot: 'CHEST',
+        classes: 'ENC',
+        ac: 5,
+        mods: [],
+        resists: [],
+      },
+    }
+    const rankings = {
+      classWeights: {
+        Warrior: { ...AC_WEIGHTS },
+        Enchanter: { ...AC_WEIGHTS },
+      },
+      focusCandidates: {},
+      characters: [
+        {
+          name: 'War',
+          class: 'Warrior',
+          inventory: [{ slot_id: 17, item_id: 100, item_name: 'Old Chest' }],
+        },
+        {
+          name: 'Enc',
+          class: 'Enchanter',
+          inventory: [{ slot_id: 17, item_id: 100, item_name: 'Old Chest' }],
+        },
+      ],
+    }
+    const result = evaluateItemFitForAccount({
+      characters: [
+        { char_id: 'w1', name: 'War', class_name: 'Warrior' },
+        { char_id: 'e1', name: 'Enc', class_name: 'Enchanter' },
+      ],
+      itemId: 50001,
+      itemName: 'Elemental Chest Mold',
+      rankings,
+      itemStats,
+      raidItemIds: new Set([100, 50001]),
+    })
+    assert.equal(result.ok, true, result.reason)
+    assert.equal(result.itemName, 'Elemental Chest Mold')
+    assert.equal(result.itemId, 50001)
+    const war = result.fits.find((f) => f.characterName === 'War')
+    const enc = result.fits.find((f) => f.characterName === 'Enc')
+    assert.ok(war?.isUpgrade)
+    assert.ok(war.scoreDelta > 0)
+    // ENC armor has lower AC than equipped (ac 5 vs 10) → eligible but not upgrade
+    assert.equal(enc?.eligible, true)
+    assert.equal(enc?.isUpgrade, false)
+    assert.equal(war.candidateName, 'Elemental Chest Mold')
   })
 
   it('returns missing_magelo without inventing deltas', () => {

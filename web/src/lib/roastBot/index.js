@@ -95,6 +95,8 @@ export {
   extractInventory,
   resetUpgradeCaches,
   collectRaidLootItemIds,
+  expandRaidLootWithClassArmor,
+  filterItemStatsForRaidLoot,
   CANONICAL_SLOT_TO_IDS,
   slotIdsFromCanonical,
   chipLabelForSlot,
