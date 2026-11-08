@@ -275,11 +275,31 @@ function replyForDisambiguation(displayName, senses, catalog) {
 }
 
 /**
+ * Pick guild catalog id from a guild-cued query (bid/dkp before generic rules).
+ * @param {string} q normalized
+ */
+function guildResourceIdFromQuery(q) {
+  if (/\b(?:bid(?:ding|s)?|dkp|earn(?:ing)?)\b/.test(q)) return 'guild-bidding'
+  if (/\b(?:wts|selling loot|sell loot)\b/.test(q)) return 'guild-selling-loot'
+  if (/\b(?:coth|guild bank)\b/.test(q)) return 'guild-coth-bank'
+  if (/\braid channels?\b/.test(q)) return 'guild-raid-channels'
+  if (
+    /\b(?:guild rules?|raiding rules?|raid rules?|raid (?:requirements|schedule))\b/.test(q)
+  ) {
+    return 'guild-raiding-rules'
+  }
+  if (/\bgetting started\b/.test(q)) return 'guild-getting-started'
+  if (/\b(?:member guide|new member|onboarding)\b/.test(q)) return 'doc-member'
+  return 'doc-member'
+}
+
+/**
  * Domain-only shortcuts (no named multi-sense entity).
  * @param {Set<import('./entities.js').Domain>} cues
  * @param {import('./catalog.js').Resource[]} catalog
+ * @param {string} [q] normalized query (needed for guild sub-routing)
  */
-function matchFromDomainCues(cues, catalog) {
+function matchFromDomainCues(cues, catalog, q = '') {
   if (cues.has('flagging') && !cues.has('potime') && !cues.has('forum-strat')) {
     const r = getResourceById('doc-flags', catalog)
     if (r) return { status: 'match', matches: [{ resource: r, score: 90 }] }
@@ -295,6 +315,15 @@ function matchFromDomainCues(cues, catalog) {
       if (r) return { status: 'match', matches: [{ resource: r, score: 88 }] }
     }
     const r = getResourceById('doc-potime', catalog)
+    if (r) return { status: 'match', matches: [{ resource: r, score: 90 }] }
+  }
+  if (
+    cues.has('guild') &&
+    !cues.has('flagging') &&
+    !cues.has('potime') &&
+    !cues.has('forum-strat')
+  ) {
+    const r = getResourceById(guildResourceIdFromQuery(q), catalog)
     if (r) return { status: 'match', matches: [{ resource: r, score: 90 }] }
   }
   return null
@@ -341,8 +370,8 @@ export function buildRedirectReply(message, opts = {}) {
     if (flags) return replyForResource(flags, catalog)
   }
 
-  // Bare domain cues (e.g. "backflagging", "potime resists")
-  const domainHit = matchFromDomainCues(cues, catalog)
+  // Bare domain cues (e.g. "backflagging", "potime resists", "dkp")
+  const domainHit = matchFromDomainCues(cues, catalog, q)
   if (domainHit?.status === 'match') {
     return replyForResource(domainHit.matches[0].resource, catalog)
   }

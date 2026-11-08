@@ -21,16 +21,23 @@ describe('paperclip intent routing', () => {
     assert.deepEqual(reply.matchIds, ['doc-flags'])
   })
 
-  it('routes bare Grummus to flagging (not the forum LN post)', () => {
+  it('asks when bare Grummus is ambiguous (flagging vs low numbers)', () => {
     const reply = buildRedirectReply('Grummus')
-    assert.equal(reply.status, 'match')
-    assert.deepEqual(reply.matchIds, ['doc-flags'])
+    assert.equal(reply.status, 'ambiguous')
+    assert.ok(reply.matchIds.includes('doc-flags'))
+    assert.ok(reply.matchIds.includes('post-grummus'))
+    assert.match(reply.text, /flagging/i)
+    assert.match(reply.text, /low numbers/i)
   })
 
-  it('routes Grummus low numbers to the forum post', () => {
-    const reply = buildRedirectReply('Grummus low numbers')
-    assert.equal(reply.status, 'match')
-    assert.deepEqual(reply.matchIds, ['post-grummus'])
+  it('routes Grummus + flag cues to flags; Grummus low numbers to the forum post', () => {
+    const flagReply = buildRedirectReply('I need Grummus for flags')
+    assert.equal(flagReply.status, 'match')
+    assert.deepEqual(flagReply.matchIds, ['doc-flags'])
+
+    const lnReply = buildRedirectReply('Grummus low numbers')
+    assert.equal(lnReply.status, 'match')
+    assert.deepEqual(lnReply.matchIds, ['post-grummus'])
   })
 
   it('routes PoTime fight / Quarm / Gina with both potime resources linked', () => {
@@ -96,6 +103,65 @@ describe('paperclip intent routing', () => {
     assert.deepEqual(buildRedirectReply('raid channels').matchIds, ['guild-raid-channels'])
   })
 
+  it('routes bare DKP and earn-DKP phrasing to bidding', () => {
+    assert.deepEqual(buildRedirectReply('dkp').matchIds, ['guild-bidding'])
+    assert.deepEqual(buildRedirectReply('DKP').matchIds, ['guild-bidding'])
+    assert.deepEqual(buildRedirectReply('how do we earn dkp').matchIds, ['guild-bidding'])
+    assert.deepEqual(buildRedirectReply('earning dkp').matchIds, ['guild-bidding'])
+  })
+
+  it('routes guild / raiding rules to raiding rules', () => {
+    assert.deepEqual(buildRedirectReply('guild rules').matchIds, ['guild-raiding-rules'])
+    assert.deepEqual(buildRedirectReply('raiding rules').matchIds, ['guild-raiding-rules'])
+  })
+
+  it('asks when TT / RZ / saryrn / bert are ambiguous (flag vs potime)', () => {
+    for (const q of ['TT', 'tt', 'RZ', 'rz', 'saryrn', 'bert']) {
+      const reply = buildRedirectReply(q)
+      assert.equal(reply.status, 'ambiguous', q)
+      assert.ok(reply.matchIds.includes('doc-flags'), q)
+      assert.ok(reply.matchIds.includes('doc-potime'), q)
+    }
+  })
+
+  it('routes RZ with flag or potime cues', () => {
+    const flagReply = buildRedirectReply('rz flags')
+    assert.equal(flagReply.status, 'match')
+    assert.deepEqual(flagReply.matchIds, ['doc-flags'])
+
+    const timeReply = buildRedirectReply('rz potime')
+    assert.equal(timeReply.status, 'match')
+    assert.ok(timeReply.matchIds.includes('doc-potime'))
+    assert.ok(timeReply.matchIds.includes('post-potime-overview'))
+  })
+
+  it('routes TZ / VZ to Plane of Time', () => {
+    for (const q of ['TZ', 'VZ']) {
+      const reply = buildRedirectReply(q)
+      assert.equal(reply.status, 'match', q)
+      assert.ok(reply.matchIds.includes('doc-potime'), q)
+      assert.ok(reply.matchIds.includes('post-potime-overview'), q)
+    }
+  })
+
+  it('routes common flag-path abbrevs and bosses to the flags doc', () => {
+    for (const q of [
+      'carp',
+      'carprin',
+      'Agnarr',
+      'LMM',
+      'MB',
+      'AD',
+      'HoH trials',
+      'ToSR',
+      'Rathe Council',
+    ]) {
+      const reply = buildRedirectReply(q)
+      assert.equal(reply.status, 'match', q)
+      assert.deepEqual(reply.matchIds, ['doc-flags'], q)
+    }
+  })
+
   it('routes forum-only topics', () => {
     assert.deepEqual(buildRedirectReply('velketor').matchIds, ['post-velketor'])
     assert.deepEqual(buildRedirectReply('coldain ring').matchIds, ['post-coldain-ring'])
@@ -104,8 +170,9 @@ describe('paperclip intent routing', () => {
 
   it('fuzzy-matches common typos to the right domain', () => {
     const grumus = buildRedirectReply('grumus')
-    assert.equal(grumus.status, 'match')
-    assert.deepEqual(grumus.matchIds, ['doc-flags'])
+    assert.equal(grumus.status, 'ambiguous')
+    assert.ok(grumus.matchIds.includes('doc-flags'))
+    assert.ok(grumus.matchIds.includes('post-grummus'))
 
     const yelinak = buildRedirectReply('yelinak')
     assert.equal(yelinak.status, 'match')

@@ -77,6 +77,10 @@ export const DOMAIN_CUES = {
     /\bmember guide\b/,
     /\bnew member\b/,
     /\bonboarding\b/,
+    /\bguild\b/,
+    /\bguild rules?\b/,
+    /\braiding rules?\b/,
+    /\braid rules?\b/,
   ],
   'forum-strat': [
     /\blow numbers?\b/,
@@ -167,7 +171,7 @@ export const ENTITIES = [
   {
     id: 'terris',
     displayName: 'Terris Thule',
-    names: ['terris thule', 'terris'],
+    names: ['terris thule', 'terris', 'tt'],
     senses: [
       {
         id: 'terris-flag',
@@ -251,7 +255,7 @@ export const ENTITIES = [
   {
     id: 'tallon',
     displayName: 'Tallon Zek',
-    names: ['tallon zek', 'tallon'],
+    names: ['tallon zek', 'tallon', 'tz'],
     senses: [
       {
         id: 'tallon-potime',
@@ -265,7 +269,7 @@ export const ENTITIES = [
   {
     id: 'vallon',
     displayName: 'Vallon Zek',
-    names: ['vallon zek', 'vallon'],
+    names: ['vallon zek', 'vallon', 'vz'],
     senses: [
       {
         id: 'vallon-potime',
@@ -279,14 +283,136 @@ export const ENTITIES = [
   {
     id: 'rallos',
     displayName: 'Rallos Zek',
-    names: ['rallos zek', 'rallos'],
+    names: ['rallos zek', 'rallos', 'rz'],
     senses: [
+      {
+        id: 'rallos-flag',
+        domain: 'flagging',
+        resourceId: 'doc-flags',
+        label: 'Rallos Zek for flagging',
+        contextHint: 'flag / Tactics access',
+        cueBoost: ['flag', 'backflag', 'flagging', 'tactics', 'warlord'],
+      },
       {
         id: 'rallos-potime',
         domain: 'potime',
         resourceId: 'doc-potime',
         label: 'Rallos Zek (Plane of Time raid guide)',
         contextHint: 'Plane of Time',
+        cueBoost: ['potime', 'po time', 'plane of time', 'god fight'],
+      },
+    ],
+  },
+  // Flag-path / progression bosses (single sense → flags)
+  {
+    id: 'carprin',
+    displayName: 'Carprin',
+    names: ['carprin', 'carp'],
+    senses: [
+      {
+        id: 'carprin-flag',
+        domain: 'flagging',
+        resourceId: 'doc-flags',
+        label: 'Carprin (flagging)',
+        contextHint: 'flag / Crypt of Decay path',
+      },
+    ],
+  },
+  {
+    id: 'agnarr',
+    displayName: 'Agnarr',
+    names: ['agnarr', 'agnarr the storm lord'],
+    senses: [
+      {
+        id: 'agnarr-flag',
+        domain: 'flagging',
+        resourceId: 'doc-flags',
+        label: 'Agnarr (flagging)',
+        contextHint: 'flag / Plane of Storms',
+      },
+    ],
+  },
+  {
+    id: 'mithaniel',
+    displayName: 'Lord Mithaniel Marr',
+    names: ['lmm', 'lord mithaniel marr', 'mithaniel marr', 'mithaniel'],
+    senses: [
+      {
+        id: 'mithaniel-flag',
+        domain: 'flagging',
+        resourceId: 'doc-flags',
+        label: 'Lord Mithaniel Marr (flagging)',
+        contextHint: 'flag / Halls of Honor',
+      },
+    ],
+  },
+  {
+    id: 'manaetic',
+    displayName: 'Manaetic Behemoth',
+    names: ['mb', 'manaetic behemoth', 'manaetic'],
+    senses: [
+      {
+        id: 'manaetic-flag',
+        domain: 'flagging',
+        resourceId: 'doc-flags',
+        label: 'Manaetic Behemoth (flagging)',
+        contextHint: 'flag / Plane of Innovation',
+      },
+    ],
+  },
+  {
+    id: 'aerindar',
+    displayName: "Aerin`Dar",
+    names: ['ad', 'aerindar', 'aerin dar'],
+    senses: [
+      {
+        id: 'aerindar-flag',
+        domain: 'flagging',
+        resourceId: 'doc-flags',
+        label: "Aerin`Dar (flagging)",
+        contextHint: 'flag / Plane of Air',
+      },
+    ],
+  },
+  {
+    id: 'hoh',
+    displayName: 'Halls of Honor',
+    names: ['hoh', 'hoh trials', 'hall of honor', 'halls of honor'],
+    senses: [
+      {
+        id: 'hoh-flag',
+        domain: 'flagging',
+        resourceId: 'doc-flags',
+        label: 'Halls of Honor trials (flagging)',
+        contextHint: 'flag / HoH trials',
+      },
+    ],
+  },
+  {
+    id: 'tosr',
+    displayName: 'Temple of Solusek Ro',
+    names: ['tosr', 'temple of solusek ro', 'solusek ro'],
+    senses: [
+      {
+        id: 'tosr-flag',
+        domain: 'flagging',
+        resourceId: 'doc-flags',
+        label: 'Temple of Solusek Ro (flagging)',
+        contextHint: 'flag / ToSR',
+      },
+    ],
+  },
+  {
+    id: 'rathe',
+    displayName: 'Rathe Council',
+    names: ['rathe', 'rathe council', 'council of rathe'],
+    senses: [
+      {
+        id: 'rathe-flag',
+        domain: 'flagging',
+        resourceId: 'doc-flags',
+        label: 'Rathe Council (flagging)',
+        contextHint: 'flag / Plane of Earth',
       },
     ],
   },
@@ -322,6 +448,19 @@ export const FLAG_MOB_NAMES = [
   'txevu',
   'cod bert',
   'crypt bert',
+  'carprin',
+  'carp',
+  'agnarr',
+  'lmm',
+  'mithaniel',
+  'manaetic behemoth',
+  'aerindar',
+  'aerin dar',
+  'hoh',
+  'hoh trials',
+  'tosr',
+  'rathe',
+  'rathe council',
 ]
 
 /**
@@ -461,8 +600,14 @@ export function resolveEntitySenses(entity, cues, query) {
     return { status: 'ambiguous', senses: boosted }
   }
 
-  // No cues: multi-sense → ask (but drop forum-strat from default ambiguity unless only senses)
+  // No cues: multi-sense → ask. Keep forum-strat in the ask when it is the only
+  // alternate (e.g. bare Grummus → flagging vs low-numbers), but drop LN when
+  // flagging vs potime is already ambiguous (e.g. bare Innoruuk).
   const primary = senses.filter((s) => s.domain !== 'forum-strat')
+  const ln = senses.filter((s) => s.domain === 'forum-strat')
+  if (primary.length === 1 && ln.length) {
+    return { status: 'ambiguous', senses: [...primary, ...ln] }
+  }
   if (primary.length === 1) return { status: 'match', sense: primary[0] }
   if (primary.length > 1) return { status: 'ambiguous', senses: primary }
   return { status: 'ambiguous', senses }
