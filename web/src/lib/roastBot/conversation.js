@@ -80,6 +80,27 @@ function safeSubjectName(name) {
   return n
 }
 
+/**
+ * Prefer Magelo export casing for guild-wide subjects extracted from free text.
+ * @param {string} name
+ * @param {object|null|undefined} upgradeContext
+ * @returns {string}
+ */
+function canonicalGuildSubjectName(name, upgradeContext) {
+  const safe = safeSubjectName(name)
+  if (!safe) return name
+  const list =
+    upgradeContext?.rankings?.characters ||
+    upgradeContext?.rankings?.Chars ||
+    upgradeContext?.rankings?.toons ||
+    []
+  const hit = list.find(
+    (c) => String(c.name || c.character_name || c.char_name || '').toLowerCase() === safe.toLowerCase(),
+  )
+  const mageloName = hit?.name || hit?.character_name || hit?.char_name
+  return mageloName ? String(mageloName).trim() : safe
+}
+
 function rememberTemplate(state, templateId) {
   if (!templateId) return
   const recent = [...(state.recentTemplateIds || []), templateId].filter(Boolean)
@@ -485,11 +506,12 @@ export function handleMessage({
   }
   resolvedWhoIsName = safeSubjectName(resolvedWhoIsName)
 
-  // Who-is resolves guild-wide names; do not treat the ask as linked-roster selection.
+  // Who-is / spend / viability / stats / gear resolve guild-wide names; do not treat the ask as linked-roster selection.
   const guildWideSubjectIntents = new Set([
     INTENTS.CHARACTER_DKP_SPENT,
     INTENTS.QUARM_ELIGIBILITY,
     INTENTS.CHARACTER_STATS,
+    INTENTS.GEAR_ASSESSMENT,
   ])
   // Character-swap may name a roster toon that classifyIntent already matched.
   let swapMatched = classified.matchedCharacter
@@ -519,7 +541,7 @@ export function handleMessage({
     )
     if (fromRoster) charSel = fromRoster
   }
-  // Spend / viability / stats can name any guild toon, not only linked roster.
+  // Spend / viability / stats / gear can name any guild toon, not only linked roster.
   if (!charSel && guildWideSubjectIntents.has(intent)) {
     let subjectName =
       characterSpendResult?.characterName ||
@@ -542,7 +564,7 @@ export function handleMessage({
         (c) => String(c.name || '').toLowerCase() === String(subjectName).toLowerCase(),
       )
       charSel = fromRoster || {
-        name: subjectName,
+        name: canonicalGuildSubjectName(subjectName, upgradeContext),
         char_id: characterSpendResult?.charId || null,
         class_name: null,
       }

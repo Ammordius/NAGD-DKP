@@ -50,6 +50,16 @@ describe('character spend / eligibility / stats intents', () => {
     assert.equal(out.intent, INTENTS.QUARM_ELIGIBILITY)
   })
 
+  it('classifies raid geared as Quarm eligibility', () => {
+    const out = classifyIntent('is pigpen raid geared?', { characters: chars })
+    assert.equal(out.intent, INTENTS.QUARM_ELIGIBILITY)
+  })
+
+  it('classifies best geared phrasing as gear assessment', () => {
+    const out = classifyIntent('is pigpen the best geared gnome', { characters: chars })
+    assert.equal(out.intent, INTENTS.GEAR_ASSESSMENT)
+  })
+
   it('classifies character stats', () => {
     const out = classifyIntent("what are Iaminae's stats", { characters: chars })
     assert.equal(out.intent, INTENTS.CHARACTER_STATS)
@@ -61,6 +71,36 @@ describe('character spend / eligibility / stats intents', () => {
         intent: INTENTS.CHARACTER_DKP_SPENT,
       }),
       'tandiyen',
+    )
+  })
+
+  it('extracts guild-wide raid geared subject name', () => {
+    assert.equal(
+      extractSubjectCharacterName('is pigpen raid geared?', {
+        intent: INTENTS.QUARM_ELIGIBILITY,
+      }),
+      'pigpen',
+    )
+  })
+
+  it('extracts guild-wide gear assessment subject name', () => {
+    assert.equal(
+      extractSubjectCharacterName('is pigpen the best geared gnome', {
+        intent: INTENTS.GEAR_ASSESSMENT,
+      }),
+      'pigpen',
+    )
+    assert.equal(
+      extractSubjectCharacterName('how is Pigpen gear?', {
+        intent: INTENTS.GEAR_ASSESSMENT,
+      }),
+      'Pigpen',
+    )
+    assert.equal(
+      extractSubjectCharacterName('how is my gear?', {
+        intent: INTENTS.GEAR_ASSESSMENT,
+      }),
+      null,
     )
   })
 

@@ -88,13 +88,14 @@ export const QUARM_ELIGIBILITY_PATTERNS = [
   /\bquarm\s+eligib/,
   /\beligib\w*\s+(for\s+)?quarm\b/,
   /\braid[- ]?ready\b/,
+  /\braid[- ]?geared\b/,
   /\braid\s+viable\b/,
   /\bviable\s+geared\b/,
   /\bclass\s+coverage\b/,
   /\bclass\s+ranking\b/,
   /\b(green|display)\s+(raid\s+)?(toon|status|pill)\b/,
-  /\bis\s+\w[\w'-]*\s+(quarm\s+)?(eligib\w*|viable|raid[- ]?ready)\b/,
-  /\bis\s+(this\s+)?(toon|character|alt)\s+(quarm\s+)?(eligib\w*|raid[- ]?ready|viable)\b/,
+  /\bis\s+\w[\w'-]*\s+(quarm\s+)?(eligib\w*|viable|raid[- ]?ready|raid[- ]?geared)\b/,
+  /\bis\s+(this\s+)?(toon|character|alt)\s+(quarm\s+)?(eligib\w*|raid[- ]?ready|raid[- ]?geared|viable)\b/,
 ]
 
 /** @param {string} text already normalized lowercase */
@@ -492,9 +493,10 @@ export function extractSubjectCharacterName(raw, opts = {}) {
   }
   if (!intent || intent === INTENTS.QUARM_ELIGIBILITY) {
     const elig =
-      tryCapture(/\bis\s+([A-Za-z][\w'-]{1,32})\s+(?:quarm\s+)?(?:eligible|viable|raid[- ]?ready)\b/i) ||
+      tryCapture(/\bis\s+([A-Za-z][\w'-]{1,32})\s+(?:quarm\s+)?(?:eligible|viable|raid[- ]?ready|raid[- ]?geared)\b/i) ||
       tryCapture(/\b([A-Za-z][\w'-]{1,32})\s+quarm\s+eligib/i) ||
       tryCapture(/\b([A-Za-z][\w'-]{1,32})\s+raid[- ]?ready\b/i) ||
+      tryCapture(/\b([A-Za-z][\w'-]{1,32})\s+raid[- ]?geared\b/i) ||
       tryCapture(/\b([A-Za-z][\w'-]{1,32})\s+(?:raid\s+)?viable\b/i) ||
       tryCapture(/\bclass\s+ranking\s+(?:%|percent|percentage)?\s+(?:for|of)\s+([A-Za-z][\w'-]{1,32})\b/i)
     if (elig) return elig
@@ -505,6 +507,14 @@ export function extractSubjectCharacterName(raw, opts = {}) {
       tryCapture(/\bstats?\s+(?:for|of)\s+([A-Za-z][\w'-]{1,32})\b/i) ||
       tryCapture(/\b([A-Za-z][\w'-]{1,32})(?:'s)?\s+stats?\b/i)
     if (stats) return stats
+  }
+  if (!intent || intent === INTENTS.GEAR_ASSESSMENT) {
+    const gear =
+      tryCapture(/\bis\s+([A-Za-z][\w'-]{1,32})\s+(?:the\s+)?(?:best\s+)?(?:well[- ]?)?geared\b/i) ||
+      tryCapture(/\bhow\s+(?:is|are|good\s+is)\s+([A-Za-z][\w'-]{1,32})(?:'s)?\s+gear\b/i) ||
+      tryCapture(/\b([A-Za-z][\w'-]{1,32})(?:'s)?\s+gear(?:ed)?\s+(?:status|score|rating|assessment|check)\b/i) ||
+      tryCapture(/\bgear(?:ed)?\s+(?:status|score|rating|assessment|check)\s+(?:for|of|on)\s+([A-Za-z][\w'-]{1,32})\b/i)
+    if (gear) return gear
   }
   return null
 }

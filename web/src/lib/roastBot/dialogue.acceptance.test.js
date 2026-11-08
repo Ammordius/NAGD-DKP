@@ -897,6 +897,142 @@ describe('loot discovery dialogue regression', () => {
     assert.doesNotMatch(bare.response.text, /\bhe is not in the current Magelo/i)
   })
 
+  it('guild-wide best geared ask assesses named toon, not asker alts', () => {
+    const facts = fixtureFacts()
+    const rankings = {
+      ...rankingsFixture,
+      characters: [
+        ...rankingsFixture.characters,
+        {
+          name: 'Pigpen',
+          class: 'Enchanter',
+          overall_score: 700,
+          inventory: [{ slot_id: 2, item_id: 100, item_name: 'Old Circlet' }],
+        },
+      ],
+    }
+    const { response, intent, answer, state } = handleMessage({
+      text: 'is pigpen the best geared gnome',
+      facts,
+      state: createConversationState(),
+      upgradeContext: {
+        rankings,
+        itemStats: itemStatsFixture,
+        raidItemIds: new Set([100, 501]),
+      },
+      rng: () => 0,
+    })
+    assert.equal(intent, INTENTS.GEAR_ASSESSMENT)
+    assert.equal(state.lastSubject, 'Pigpen')
+    assert.match(response.text, /Pigpen/i)
+    assert.doesNotMatch(response.text, /Which character\?/i)
+    assert.doesNotMatch(response.text, /Iaminae|Charmalt|Zender|Zenderheals/)
+    assert.ok(!answer.requiredClaims.includes('need_character'))
+  })
+
+  it('is pigpen raid geared uses Quarm path for guild-wide subject', () => {
+    const facts = fixtureFacts()
+    const rankings = {
+      ...rankingsFixture,
+      characters: [
+        ...rankingsFixture.characters,
+        {
+          name: 'Pigpen',
+          class: 'Enchanter',
+          overall_score: 700,
+          inventory: [],
+        },
+      ],
+    }
+    const { response, intent, state } = handleMessage({
+      text: 'is pigpen raid geared?',
+      facts,
+      state: createConversationState(),
+      upgradeContext: {
+        rankings,
+        itemStats: itemStatsFixture,
+        raidItemIds: new Set([100, 501]),
+      },
+      rng: () => 0,
+    })
+    assert.equal(intent, INTENTS.QUARM_ELIGIBILITY)
+    assert.equal(state.lastSubject, 'Pigpen')
+    assert.match(response.text, /Pigpen/i)
+    assert.doesNotMatch(response.text, /Which character\?/i)
+    assert.doesNotMatch(response.text, /Iaminae|Charmalt|Zender|Zenderheals/)
+  })
+
+  it('who-is Pigpen → is he raid geared resolves Pigpen, not asker alts', () => {
+    const facts = fixtureFacts()
+    let state = createConversationState()
+    const first = handleMessage({
+      text: 'who is Pigpen',
+      facts,
+      state,
+      whoIsName: 'Pigpen',
+      whoIsResult: {
+        status: 'ok',
+        characterName: 'Pigpen',
+        accountId: 'a9',
+        accountName: 'Pigpen',
+        lastRaidDate: '2026-10-27',
+        charId: '99',
+      },
+      rng: () => 0,
+    })
+    assert.equal(first.intent, INTENTS.WHO_IS)
+    assert.equal(first.state.lastSubject, 'Pigpen')
+    state = first.state
+
+    const rankings = {
+      ...rankingsFixture,
+      characters: [
+        ...rankingsFixture.characters,
+        {
+          name: 'Pigpen',
+          class: 'Enchanter',
+          overall_score: 700,
+          inventory: [],
+        },
+      ],
+    }
+    const second = handleMessage({
+      text: 'is he raid geared',
+      facts,
+      state,
+      upgradeContext: {
+        rankings,
+        itemStats: itemStatsFixture,
+        raidItemIds: new Set([100, 501]),
+      },
+      rng: () => 0,
+    })
+    assert.equal(second.intent, INTENTS.QUARM_ELIGIBILITY)
+    assert.match(second.response.text, /Pigpen/i)
+    assert.doesNotMatch(second.response.text, /Which character\?/i)
+    assert.doesNotMatch(second.response.text, /Iaminae|Charmalt|Zender|Zenderheals/)
+    assert.ok(second.response.referenced.characters.includes('Pigpen'))
+  })
+
+  it('unnamed gear check with multiple linked alts still clarifies', () => {
+    const facts = fixtureFacts()
+    const { response, intent, answer } = handleMessage({
+      text: 'gear check',
+      facts,
+      state: createConversationState(),
+      upgradeContext: {
+        rankings: rankingsFixture,
+        itemStats: itemStatsFixture,
+        raidItemIds: new Set([100, 501]),
+      },
+      rng: () => 0,
+    })
+    assert.equal(intent, INTENTS.GEAR_ASSESSMENT)
+    assert.ok(answer.requiredClaims.includes('need_character'))
+    assert.match(response.text, /Which character\?/i)
+    assert.match(response.text, /Iaminae/)
+  })
+
   it('who is he after WHO_IS Badammo reuses Badammo', () => {
     const facts = fixtureFacts()
     let state = createConversationState()
