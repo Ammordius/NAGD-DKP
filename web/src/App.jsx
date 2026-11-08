@@ -33,6 +33,7 @@ import Profile from './pages/Profile'
 import AuthCallback from './pages/AuthCallback'
 
 const RoastBot = lazy(() => import('./components/RoastBot.jsx'))
+const PaperclipBot = lazy(() => import('./components/PaperclipBot.jsx'))
 const Expedition = lazy(() => import('./pages/Expedition.jsx'))
 
 function RequireAuth({ session, children }) {
@@ -314,6 +315,11 @@ export default function App() {
       {funZoneEnabled && session && profile ? (
         <Suspense fallback={null}>
           <RoastBot profile={profile} session={session} />
+        </Suspense>
+      ) : null}
+      {session && profile ? (
+        <Suspense fallback={null}>
+          <PaperclipBot />
         </Suspense>
       ) : null}
       <Analytics />
