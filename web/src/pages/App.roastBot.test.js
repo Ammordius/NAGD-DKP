@@ -8,13 +8,15 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const appSource = readFileSync(path.join(root, 'App.jsx'), 'utf8')
 const roastSource = readFileSync(path.join(root, 'components', 'RoastBot.jsx'), 'utf8')
 
+const dockSource = readFileSync(path.join(root, 'components', 'AssistantDock.jsx'), 'utf8')
+
 describe('App RoastBot wiring', () => {
-  it('lazy-loads RoastBot for authenticated users with profile when Fun Zone is enabled', () => {
-    assert.match(appSource, /lazy\(\(\)\s*=>\s*import\('\.\/components\/RoastBot\.jsx'\)\)/)
+  it('loads Inquisitor through Fun Zone–gated AssistantDock', () => {
+    assert.match(appSource, /lazy\(\(\)\s*=>\s*import\('\.\/components\/AssistantDock\.jsx'\)\)/)
     assert.match(appSource, /import \{ isFunZoneEnabled \} from '\.\/lib\/funZone'/)
-    assert.match(appSource, /const funZoneEnabled = isFunZoneEnabled\(\)/)
-    assert.match(appSource, /funZoneEnabled && session && profile/)
-    assert.match(appSource, /<RoastBot profile=\{profile\} session=\{session\}/)
+    assert.match(appSource, /funZoneEnabled && session && profile \? \([\s\S]*<AssistantDock/)
+    assert.match(dockSource, /lazy\(\(\)\s*=>\s*import\('\.\/RoastBot\.jsx'\)\)/)
+    assert.match(dockSource, /<RoastBot/)
     assert.match(appSource, /Suspense/)
   })
 
@@ -30,14 +32,14 @@ describe('App RoastBot wiring', () => {
     assert.match(roastSource, /startConversation\(facts\)/)
   })
 
-  it('RoastBot mounts after Routes so browser Back keeps conversation', () => {
+  it('AssistantDock mounts after Routes so browser Back keeps conversation', () => {
     const routesClose = appSource.indexOf('</Routes>')
-    const roastMount = appSource.indexOf('<RoastBot')
+    const dockMount = appSource.indexOf('<AssistantDock')
     assert.ok(routesClose >= 0, 'expected </Routes> in App.jsx')
-    assert.ok(roastMount >= 0, 'expected <RoastBot in App.jsx')
+    assert.ok(dockMount >= 0, 'expected <AssistantDock in App.jsx')
     assert.ok(
-      roastMount > routesClose,
-      'RoastBot must render after </Routes> so SPA Back does not remount the chat',
+      dockMount > routesClose,
+      'AssistantDock must render after </Routes> so SPA Back does not remount the chat',
     )
   })
 
@@ -46,5 +48,11 @@ describe('App RoastBot wiring', () => {
     assert.match(roastSource, /<Link key=\{`\$\{link\.type\}-\$\{link\.to\}`\} to=\{link\.to\}>/)
     assert.match(roastSource, /<Link to=\{card\.to\}>\{card\.itemName\}<\/Link>/)
     assert.doesNotMatch(roastSource, /window\.location|href=\{link\.to\}|navigate\(link\.to\)/)
+  })
+
+  it('RoastBot supports controlled open and optional FAB for the shared dock', () => {
+    assert.match(roastSource, /showToggle = true/)
+    assert.match(roastSource, /onOpenChange/)
+    assert.match(roastSource, /showToggle \? \(/)
   })
 })

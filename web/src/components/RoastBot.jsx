@@ -116,8 +116,26 @@ function renderTableCell(cell) {
 /**
  * Floating DKP Inquisitor chat. Authenticated users only (parent gates mount).
  * Bot-specific network fetches are gated on `open` (except shared SWR caches when warm).
+ *
+ * @param {{
+ *   profile: object,
+ *   session: object,
+ *   factsOverride?: object | null,
+ *   openOnMount?: boolean,
+ *   open?: boolean,
+ *   onOpenChange?: (open: boolean) => void,
+ *   showToggle?: boolean,
+ * }} props
  */
-export default function RoastBot({ profile, session, factsOverride = null, openOnMount = false }) {
+export default function RoastBot({
+  profile,
+  session,
+  factsOverride = null,
+  openOnMount = false,
+  open: openProp,
+  onOpenChange,
+  showToggle = true,
+}) {
   const location = useLocation()
   const hide =
     location.pathname === '/login' ||
@@ -126,7 +144,15 @@ export default function RoastBot({ profile, session, factsOverride = null, openO
   const accountId = profile?.account_id || null
   const userId = session?.user?.id || null
 
-  const [open, setOpen] = useState(openOnMount)
+  const controlled = openProp !== undefined
+  const [openUncontrolled, setOpenUncontrolled] = useState(openOnMount)
+  const open = controlled ? Boolean(openProp) : openUncontrolled
+
+  function setOpen(next) {
+    const value = typeof next === 'function' ? next(open) : next
+    if (!controlled) setOpenUncontrolled(value)
+    onOpenChange?.(value)
+  }
   const [input, setInput] = useState('')
   const [messages, setMessages] = useState([])
   const [suggestions, setSuggestions] = useState([])
@@ -671,16 +697,18 @@ export default function RoastBot({ profile, session, factsOverride = null, openO
         </div>
       ) : null}
 
-      <button
-        type="button"
-        className="roast-bot-toggle"
-        data-testid="roast-bot-toggle"
-        aria-label={open ? 'Close DKP Inquisitor' : 'Open DKP Inquisitor'}
-        aria-expanded={open}
-        onClick={() => setOpen((v) => !v)}
-      >
-        ☠
-      </button>
+      {showToggle ? (
+        <button
+          type="button"
+          className="roast-bot-toggle"
+          data-testid="roast-bot-toggle"
+          aria-label={open ? 'Close DKP Inquisitor' : 'Open DKP Inquisitor'}
+          aria-expanded={open}
+          onClick={() => setOpen((v) => !v)}
+        >
+          ☠
+        </button>
+      ) : null}
     </div>
   )
 }

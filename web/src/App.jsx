@@ -32,8 +32,7 @@ import DiscordSchedule from './pages/DiscordSchedule'
 import Profile from './pages/Profile'
 import AuthCallback from './pages/AuthCallback'
 
-const RoastBot = lazy(() => import('./components/RoastBot.jsx'))
-const PaperclipBot = lazy(() => import('./components/PaperclipBot.jsx'))
+const AssistantDock = lazy(() => import('./components/AssistantDock.jsx'))
 const Expedition = lazy(() => import('./pages/Expedition.jsx'))
 
 function RequireAuth({ session, children }) {
@@ -314,12 +313,7 @@ export default function App() {
       </Routes>
       {funZoneEnabled && session && profile ? (
         <Suspense fallback={null}>
-          <RoastBot profile={profile} session={session} />
-        </Suspense>
-      ) : null}
-      {session && profile ? (
-        <Suspense fallback={null}>
-          <PaperclipBot />
+          <AssistantDock profile={profile} session={session} />
         </Suspense>
       ) : null}
       <Analytics />

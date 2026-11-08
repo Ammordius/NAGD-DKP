@@ -6,19 +6,41 @@ import {
   buildRedirectReply,
   greetingMessage,
 } from '../lib/paperclip/index.js'
+import './RoastBot.css'
 import './PaperclipBot.css'
 
 /**
- * Floating redirect-only guide pointer. Authenticated users only (parent gates mount).
- * Not Fun Zone — utility for members. Links are external (guildtag / Google Docs).
+ * Redirect-only guide pointer. Uses Inquisitor panel chrome for visual parity.
+ * Links show human labels, not raw URLs.
+ *
+ * @param {{
+ *   openOnMount?: boolean,
+ *   open?: boolean,
+ *   onOpenChange?: (open: boolean) => void,
+ *   showToggle?: boolean,
+ * }} props
  */
-export default function PaperclipBot({ openOnMount = false }) {
+export default function PaperclipBot({
+  openOnMount = false,
+  open: openProp,
+  onOpenChange,
+  showToggle = true,
+}) {
   const location = useLocation()
   const hide =
     location.pathname === '/login' ||
     location.pathname.startsWith('/auth/')
 
-  const [open, setOpen] = useState(openOnMount)
+  const controlled = openProp !== undefined
+  const [openUncontrolled, setOpenUncontrolled] = useState(openOnMount)
+  const open = controlled ? Boolean(openProp) : openUncontrolled
+
+  function setOpen(next) {
+    const value = typeof next === 'function' ? next(open) : next
+    if (!controlled) setOpenUncontrolled(value)
+    onOpenChange?.(value)
+  }
+
   const [input, setInput] = useState('')
   const [messages, setMessages] = useState([])
   const [suggestions, setSuggestions] = useState([])
@@ -35,9 +57,11 @@ export default function PaperclipBot({ openOnMount = false }) {
   }, [])
 
   useEffect(() => {
-    if (!open || startedRef.current) return
-    startedRef.current = true
-    restart()
+    if (!open) return
+    if (!startedRef.current) {
+      startedRef.current = true
+      restart()
+    }
   }, [open, restart])
 
   const onMessagesScroll = () => {
@@ -77,18 +101,27 @@ export default function PaperclipBot({ openOnMount = false }) {
   if (hide) return null
 
   return (
-    <div className="paperclip-bot-root" data-testid="paperclip-bot-root">
+    <div
+      className="paperclip-bot-root roast-bot-root"
+      data-testid="paperclip-bot-root"
+      data-open={open ? '1' : '0'}
+    >
       {open ? (
-        <div className="paperclip-bot-panel" data-testid="paperclip-bot-panel" role="dialog" aria-label={BOT_NAME}>
-          <div className="paperclip-bot-header">
+        <div
+          className="paperclip-bot-panel roast-bot-panel"
+          data-testid="paperclip-bot-panel"
+          role="dialog"
+          aria-label={BOT_NAME}
+        >
+          <div className="roast-bot-header">
             <div>
               <h2>{BOT_NAME}</h2>
-              <p className="paperclip-bot-tagline">{BOT_TAGLINE}</p>
+              <p className="roast-bot-tagline">{BOT_TAGLINE}</p>
             </div>
-            <div className="paperclip-bot-header-actions">
+            <div className="roast-bot-header-actions">
               <button
                 type="button"
-                className="paperclip-bot-restart"
+                className="roast-bot-restart"
                 data-testid="paperclip-bot-restart"
                 onClick={restart}
               >
@@ -96,7 +129,7 @@ export default function PaperclipBot({ openOnMount = false }) {
               </button>
               <button
                 type="button"
-                className="paperclip-bot-close"
+                className="roast-bot-close"
                 aria-label="Close Paperclip"
                 onClick={() => setOpen(false)}
               >
@@ -106,7 +139,7 @@ export default function PaperclipBot({ openOnMount = false }) {
           </div>
 
           <div
-            className="paperclip-bot-messages"
+            className="roast-bot-messages"
             ref={listRef}
             data-testid="paperclip-bot-messages"
             onScroll={onMessagesScroll}
@@ -114,20 +147,21 @@ export default function PaperclipBot({ openOnMount = false }) {
             {messages.map((msg, i) => (
               <div
                 key={`${msg.role}-${i}`}
-                className={`paperclip-bot-msg paperclip-bot-msg-${msg.role}`}
+                className={`roast-bot-msg roast-bot-msg-${msg.role}`}
                 data-testid={msg.role === 'bot' ? 'paperclip-bot-reply' : 'paperclip-bot-user-msg'}
               >
                 <div>{msg.text}</div>
                 {msg.links?.length ? (
-                  <div className="paperclip-bot-links">
+                  <div className="roast-bot-links paperclip-bot-links">
                     {msg.links.map((link) => (
                       <a
                         key={`${link.href}-${link.label}`}
                         href={link.href}
                         target="_blank"
                         rel="noopener noreferrer"
+                        title={link.href}
                       >
-                        {link.href}
+                        {link.label || link.href}
                       </a>
                     ))}
                   </div>
@@ -136,22 +170,24 @@ export default function PaperclipBot({ openOnMount = false }) {
             ))}
           </div>
 
-          <div className="paperclip-bot-chips" data-testid="paperclip-bot-chips">
-            {suggestions.map((chip) => (
-              <button
-                key={chip}
-                type="button"
-                className="paperclip-bot-chip"
-                onClick={() => send(chip)}
-                disabled={busy}
-              >
-                {chip}
-              </button>
-            ))}
-          </div>
+          {suggestions.length ? (
+            <div className="roast-bot-chips" data-testid="paperclip-bot-chips">
+              {suggestions.map((chip) => (
+                <button
+                  key={chip}
+                  type="button"
+                  className="roast-bot-chip"
+                  onClick={() => send(chip)}
+                  disabled={busy}
+                >
+                  {chip}
+                </button>
+              ))}
+            </div>
+          ) : null}
 
           <form
-            className="paperclip-bot-input-row"
+            className="roast-bot-input-row"
             onSubmit={(e) => {
               e.preventDefault()
               send(input)
@@ -162,13 +198,13 @@ export default function PaperclipBot({ openOnMount = false }) {
               type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="Ask about a guide topic…"
+              placeholder="Ask about flags, PoTime, DKP, or a guide…"
               aria-label="Message Paperclip"
               disabled={busy}
             />
             <button
               type="submit"
-              className="paperclip-bot-send"
+              className="roast-bot-send"
               data-testid="paperclip-bot-send"
               disabled={busy || !input.trim()}
             >
@@ -178,16 +214,18 @@ export default function PaperclipBot({ openOnMount = false }) {
         </div>
       ) : null}
 
-      <button
-        type="button"
-        className="paperclip-bot-toggle"
-        data-testid="paperclip-bot-toggle"
-        aria-label={open ? 'Close Paperclip' : 'Open Paperclip'}
-        aria-expanded={open}
-        onClick={() => setOpen((v) => !v)}
-      >
-        📎
-      </button>
+      {showToggle ? (
+        <button
+          type="button"
+          className="roast-bot-toggle paperclip-bot-toggle"
+          data-testid="paperclip-bot-toggle"
+          aria-label={open ? 'Close Paperclip' : 'Open Paperclip'}
+          aria-expanded={open}
+          onClick={() => setOpen(!open)}
+        >
+          📎
+        </button>
+      ) : null}
     </div>
   )
 }
