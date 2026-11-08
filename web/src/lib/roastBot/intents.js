@@ -152,7 +152,19 @@ const RULES = [
   { intent: INTENTS.WORST_PURCHASE, patterns: [/worst (purchase|buy|bid|loot)/, /biggest mistake/, /most (expensive|questionable)/, /regret/] },
   { intent: INTENTS.WHY_BROKE, patterns: [/why am i broke/, /why.*(broke|poor|empty|no dkp)/, /where did (my|the) dkp go/, /what happened to my dkp/] },
   { intent: INTENTS.BALANCE, patterns: [/\bbalance\b/, /how (much|many) dkp (do i|have|left)/, /dkp (do i|left|have)/, /am i broke/, /what('?s| is) my dkp/] },
-  { intent: INTENTS.GEAR_ASSESSMENT, patterns: [/well[- ]?geared/, /how (is|are|good is) .{0,40}gear/, /is .{0,40}geared/, /gear(ed)? (status|score|rating|assessment|check)/, /how('?s| is) my .{0,30}(gear|toon|character)/, /gear check/] },
+  {
+    intent: INTENTS.GEAR_ASSESSMENT,
+    patterns: [
+      /well[- ]?geared/,
+      /how (is|are|good is) .{0,40}gear/,
+      /is .{0,40}geared/,
+      /is\s+[A-Za-z][\w'-]{1,32}\s+(?:the\s+)?(?:strongest|best|top)\b/,
+      /how\s+strong\s+(?:is|are)\b/,
+      /gear(ed)? (status|score|rating|assessment|check)/,
+      /how('?s| is) my .{0,30}(gear|toon|character)/,
+      /gear check/,
+    ],
+  },
   { intent: INTENTS.ATTENDANCE, patterns: [/how('?s| is) my raid/, /\braiding\b/, /attendance/, /show(ing)? up/, /been away/, /inactive/, /how often.*(raid|attend)/] },
   // Before UPGRADES/CHARACTERS so "is this an upgrade" / "which of my toons could use" do not steal those lanes.
   { intent: INTENTS.ITEM_FIT, patterns: ITEM_FIT_PATTERNS },
@@ -218,7 +230,7 @@ export function classifyIntent(raw, ctx = {}) {
     return { intent: INTENTS.UPGRADES, confidence: 0.7, matchedCharacter, matchedItemHint }
   }
 
-  if (matchedCharacter && /gear|geared|score|viable/.test(text)) {
+  if (matchedCharacter && /gear|geared|score|viable|strongest|\bstrong\b/.test(text)) {
     return { intent: INTENTS.GEAR_ASSESSMENT, confidence: 0.7, matchedCharacter, matchedItemHint }
   }
 
@@ -510,6 +522,8 @@ export function extractSubjectCharacterName(raw, opts = {}) {
   }
   if (!intent || intent === INTENTS.GEAR_ASSESSMENT) {
     const gear =
+      tryCapture(/\bis\s+([A-Za-z][\w'-]{1,32})\s+(?:the\s+)?(?:strongest|best|top)\b/i) ||
+      tryCapture(/\bhow\s+strong\s+(?:is|are)\s+([A-Za-z][\w'-]{1,32})\b/i) ||
       tryCapture(/\bis\s+([A-Za-z][\w'-]{1,32})\s+(?:the\s+)?(?:best\s+)?(?:well[- ]?)?geared\b/i) ||
       tryCapture(/\bhow\s+(?:is|are|good\s+is)\s+([A-Za-z][\w'-]{1,32})(?:'s)?\s+gear\b/i) ||
       tryCapture(/\b([A-Za-z][\w'-]{1,32})(?:'s)?\s+gear(?:ed)?\s+(?:status|score|rating|assessment|check)\b/i) ||

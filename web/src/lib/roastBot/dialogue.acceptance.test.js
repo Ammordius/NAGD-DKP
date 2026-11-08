@@ -930,6 +930,40 @@ describe('loot discovery dialogue regression', () => {
     assert.ok(!answer.requiredClaims.includes('need_character'))
   })
 
+  it('guild-wide strongest gnome ask assesses named toon, not asker alts', () => {
+    const facts = fixtureFacts()
+    const rankings = {
+      ...rankingsFixture,
+      characters: [
+        ...rankingsFixture.characters,
+        {
+          name: 'Pigpen',
+          class: 'Enchanter',
+          overall_score: 700,
+          inventory: [{ slot_id: 2, item_id: 100, item_name: 'Old Circlet' }],
+        },
+      ],
+    }
+    const { response, intent, answer, state } = handleMessage({
+      text: 'is pigpen the strongest gnome',
+      facts,
+      state: createConversationState(),
+      upgradeContext: {
+        rankings,
+        itemStats: itemStatsFixture,
+        raidItemIds: new Set([100, 501]),
+      },
+      rng: () => 0,
+    })
+    assert.equal(intent, INTENTS.GEAR_ASSESSMENT)
+    assert.equal(state.lastSubject, 'Pigpen')
+    assert.match(response.text, /Pigpen/i)
+    assert.doesNotMatch(response.text, /Which character\?/i)
+    assert.doesNotMatch(response.text, /Iaminae|Charmalt|Zender|Zenderheals/)
+    assert.doesNotMatch(response.text, /did not perform an analysis/i)
+    assert.ok(!answer.requiredClaims.includes('need_character'))
+  })
+
   it('is pigpen raid geared uses Quarm path for guild-wide subject', () => {
     const facts = fixtureFacts()
     const rankings = {

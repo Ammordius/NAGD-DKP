@@ -60,6 +60,21 @@ describe('character spend / eligibility / stats intents', () => {
     assert.equal(out.intent, INTENTS.GEAR_ASSESSMENT)
   })
 
+  it('classifies strongest / best / how-strong phrasing as gear assessment', () => {
+    assert.equal(
+      classifyIntent('is pigpen the strongest gnome', { characters: chars }).intent,
+      INTENTS.GEAR_ASSESSMENT,
+    )
+    assert.equal(
+      classifyIntent('is pigpen the best gnome', { characters: chars }).intent,
+      INTENTS.GEAR_ASSESSMENT,
+    )
+    assert.equal(
+      classifyIntent('how strong is pigpen', { characters: chars }).intent,
+      INTENTS.GEAR_ASSESSMENT,
+    )
+  })
+
   it('classifies character stats', () => {
     const out = classifyIntent("what are Iaminae's stats", { characters: chars })
     assert.equal(out.intent, INTENTS.CHARACTER_STATS)
@@ -86,6 +101,24 @@ describe('character spend / eligibility / stats intents', () => {
   it('extracts guild-wide gear assessment subject name', () => {
     assert.equal(
       extractSubjectCharacterName('is pigpen the best geared gnome', {
+        intent: INTENTS.GEAR_ASSESSMENT,
+      }),
+      'pigpen',
+    )
+    assert.equal(
+      extractSubjectCharacterName('is pigpen the strongest gnome', {
+        intent: INTENTS.GEAR_ASSESSMENT,
+      }),
+      'pigpen',
+    )
+    assert.equal(
+      extractSubjectCharacterName('is pigpen the best gnome', {
+        intent: INTENTS.GEAR_ASSESSMENT,
+      }),
+      'pigpen',
+    )
+    assert.equal(
+      extractSubjectCharacterName('how strong is pigpen', {
         intent: INTENTS.GEAR_ASSESSMENT,
       }),
       'pigpen',
