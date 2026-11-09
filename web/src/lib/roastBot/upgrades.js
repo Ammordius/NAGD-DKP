@@ -36,7 +36,7 @@ function resolveExactSlotAlias(text) {
 }
 
 /**
- * Discovery canonical slot strings → Magelo inventory slot ids (1–22).
+ * Discovery canonical slot strings → Magelo inventory slot ids (1–21).
  * Paired slots (ear/wrist/finger) map to both inventory positions.
  */
 export const CANONICAL_SLOT_TO_IDS = {
@@ -61,8 +61,7 @@ export const CANONICAL_SLOT_TO_IDS = {
   LEGS: [18],
   FEET: [19],
   WAIST: [20],
-  POWER: [21],
-  AMMO: [22],
+  AMMO: [21],
 }
 
 /**
@@ -370,7 +369,7 @@ export function extractInventory(mageloChar) {
       item_id: row.item_id != null ? Number(row.item_id) : row.itemId != null ? Number(row.itemId) : null,
       item_name: row.item_name || row.itemName || row.name || '',
     }))
-    .filter((r) => Number.isFinite(r.slot_id) && r.slot_id >= 1 && r.slot_id <= 22)
+    .filter((r) => Number.isFinite(r.slot_id) && r.slot_id >= 1 && r.slot_id <= 21)
 }
 
 /**

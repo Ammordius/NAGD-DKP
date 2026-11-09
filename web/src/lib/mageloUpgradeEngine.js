@@ -42,8 +42,7 @@ export const SLOT_ID_TO_EQ_SLOTS = {
   18: ['LEGS'],
   19: ['FEET'],
   20: ['WAIST'],
-  21: ['POWER'],
-  22: ['AMMO'],
+  21: ['AMMO'],
 }
 
 export const SLOT_NAMES_FOR_UI = {
@@ -67,8 +66,7 @@ export const SLOT_NAMES_FOR_UI = {
   18: 'Legs',
   19: 'Feet',
   20: 'Waist',
-  21: 'Power Source',
-  22: 'Ammo',
+  21: 'Ammo',
 }
 
 const FOCUS_OVERLAP_GROUPS = [
@@ -678,7 +676,7 @@ export function computeUpgradesForCharacter(char, maxPerSlot, includeDowngrades,
   }
 
   const { norm, focusWeights, focusValuesByItem, classAbbrev, itemStats, elementalDisplayNames } = prep
-  const equippedOnly = (char.inventory || []).filter((i) => i.slot_id >= 1 && i.slot_id <= 22)
+  const equippedOnly = (char.inventory || []).filter((i) => i.slot_id >= 1 && i.slot_id <= 21)
   const bySlot = []
   let anyMissing = false
 
@@ -876,7 +874,7 @@ export function evaluateItemUpgradeForCharacter(char, candidateItemId, ctx) {
 
   const { norm, focusWeights, focusValuesByItem } = prep
 
-  const equippedOnly = (char.inventory || []).filter((i) => i.slot_id >= 1 && i.slot_id <= 22)
+  const equippedOnly = (char.inventory || []).filter((i) => i.slot_id >= 1 && i.slot_id <= 21)
   const getItemName = (itemIdNum) => {
     if (itemIdNum == null || Number.isNaN(itemIdNum)) return ''
     const st = itemStats[String(itemIdNum)]
@@ -886,7 +884,7 @@ export function evaluateItemUpgradeForCharacter(char, candidateItemId, ctx) {
 
   let best = null
 
-  for (let slotId = 1; slotId <= 22; slotId += 1) {
+  for (let slotId = 1; slotId <= 21; slotId += 1) {
     if (!itemMatchesSlot(slotId, candidateStats.slot)) continue
     if (slotId === 14 && isItemTwoHanded(candidateStats)) continue
 

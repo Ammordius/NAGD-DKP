@@ -74,15 +74,18 @@ describe('roastBot upgrades', () => {
     assert.equal(findMageloCharacter(rankings, 'Missing'), null)
   })
 
-  it('extracts equipped inventory slots 1–22', () => {
+  it('extracts equipped inventory slots 1–21', () => {
     const inv = extractInventory({
       inventory: [
         { slot_id: 17, item_id: 1, item_name: 'Chest' },
+        { slot_id: 21, item_id: 3, item_name: 'Ammo' },
+        { slot_id: 22, item_id: 4, item_name: 'General1 Bag' },
         { slot_id: 99, item_id: 2, item_name: 'Bag' },
       ],
     })
-    assert.equal(inv.length, 1)
+    assert.equal(inv.length, 2)
     assert.equal(inv[0].slot_id, 17)
+    assert.equal(inv[1].slot_id, 21)
   })
 
   it('filters item stats to raid loot ids', () => {
